@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <WarningLevel>5</WarningLevel>
+    <IsTestProject>false</IsTestProject>
+    <DisableImplicitSystemValueTupleReference>true</DisableImplicitSystemValueTupleReference>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="ClientId.fs" />
+    <Compile Include="TodosService.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Equinox" Version="0.0.1-cosmos-0000288" />
+    <PackageReference Include="TypeShape" Version="6.0.0" />
+  </ItemGroup>
+
+</Project>

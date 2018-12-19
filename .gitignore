@@ -1,0 +1,15 @@
+# Build results
+msbuild.*
+.build/
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio 2015+ cache/options directory
+.vs/
+*.fsproj.user
+
+# NuGet Packages
+*.nupkg
+packages.config
+# The packages folder can be ignored because of Package Restore
+**/packages/*
