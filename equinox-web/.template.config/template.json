@@ -1,58 +1,64 @@
 {
-    "$schema": "http://json.schemastore.org/template",
-    "author": "bartelink",
-    "classifications": [
-        "F#",
-        "Web",
-        "Equinox",
-        "Event Sourcing"
-    ],
-    "name": "Equinox Web App",
-    "tags": {
-        "language": "F#"
+  "$schema": "http://json.schemastore.org/template",
+  "author": "bartelink",
+  "classifications": [
+    "F#",
+    "Web",
+    "Equinox",
+    "Event Sourcing"
+  ],
+  "name": "Equinox Web App",
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Equinox.Web.Template",
+  "shortName": "equinoxweb",
+  "sourceName": "TodoBackend",
+  "symbols": {
+    "todos": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "true",
+      "description": "If true, this will generate an example TodosController in your project, together with associated Domain logic."
     },
-    "identity": "Equinox.Web.Template",
-    "shortName": "equinoxweb",
-    "sourceName": "TodoBackend",
-    "symbols": {
-        "todos": {
-            "type": "parameter",
-            "datatype": "bool",
-            "isRequired": false,
-            "defaultValue": "true",
-            "description": "If true, this will generate an example TodosController in your project, together with associated Domain logic."
-        },
-        "memorystore": {
-            "type": "parameter",
-            "dataType": "bool",
-            "defaultValue": "true",
-            "description": "Store Events in an In-Memory volatile store (for test purposes only.)"
-        },
-        "eventstore": {
-            "type": "parameter",
-            "dataType": "bool",
-            "defaultValue": "true",
-            "description": "Store Events in EventStore (see https://eventstore.org)"
-        },
-        "cosmos": {
-            "type": "parameter",
-            "dataType": "bool",
-            "defaultValue": "true",
-            "description": "Store Events in Azure CosmosDb"
-        }
+    "memoryStore": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "true",
+      "description": "'Store' Events in an In-Memory volatile store (for test purposes only.)"
     },
-    "sources": [
+    "eventStore": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "true",
+      "description": "Store Events in an EventStore Cluster (see https://eventstore.org)"
+    },
+    "cosmos": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "true",
+      "description": "Store Events in an Azure CosmosDb Account"
+    },
+    "cosmosSimulator": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "false",
+      "description": "Include code/comments regarding Azure CosmosDb simulator"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
         {
-          "modifiers": [
-            {
-                "condition": "(!todos)",
-                "exclude": [
-                    "*/Controllers/**/*",
-                    "**/TodosService.fs",
-                    "**/ClientId.fs"
-                ]
-              }
+          "condition": "(!todos)",
+          "exclude": [
+            "*/Controllers/**/*",
+            "**/TodosService.fs",
+            "**/ClientId.fs"
           ]
         }
-    ]
+      ]
+    }
+  ]
 }
