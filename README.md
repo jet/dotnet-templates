@@ -10,27 +10,30 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 As dictated by [the design of dotnet's templating mechanism](https://github.com/dotnet/templating/), consumption is ultimately via the .NET Core SDK's `dotnet new` CLI facility and/or associated facilities in Visual Studio, Rider etc.
 
-In order to be able to use them, the first step is to install the asociated NuGet packages :-
+To use from the command line, the outline is:
+  1. Install a template locally (use `dotnet new --list` to view your current list)
+  2. Use `dotnet new` to expand the template in a given directory
 
-1. Install a template locally: `dotnet new -i Equinox.Templates::*` - install the templates (use `dotnet new --list` to view)
-2. Use dotnet new to expand the template in a given directory: `dotnet net equinox-web --help` (to see available options)
+    dotnet new -i Equinox.Templates
+    dotnet net eqxWeb --help
 
 ## CONTRIBUTING
 
 Please don't hesitate to [create a GitHub issue](https://github.com/jet/dotnet-templates/issues/new) for any questions so others can benefit from the discussion. For any significant planned changes or additions, please err on the side of [reaching out early](https://github.com/jet/dotnet-templates/issues/new) so we can align expectationss - there's nothing more frustrating than having your hard work not yielding a mutually agreeable result ;)
 
-### Contribution guidelines - `web-equinox`
+### Contribution guidelines - `equinox-web`
 
 See [the Equinox repo's CONTRIBUTING section](https://github.com/jet/equinox/blob/master/README.md#contributing) for general guidelines wrt how contributions are considered specifically wrt Equinox.
 
-Examples of changes that would likely be of interest:
+The following sorts of things are top of the list for the `equinox-web` template at the present time:
 
-- Fixes for typos, adding of info to the readme or comments in the emitted code
+- Fixes for typos, adding of info to the readme or comments in the emitted code etc
 - Small-scale cleanup or clarifications of the emitted code
 - support for additional .NET languages in the templates
+- further straightforward starter projects
 
-While there is no firm limit to what makes sense to add, it should be borne in mind that `dotnet new equinox` is often going to be a new user's first interaction with Equinox. Hence there's a delicate (and intrinsically subjective) balance to be struck between:
+While there is no rigid or defined limit to what makes sense to add, it should be borne in mind that `dotnet new equinox` is often going to be a new user's first interaction with Equinox. Hence there's a delicate (and intrinsically subjective) balance to be struck between:
 
-a) simplicity of programming techniques used / beginner friendliness
-b) brevity of the generated code
-c) encouraging good design practicess
+  1. simplicity of programming techniques used / beginner friendliness
+  2. brevity of the generated code
+  3. encouraging good design practices
