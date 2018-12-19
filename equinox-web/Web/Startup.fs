@@ -11,42 +11,86 @@ open TodoBackend
 /// Equinox store bindings
 module Storage =
     /// Specifies the store to be used, together with any relevant custom parameters
+    [<RequireQualifiedAccess>]
     type Config =
+#if memoryStore || (!cosmos && !eventStore)
         | Mem
-        | ES of host: string * username: string * password: string * cacheGb: int
+#endif
+#if eventStore
+        | ES of host: string * username: string * password: string * cacheMb: int
+#endif
+#if cosmos
+        | DocDb of mode: Equinox.Cosmos.ConnectionMode * connectionStringWithUriAndKey: string * database: string * collection: string * cacheMb: int
+#endif
 
     /// Holds an initialized/customized/configured of the store as defined by the `Config`
     type Instance =
+#if memoryStore || (!cosmos && !eventStore)
         | MemoryStore of Equinox.MemoryStore.VolatileStore
+#endif
+#if eventStore
         | EventStore of gateway: Equinox.EventStore.GesGateway * cache: Equinox.EventStore.Caching.Cache
+#endif
+#if cosmos
+        | CosmosStore of store: Equinox.Cosmos.EqxStore * cache: Equinox.Cosmos.Caching.Cache
+#endif
 
+#if memoryStore || (!cosmos && !eventStore)
     /// MemoryStore 'wiring', uses Equinox.MemoryStore nuget package
     module private Memory =
         open Equinox.MemoryStore
         let connect () =
             VolatileStore()
 
+#endif
+#if eventStore
     /// EventStore wiring, uses Equinox.EventStore nuget package
     module private ES =
         open Equinox.EventStore
-        let mkCache cacheGb =
-            let bytes = cacheGb*1024*1024
-            Caching.Cache ("ES", bytes)
-        let connect host username password=
+        let mkCache mb = Caching.Cache ("ES", mb)
+        let connect host username password =
             let log = Logger.SerilogNormal (Log.ForContext<Instance>())
             let c = GesConnector(username,password,reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
             let conn = c.Establish ("Twin", Discovery.GossipDns host, ConnectionStrategy.ClusterTwinPreferSlaveReads) |> Async.RunSynchronously
             GesGateway(conn, GesBatchingPolicy(maxBatchSize=500))
 
+#endif
+#if cosmos
+    /// CosmosDb wiring, uses Equinox.Cosmos nuget package
+    module private Cosmos =
+        open Equinox.Cosmos
+        let mkCache mb = Caching.Cache ("Cosmos", mb)
+        let connect appName (mode, discovery) (operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds) =
+            let log = Log.ForContext<Instance>()
+            let c = EqxConnector(log=log, mode=mode, requestTimeout=operationTimeout, maxRetryAttemptsOnThrottledRequests=maxRetryForThrottling, maxRetryWaitTimeInSeconds=maxRetryWaitSeconds)
+            let conn = c.Connect(appName, discovery) |> Async.RunSynchronously
+            EqxGateway(conn, EqxBatchingPolicy(defaultMaxItems=500))
+
+#endif
+
     /// Creates and/or connects to a specific store as dictated by the specified config
     let connect : Config -> Instance = function
-        | Mem ->
+#if memoryStore || (!cosmos && !eventStore)
+        | Config.Mem ->
             let store = Memory.connect()
             Instance.MemoryStore store
-        | ES (host, user, pass, cache) ->
+#endif
+#if eventStore
+        | Config.ES (host, user, pass, cache) ->
             let cache = ES.mkCache cache
             let conn = ES.connect host user pass
             Instance.EventStore (conn, cache)
+#endif
+#if cosmos
+        | Config.DocDb (mode, connectionString, database, collection, cache) ->
+            let cache = Cosmos.mkCache cache
+            let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
+            let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
+            let gateway = Cosmos.connect "App" (mode, Equinox.Cosmos.Discovery.FromConnectionString connectionString) (timeout, retriesOn429Throttling, int timeout.TotalSeconds)
+            let collectionMapping = Equinox.Cosmos.EqxCollections(database, collection)
+            let store = Equinox.Cosmos.EqxStore(gateway, collectionMapping)
+            Instance.CosmosStore (store, cache)
+#endif
 
 /// Dependency Injection wiring for services using Equinox
 module Services =
@@ -57,19 +101,29 @@ module Services =
     let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.UnionCodec.JsonUtf8.Create<'Union>(serializationSettings)
 
     /// Builds a Stream Resolve function appropriate to the store being used
-    type StreamResolver(storage) =
+    type StreamResolver(storage : Storage.Instance) =
         member __.Resolve
             (   codec : Equinox.UnionCodec.IUnionEncoder<'event,byte[]>,
                 fold: ('state -> 'event seq -> 'state),
                 initial: 'state,
                 snapshot: (('event -> bool) * ('state -> 'event))) =
             match storage with
+#if memoryStore || (!cosmos && !eventStore)
             | Storage.MemoryStore store ->
                 Equinox.MemoryStore.MemResolver(store, fold, initial).Resolve
+#endif
+#if eventStore
             | Storage.EventStore (gateway, cache) ->
                 let accessStrategy = Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot
                 let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
                 Equinox.EventStore.GesResolver<'event,'state>(gateway, codec, fold, initial, accessStrategy, cacheStrategy).Resolve
+#endif
+#if cosmos
+            | Storage.CosmosStore (store, cache) ->
+                let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot snapshot
+                let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+                Equinox.Cosmos.EqxResolver<'event,'state>(store, codec, fold, initial, accessStrategy, cacheStrategy).Resolve
+#endif
 
     /// Binds a storage independent Service's Handler's `resolve` function to a given Stream Policy using the StreamResolver
     type ServiceBuilder(resolver: StreamResolver, handlerLog : ILogger) =
@@ -100,8 +154,14 @@ type Startup() =
     member __.ConfigureServices(services: IServiceCollection) : unit =
         services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1) |> ignore
 
-        let storeConfig = Storage.Mem
+#if cosmos || eventStore
+        // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
+        // The primary objects held in the cache are the Folded State of Event-sourced aggregates
+        // see https://docs.microsoft.com/en-us/dotnet/framework/performance/caching-in-net-framework-applications for more information
+        let cacheMb = 50
 
+#endif
+#if eventStore
         // EVENTSTORE: see https://eventstore.org/
         // Requires a Commercial HA Cluster, which can be simulated by 1) installing the OSS Edition from Choocolatey 2) running it in cluster mode
 
@@ -110,7 +170,37 @@ type Startup() =
         //# run as a single-node cluster to allow connection logic to use cluster mode as for a commercial cluster
         //& $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
 
-        let storeConfig = Storage.ES ("localhost","admin","changeit",2)
+        let storeConfig = Storage.Config.ES ("localhost","admin","changeit",cacheMb)
+#endif
+#if cosmos
+        // AZURE COSMOSDB: Events are stored in an Azure CosmosDb Account (using the SQL API)
+        // Provisioning Steps:
+        // 1) Set the 3x environment variables EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABAS, EQUINOX_COSMOS_COLLECTION
+        // 2) Provision a collection using the following command sequence:
+        //     dotnet tool install -g Equinox.Cli
+        //     Equinox.Cli init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_COLLECTION
+
+        let storeConfig = 
+            let connectionVar, databaseVar, collectionVar = "EQUINOX_COSMOS_CONNECTION", "EQUINOX_COSMOS_DATABASE", "EQUINOX_COSMOS_COLLECTION"
+            let read key = Environment.GetEnvironmentVariable key |> Option.ofObj
+            match read connectionVar, read databaseVar, read collectionVar with
+            | Some connection, Some database, Some collection ->
+                let connMode = Equinox.Cosmos.ConnectionMode.DirectTcp // Best perf - select one of the others iff using .NETCore on linux or encounter firewall issues
+                Storage.Config.DocDb (connMode, connection, database, collection, cacheMb) 
+#   if cosmosSimulator
+            | None, Some database, Some collection ->
+                // alternately, you can feed in this connection string in as a parameter externally and remove this special casing
+                let wellKnownConnectionStringForCosmosDbSimulator =
+                    "AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
+                Storage.Config.DocDb (Equinox.Cosmos.ConnectionMode.DirectTcp, wellKnownConnectionStringForCosmosDbSimulator, database, collection, cacheMb)
+#   endif
+            | _ ->
+                failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar collectionVar
+#endif
+
+#if memoryStore || (!cosmos && !eventStore)
+        let storeConfig = Storage.Config.Mem
+#endif
 
         Services.register(services, storeConfig)
 
@@ -120,5 +210,6 @@ type Startup() =
         else app.UseHsts() |> ignore
 
         app.UseHttpsRedirection()
+            // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
             .UseCors(fun x -> x.WithOrigins([|"https://www.todobackend.com"|]).AllowAnyHeader().AllowAnyMethod() |> ignore)
             .UseMvc() |> ignore
