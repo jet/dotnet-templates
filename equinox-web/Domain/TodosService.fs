@@ -19,7 +19,7 @@ module Events =
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Folds =
 
-    /// Present state of the Todo List as inferred from the Event's we've see to date
+    /// Present state of the Todo List as inferred from the Events we've seen to date
     type State = { items : Events.ItemData list; nextId : int }
     /// State implied by the absence of any events on this stream
     let initial = { items = []; nextId = 0 }
@@ -32,7 +32,7 @@ module Folds =
         | Events.Compacted items -> { s with items = List.ofArray items }
     /// Folds a set of events from the store into a given `state`
     let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
-    /// Determines whether a given event represents a checkpoint that inmplies we don't need to see any preceding events
+    /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
     let isOrigin = function Events.Cleared | Events.Compacted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
     let compact state = Events.Compacted (Array.ofList state.items)
@@ -70,6 +70,7 @@ module Commands =
 
 /// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
 type Handler(log, stream, ?maxAttempts) =
+
     let inner = Equinox.Handler(Folds.fold, log, stream, maxAttempts = defaultArg maxAttempts 2)
 
     /// Execute `command`; does not emit the post state

@@ -8,8 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="ClientId.fs" />
-    <Compile Include="TodosService.fs" />
+    <Compile Include="*.fs" />
   </ItemGroup>
 
   <ItemGroup>

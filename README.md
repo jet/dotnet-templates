@@ -15,7 +15,9 @@ To use from the command line, the outline is:
   2. Use `dotnet new` to expand the template in a given directory
 
     dotnet new -i Equinox.Templates
-    dotnet net eqxWeb --help
+    dotnet new equinoxweb -t --help
+    dotnet run -p Web
+    start https://www.todobackend.com/client/index.html?https://localhost:5001/todos
 
 ## CONTRIBUTING
 
@@ -32,7 +34,7 @@ The following sorts of things are top of the list for the `equinox-web` template
 - support for additional .NET languages in the templates
 - further straightforward starter projects
 
-While there is no rigid or defined limit to what makes sense to add, it should be borne in mind that `dotnet new equinox` is often going to be a new user's first interaction with Equinox. Hence there's a delicate (and intrinsically subjective) balance to be struck between:
+While there is no rigid or defined limit to what makes sense to add, it should be borne in mind that `dotnet new equinoxweb` is often going to be a new user's first interaction with Equinox. Hence there's a delicate (and intrinsically subjective) balance to be struck between:
 
   1. simplicity of programming techniques used / beginner friendliness
   2. brevity of the generated code
