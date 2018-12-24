@@ -36,8 +36,6 @@ module Folds =
     let isOrigin = function Events.Cleared | Events.Compacted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
     let compact state = Events.Compacted (Array.ofList state.items)
-    /// Pair of functions used by Stream Builder where store can perform snapshotting
-    let snapshot = isOrigin, compact
 
 /// Properties that can be edited on a Todo List item
 type Props = { order: int; title: string; completed: bool }

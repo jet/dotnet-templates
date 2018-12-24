@@ -1,0 +1,23 @@
+name: $(Rev:r)
+jobs:
+- job: Windows
+  pool:
+    vmImage: 'vs2017-win2016'
+  steps:
+  - script: dotnet pack build.proj
+    displayName: dotnet pack build.proj
+    env:
+      BUILD_PR: $(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)
+      BUILD_ID: $(BUILD.BUILDNUMBER) 
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathtoPublish: 'bin/nupkg'
+      artifactName: 'nupkgs'
+  - task: NuGetCommand@2
+    inputs:
+      command: push
+      nuGetFeedType: external
+      publishFeedCredentials: 'Jet-MyGet'
+      versioningScheme: byEnvVar
+      versionEnvVar: Version
+      packagesToPush: 'bin/nupkg/*.nupkg'
