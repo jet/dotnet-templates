@@ -19,7 +19,6 @@ module Folds =
     let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
     let isOrigin = function Events.Compacted _ -> true | _ -> false
     let compact state = Events.Compacted { happened = state.happened }
-    let snapshot = isOrigin, compact
 
 module Commands =
 

@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <Description>dotnet new equinoxweb: Equinox Web + Event-sourced Domain templates</Description>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <IsTestProject>false</IsTestProject>
+    <PackageType>Template</PackageType>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+  </PropertyGroup>
+
+ <ItemGroup>
+    <None Include="../../equinox-web/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*" Pack="true" PackagePath="content" />
+  </ItemGroup>
+
+  <ItemGroup>
+      <PackageReference Include="MinVer" Version="1.0.0-beta.2" PrivateAssets="All" />
+  </ItemGroup>
+</Project>

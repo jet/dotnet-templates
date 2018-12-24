@@ -131,13 +131,15 @@ module Services =
 #if todos
          member __.CreateTodosService() =
             let codec = genCodec<Todo.Events.Event>()
-            let fold, initial, snapshot = Todo.Folds.fold, Todo.Folds.initial, Todo.Folds.snapshot
+            let fold, initial = Todo.Folds.fold, Todo.Folds.initial
+            let snapshot = Todo.Folds.isOrigin, Todo.Folds.compact
             Todo.Service(handlerLog, resolver.Resolve(codec,fold,initial,snapshot))
 #endif
 #if aggregate
          member __.CreateAggregateService() =
             let codec = genCodec<Aggregate.Events.Event>()
-            let fold, initial, snapshot = Aggregate.Folds.fold, Aggregate.Folds.initial, Aggregate.Folds.snapshot
+            let fold, initial = Aggregate.Folds.fold, Aggregate.Folds.initial
+            let snapshot = Aggregate.Folds.isOrigin, Aggregate.Folds.compact
             Aggregate.Service(handlerLog, resolver.Resolve(codec,fold,initial,snapshot))
 #endif
 #if (!aggregate && !todos)
@@ -145,7 +147,8 @@ module Services =
         // TODO implement Service builders, e.g. 
         //member __.CreateThingService() =
         //   let codec = genCodec<Thing.Events.Event>()
-        //   let fold, initial, snapshot = Thing.Folds.fold, Thing.Folds.initial, Thing.Folds.snapshot
+        //   let fold, initial = Thing.Folds.fold, Thing.Folds.initial
+        //   let snapshot = Thing.Folds.isOrigin, Thing.Folds.compact
         //   Thing.Service(handlerLog, resolver.Resolve(codec,fold,initial,snapshot))
 #endif
 
