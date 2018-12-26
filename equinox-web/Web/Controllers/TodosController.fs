@@ -16,8 +16,10 @@ type GetByIdArgsTemplate = { id: int }
 // To run:
 //     & dotnet run -f netcoreapp2.1 -p Web
 //     https://www.todobackend.com/client/index.html?https://localhost:5001/todos
-// Stolen from https://github.com/ChristianAlexander/dotnetcore-todo-webapi/blob/master/src/TodoWebApi/Controllers/TodosController.cs
-// even more stolen from https://github.com/joeaudette/playground/blob/master/spa-stack/src/FSharp.WebLib/Controllers.fs
+//     # NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your nevironment before using it._
+// See also similar backends used as references when implementing:
+//     https://github.com/ChristianAlexander/dotnetcore-todo-webapi/blob/master/src/TodoWebApi/Controllers/TodosController.cs
+//     https://github.com/joeaudette/playground/blob/master/spa-stack/src/FSharp.WebLib/Controllers.fs
 [<Route "[controller]"; ApiController>]
 type TodosController(service: Todo.Service) =
     inherit ControllerBase()

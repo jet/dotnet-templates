@@ -236,5 +236,6 @@ type Startup() =
         else app.UseHsts() |> ignore
 
         app.UseHttpsRedirection()
-            .UseCors(fun x -> x.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod() |> ignore)
+             // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your nevironment before using it._
+            .UseCors(fun x -> x.WithOrigins([|"https://www.todobackend.com"|]).AllowAnyHeader().AllowAnyMethod() |> ignore)
             .UseMvc() |> ignore

@@ -17,7 +17,12 @@ To use from the command line, the outline is:
     dotnet new -i Equinox.Templates
     dotnet new equinoxweb -t --help
     dotnet run -p Web
+
+   3. Run requests against that endpoint, e.g.:
+
     start https://www.todobackend.com/client/index.html?https://localhost:5001/todos
+
+    _NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your nevironment before using it._
 
 ## CONTRIBUTING
 
