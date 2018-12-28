@@ -1,4 +1,4 @@
-﻿module TodoBackendTemplate
+﻿module TodoBackendTemplate.Todo
 
 // NB - these types and names reflect the actual storage formats and hence need to be versioned with care
 module Events =

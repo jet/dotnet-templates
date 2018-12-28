@@ -1,4 +1,4 @@
-﻿module TodoBackend.Aggregate
+﻿module TodoBackendTemplate.Aggregate
 
 // NB - these types and names reflect the actual storage formats and hence need to be versioned with care
 module Events =

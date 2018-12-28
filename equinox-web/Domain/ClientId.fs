@@ -1,4 +1,4 @@
-﻿namespace TodoBackend
+﻿namespace TodoBackendTemplate
 
 open System
 open System.Runtime.Serialization
