@@ -4,8 +4,10 @@ msbuild.*
 [Bb]in/
 [Oo]bj/
 
-# Visual Studio 2015+ cache/options directory
+# IDE cache/options directories
 .vs/
+.idea/
+*.DotSettings.user
 *.fsproj.user
 
 # NuGet Packages

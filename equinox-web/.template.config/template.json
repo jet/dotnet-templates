@@ -13,7 +13,7 @@
   "identity": "Equinox.Template",
   "name": "Equinox Web App",
   "shortName": "equinoxweb",
-  "sourceName": "TodoBackend",
+  "sourceName": "TodoBackendTemplate",
   "preferNameDirectory": true,
 
   "symbols": {

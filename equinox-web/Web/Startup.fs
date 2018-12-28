@@ -1,4 +1,4 @@
-namespace TodoBackend.Web
+namespace TodoBackendTemplate.Web
 
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
@@ -7,7 +7,7 @@ open Microsoft.Extensions.DependencyInjection
 open Serilog
 open System
 #if (aggregate || todos)
-open TodoBackend
+open TodoBackendTemplate
 #endif
 
 /// Equinox store bindings

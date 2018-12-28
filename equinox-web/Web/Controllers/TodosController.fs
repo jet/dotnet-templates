@@ -1,7 +1,7 @@
-﻿namespace TodoBackend.Controllers
+﻿namespace TodoBackendTemplate.Controllers
 
 open Microsoft.AspNetCore.Mvc
-open TodoBackend
+open TodoBackendTemplate
 
 type FromClientIdHeaderAttribute() = inherit FromHeaderAttribute(Name="COMPLETELY_INSECURE_CLIENT_ID")
 

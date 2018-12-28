@@ -1,4 +1,4 @@
-namespace TodoBackend.Web
+namespace TodoBackendTemplate.Web
 
 open Microsoft.AspNetCore
 open Microsoft.AspNetCore.Hosting
