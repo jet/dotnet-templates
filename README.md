@@ -14,10 +14,16 @@ To use from the command line, the outline is:
   1. Install a template locally (use `dotnet new --list` to view your current list)
   2. Use `dotnet new` to expand the template in a given directory
 
+    # install the templates into `dotnet new`s list of avaiable templates so it can be picked up by
+    # `dotnet new`, Rider, Visual Studio etc.
     dotnet new -i Equinox.Templates
+
+    # --help shows the options including wiring for storage subsystems,
+    # -t includes an example Controller and Service to test the storage subsystem)
     dotnet new equinoxweb -t --help
-    dotnet run -p Web
-    start https://www.todobackend.com/client/index.html?https://localhost:5001/todos
+
+    # see readme.md in the generated code for further instructions regarding the TodoBackend the above -t switch above triggers the inclusion of
+    start readme.md
 
 ## CONTRIBUTING
 
