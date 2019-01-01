@@ -20,4 +20,4 @@ jobs:
       publishFeedCredentials: 'Jet-MyGet'
       versioningScheme: byEnvVar
       versionEnvVar: Version
-      packagesToPush: 'bin/_nupkg/*.nupkg' # _ to neutralize upload as presently failing
+      packagesToPush: 'bin/nupkg/*.nupkg'
