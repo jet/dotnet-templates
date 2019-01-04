@@ -21,17 +21,31 @@ namespace TodoBackendTemplate
 
     public class EquinoxHandler<TEvent, TState> : Handler<TEvent, TState>
     {
-        public EquinoxHandler(Func<TState, IEnumerable<TEvent>, TState> fold, ILogger log,
-            IStream<TEvent, TState> stream)
-            : base(FuncConvert.FromFunc<TState, FSharpList<TEvent>, TState>(fold), log, stream, 3, null, null)
+        public EquinoxHandler
+            (   Func<TState, IEnumerable<TEvent>, TState> fold,
+                ILogger log,
+                IStream<TEvent, TState> stream,
+                int maxAttempts = 3)
+            : base(FuncConvert.FromFunc<TState, FSharpList<TEvent>, TState>(fold),
+                log,
+                stream,
+                maxAttempts,
+               null,
+               null)
         {
         }
 
-        public async Task<Unit> Decide(Action<Context<TEvent, TState>> f) =>
-            await FSharpAsync.StartAsTask(Decide(FuncConvert.ToFSharpFunc(f)), null, null);
+        // Run the decision method, letting it decide whether or not the Command's intent should manifest as Events
+        public async Task<Unit> Decide(Action<Context<TEvent, TState>> decide) =>
+            await FSharpAsync.StartAsTask(Decide(FuncConvert.ToFSharpFunc(decide)), null, null);
 
-        public async Task<T> Query<T>(Func<TState, T> projection) =>
-            await FSharpAsync.StartAsTask(Query(FuncConvert.FromFunc(projection)), null, null);
+        // Execute a command, as Decide(Action) does, but also yield an outcome from the decision
+        public async Task<T> Decide<T>(Func<Context<TEvent, TState>,T> interpret) =>
+            await FSharpAsync.StartAsTask<T>(Decide(FuncConvert.FromFunc(interpret)), null, null);
+        
+        // Project from the synchronized state, without the possibility of adding events that Decide(Func) admits
+        public async Task<T> Query<T>(Func<TState, T> project) =>
+            await FSharpAsync.StartAsTask(Query(FuncConvert.FromFunc(project)), null, null);
     }
 
     /// Newtonsoft.Json implementation of IEncoder that encodes direct to a UTF-8 Buffer

@@ -189,10 +189,9 @@ namespace TodoBackendTemplate
                         break;
                     case Update c:
                         var proposed = Tuple.Create(c.Props.Order, c.Props.Title, c.Props.Completed);
-
                         bool IsEquivalent(Events.ItemData i) =>
-                            i.Id == c.Id && Tuple.Create(i.Order, i.Title, i.Completed).Equals(proposed);
-
+                            i.Id == c.Id
+                            && Tuple.Create(i.Order, i.Title, i.Completed).Equals(proposed);
                         if (!s.Items.Any(IsEquivalent))
                             yield return Make<Events.Updated>(c.Id, c.Props);
                         break;
@@ -213,6 +212,7 @@ namespace TodoBackendTemplate
             }
         }
 
+        /// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
         private class Handler
         {
             readonly EquinoxHandler<IEvent, State> _inner;
@@ -222,11 +222,19 @@ namespace TodoBackendTemplate
                 _inner = new EquinoxHandler<IEvent, State>(Folds.Fold, log, stream);
             }
 
-            /// Execute `command`, syncing any events decided upon
+            /// Execute `command`; does not emit the post state
             public Task<Unit> Execute(ICommand c) =>
                 _inner.Decide(ctx =>
                     ctx.Execute(s => Commands.Interpret(s, c)));
 
+            /// Handle `command`, return the items after the command's intent has been applied to the stream
+            public Task<Events.ItemData[]> Decide(ICommand c) =>
+                _inner.Decide(ctx =>
+                {
+                    ctx.Execute(s => Commands.Interpret(s, c));
+                    return ctx.State.Items;
+                });
+            
             /// Establish the present state of the Stream, project from that as specified by `projection`
             public Task<T> Query<T>(Func<State, T> projection) =>
                 _inner.Query(projection);
@@ -261,49 +269,7 @@ namespace TodoBackendTemplate
 }
 
 
-/// Defines the decion process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
-module Commands =
 
-    /// Defines the operations a caller can perform on a Todo List
-    type Command =
-        /// Create a single item
-        | Add of Props
-        /// Update a single item
-        | Update of id: int * Props
-        /// Delete a single item from the list
-        | Delete of id: int
-        /// Complete clear the todo list
-        | Clear
-
-    let interpret c (state : Folds.State) =
-        let mkItem id (value: Props): Events.ItemData = { id = id; order=value.order; title=value.title; completed=value.completed }
-        match c with
-        | Add value -> [Events.Added (mkItem state.nextId value)]
-        | Update (itemId,value) ->
-            let proposed = mkItem itemId value
-            match state.items |> List.tryFind (function { id = id } -> id = itemId) with
-            | Some current when current <> proposed -> [Events.Updated proposed]
-            | _ -> []
-        | Delete id -> if state.items |> List.exists (fun x -> x.id = id) then [Events.Deleted id] else []
-        | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared]
-
-/// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
-type Handler(log, stream, ?maxAttempts) =
-
-    let inner = Equinox.Handler(Folds.fold, log, stream, maxAttempts = defaultArg maxAttempts 2)
-
-    /// Execute `command`; does not emit the post state
-    member __.Execute command : Async<unit> =
-        inner.Decide <| fun ctx ->
-            ctx.Execute (Commands.interpret command)
-    /// Handle `command`, return the items after the command's intent has been applied to the stream
-    member __.Handle command : Async<Events.ItemData list> =
-        inner.Decide <| fun ctx ->
-            ctx.Execute (Commands.interpret command)
-            ctx.State.items
-    /// Establish the present state of the Stream, project from that as specified by `projection`
-    member __.Query(projection : Folds.State -> 't) : Async<'t> =
-        inner.Query projection
 
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }
