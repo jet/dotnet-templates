@@ -119,7 +119,7 @@ namespace TodoBackendTemplate.Web
         }
 
 #if todos
-        public Todo.Service CreateTodosService() =>
+        public Todo.Service CreateTodoService() =>
             Todo.Service(
                 _handlerLog,
                 _context.Resolve(

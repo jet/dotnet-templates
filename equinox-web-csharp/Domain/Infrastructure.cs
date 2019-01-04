@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading.Tasks;
 using Equinox;
 using Equinox.Store;
 using Microsoft.FSharp.Collections;
@@ -9,6 +5,10 @@ using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
 using Newtonsoft.Json;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
@@ -35,7 +35,7 @@ namespace TodoBackendTemplate
     }
 
     /// Newtonsoft.Json implementation of IEncoder that encodes direct to a UTF-8 Buffer
-    class JsonNetUtf8Codec
+    public class JsonNetUtf8Codec
     {
         readonly JsonSerializer _serializer;
 
@@ -59,5 +59,4 @@ namespace TodoBackendTemplate
                return _serializer.Deserialize<T>(jsonReader);
         }
     }
-    
 }

@@ -1,15 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data.SqlTypes;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.ExceptionServices;
-using System.Threading.Tasks;
-using Equinox;
+﻿using Equinox;
 using Equinox.Store;
-using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
 using Newtonsoft.Json;
 using Serilog;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
@@ -31,14 +27,14 @@ namespace TodoBackendTemplate
                 public bool Happened { get; set; }
             }
 
-            static JsonNetUtf8Codec _codec = new JsonNetUtf8Codec(new JsonSerializerSettings());
+            private static readonly JsonNetUtf8Codec Codec = new JsonNetUtf8Codec(new JsonSerializerSettings());
             
             public static IEvent TryDecode(string et, byte[] json)
             {
                 switch (et)
                 {
-                    case "Happened": return _codec.Decode<Happened>(json);
-                    case "Compacted": return _codec.Decode<Compacted>(json);
+                    case nameof(Happened): return Codec.Decode<Happened>(json);
+                    case nameof(Compacted): return Codec.Decode<Compacted>(json);
                     default: return null;
                 }
             }
@@ -47,8 +43,8 @@ namespace TodoBackendTemplate
             {
                 switch (x)
                 {
-                    case Happened e: return Tuple.Create("Happened", _codec.Encode(e));
-                    case Compacted e: return Tuple.Create("Compacted", _codec.Encode(e));
+                    case Happened e: return Tuple.Create(nameof(Happened), Codec.Encode(e));
+                    case Compacted e: return Tuple.Create(nameof(Compacted), Codec.Encode(e));
                     default: return null;
                 }
             }
@@ -61,7 +57,7 @@ namespace TodoBackendTemplate
 
         public static class Folds
         {
-            public static State Initial = new State {Happened = false};
+            public static readonly State Initial = new State {Happened = false};
 
             private static void Evolve(State s, IEvent x)
             {
@@ -89,13 +85,14 @@ namespace TodoBackendTemplate
             public static IEvent Compact(State s) => new Events.Compacted {Happened = s.Happened};
         }
 
-        interface ICommand
+        public interface ICommand
         {
         }
 
-        static class Commands
+        /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
+        public static class Commands
         {
-            class MakeItSo : ICommand
+            public class MakeItSo : ICommand
             {
             }
 
@@ -112,7 +109,7 @@ namespace TodoBackendTemplate
         }
 
 
-        class Handler
+        private class Handler
         {
             readonly EquinoxHandler<IEvent, State> _inner;
 
@@ -131,9 +128,9 @@ namespace TodoBackendTemplate
                 _inner.Query(projection);
         }
 
-        class View
+        public class View
         {
-            public bool Sorted { get; private set; }
+            public bool Sorted { get; set; }
         }
 
         public class Service
