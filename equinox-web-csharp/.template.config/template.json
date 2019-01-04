@@ -2,18 +2,19 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
-    "F#",
+    "C#",
     "Web",
     "Equinox",
     "Event Sourcing"
   ],
   "tags": {
-    "language": "F#"
+    "language": "C#"
   },
-  "identity": "Equinox.Template",
+  "identity": "Equinox.Template.CSharp",
+  "groupIdentity": "Equinox.Web",
   "name": "Equinox Web App",
   "shortName": "equinoxweb",
-  "sourceName": "TodoBackend",
+  "sourceName": "TodoBackendTemplate",
   "preferNameDirectory": true,
 
   "symbols": {
@@ -48,12 +49,6 @@
       "dataType": "bool",
       "defaultValue": "false",
       "description": "Store Events in an Azure CosmosDb Account"
-    },
-    "cosmosSimulator": {
-      "type": "parameter",
-      "dataType": "bool",
-      "defaultValue": "false",
-      "description": "Include code/comments regarding Azure CosmosDb simulator"
     }
   },
   "sources": [
@@ -63,15 +58,15 @@
           "condition": "(!todos)",
           "exclude": [
             "*/Controllers/**/*",
-            "**/TodosService.fs",
-            "**/ClientId.fs",
+            "**/Todo.cs",
+            "**/ClientId.cs",
             "README.md"
           ]
         },
         {
           "condition": "(!aggregate)",
           "exclude": [
-            "**/Aggregate.fs"
+            "**/Aggregate.cs"
           ]
         }
       ]

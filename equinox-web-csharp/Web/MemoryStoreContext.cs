@@ -1,10 +1,10 @@
-using System;
-using System.Collections.Generic;
 using Equinox;
 using Equinox.MemoryStore;
 using Equinox.Store;
 using Equinox.UnionCodec;
 using Microsoft.FSharp.Core;
+using System;
+using System.Collections.Generic;
 
 namespace TodoBackendTemplate
 {

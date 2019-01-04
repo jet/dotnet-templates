@@ -4,10 +4,6 @@
     <TargetFramework>netcoreapp2.1</TargetFramework>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>TRACE;todos</DefineConstants>
-  </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="Controllers/*.fs" />
     <Compile Include="Startup.fs" />

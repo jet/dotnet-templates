@@ -5,11 +5,8 @@ using Newtonsoft.Json;
 using Serilog;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data.SqlTypes;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.FSharp.Collections;
 
 namespace TodoBackendTemplate
 {
