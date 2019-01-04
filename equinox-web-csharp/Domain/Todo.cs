@@ -138,6 +138,12 @@ namespace TodoBackendTemplate
                     }
                 return new State(nextId, items.ToArray());
             }
+            
+            /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
+            public static bool IsOrigin(IEvent e) => e is Events.Cleared || e is Events.Compacted;
+            
+            /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
+            public static IEvent Compact(State state) => new Events.Compacted { NextId = state.NextId, Items = state.Items };
         }
 
         /// Properties that can be edited on a Todo List item

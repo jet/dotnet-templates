@@ -1,8 +1,3 @@
-#define cosmos
-#define eventStore
-#define memoryStore
-#define todos
-#define aggregate
 using System;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Builder;
@@ -49,7 +44,7 @@ namespace TodoBackendTemplate.Web
             });
             services.AddSingleton(sp => new ServiceBuilder(context, Serilog.Log.ForContext<EquinoxContext>()));
 #if todos
-            services.AddSingleton(sp => sp.GetRequiredService<ServiceBuilder>().CreateTodosService());
+            services.AddSingleton(sp => sp.GetRequiredService<ServiceBuilder>().CreateTodoService());
 #endif
 #if aggregate
             services.AddSingleton(sp => sp.GetRequiredService<ServiceBuilder>().CreateAggregateService());
@@ -120,14 +115,14 @@ namespace TodoBackendTemplate.Web
 
 #if todos
         public Todo.Service CreateTodoService() =>
-            Todo.Service(
+            new Todo.Service(
                 _handlerLog,
                 _context.Resolve(
-                    EquinoxCodec.Create<Todo.Events.Event>(),
-                    Todo.Folds.fold,
-                    Todo.Folds.initial,
-                    Todo.Folds.isOrigin,
-                    Todo.Folds.compact));
+                    EquinoxCodec.Create(Todo.Events.Encode,Todo.Events.TryDecode),
+                    Todo.Folds.Fold,
+                    Todo.Folds.Initial,
+                    Todo.Folds.IsOrigin,
+                    Todo.Folds.Compact));
 #endif
 #if aggregate
         public Aggregate.Service CreateAggregateService() =>
@@ -141,15 +136,15 @@ namespace TodoBackendTemplate.Web
                     Aggregate.Folds.Compact));
 #endif
 #if (!aggregate && !todos)
-        public Thing.Service CreateAggregateService() =>
-            Aggregate.Service(
-                _handlerLog,
-                _context.Resolve(
-                    EquinoxCodec.Create<Thing.Events.Event>(),
-                    Thing.Folds.fold, 
-                    Thing.Folds.initial, 
-                    Thing.Folds.isOrigin, 
-                    Thing.Folds.compact));
+//        public Thing.Service CreateAggregateService() =>
+//            Aggregate.Service(
+//                _handlerLog,
+//                _context.Resolve(
+//                    EquinoxCodec.Create<Thing.Events.Event>(),
+//                    Thing.Folds.fold, 
+//                    Thing.Folds.initial, 
+//                    Thing.Folds.isOrigin, 
+//                    Thing.Folds.compact));
 #endif
     }
 }
