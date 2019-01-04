@@ -9,11 +9,10 @@ namespace TodoBackendTemplate
 {
     public abstract class EquinoxContext
     {
-        public abstract Equinox.Store.IStream<TEvent, TState> Resolve<TEvent, TState>(
+        public abstract Func<Target,Equinox.Store.IStream<TEvent, TState>> Resolve<TEvent, TState>(
             Equinox.UnionCodec.IUnionEncoder<TEvent, byte[]> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
-            Target target,
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> compact = null);
 

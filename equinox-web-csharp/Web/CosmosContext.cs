@@ -71,11 +71,10 @@ namespace TodoBackendTemplate
             var _ = _store.Value;
         }
 
-        public override IStream<TEvent, TState> Resolve<TEvent, TState>(
+        public override Func<Target,Equinox.Store.IStream<TEvent, TState>> Resolve<TEvent, TState>(
             IUnionEncoder<TEvent, byte[]> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
-            Target target,
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> compact = null)
         {
@@ -89,7 +88,7 @@ namespace TodoBackendTemplate
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
             var resolver = new EqxResolver<TEvent, TState>(_store.Value, codec, FuncConvert.FromFunc(fold), initial, accessStrategy, cacheStrategy);
-            return resolver.Resolve.Invoke(target);
+            return t => resolver.Resolve.Invoke(t);
         }
     }
 }

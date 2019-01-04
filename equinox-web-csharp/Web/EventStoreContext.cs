@@ -58,11 +58,10 @@ namespace TodoBackendTemplate
             var _ = _gateway.Value;
         }
 
-        public override IStream<TEvent, TState> Resolve<TEvent, TState>(
+        public override Func<Target,IStream<TEvent, TState>> Resolve<TEvent, TState>(
             IUnionEncoder<TEvent, byte[]> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
-            Target target,
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> compact = null)
         {
@@ -75,7 +74,7 @@ namespace TodoBackendTemplate
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
             var resolver = new GesResolver<TEvent, TState>(_gateway.Value, codec, FuncConvert.FromFunc(fold),
                 initial, accessStrategy, cacheStrategy);
-            return resolver.Resolve.Invoke(target);
+            return t => resolver.Resolve.Invoke(t);
         }
     }
 }

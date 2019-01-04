@@ -130,15 +130,15 @@ namespace TodoBackendTemplate.Web
                     Todo.Folds.compact));
 #endif
 #if aggregate
-        public Todo.Service CreateAggregateService() =>
-            Aggregate.Service(
+        public Aggregate.Service CreateAggregateService() =>
+            new Aggregate.Service(
                 _handlerLog,
                 _context.Resolve(
-                    EquinoxCodec.Create<Aggregate.Events.Event>(),
-                    Aggregate.Folds.fold,
-                    Aggregate.Folds.initial,
-                    Aggregate.Folds.isOrigin,
-                    Aggregate.Folds.compact));
+                    EquinoxCodec.Create(Aggregate.Events.Encode,Aggregate.Events.TryDecode),
+                    Aggregate.Folds.Fold,
+                    Aggregate.Folds.Initial,
+                    Aggregate.Folds.IsOrigin,
+                    Aggregate.Folds.Compact));
 #endif
 #if (!aggregate && !todos)
         public Thing.Service CreateAggregateService() =>
