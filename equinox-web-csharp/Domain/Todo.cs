@@ -222,10 +222,8 @@ namespace TodoBackendTemplate
         {
             readonly EquinoxHandler<IEvent, State> _inner;
 
-            public Handler(ILogger log, IStream<IEvent, State> stream)
-            {
+            public Handler(ILogger log, IStream<IEvent, State> stream) =>
                 _inner = new EquinoxHandler<IEvent, State>(Folds.Fold, log, stream);
-            }
 
             /// Execute `command`; does not emit the post state
             public Task<Unit> Execute(ICommand c) =>
