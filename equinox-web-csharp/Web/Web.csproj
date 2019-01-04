@@ -4,10 +4,6 @@
     <TargetFramework>netcoreapp2.1</TargetFramework>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>TRACE;DEBUG;NETCOREAPP;NETCOREAPP2_1</DefineConstants>
-  </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="Equinox.Codec" Version="1.0.1" />
     <PackageReference Include="Equinox.Cosmos" Version="1.0.1" />

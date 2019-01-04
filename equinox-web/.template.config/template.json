@@ -34,7 +34,7 @@
     "memoryStore": {
       "type": "parameter",
       "dataType": "bool",
-      "defaultValue": "false",
+      "defaultValue": "true",
       "description": "'Store' Events in an In-Memory volatile store (for test purposes only.)"
     },
     "eventStore": {

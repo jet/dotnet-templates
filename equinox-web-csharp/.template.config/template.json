@@ -34,7 +34,7 @@
     "memoryStore": {
       "type": "parameter",
       "dataType": "bool",
-      "defaultValue": "false",
+      "defaultValue": "true",
       "description": "'Store' Events in an In-Memory volatile store (for test purposes only.)"
     },
     "eventStore": {
@@ -66,6 +66,24 @@
           "condition": "(!aggregate)",
           "exclude": [
             "**/Aggregate.cs"
+          ]
+        },
+        {
+          "condition": "(!memoryStore)",
+          "exclude": [
+            "**/MemoryStoreContext.cs"
+          ]
+        },
+        {
+          "condition": "(!eventStore)",
+          "exclude": [
+            "**/EventStoreContext.cs"
+          ]
+        },
+        {
+          "condition": "(!cosmos)",
+          "exclude": [
+            "**/CosmosContext.cs"
           ]
         }
       ]

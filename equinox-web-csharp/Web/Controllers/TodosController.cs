@@ -7,10 +7,8 @@ namespace TodoBackendTemplate.Controllers
 {
     public class FromClientIdHeaderAttribute : FromHeaderAttribute
     {
-        public FromClientIdHeaderAttribute()
-        {
+        public FromClientIdHeaderAttribute() =>
             Name = "COMPLETELY_INSECURE_CLIENT_ID";
-        }
     }
 
     public class TodoView
@@ -33,20 +31,10 @@ namespace TodoBackendTemplate.Controllers
     [Route("[controller]"), ApiController]
     public class TodosController : ControllerBase
     {
-        private readonly Todo.Service _service;
+        readonly Todo.Service _service;
 
         public TodosController(Todo.Service service) =>
             _service = service;
-
-        private Todo.Props ToProps(TodoView value) =>
-            new Todo.Props {Order = value.Order, Title = value.Title, Completed = value.Completed};
-
-        private TodoView WithUri(Todo.View x)
-        {
-            // Supplying scheme is secret sauce for making it absolute as required by client
-            var url = Url.RouteUrl("GetTodo", new {id = x.Id}, Request.Scheme);
-            return new TodoView {Id = x.Id, Url = url, Order = x.Order, Title = x.Title, Completed = x.Completed};
-        }
 
         [HttpGet]
         public async Task<IEnumerable<TodoView>> Get([FromClientIdHeader] ClientId clientId) =>
@@ -75,5 +63,15 @@ namespace TodoBackendTemplate.Controllers
         [HttpDelete]
         public Task DeleteAll([FromClientIdHeader] ClientId clientId) =>
             _service.Execute(clientId, new Todo.Commands.Clear());
+
+        Todo.Props ToProps(TodoView value) =>
+            new Todo.Props {Order = value.Order, Title = value.Title, Completed = value.Completed};
+
+        TodoView WithUri(Todo.View x)
+        {
+            // Supplying scheme is secret sauce for making it absolute as required by client
+            var url = Url.RouteUrl("GetTodo", new {id = x.Id}, Request.Scheme);
+            return new TodoView {Id = x.Id, Url = url, Order = x.Order, Title = x.Title, Completed = x.Completed};
+        }
     }
 }

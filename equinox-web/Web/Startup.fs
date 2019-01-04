@@ -224,8 +224,12 @@ type Startup() =
                 failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar collectionVar
 
 #endif
-#if (memoryStore || (!cosmos && !eventStore))
+#if (memoryStore && !cosmos && !eventStore)
         let storeConfig = Storage.Config.Mem
+
+#endif
+#if (!memoryStore && !cosmos && !eventStore)
+        //let storeConfig = Storage.Config.Mem
 
 #endif
         Services.register(services, storeConfig)

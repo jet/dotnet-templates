@@ -95,8 +95,11 @@ namespace TodoBackendTemplate.Web
             var config = new CosmosConfig(connMode, conn, db, coll, cacheMb);
             return new CosmosContext(config);
 #endif
-#if (memoryStore || (!cosmos && !eventStore))
+#if (memoryStore && !cosmos && !eventStore)
             return new MemoryStoreContext(new Equinox.MemoryStore.VolatileStore());
+#endif
+#if (!memoryStore && !cosmos && !eventStore)
+            //return new MemoryStoreContext(new Equinox.MemoryStore.VolatileStore());
 #endif
         }
     }
@@ -118,7 +121,7 @@ namespace TodoBackendTemplate.Web
             new Todo.Service(
                 _handlerLog,
                 _context.Resolve(
-                    EquinoxCodec.Create(Todo.Events.Encode,Todo.Events.TryDecode),
+                    EquinoxCodec.Create(Todo.Events.Encode, Todo.Events.TryDecode),
                     Todo.Folds.Fold,
                     Todo.Folds.Initial,
                     Todo.Folds.IsOrigin,
@@ -129,18 +132,18 @@ namespace TodoBackendTemplate.Web
             new Aggregate.Service(
                 _handlerLog,
                 _context.Resolve(
-                    EquinoxCodec.Create(Aggregate.Events.Encode,Aggregate.Events.TryDecode),
+                    EquinoxCodec.Create(Aggregate.Events.Encode, Aggregate.Events.TryDecode),
                     Aggregate.Folds.Fold,
                     Aggregate.Folds.Initial,
                     Aggregate.Folds.IsOrigin,
                     Aggregate.Folds.Compact));
 #endif
 #if (!aggregate && !todos)
-//        public Thing.Service CreateAggregateService() =>
+//        public Thing.Service CreateThingService() =>
 //            Aggregate.Service(
 //                _handlerLog,
 //                _context.Resolve(
-//                    EquinoxCodec.Create<Thing.Events.Event>(),
+//                    EquinoxCodec.Create<Thing.Events.Event>(), // Assumes Union following IUnionContract pattern, see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
 //                    Thing.Folds.fold, 
 //                    Thing.Folds.initial, 
 //                    Thing.Folds.isOrigin, 
