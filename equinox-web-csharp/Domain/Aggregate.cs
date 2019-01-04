@@ -120,7 +120,7 @@ namespace TodoBackendTemplate
 
             /// Execute `command`, syncing any events decided upon
             public Task<Unit> Execute(ICommand c) =>
-                _inner.Decide(ctx =>
+                _inner.Execute(ctx =>
                     ctx.Execute(s => Commands.Interpret(s, c)));
 
             /// Establish the present state of the Stream, project from that as specified by `projection`

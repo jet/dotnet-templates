@@ -36,7 +36,7 @@ namespace TodoBackendTemplate
         }
 
         // Run the decision method, letting it decide whether or not the Command's intent should manifest as Events
-        public async Task<Unit> Decide(Action<Context<TEvent, TState>> decide) =>
+        public async Task<Unit> Execute(Action<Context<TEvent, TState>> decide) =>
             await FSharpAsync.StartAsTask(Decide(FuncConvert.ToFSharpFunc(decide)), null, null);
 
         // Execute a command, as Decide(Action) does, but also yield an outcome from the decision

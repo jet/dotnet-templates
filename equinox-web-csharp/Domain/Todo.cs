@@ -34,29 +34,29 @@ namespace TodoBackendTemplate
             public class Added : ItemData, IEvent
             {
             }
-            
+
             public class Updated : ItemData, IEvent
             {
             }
 
-            public class Deleted: IEvent
+            public class Deleted : IEvent
             {
                 public int Id { get; set; }
             }
 
-            public class Cleared: IEvent
+            public class Cleared : IEvent
             {
                 public int NextId { get; set; }
             }
-            
-            public class Compacted: IEvent
+
+            public class Compacted : IEvent
             {
                 public int NextId { get; set; }
                 public ItemData[] Items { get; set; }
             }
 
             private static readonly JsonNetUtf8Codec Codec = new JsonNetUtf8Codec(new JsonSerializerSettings());
-            
+
             public static IEvent TryDecode(string et, byte[] json)
             {
                 switch (et)
@@ -69,8 +69,8 @@ namespace TodoBackendTemplate
                     default: return null;
                 }
             }
-            
-            public static Tuple<string,byte[]> Encode(IEvent x)
+
+            public static Tuple<string, byte[]> Encode(IEvent x)
             {
                 switch (x)
                 {
@@ -110,7 +110,7 @@ namespace TodoBackendTemplate
             {
                 var nextId = origin.NextId;
                 var items = origin.Items.ToList();
-                foreach (var x in xs) 
+                foreach (var x in xs)
                     switch (x)
                     {
                         case Events.Added e:
@@ -147,7 +147,7 @@ namespace TodoBackendTemplate
             public string Title { get; set; }
             public bool Completed { get; set; }
         }
-        
+
         /// Defines the operations a caller can perform on a Todo List
         public interface ICommand
         {
@@ -189,9 +189,11 @@ namespace TodoBackendTemplate
                         break;
                     case Update c:
                         var proposed = Tuple.Create(c.Props.Order, c.Props.Title, c.Props.Completed);
+
                         bool IsEquivalent(Events.ItemData i) =>
                             i.Id == c.Id
                             && Tuple.Create(i.Order, i.Title, i.Completed).Equals(proposed);
+
                         if (!s.Items.Any(IsEquivalent))
                             yield return Make<Events.Updated>(c.Id, c.Props);
                         break;
@@ -224,7 +226,7 @@ namespace TodoBackendTemplate
 
             /// Execute `command`; does not emit the post state
             public Task<Unit> Execute(ICommand c) =>
-                _inner.Decide(ctx =>
+                _inner.Execute(ctx =>
                     ctx.Execute(s => Commands.Interpret(s, c)));
 
             /// Handle `command`, return the items after the command's intent has been applied to the stream
@@ -234,85 +236,78 @@ namespace TodoBackendTemplate
                     ctx.Execute(s => Commands.Interpret(s, c));
                     return ctx.State.Items;
                 });
-            
+
             /// Establish the present state of the Stream, project from that as specified by `projection`
             public Task<T> Query<T>(Func<State, T> projection) =>
                 _inner.Query(projection);
         }
 
+        /// A single Item in the Todo List
         public class View
         {
-            public bool Sorted { get; set; }
+            public int Id { get; set; }
+            public int Order { get; set; }
+            public string Title { get; set; }
+            public bool Completed { get; set; }
         }
 
+        /// Defines operations that a Controller can perform on a Todo List
         public class Service
         {
             /// Maps a ClientId to Handler for the relevant stream
-            readonly Func<string, Handler> _stream;
+            readonly Func<ClientId, Handler> _stream;
 
             public Service(ILogger handlerLog, Func<Target, IStream<IEvent, State>> resolve) =>
                 _stream = id => new Handler(handlerLog, resolve(CategoryId(id)));
 
-            static Target CategoryId(string id) => Target.NewCatId("Todo", id);
+            //
+            // READ
+            //
 
-            static View Render(State s) => new View() {Sorted = s.Happened};
+            /// List all open items
+            public Task<IEnumerable<View>> List(ClientId clientId) =>
+                _stream(clientId).Query(s => s.Items.Select(Render));
 
-            /// Read the present state
-            // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
-            public Task<View> Read(string id) => _stream(id).Query(Render);
+            /// Load details for a single specific item
+            public Task<View> TryGet(ClientId clientId, int id) =>
+                _stream(clientId).Query(s =>
+                {
+                    var i = s.Items.SingleOrDefault(x => x.Id == id);
+                    return i == null ? null : Render(i);
+                });
 
-            /// Execute the specified command 
-            public Task<Unit> Execute(string id, ICommand command) =>
-                _stream(id).Execute(command);
+            //
+            // WRITE
+            //
+
+            /// Execute the specified (blind write) command 
+            public Task<Unit> Execute(ClientId clientId, ICommand command) =>
+                _stream(clientId).Execute(command);
+
+            //
+            // WRITE-READ
+            //
+
+            /// Create a new ToDo List item; response contains the generated `id`
+            public async Task<View> Create(ClientId clientId, Props template)
+            {
+                var state = await _stream(clientId).Decide(new Commands.Add {Props = template});
+                return Render(state.First());
+            }
+
+            /// Update the specified item as referenced by the `item.id`
+            public async Task<View> Patch(ClientId clientId, int id, Props value)
+            {
+                var state = await _stream(clientId).Decide(new Commands.Update {Id = id, Props = value});
+                return Render(state.Single(x => x.Id == id));
+            }
+
+            /// Maps a ClientId to the CatId that specifies the Stream in which the data for that client will be held
+            static Target CategoryId(ClientId id) =>
+                Target.NewCatId("Todos", id?.ToString() ?? "1");
+
+            static View Render(Events.ItemData i) =>
+                new View {Id = i.Id, Order = i.Order, Title = i.Title, Completed = i.Completed};
         }
     }
 }
-
-
-
-
-/// A single Item in the Todo List
-type View = { id: int; order: int; title: string; completed: bool }
-
-/// Defines operations that a Controller can perform on a Todo List
-type Service(handlerLog, resolve) =
-    
-    /// Maps a ClientId to the CatId that specifies the Stream in whehch the data for that client will be held
-    let (|CategoryId|) (clientId: ClientId) = Equinox.CatId("Todos", if obj.ReferenceEquals(clientId,null) then "1" else clientId.Value)
-    
-    /// Maps a ClientId to Handler for the relevant stream
-    let (|Stream|) (CategoryId catId) = Handler(handlerLog, resolve catId)
-
-    let render (item: Events.ItemData) : View =
-        {   id = item.id
-            order = item.order
-            title = item.title
-            completed = item.completed }
-
-    (* READ *)
-
-    /// List all open items
-    member __.List(Stream stream) : Async<View seq> =
-        stream.Query (fun x -> seq { for x in x.items -> render x })
-
-    /// Load details for a single specific item
-    member __.TryGet(Stream stream, id) : Async<View option> =
-        stream.Query (fun x -> x.items |> List.tryFind (fun x -> x.id = id) |> Option.map render)
-
-    (* WRITE *)
-
-    /// Execute the specified (blind write) command 
-    member __.Execute(Stream stream, command) : Async<unit> =
-        stream.Execute command
-
-    (* WRITE-READ *)
-
-    /// Create a new ToDo List item; response contains the generated `id`
-    member __.Create(Stream stream, template: Props) : Async<View> = async {
-        let! state' = stream.Handle(Commands.Add template)
-        return List.head state' |> render }
-
-    /// Update the specified item as referenced by the `item.id`
-    member __.Patch(Stream stream, id: int, value: Props) : Async<View> = async {
-        let! state' = stream.Handle(Commands.Update (id, value))
-        return state' |> List.find (fun x -> x.id = id) |> render}
