@@ -64,22 +64,15 @@ namespace TodoBackendTemplate
         }
 
         /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
-        public abstract class Command
+        public abstract class Command : OneOfBase<Command.MakeItSo>
         {
             public class MakeItSo : Command
             {
             }
 
-            public static IEnumerable<Event> Interpret(State s, Command x)
-            {
-                switch (x)
-                {
-                    case MakeItSo c:
-                        if (!s.Happened) yield return new Event.Happened();
-                        break;
-                    default: throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
-                }
-            }
+            public static Event[] Interpret(State s, Command x) =>
+                x.Match(makeItSo => 
+                    s.Happened ? new Event[0] : new Event [] { new Event.Happened()});
         }
 
         class Handler
