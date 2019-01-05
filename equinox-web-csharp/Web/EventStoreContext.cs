@@ -40,17 +40,12 @@ namespace TodoBackendTemplate
         private static GesGateway Connect(EventStoreConfig config)
         {
             var log = Logger.NewSerilogNormal(Serilog.Log.ForContext<EventStoreContext>());
-            var c = new GesConnector(config.Username, config.Password, reqTimeout: TimeSpan.FromSeconds(5),
-                reqRetries: 1,
-                log: log, heartbeatTimeout: null, concurrentOperationsLimit: null, readRetryPolicy: null,
-                writeRetryPolicy: null, tags: null);
+            var c = new GesConnector(config.Username, config.Password, reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
 
             var conn = FSharpAsync.RunSynchronously(
-                c.Establish("Twin", Discovery.NewGossipDns(config.Host),
-                    ConnectionStrategy.ClusterTwinPreferSlaveReads),
+                c.Establish("Twin", Discovery.NewGossipDns(config.Host), ConnectionStrategy.ClusterTwinPreferSlaveReads),
                 null, null);
-            return new GesGateway(conn,
-                new GesBatchingPolicy(maxBatchSize: 500));
+            return new GesGateway(conn, new GesBatchingPolicy(maxBatchSize: 500));
         }
 
         internal override void Connect()

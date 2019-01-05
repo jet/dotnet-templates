@@ -12,10 +12,8 @@ namespace TodoBackendTemplate
     {
         readonly VolatileStore _store;
 
-        public MemoryStoreContext(VolatileStore store)
-        {
+        public MemoryStoreContext(VolatileStore store) =>        
             _store = store;
-        }
 
         public override Func<Target,IStream<TEvent, TState>> Resolve<TEvent, TState>(
             IUnionEncoder<TEvent, byte[]> codec,

@@ -10,9 +10,8 @@
     "language": "C#"
   },
   "identity": "Equinox.Template.CSharp",
-  "groupIdentity": "Equinox.Web",
   "name": "Equinox Web App",
-  "shortName": "equinoxweb",
+  "shortName": "eqxwebcs",
   "sourceName": "TodoBackendTemplate",
   "preferNameDirectory": true,
 

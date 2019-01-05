@@ -4,7 +4,11 @@ This project was generated using:
 
     dotnet new -i Equinox.Templates # just once, to install in the local templates store
 
-    dotnet new equinoxweb -t # use --help to see options regarding storage subsystem configuration etc
+    dotnet new eqxweb -t # use --help to see options regarding storage subsystem configuration etc
+
+To generate the C# equivalent:
+
+    dotnet new eqxwebcs -t # use --help to see options regarding storage subsystem configuration etc
 
 To run a local instance of the Website on https://localhost:5001 and http://localhost:5000
 

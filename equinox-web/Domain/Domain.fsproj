@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox" Version="1.0.1" />
+    <PackageReference Include="Equinox" Version="1.0.3-rc1" />
     <PackageReference Include="TypeShape" Version="6.0.0" />
   </ItemGroup>
 

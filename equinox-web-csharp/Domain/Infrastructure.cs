@@ -14,8 +14,7 @@ namespace TodoBackendTemplate
 {
     public static class HandlerExtensions
     {
-        public static void Execute<TEvent, TState>(this Context<TEvent, TState> that,
-            Func<TState, IEnumerable<TEvent>> f) =>
+        public static void Execute<TEvent, TState>(this Context<TEvent, TState> that, Func<TState, IEnumerable<TEvent>> f) =>
             that.Execute(FuncConvert.FromFunc<TState, FSharpList<TEvent>>(s => ListModule.OfSeq(f(s))));
     }
 
@@ -26,12 +25,7 @@ namespace TodoBackendTemplate
                 ILogger log,
                 IStream<TEvent, TState> stream,
                 int maxAttempts = 3)
-            : base(FuncConvert.FromFunc<TState, FSharpList<TEvent>, TState>(fold),
-                log,
-                stream,
-                maxAttempts,
-               null,
-               null)
+            : base(FuncConvert.FromFunc(fold), log, stream, maxAttempts)
         {
         }
 

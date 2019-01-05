@@ -34,10 +34,7 @@ namespace TodoBackendTemplate
             FSharpOption<TEvent> TryDecodeImpl(Tuple<string, byte[]> encoded) => OptionModule.OfObj(tryDecode(encoded.Item1, encoded.Item2));
         }
 
-        public static Equinox.UnionCodec.IUnionEncoder<TEvent, byte[]> Create<TEvent>(
-            JsonSerializerSettings settings = null) where TEvent: UnionContract.IUnionContract
-        {
-            return Equinox.UnionCodec.JsonUtf8.Create<TEvent>(settings ?? _defaultSerializationSettings, null, null );
-        }
+        public static Equinox.UnionCodec.IUnionEncoder<TEvent, byte[]> Create<TEvent>(JsonSerializerSettings settings = null) where TEvent: UnionContract.IUnionContract =>
+            Equinox.UnionCodec.JsonUtf8.Create<TEvent>(settings ?? _defaultSerializationSettings);
     } 
 }

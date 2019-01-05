@@ -36,8 +36,7 @@ namespace TodoBackendTemplate
         public CosmosContext(CosmosConfig config)
         {
             _cache = new Caching.Cache("Cosmos", config.CacheMb);
-            var retriesOn429Throttling =
-                1; // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
+            var retriesOn429Throttling = 1; // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             var timeout = TimeSpan.FromSeconds(5); // Timeout applied per request to CosmosDb, including retry attempts
             var discovery = Discovery.FromConnectionString(config.ConnectionStringWithUriAndKey);
            _store = new Lazy<EqxStore>(() =>
@@ -46,7 +45,7 @@ namespace TodoBackendTemplate
                    (int) timeout.TotalSeconds);
                var collectionMapping = new EqxCollections(config.Database, config.Collection);
 
-               return new EqxStore(gateway, collectionMapping, resolverLog: null);
+               return new EqxStore(gateway, collectionMapping);
            });
     }
 
@@ -54,15 +53,11 @@ namespace TodoBackendTemplate
             int maxRetryForThrottling, int maxRetryWaitSeconds)
         {
             var log = Log.ForContext<CosmosContext>();
-            var c = new EqxConnector(log: log, mode: mode, requestTimeout:
-                operationTimeout, maxRetryAttemptsOnThrottledRequests: maxRetryForThrottling,
-                maxRetryWaitTimeInSeconds:
-                maxRetryWaitSeconds, tags: null, maxConnectionLimit: null, defaultConsistencyLevel: null,
-                readRetryPolicy: null, writeRetryPolicy: null);
+            var c = new EqxConnector(log, mode, operationTimeout,
+                maxRetryAttemptsOnThrottledRequests: maxRetryForThrottling,
+                maxRetryWaitTimeInSeconds: maxRetryWaitSeconds);
             var conn = FSharpAsync.RunSynchronously(c.Connect(appName, discovery), null, null);
-            return new EqxGateway(conn, new EqxBatchingPolicy(defaultMaxItems: 500, getDefaultMaxItems: null,
-                maxRequests: null, maxEventsPerSlice: null
-            ));
+            return new EqxGateway(conn, new EqxBatchingPolicy(defaultMaxItems: 500));
         }
 
         internal override void Connect()
@@ -80,8 +75,7 @@ namespace TodoBackendTemplate
             var accessStrategy =
                 isOrigin == null && compact == null
                     ? null
-                    : AccessStrategy<TEvent, TState>.NewSnapshot(FuncConvert.FromFunc(isOrigin),
-                        FuncConvert.FromFunc(compact));
+                    : AccessStrategy<TEvent, TState>.NewSnapshot(FuncConvert.FromFunc(isOrigin), FuncConvert.FromFunc(compact));
 
             var cacheStrategy = _cache == null
                 ? null

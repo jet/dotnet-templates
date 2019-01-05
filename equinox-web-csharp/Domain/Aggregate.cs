@@ -113,10 +113,8 @@ namespace TodoBackendTemplate
         {
             readonly EquinoxHandler<IEvent, State> _inner;
 
-            public Handler(ILogger log, IStream<IEvent, State> stream)
-            {
+            public Handler(ILogger log, IStream<IEvent, State> stream) =>
                 _inner = new EquinoxHandler<IEvent, State>(Folds.Fold, log, stream);
-            }
 
             /// Execute `command`, syncing any events decided upon
             public Task<Unit> Execute(ICommand c) =>
@@ -138,20 +136,20 @@ namespace TodoBackendTemplate
             /// Maps a ClientId to Handler for the relevant stream
             readonly Func<string, Handler> _stream;
 
+            static Target CategoryId(string id) => Target.NewCatId("Aggregate", id);
+
             public Service(ILogger handlerLog, Func<Target, IStream<IEvent, State>> resolve) =>
                 _stream = id => new Handler(handlerLog, resolve(CategoryId(id)));
 
-            static Target CategoryId(string id) => Target.NewCatId("Aggregate", id);
-
-            static View Render(State s) => new View() {Sorted = s.Happened};
+            /// Execute the specified command 
+            public Task<Unit> Execute(string id, ICommand command) =>
+                _stream(id).Execute(command);
 
             /// Read the present state
             // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
             public Task<View> Read(string id) => _stream(id).Query(Render);
 
-            /// Execute the specified command 
-            public Task<Unit> Execute(string id, ICommand command) =>
-                _stream(id).Execute(command);
+            static View Render(State s) => new View() {Sorted = s.Happened};
         }
     }
 }

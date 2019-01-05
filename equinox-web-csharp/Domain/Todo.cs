@@ -258,6 +258,10 @@ namespace TodoBackendTemplate
             /// Maps a ClientId to Handler for the relevant stream
             readonly Func<ClientId, Handler> _stream;
 
+            /// Maps a ClientId to the CatId that specifies the Stream in which the data for that client will be held
+            static Target CategoryId(ClientId id) =>
+                Target.NewCatId("Todos", id?.ToString() ?? "1");
+
             public Service(ILogger handlerLog, Func<Target, IStream<IEvent, State>> resolve) =>
                 _stream = id => new Handler(handlerLog, resolve(CategoryId(id)));
 
@@ -302,10 +306,6 @@ namespace TodoBackendTemplate
                 var state = await _stream(clientId).Decide(new Commands.Update {Id = id, Props = value});
                 return Render(state.Single(x => x.Id == id));
             }
-
-            /// Maps a ClientId to the CatId that specifies the Stream in which the data for that client will be held
-            static Target CategoryId(ClientId id) =>
-                Target.NewCatId("Todos", id?.ToString() ?? "1");
 
             static View Render(Events.ItemData i) =>
                 new View {Id = i.Id, Order = i.Order, Title = i.Title, Completed = i.Completed};
