@@ -53,9 +53,7 @@ namespace TodoBackendTemplate
             int maxRetryForThrottling, int maxRetryWaitSeconds)
         {
             var log = Log.ForContext<CosmosContext>();
-            var c = new EqxConnector(log, mode, operationTimeout,
-                maxRetryAttemptsOnThrottledRequests: maxRetryForThrottling,
-                maxRetryWaitTimeInSeconds: maxRetryWaitSeconds);
+            var c = new EqxConnector(operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds, log, mode: mode);
             var conn = FSharpAsync.RunSynchronously(c.Connect(appName, discovery), null, null);
             return new EqxGateway(conn, new EqxBatchingPolicy(defaultMaxItems: 500));
         }
