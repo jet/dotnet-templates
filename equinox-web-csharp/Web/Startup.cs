@@ -48,15 +48,15 @@ namespace TodoBackendTemplate.Web
 #endif
 #if aggregate
             services.AddSingleton(sp => sp.GetRequiredService<ServiceBuilder>().CreateAggregateService());
-#else
+#endif
+#if (!aggregate && !todos)
             //services.Register(fun sp -> sp.Resolve<ServiceBuilder>().CreateThingService())
 #endif
-
         }
 
         private static EquinoxContext ConfigureStore()
         {
-#if cosmos || eventStore
+#if (cosmos || eventStore)
             // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
             // The primary objects held in the cache are the Folded State of Event-sourced aggregates
             // see https://docs.microsoft.com/en-us/dotnet/framework/performance/caching-in-net-framework-applications for more information
