@@ -6,13 +6,14 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using OneOf;
 
 namespace TodoBackendTemplate
 {
     public static class Aggregate
     {
         /// NB - these types and names reflect the actual storage formats and hence need to be versioned with care
-        public abstract class Event
+        public abstract class Event : OneOfBase<Event.Happened, Event.Compacted>
         {
             public class Happened : Event
             {
@@ -43,21 +44,10 @@ namespace TodoBackendTemplate
 
             internal State(bool happened) { Happened = happened; }
 
-            public static readonly State Initial = new State(false);
-
-            static void Evolve(State s, Event x)
-            {
-                switch (x)
-                {
-                    case Event.Happened e:
-                        s.Happened = true;
-                        break;
-                    case Event.Compacted e:
-                        s.Happened = e.Happened;
-                        break;
-                    default: throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
-                }
-            }
+            static void Evolve(State s, Event x) =>
+                x.Match(
+                    (Happened _) => s.Happened = true,
+                    (Compacted e) => s.Happened = e.Happened);
 
             public static State Fold(State origin, IEnumerable<Event> xs)
             {
