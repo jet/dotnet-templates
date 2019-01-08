@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Events;
 using System;
@@ -8,7 +9,7 @@ namespace TodoBackendTemplate.Web
 {
     static class Program
     {
-        public static int Main(string[] argv)
+        public static async int Main(string[] argv)
         {
             try
             {
@@ -18,11 +19,15 @@ namespace TodoBackendTemplate.Web
                     .Enrich.FromLogContext()
                     .WriteTo.Console()
                     .CreateLogger();
-                WebHost
+                var host = WebHost
                     .CreateDefaultBuilder(argv)
                     .UseStartup<Startup>()
-                    .Build()
-                    .Run();
+                    .Build();
+                // Conceptually, these can run in parallel
+                // in practice, you'll only very rarely have >1 store
+                foreach (var ctx in host.Services.GetServices<EquinoxContext>())
+                    await ctx.Connect();
+                host.Run();
                 return 0;
             }
             catch (Exception e)

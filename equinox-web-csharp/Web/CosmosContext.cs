@@ -6,6 +6,7 @@ using Microsoft.FSharp.Core;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
@@ -30,8 +31,10 @@ namespace TodoBackendTemplate
 
     public class CosmosContext : EquinoxContext
     {
-        readonly Lazy<EqxStore> _store;
         readonly Caching.Cache _cache;
+
+        EqxStore _store;
+        readonly Func<Task> _connect;
 
         public CosmosContext(CosmosConfig config)
         {
@@ -39,28 +42,25 @@ namespace TodoBackendTemplate
             var retriesOn429Throttling = 1; // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             var timeout = TimeSpan.FromSeconds(5); // Timeout applied per request to CosmosDb, including retry attempts
             var discovery = Discovery.FromConnectionString(config.ConnectionStringWithUriAndKey);
-           _store = new Lazy<EqxStore>(() =>
-           {
-               var gateway = Connect("App", config.Mode, discovery, timeout, retriesOn429Throttling,
-                   (int) timeout.TotalSeconds);
-               var collectionMapping = new EqxCollections(config.Database, config.Collection);
+            _connect = async () =>
+            {
+                var gateway = await Connect("App", config.Mode, discovery, timeout, retriesOn429Throttling,
+                    (int)timeout.TotalSeconds);
+                var collectionMapping = new EqxCollections(config.Database, config.Collection);
 
-               return new EqxStore(gateway, collectionMapping);
-           });
-    }
+                _store = new EqxStore(gateway, collectionMapping);
+            };
+        }
 
-        private static EqxGateway Connect(string appName, ConnectionMode mode, Discovery discovery, TimeSpan operationTimeout,
+        internal override async Task Connect() => await _connect();
+
+        static async Task<EqxGateway> Connect(string appName, ConnectionMode mode, Discovery discovery, TimeSpan operationTimeout,
             int maxRetryForThrottling, int maxRetryWaitSeconds)
         {
             var log = Log.ForContext<CosmosContext>();
             var c = new EqxConnector(operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds, log, mode: mode);
-            var conn = FSharpAsync.RunSynchronously(c.Connect(appName, discovery), null, null);
+            var conn = await FSharpAsync.StartAsTask(c.Connect(appName, discovery), null, null);
             return new EqxGateway(conn, new EqxBatchingPolicy(defaultMaxItems: 500));
-        }
-
-        internal override void Connect()
-        {
-            var _ = _store.Value;
         }
 
         public override Func<Target,Equinox.Store.IStream<TEvent, TState>> Resolve<TEvent, TState>(
@@ -78,7 +78,7 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new EqxResolver<TEvent, TState>(_store.Value, codec, FuncConvert.FromFunc(fold), initial, accessStrategy, cacheStrategy);
+            var resolver = new EqxResolver<TEvent, TState>(_store, codec, FuncConvert.FromFunc(fold), initial, accessStrategy, cacheStrategy);
             return t => resolver.Resolve.Invoke(t);
         }
     }

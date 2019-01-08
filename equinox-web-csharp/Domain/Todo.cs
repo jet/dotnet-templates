@@ -10,14 +10,10 @@ using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
-    public class Todo
+    public static class Todo
     {
-        public interface IEvent
-        {
-        }
-
         /// NB - these types and names reflect the actual storage formats and hence need to be versioned with care
-        public static class Events
+        public abstract class Event
         {
             /// Information we retain per Todo List entry
             public abstract class ItemData
@@ -28,33 +24,38 @@ namespace TodoBackendTemplate
                 public bool Completed { get; set; }
             }
 
-            public class Added : ItemData, IEvent
+            public abstract class ItemEvent : Event
+            {
+                public ItemData Data { get; set; }
+            }
+
+            public class Added : ItemEvent
             {
             }
 
-            public class Updated : ItemData, IEvent
+            public class Updated : ItemEvent
             {
             }
 
-            public class Deleted : IEvent
+            public class Deleted : Event
             {
                 public int Id { get; set; }
             }
 
-            public class Cleared : IEvent
+            public class Cleared : Event
             {
                 public int NextId { get; set; }
             }
 
-            public class Compacted : IEvent
+            public class Compacted : Event
             {
                 public int NextId { get; set; }
                 public ItemData[] Items { get; set; }
             }
 
-            private static readonly JsonNetUtf8Codec Codec = new JsonNetUtf8Codec(new JsonSerializerSettings());
+            static readonly JsonNetUtf8Codec Codec = new JsonNetUtf8Codec(new JsonSerializerSettings());
 
-            public static IEvent TryDecode(string et, byte[] json)
+            public static Event TryDecode(string et, byte[] json)
             {
                 switch (et)
                 {
@@ -67,18 +68,7 @@ namespace TodoBackendTemplate
                 }
             }
 
-            public static Tuple<string, byte[]> Encode(IEvent x)
-            {
-                switch (x)
-                {
-                    case Added e: return Tuple.Create(nameof(Added), Codec.Encode(e));
-                    case Updated e: return Tuple.Create(nameof(Updated), Codec.Encode(e));
-                    case Deleted e: return Tuple.Create(nameof(Deleted), Codec.Encode(e));
-                    case Cleared e: return Tuple.Create(nameof(Cleared), Codec.Encode(e));
-                    case Compacted e: return Tuple.Create(nameof(Compacted), Codec.Encode(e));
-                    default: return null;
-                }
-            }
+            public static (string, byte[]) Encode(Event e) => (e.GetType().Name, Codec.Encode(e));
         }
 
         /// Present state of the Todo List as inferred from the Events we've seen to date
@@ -89,44 +79,41 @@ namespace TodoBackendTemplate
         public class State
         {
             public int NextId { get; }
-            public Events.ItemData[] Items { get; }
+            public Event.ItemData[] Items { get; }
 
-            public State(int nextId, Events.ItemData[] items)
+            internal State(int nextId, Event.ItemData[] items)
             {
                 NextId = nextId;
                 Items = items;
             }
-        }
 
-        public static class Folds
-        {
-            public static State Initial = new State(0, new Events.ItemData[0]);
+            public static State Initial = new State(0, new Event.ItemData[0]);
 
             /// Folds a set of events from the store into a given `state`
-            public static State Fold(State origin, IEnumerable<IEvent> xs)
+            public static State Fold(State origin, IEnumerable<Event> xs)
             {
                 var nextId = origin.NextId;
                 var items = origin.Items.ToList();
                 foreach (var x in xs)
                     switch (x)
                     {
-                        case Events.Added e:
+                        case Event.Added e:
                             nextId++;
-                            items.Insert(0, e);
+                            items.Insert(0, e.Data);
                             break;
-                        case Events.Updated e:
-                            var i = items.FindIndex(item => item.Id == e.Id);
+                        case Event.Updated e:
+                            var i = items.FindIndex(item => item.Id == e.Data.Id);
                             if (i != -1)
-                                items[i] = e;
+                                items[i] = e.Data;
                             break;
-                        case Events.Deleted e:
+                        case Event.Deleted e:
                             items.RemoveAll(item => item.Id == e.Id);
                             break;
-                        case Events.Cleared e:
+                        case Event.Cleared e:
                             nextId = e.NextId;
                             items.Clear();
                             break;
-                        case Events.Compacted e:
+                        case Event.Compacted e:
                             nextId = e.NextId;
                             items = e.Items.ToList();
                             break;
@@ -137,10 +124,10 @@ namespace TodoBackendTemplate
             }
             
             /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
-            public static bool IsOrigin(IEvent e) => e is Events.Cleared || e is Events.Compacted;
+            public static bool IsOrigin(Event e) => e is Event.Cleared || e is Event.Compacted;
             
             /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-            public static IEvent Compact(State state) => new Events.Compacted { NextId = state.NextId, Items = state.Items };
+            public static Event Compact(State state) => new Event.Compacted { NextId = state.NextId, Items = state.Items };
         }
 
         /// Properties that can be edited on a Todo List item
@@ -152,89 +139,85 @@ namespace TodoBackendTemplate
         }
 
         /// Defines the operations a caller can perform on a Todo List
-        public interface ICommand
-        {
-        }
-
-        /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
-        public static class Commands
+        public abstract class Command
         {
             /// Create a single item
-            public class Add : ICommand
+            public class Add : Command
             {
                 public Props Props { get; set; }
             }
 
             /// Update a single item
-            public class Update : ICommand
+            public class Update : Command
             {
                 public int Id { get; set; }
                 public Props Props { get; set; }
             }
 
             /// Delete a single item from the list
-            public class Delete : ICommand
+            public class Delete : Command
             {
                 public int Id { get; set; }
             }
 
             /// Complete clear the todo list
-            public class Clear : ICommand
+            public class Clear : Command
             {
             }
 
-            public static IEnumerable<IEvent> Interpret(State s, ICommand x)
+            /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
+            public static IEnumerable<Event> Interpret(State s, Command x)
             {
                 switch (x)
                 {
                     case Add c:
-                        yield return Make<Events.Added>(s.NextId, c.Props);
+                        yield return Make<Event.Added>(s.NextId, c.Props);
                         break;
                     case Update c:
-                        var proposed = Tuple.Create(c.Props.Order, c.Props.Title, c.Props.Completed);
+                        var proposed = new {c.Props.Order, c.Props.Title, c.Props.Completed};
 
-                        bool IsEquivalent(Events.ItemData i) =>
+                        bool IsEquivalent(Event.ItemData i) =>
                             i.Id == c.Id
-                            && Tuple.Create(i.Order, i.Title, i.Completed).Equals(proposed);
+                            && new {i.Order, i.Title, i.Completed} == proposed;
 
                         if (!s.Items.Any(IsEquivalent))
-                            yield return Make<Events.Updated>(c.Id, c.Props);
+                            yield return Make<Event.Updated>(c.Id, c.Props);
                         break;
                     case Delete c:
                         if (s.Items.Any(i => i.Id == c.Id))
-                            yield return new Events.Deleted {Id = c.Id};
+                            yield return new Event.Deleted {Id = c.Id};
                         break;
-                    case Clear c:
-                        if (s.Items.Any()) yield return new Events.Cleared {NextId = s.NextId};
+                    case Clear _:
+                        if (s.Items.Any()) yield return new Event.Cleared {NextId = s.NextId};
                         break;
 
                     default:
                         throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
                 }
 
-                T Make<T>(int id, Props value) where T : Events.ItemData, IEvent, new() =>
-                    new T() {Id = id, Order = value.Order, Title = value.Title, Completed = value.Completed};
+                T Make<T>(int id, Props value) where T : Event.ItemEvent, new() =>
+                    new T {Data = {Id = id, Order = value.Order, Title = value.Title, Completed = value.Completed}};
             }
         }
 
         /// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
-        private class Handler
+        class Handler
         {
-            readonly EquinoxHandler<IEvent, State> _inner;
+            readonly EquinoxHandler<Event, State> _inner;
 
-            public Handler(ILogger log, IStream<IEvent, State> stream) =>
-                _inner = new EquinoxHandler<IEvent, State>(Folds.Fold, log, stream);
+            public Handler(ILogger log, IStream<Event, State> stream) =>
+                _inner = new EquinoxHandler<Event, State>(State.Fold, log, stream);
 
             /// Execute `command`; does not emit the post state
-            public Task<Unit> Execute(ICommand c) =>
+            public Task<Unit> Execute(Command c) =>
                 _inner.Execute(ctx =>
-                    ctx.Execute(s => Commands.Interpret(s, c)));
+                    ctx.Execute(s => Command.Interpret(s, c)));
 
             /// Handle `command`, return the items after the command's intent has been applied to the stream
-            public Task<Events.ItemData[]> Decide(ICommand c) =>
+            public Task<Event.ItemData[]> Decide(Command c) =>
                 _inner.Decide(ctx =>
                 {
-                    ctx.Execute(s => Commands.Interpret(s, c));
+                    ctx.Execute(s => Command.Interpret(s, c));
                     return ctx.State.Items;
                 });
 
@@ -262,7 +245,7 @@ namespace TodoBackendTemplate
             static Target CategoryId(ClientId id) =>
                 Target.NewCatId("Todos", id?.ToString() ?? "1");
 
-            public Service(ILogger handlerLog, Func<Target, IStream<IEvent, State>> resolve) =>
+            public Service(ILogger handlerLog, Func<Target, IStream<Event, State>> resolve) =>
                 _stream = id => new Handler(handlerLog, resolve(CategoryId(id)));
 
             //
@@ -286,7 +269,7 @@ namespace TodoBackendTemplate
             //
 
             /// Execute the specified (blind write) command 
-            public Task<Unit> Execute(ClientId clientId, ICommand command) =>
+            public Task<Unit> Execute(ClientId clientId, Command command) =>
                 _stream(clientId).Execute(command);
 
             //
@@ -296,18 +279,18 @@ namespace TodoBackendTemplate
             /// Create a new ToDo List item; response contains the generated `id`
             public async Task<View> Create(ClientId clientId, Props template)
             {
-                var state = await _stream(clientId).Decide(new Commands.Add {Props = template});
+                var state = await _stream(clientId).Decide(new Command.Add {Props = template});
                 return Render(state.First());
             }
 
             /// Update the specified item as referenced by the `item.id`
             public async Task<View> Patch(ClientId clientId, int id, Props value)
             {
-                var state = await _stream(clientId).Decide(new Commands.Update {Id = id, Props = value});
+                var state = await _stream(clientId).Decide(new Command.Update {Id = id, Props = value});
                 return Render(state.Single(x => x.Id == id));
             }
 
-            static View Render(Events.ItemData i) =>
+            static View Render(Event.ItemData i) =>
                 new View {Id = i.Id, Order = i.Order, Title = i.Title, Completed = i.Completed};
         }
     }

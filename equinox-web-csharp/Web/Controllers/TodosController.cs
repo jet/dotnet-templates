@@ -58,11 +58,11 @@ namespace TodoBackendTemplate.Controllers
 
         [HttpDelete("{id}")]
         public Task Delete([FromClientIdHeader] ClientId clientId, int id) =>
-            _service.Execute(clientId, new Todo.Commands.Delete {Id = id});
+            _service.Execute(clientId, new Todo.Command.Delete {Id = id});
 
         [HttpDelete]
         public Task DeleteAll([FromClientIdHeader] ClientId clientId) =>
-            _service.Execute(clientId, new Todo.Commands.Clear());
+            _service.Execute(clientId, new Todo.Command.Clear());
 
         Todo.Props ToProps(TodoView value) =>
             new Todo.Props {Order = value.Order, Title = value.Title, Completed = value.Completed};

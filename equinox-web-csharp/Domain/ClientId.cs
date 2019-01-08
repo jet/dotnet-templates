@@ -15,6 +15,7 @@ namespace TodoBackendTemplate
         [IgnoreDataMember] // Prevent Swashbuckle inferring there is a Value property
         public Guid Value { get; }
 
+        // TOCONSIDER - happy for this to become a ctor and  ClientIdStringConverter to be removed if it just works correctly as-is when a header is supplied
         public static ClientId Parse(string input) => new ClientId(Guid.Parse(input));
 
         public override string ToString() => Value.ToString("N");
@@ -28,10 +29,7 @@ namespace TodoBackendTemplate
         public override object ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value) =>
             value is string s ? ClientId.Parse(s) : base.ConvertFrom(context, culture, value);
 
-        public override object ConvertTo(ITypeDescriptorContext context, CultureInfo culture, object value,
-            Type destinationType) =>
-            value is ClientId c && destinationType == typeof(string)
-                ? c.Value
-                : base.ConvertTo(context, culture, value, destinationType);
+        public override object ConvertTo(ITypeDescriptorContext context, CultureInfo culture, object value, Type destinationType) =>
+            base.ConvertTo(context, culture, value, destinationType);
     }
 }

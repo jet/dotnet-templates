@@ -5,6 +5,7 @@ using Equinox.UnionCodec;
 using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
@@ -26,8 +27,6 @@ namespace TodoBackendTemplate
             return target => resolver.Resolve.Invoke(target);
         }
 
-        internal override void Connect()
-        {
-        }
+        internal override Task Connect() => Task.CompletedTask;
     }
 }

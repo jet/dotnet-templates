@@ -3,6 +3,7 @@ using Microsoft.FSharp.Core;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using TypeShape;
 
 namespace TodoBackendTemplate
@@ -16,7 +17,7 @@ namespace TodoBackendTemplate
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> compact = null);
 
-        internal abstract void Connect();
+        internal abstract Task Connect();
     }
 
     public static class EquinoxCodec

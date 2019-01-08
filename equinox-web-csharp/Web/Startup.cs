@@ -35,13 +35,9 @@ namespace TodoBackendTemplate.Web
             ConfigureServices(services, equinoxContext);
         }
 
-        private static void ConfigureServices(IServiceCollection services, EquinoxContext context)
+        static void ConfigureServices(IServiceCollection services, EquinoxContext context)
         {
-            services.AddSingleton(_ =>
-            {
-                context.Connect();
-                return context;
-            });
+            services.AddSingleton(_ => context);
             services.AddSingleton(sp => new ServiceBuilder(context, Serilog.Log.ForContext<EquinoxContext>()));
 #if todos
             services.AddSingleton(sp => sp.GetRequiredService<ServiceBuilder>().CreateTodoService());
@@ -54,7 +50,7 @@ namespace TodoBackendTemplate.Web
 #endif
         }
 
-        private static EquinoxContext ConfigureStore()
+        static EquinoxContext ConfigureStore()
         {
 #if (cosmos || eventStore)
             // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
@@ -121,26 +117,26 @@ namespace TodoBackendTemplate.Web
             new Todo.Service(
                 _handlerLog,
                 _context.Resolve(
-                    EquinoxCodec.Create(Todo.Events.Encode, Todo.Events.TryDecode),
-                    Todo.Folds.Fold,
-                    Todo.Folds.Initial,
-                    Todo.Folds.IsOrigin,
-                    Todo.Folds.Compact));
+                    EquinoxCodec.Create(Todo.Event.Encode, Todo.Event.TryDecode),
+                    Todo.State.Fold,
+                    Todo.State.Initial,
+                    Todo.State.IsOrigin,
+                    Todo.State.Compact));
 #endif
 #if aggregate
         public Aggregate.Service CreateAggregateService() =>
             new Aggregate.Service(
                 _handlerLog,
                 _context.Resolve(
-                    EquinoxCodec.Create(Aggregate.Events.Encode, Aggregate.Events.TryDecode),
-                    Aggregate.Folds.Fold,
-                    Aggregate.Folds.Initial,
-                    Aggregate.Folds.IsOrigin,
-                    Aggregate.Folds.Compact));
+                    EquinoxCodec.Create(Aggregate.Event.Encode, Aggregate.Event.TryDecode),
+                    Aggregate.State.Fold,
+                    Aggregate.State.Initial,
+                    Aggregate.State.IsOrigin,
+                    Aggregate.State.Compact));
 #endif
 #if (!aggregate && !todos)
 //        public Thing.Service CreateThingService() =>
-//            Aggregate.Service(
+//            Thing.Service(
 //                _handlerLog,
 //                _context.Resolve(
 //                    EquinoxCodec.Create<Thing.Events.Event>(), // Assumes Union following IUnionContract pattern, see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
