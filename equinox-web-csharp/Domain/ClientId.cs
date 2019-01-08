@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ComponentModel;
 using System.Globalization;
+using System.Runtime.Serialization;
 
 namespace TodoBackendTemplate
 {
@@ -11,9 +12,9 @@ namespace TodoBackendTemplate
     {
         private ClientId(Guid value) => Value = value;
 
+        [IgnoreDataMember] // Prevent Swashbuckle inferring there is a Value property
         public Guid Value { get; }
 
-        // NB for validation [and XSS] purposes we must prove it translatable to a Guid
         public static ClientId Parse(string input) => new ClientId(Guid.Parse(input));
 
         public override string ToString() => Value.ToString("N");
