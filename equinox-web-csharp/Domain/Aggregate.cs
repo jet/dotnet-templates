@@ -2,11 +2,11 @@
 using Equinox.Store;
 using Microsoft.FSharp.Core;
 using Newtonsoft.Json;
+using OneOf;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using OneOf;
 
 namespace TodoBackendTemplate
 {
@@ -46,8 +46,8 @@ namespace TodoBackendTemplate
 
             static void Evolve(State s, Event x) =>
                 x.Match(
-                    (Happened _) => s.Happened = true,
-                    (Compacted e) => s.Happened = e.Happened);
+                    (Event.Happened _) => s.Happened = true,
+                    (Event.Compacted e) => s.Happened = e.Happened);
 
             public static State Fold(State origin, IEnumerable<Event> xs)
             {
@@ -71,7 +71,7 @@ namespace TodoBackendTemplate
             }
 
             public static Event[] Interpret(State s, Command x) =>
-                x.Match(makeItSo => 
+                x.Match((MakeItSo _) => 
                     s.Happened ? new Event[0] : new Event [] { new Event.Happened()});
         }
 
