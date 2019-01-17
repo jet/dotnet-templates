@@ -34,8 +34,8 @@ namespace TodoBackendTemplate
                     default: return null;
                 }
             }
-            
-            public static (string, byte[]) Encode(Event e) => (e.GetType().Name, Codec.Encode(e));
+
+            public static Tuple<string, byte[]> Encode(Event e) => Tuple.Create(e.GetType().Name, Codec.Encode(e));
         }
         public class State
         {

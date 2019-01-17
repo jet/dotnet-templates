@@ -16,7 +16,7 @@ namespace TodoBackendTemplate
         public abstract class Event
         {
             /// Information we retain per Todo List entry
-            public abstract class ItemData
+            public class ItemData
             {
                 public int Id { get; set; }
                 public int Order { get; set; }
@@ -26,6 +26,7 @@ namespace TodoBackendTemplate
 
             public abstract class ItemEvent : Event
             {
+                protected ItemEvent() => Data = new ItemData();
                 public ItemData Data { get; set; }
             }
 
@@ -68,7 +69,7 @@ namespace TodoBackendTemplate
                 }
             }
 
-            public static (string, byte[]) Encode(Event e) => (e.GetType().Name, Codec.Encode(e));
+            public static Tuple<string, byte[]> Encode(Event e) => Tuple.Create(e.GetType().Name, Codec.Encode(e));
         }
 
         /// Present state of the Todo List as inferred from the Events we've seen to date

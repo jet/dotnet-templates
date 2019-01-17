@@ -4,12 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Events;
 using System;
+using System.Threading.Tasks;
 
 namespace TodoBackendTemplate.Web
 {
     static class Program
     {
-        public static async int Main(string[] argv)
+        public static async Task<int> Main(string[] argv)
         {
             try
             {
