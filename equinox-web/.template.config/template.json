@@ -2,7 +2,6 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
-    "F#",
     "Web",
     "Equinox",
     "Event Sourcing"
@@ -12,7 +11,7 @@
   },
   "identity": "Equinox.Template",
   "name": "Equinox Web App",
-  "shortName": "equinoxweb",
+  "shortName": "eqxweb",
   "sourceName": "TodoBackendTemplate",
   "preferNameDirectory": true,
 
@@ -34,7 +33,7 @@
     "memoryStore": {
       "type": "parameter",
       "dataType": "bool",
-      "defaultValue": "false",
+      "defaultValue": "true",
       "description": "'Store' Events in an In-Memory volatile store (for test purposes only.)"
     },
     "eventStore": {

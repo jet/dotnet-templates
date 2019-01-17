@@ -7,13 +7,14 @@
     <IsTestProject>false</IsTestProject>
     <PackageType>Template</PackageType>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
-  </PropertyGroup>
+ </PropertyGroup>
 
  <ItemGroup>
-    <None Include="../../equinox-web/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*" Pack="true" PackagePath="content" />
-  </ItemGroup>
+    <None Include="../../equinox-*/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*;**/.idea/**/*" Pack="true" PackagePath="content" />
+ </ItemGroup>
 
   <ItemGroup>
       <PackageReference Include="MinVer" Version="1.0.0-beta.2" PrivateAssets="All" />
   </ItemGroup>
+
 </Project>

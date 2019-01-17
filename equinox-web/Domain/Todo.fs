@@ -9,12 +9,13 @@ module Events =
     type Event =
         | Added     of ItemData
         | Updated   of ItemData
-        | Deleted   of int
+        | Deleted   of id: int
         /// Cleared also `isOrigin` (see below) - if we see one of these, we know we don't need to look back any further
-        | Cleared
+        | Cleared   of nextId: int
         /// For EventStore, AccessStrategy.RollingSnapshots embeds these events every `batchSize` events
-        | Compacted of ItemData[]
+        | Compacted of CompactedData
         interface TypeShape.UnionContract.IUnionContract
+    and CompactedData = { nextId: int; items: ItemData[] }
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Folds =
@@ -28,19 +29,19 @@ module Folds =
         | Events.Added item -> { s with items = item :: s.items; nextId = s.nextId + 1 }
         | Events.Updated value -> { s with items = s.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
         | Events.Deleted id -> { s with items = s.items  |> List.filter (fun x -> x.id <> id) }
-        | Events.Cleared -> { s with items = [] }
-        | Events.Compacted items -> { s with items = List.ofArray items }
+        | Events.Cleared nextId -> { nextId = nextId; items = [] }
+        | Events.Compacted s -> { nextId = s.nextId; items = List.ofArray s.items }
     /// Folds a set of events from the store into a given `state`
     let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
-    let isOrigin = function Events.Cleared | Events.Compacted _ -> true | _ -> false
+    let isOrigin = function Events.Cleared _ | Events.Compacted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-    let compact state = Events.Compacted (Array.ofList state.items)
+    let compact state = Events.Compacted { nextId = state.nextId; items = Array.ofList state.items }
 
 /// Properties that can be edited on a Todo List item
 type Props = { order: int; title: string; completed: bool }
 
-/// Defines the decion process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
+/// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
 module Commands =
 
     /// Defines the operations a caller can perform on a Todo List
@@ -64,7 +65,7 @@ module Commands =
             | Some current when current <> proposed -> [Events.Updated proposed]
             | _ -> []
         | Delete id -> if state.items |> List.exists (fun x -> x.id = id) then [Events.Deleted id] else []
-        | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared]
+        | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared state.nextId]
 
 /// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
 type Handler(log, stream, ?maxAttempts) =
@@ -90,7 +91,7 @@ type View = { id: int; order: int; title: string; completed: bool }
 /// Defines operations that a Controller can perform on a Todo List
 type Service(handlerLog, resolve) =
     
-    /// Maps a ClientId to the CatId that specifies the Stream in whehch the data for that client will be held
+    /// Maps a ClientId to the CatId that specifies the Stream in which the data for that client will be held
     let (|CategoryId|) (clientId: ClientId) = Equinox.CatId("Todos", if obj.ReferenceEquals(clientId,null) then "1" else clientId.Value)
     
     /// Maps a ClientId to Handler for the relevant stream

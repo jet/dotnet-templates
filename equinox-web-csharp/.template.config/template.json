@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Web",
+    "Equinox",
+    "Event Sourcing"
+  ],
+  "tags": {
+    "language": "C#"
+  },
+  "identity": "Equinox.Template.CSharp",
+  "name": "Equinox Web App",
+  "shortName": "eqxwebcs",
+  "sourceName": "TodoBackendTemplate",
+  "preferNameDirectory": true,
+
+  "symbols": {
+    "aggregate": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "true",
+      "description": "Generate an example Aggregate."
+    },
+    "todos": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Generate an example TodosController in your project, together with associated Domain logic."
+    },
+    "memoryStore": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "true",
+      "description": "'Store' Events in an In-Memory volatile store (for test purposes only.)"
+    },
+    "eventStore": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "false",
+      "description": "Store Events in an EventStore Cluster (see https://eventstore.org)"
+    },
+    "cosmos": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "false",
+      "description": "Store Events in an Azure CosmosDb Account"
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!todos)",
+          "exclude": [
+            "*/Controllers/**/*",
+            "**/Todo.cs",
+            "**/ClientId.cs",
+            "README.md"
+          ]
+        },
+        {
+          "condition": "(!aggregate)",
+          "exclude": [
+            "**/Aggregate.cs"
+          ]
+        },
+        {
+          "condition": "(!memoryStore)",
+          "exclude": [
+            "**/MemoryStoreContext.cs"
+          ]
+        },
+        {
+          "condition": "(!eventStore)",
+          "exclude": [
+            "**/EventStoreContext.cs"
+          ]
+        },
+        {
+          "condition": "(!cosmos)",
+          "exclude": [
+            "**/CosmosContext.cs"
+          ]
+        }
+      ]
+    }
+  ]
+}

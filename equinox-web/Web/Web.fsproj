@@ -4,10 +4,6 @@
     <TargetFramework>netcoreapp2.1</TargetFramework>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>TRACE;todos</DefineConstants>
-  </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="Controllers/*.fs" />
     <Compile Include="Startup.fs" />
@@ -15,10 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.Codec" Version="1.0.1" />
-    <PackageReference Include="Equinox.Cosmos" Version="1.0.1" />
-    <PackageReference Include="Equinox.EventStore" Version="1.0.1" />
-    <PackageReference Include="Equinox.MemoryStore" Version="1.0.1" />
+    <PackageReference Include="Equinox.Codec" Version="1.0.3" />
+    <PackageReference Include="Equinox.Cosmos" Version="1.0.3" />
+    <PackageReference Include="Equinox.EventStore" Version="1.0.3" />
+    <PackageReference Include="Equinox.MemoryStore" Version="1.0.3" />
     <PackageReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Serilog.AspNetCore" Version="2.1.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />

@@ -4,15 +4,21 @@ This project was generated using:
 
     dotnet new -i Equinox.Templates # just once, to install in the local templates store
 
-    dotnet new eqxweb -t # use --help to see options regarding storage subsystem configuration etc
-
-To generate the C# equivalent:
-
     dotnet new eqxwebcs -t # use --help to see options regarding storage subsystem configuration etc
+
+To generate the F# equivalent:
+
+    dotnet new eqxweb -t # use --help to see options regarding storage subsystem configuration etc
 
 To run a local instance of the Website on https://localhost:5001 and http://localhost:5000
 
     dotnet run -p Web
+
+----
+
+**It's strongly recommended to also generate an F# version too - the translation of the template is intentionally not 1:1, and has not recieved as much love and attention as the F# implementation by any stretch and should definitely not be considered the cleanest C# implementation possible. The time investment of looking at both is very likely to pay off both in terms of understanding the goals/patterns of Equinox and troubleshooting**
+
+_Finally: Please raise issues for any and all things that the Todo sample's implementation raises. While event sourcing is pretty debatable for a todo app, and the todobackend mandates a particular implementation, that does not mean it can't be improved. Yes, even by folks like you with Imposter Syndrome!_
 
 ----
 
