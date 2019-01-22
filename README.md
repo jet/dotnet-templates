@@ -4,8 +4,8 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 ## Available Templates
 
-- [`eqxweb`](equinox-web/readme.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project.
-- [`eqxwebcs`](equinox-web-csharp/readme.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project _ported to C#_.
+- [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project.
+- [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project _ported to C#_.
 
 ## How to use
 
