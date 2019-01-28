@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <WarningLevel>5</WarningLevel>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Infrastructure.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Argu" Version="5.2.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
+    <PackageReference Include="TypeShape" Version="6.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\equinox\src\Equinox.Codec\Equinox.Codec.fsproj" />
+    <ProjectReference Include="..\..\..\equinox\src\Equinox.Projection.Codec\Equinox.Projection.Codec.fsproj" />
+    <ProjectReference Include="..\..\..\equinox\src\Equinox.Projection.Kafka\Equinox.Projection.Kafka.fsproj" />
+  </ItemGroup>
+
+</Project>
