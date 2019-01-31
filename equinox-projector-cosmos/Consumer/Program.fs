@@ -42,7 +42,7 @@ module EventParser =
             interface TypeShape.UnionContract.IUnionContract
         let codec = Equinox.UnionCodec.JsonUtf8.Create<Event>(settings)
     
-    let tryExtractCategory (x : RenderedEvent =
+    let tryExtractCategory (x : RenderedEvent) =
         x.s.Split([|'-'|],2,StringSplitOptions.RemoveEmptyEntries)
         |> Array.tryHead
     let tryDecode (log : ILogger) (codec : Equinox.UnionCodec.IUnionEncoder<_,_>) (x : RenderedEvent) =
@@ -158,7 +158,7 @@ let main argv =
         Logging.initialize args.Verbose
         let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group)
 
-        let c = Consumer.start cfg args.Parallelism
+        use c = Consumer.start cfg args.Parallelism
         c.AwaitConsumer() |> Async.RunSynchronously
         0 
     with

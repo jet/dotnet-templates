@@ -1,4 +1,4 @@
-# Equinox Projector Template
+# Equinox Projector/Consumer Template
 
 This project was generated using:
 
@@ -13,12 +13,15 @@ This project was generated using:
     ```
 
 To provide sample data to project:
+
     0. establish connection strings etc. per https://github.com/jet/equinox README
 
         ```powershell
-        $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;"
-        $env:EQUINOX_COSMOS_DATABASE="equinox-test"
-        $env:EQUINOX_COSMOS_COLLECTION="equinox-test"
+        $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
+        $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
+        $env:EQUINOX_COSMOS_COLLECTION="equinox-test" # or use - c
+
+        $env:EQUINOX_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
         ```
 
     1. Use the eqx tool to initialize and then run some transactions in a CosmosDb collection
@@ -38,10 +41,12 @@ To provide sample data to project:
     2. To run the Projector:
 
         ```powershell
+
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
-        # `-b 1000` sets the max batch size to 1000
-        # `-n epoch0` defines the Projector instance id - each id has separated state in the aux collection
-        dotnet run -p Projector -- -n epoch0 -b 1000
+
+        # `epoch0` defines the Projector instance id - each id has separated state in the aux collection
+        # `-m 1000` sets the max batch size to 1000
+        dotnet run -p Projector -- epoch0 -m 1000 cosmos
         # NB (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
         ```
 //#else
@@ -49,14 +54,14 @@ To provide sample data to project:
     2. To run the Projector:
 
         ```powershell
-        $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;"
-        $env:EQUINOX_COSMOS_DATABASE="equinox-test"
-        $env:EQUINOX_COSMOS_COLLECTION="equinox-test"
         $env:EQUINOX_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
+
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
-        # `-m 1000` sets the max batch size to 1000
+
         # `epoch0` defines the Projector instance id - each id has separated state in the aux collection
-        # `-t topic0` identifies the Kafka topic which the Projector is to write to
+        # `-m 1000` sets the max batch size to 1000
+        # `-t topic0` identifies the Kafka topic to which the Projector should write
+        # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         dotnet run -p Projector -- epoch0 -m 1000 -t topic0 cosmos
         # NB (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
         ```
