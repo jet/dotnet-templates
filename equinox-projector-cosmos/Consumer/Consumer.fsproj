@@ -14,13 +14,10 @@
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.2.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
-    <PackageReference Include="TypeShape" Version="6.0.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\equinox\src\Equinox.Codec\Equinox.Codec.fsproj" />
-    <ProjectReference Include="..\..\..\equinox\src\Equinox.Projection.Codec\Equinox.Projection.Codec.fsproj" />
-    <ProjectReference Include="..\..\..\equinox\src\Equinox.Projection.Kafka\Equinox.Projection.Kafka.fsproj" />
+    <!--<PackageReference Include="TypeShape" Version="6.0.1" />-->
+    <PackageReference Include="Equinox.Codec" Version="1.1.0-beta3" />
+    <PackageReference Include="Equinox.Projection.Codec" Version="1.1.0-beta3" />
+    <PackageReference Include="Equinox.Projection.Kafka" Version="1.1.0-beta3" />
   </ItemGroup>
 
 </Project>
