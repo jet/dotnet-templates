@@ -10,6 +10,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Consumer", "Consumer\Consumer.fsproj", "{7ED94D2B-1744-48A0-9B20-94E4777617E9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,6 +22,10 @@ Global
 		{6C72C937-ECFC-4DD4-9BA0-7355B237F974}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C72C937-ECFC-4DD4-9BA0-7355B237F974}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6C72C937-ECFC-4DD4-9BA0-7355B237F974}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7ED94D2B-1744-48A0-9B20-94E4777617E9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7ED94D2B-1744-48A0-9B20-94E4777617E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7ED94D2B-1744-48A0-9B20-94E4777617E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7ED94D2B-1744-48A0-9B20-94E4777617E9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
