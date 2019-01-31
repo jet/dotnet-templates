@@ -33,18 +33,18 @@ To use from the command line, the outline is:
 
 Please don't hesitate to [create a GitHub issue](https://github.com/jet/dotnet-templates/issues/new) for any questions so others can benefit from the discussion. For any significant planned changes or additions, please err on the side of [reaching out early](https://github.com/jet/dotnet-templates/issues/new) so we can align expectationss - there's nothing more frustrating than having your hard work not yielding a mutually agreeable result ;)
 
-### Contribution guidelines - `equinox-web`
+### Contribution guidelines - `equinox-*` templates
 
 See [the Equinox repo's CONTRIBUTING section](https://github.com/jet/equinox/blob/master/README.md#contributing) for general guidelines wrt how contributions are considered specifically wrt Equinox.
 
-The following sorts of things are top of the list for the `eqxweb*` templates at the present time:
+The following sorts of things are top of the list for the `eqx*` templates at the present time:
 
 - Fixes for typos, adding of info to the readme or comments in the emitted code etc
 - Small-scale cleanup or clarifications of the emitted code
 - support for additional languages in the templates
 - further straightforward starter projects
 
-While there is no rigid or defined limit to what makes sense to add, it should be borne in mind that `dotnet new eqxweb` is often going to be a new user's first interaction with Equinox and/or [asp]dotnetcore. Hence there's a delicate (and intrinsically subjective) balance to be struck between:
+While there is no rigid or defined limit to what makes sense to add, it should be borne in mind that `dotnet new eqx*` is often going to be a new user's first interaction with Equinox and/or [asp]dotnetcore. Hence there's a delicate (and intrinsically subjective) balance to be struck between:
 
   1. simplicity of programming techniques used / beginner friendliness
   2. brevity of the generated code

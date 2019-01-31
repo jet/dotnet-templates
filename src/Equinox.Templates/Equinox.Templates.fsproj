@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Authors>@jet @bartelink contributors</Authors>
     <Company>Jet.com</Company>
-    <Description>Composable high performance event sourcing componentry</Description>
+    <Description>dotnet new equinoxweb/equinoxprojector: Equinox Web, Domain templates</Description>
     <PackageProjectUrl>https://github.com/jet/dotnet-templates</PackageProjectUrl>
     <PackageTags>fsharp eventsourcing cosmosdb eventstore changefeedprocessor kafka</PackageTags>
     <PackageLicense>Apache-2.0</PackageLicense>
@@ -14,14 +14,14 @@
     <IsTestProject>false</IsTestProject>
     <PackageType>Template</PackageType>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
- </PropertyGroup>
-
- <ItemGroup>
-    <None Include="../../equinox-*/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*;**/.idea/**/*" Pack="true" PackagePath="content" />
- </ItemGroup>
+  </PropertyGroup>
 
   <ItemGroup>
-      <PackageReference Include="MinVer" Version="1.0.0-beta.2" PrivateAssets="All" />
+    <None Include="../../equinox-*/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*;**/.idea/**/*" Pack="true" PackagePath="content" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="1.0.0-beta.2" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>
