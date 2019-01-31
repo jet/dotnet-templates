@@ -5,13 +5,14 @@
     "Equinox",
     "Event Sourcing",
     "CosmosDb",
-    "ChangeFeed"
+    "ChangeFeed",
+    "Kafka"
   ],
   "tags": {
     "language": "F#"
   },
   "identity": "Equinox.Template.Projector.Cosmos",
-  "name": "Equinox Projector",
+  "name": "Equinox Projector (with optional consumer)",
   "shortName": "eqxprojector",
   "sourceName": "ProjectorTemplate",
   "preferNameDirectory": true,
@@ -31,7 +32,14 @@
         {
           "condition": "(!kafka)",
           "exclude": [
-            "**/Consumer/**/*"
+            "**/Consumer/**/*",
+            "equinox-projector-consumer-cosmos.sln"
+          ]
+        },
+        {
+          "condition": "(kafka)",
+          "exclude": [
+            "equinox-projector-cosmos.sln"
           ]
         }
       ]

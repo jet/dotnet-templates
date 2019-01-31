@@ -2,12 +2,16 @@
 
 open Equinox.Cosmos
 open Equinox.Cosmos.Projection
+//#if kafka
 open Equinox.Projection.Codec
 open Equinox.Projection.Kafka
+//#endif
 open Equinox.Store
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
+//#if kafka
 open Newtonsoft.Json
+//#endif
 open Serilog
 open System
 open System.Collections.Generic
@@ -31,9 +35,11 @@ module CmdParser =
         | [<AltCommandLine("-l"); Unique>] LagFreqS of float
         | [<AltCommandLine("-v"); Unique>] Verbose
         | [<AltCommandLine("-vc"); Unique>] ChangeFeedVerbose
+//#if kafka
         (* Kafka Args *)
         | [<AltCommandLine("-b"); Unique>] Broker of string
         | [<AltCommandLine("-t"); Unique>] Topic of string
+//#endif
         (* Source Args *)
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosArguments>
         interface IArgParserTemplate with
@@ -45,12 +51,16 @@ module CmdParser =
                 | LagFreqS _ ->         "specify frequency to dump lag stats. Default: off"
                 | Verbose ->            "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->  "request Verbose Logging from ChangeFeedProcessor. Default: off"
+//#if kafka
                 | Broker _ ->           "specify Kafka Broker, in host:port format. (default: use environment variable EQUINOX_KAFKA_BROKER, if specified)"
                 | Topic _ ->            "specify Kafka Topic Id. (default: use environment variable EQUINOX_KAFKA_TOPIC, if specified)"
+//#endif
                 | Cosmos _ ->           "specify CosmosDb input parameters"
     and Parameters(args : ParseResults<Arguments>) =
         member val Source = CosmosInfo(args.GetResult Cosmos)
+//#if kafka
         member val Target = TargetInfo args
+//#endif
         member __.LeaseId = args.GetResult LeaseId
         member __.Suffix = args.GetResult(Suffix,"-aux")
         member __.Verbose = args.Contains Verbose
@@ -60,15 +70,16 @@ module CmdParser =
         member __.AuxCollectionName = __.Source.Collection + __.Suffix
         member __.StartFromHere = args.Contains ForceStartFromHere
         member x.BuildChangeFeedParams() =
-            Log.Information("Processing using LeaseId {leaseId} in Aux coll {auxCollName} in batches of {batchSize}",
-                x.LeaseId, x.AuxCollectionName, x.BatchSize)
+            Log.Information("Processing {leaseId} in {auxCollName} in batches of {batchSize}", x.LeaseId, x.AuxCollectionName, x.BatchSize)
             if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             { database = x.Source.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
+//#if kafka
     and TargetInfo(args : ParseResults<Arguments>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
         member x.BuildTargetParams() = x.Broker, x.Topic
+//#endif
     and [<NoEquality; NoComparison>] CosmosArguments =
         | [<AltCommandLine("-m")>] ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine("-o")>] Timeout of float
@@ -98,7 +109,7 @@ module CmdParser =
 
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,masterKey)) = Discovery.FromConnectionString x.Connection
-            Log.Information("Using CosmosDb {mode} {endpointUri} Database {database} Collection {collection}.",
+            Log.Information("CosmosDb {mode} {endpointUri} Database {database} Collection {collection}.",
                 x.Mode, endpointUri, x.Database, x.Collection)
             Log.Information("CosmosDb timeout: {timeout}s, {retries} retries; Throttling maxRetryWaitTime {maxRetryWaitTime}",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
@@ -138,6 +149,7 @@ let run (endpointUri, masterKey) connectionPolicy source
     do! feedEventHost.StopAsync() |> Async.AwaitTaskCorrect
 }
 
+//#if kafka
 let mkRangeProjector (broker, topic) =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, maxInFlight = 1, compression = Config.Producer.LZ4)
@@ -155,18 +167,35 @@ let mkRangeProjector (broker, topic) =
         sw.Restart() // restart the clock as we handoff back to the CFP
     }
     IChangeFeedObserver.Create(Log.Logger, projectBatch, disposeProducer)
-    
+//#else
+let mkRangeProcessor () =
+    let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
+    let processBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+        sw.Stop() // Stop the clock after CFP hands off to us
+        let pt,events = (fun () -> docs |> Seq.collect Parse.enumEvents |> Seq.length) |> Stopwatch.Time 
+        Log.Information("Range {rangeId} Fetch: {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s",
+            ctx.PartitionKeyRangeId, ctx.FeedResponse.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
+            events, (let e = pt.Elapsed in e.TotalSeconds))
+        sw.Restart() // restart the clock as we handoff back to the CFP
+    }
+    IChangeFeedObserver.Create(Log.Logger, processBatch)
+ //#endif
+ 
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ChangeFeedVerbose
         let (endpointUri,masterKey), connectionPolicy, source = args.Source.BuildConnectionDetails()
         let aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
+//#if !kafka
+        let createRangeHandler = mkRangeProcessor
+//#else
         let targetParams = args.Target.BuildTargetParams()
-        let mkRangeProjector () = mkRangeProjector targetParams
+        let createRangeHandler () = mkRangeProjector targetParams
+//#endif
         run (endpointUri,masterKey) connectionPolicy source
             (aux, leaseId, startFromHere, batchSize, lagFrequency)
-            mkRangeProjector     
+            createRangeHandler     
         |> Async.RunSynchronously
         0 
     with e ->
