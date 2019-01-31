@@ -2,19 +2,19 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <Description>dotnet new equinoxweb: Equinox Web + Event-sourced Domain templates</Description>
+    <Description>dotnet new equinoxweb/equinoxprojector: Equinox Web, Domain, Projector, Consumer templates</Description>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <IsTestProject>false</IsTestProject>
     <PackageType>Template</PackageType>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
- </PropertyGroup>
-
- <ItemGroup>
-    <None Include="../../equinox-*/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*;**/.idea/**/*" Pack="true" PackagePath="content" />
- </ItemGroup>
+  </PropertyGroup>
 
   <ItemGroup>
-      <PackageReference Include="MinVer" Version="1.0.0-beta.2" PrivateAssets="All" />
+    <None Include="../../equinox-*/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*;**/.idea/**/*" Pack="true" PackagePath="content" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="1.0.0-beta.2" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>
