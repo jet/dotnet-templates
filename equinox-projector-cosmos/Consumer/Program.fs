@@ -118,11 +118,11 @@ module CmdParser =
 
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Broker _ -> "Specify Kafka Broker, in host:port format. (optional if environment variable EQUINOX_KAFKA_BROKER specified)"
-                | Topic _ -> "Specify Kafka Topic name. (optional if environment variable EQUINOX_KAFKA_TOPIC specified)"
-                | Group _ -> "Specify Kafka Consumer Group Id. (optional if environment variable EQUINOX_KAFKA_GROUP specified)"
-                | Parallelism _ -> "Parallelism constraint when handling batches being consumed (default: 2 * Environment.ProcessorCount)"
-                | Verbose _ -> "Request verbose logging."
+                | Broker _ ->   "specify Kafka Broker, in host:port format. (optional if environment variable EQUINOX_KAFKA_BROKER specified)"
+                | Topic _ ->    "specify Kafka Topic name. (optional if environment variable EQUINOX_KAFKA_TOPIC specified)"
+                | Group _ ->    "specify Kafka Consumer Group Id. (optional if environment variable EQUINOX_KAFKA_GROUP specified)"
+                | Parallelism _ -> "parallelism constraint when handling batches being consumed (default: 2 * Environment.ProcessorCount)"
+                | Verbose _ ->  "request verbose logging."
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : ParseResults<Arguments> =
@@ -135,7 +135,7 @@ module CmdParser =
             match Environment.GetEnvironmentVariable key with
             | null -> failwithf "Please provide a %s, either as an argment or via the %s environment variable" msg key
             | x -> x 
-        member __.Broker = Uri <| match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER"
+        member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
         member __.Group = match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "EQUINOX_KAFKA_GROUP"
         member __.Parallelism = match args.TryGetResult Parallelism with Some x -> x | None -> 2 * Environment.ProcessorCount
