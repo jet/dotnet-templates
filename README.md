@@ -6,6 +6,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 - [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project.
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project _ported to C#_.
+- [`eqxprojector`](equinox-projector-cosmos/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic.
 
 ## How to use
 
@@ -29,11 +30,14 @@ To use from the command line, the outline is:
     # see readme.md in the generated code for further instructions regarding the TodoBackend the above -t switch above triggers the inclusion of
     start readme.md
 
+    # to add a Projector and a Consumer
+    dotnet new eqxprojector -k
+
 ## CONTRIBUTING
 
 Please don't hesitate to [create a GitHub issue](https://github.com/jet/dotnet-templates/issues/new) for any questions so others can benefit from the discussion. For any significant planned changes or additions, please err on the side of [reaching out early](https://github.com/jet/dotnet-templates/issues/new) so we can align expectationss - there's nothing more frustrating than having your hard work not yielding a mutually agreeable result ;)
 
-### Contribution guidelines - `equinox-web`
+### Contribution guidelines - `equinox-web*`, `equinox-projector-cosmos`
 
 See [the Equinox repo's CONTRIBUTING section](https://github.com/jet/equinox/blob/master/README.md#contributing) for general guidelines wrt how contributions are considered specifically wrt Equinox.
 
