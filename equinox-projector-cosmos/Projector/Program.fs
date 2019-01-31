@@ -168,7 +168,7 @@ let mkRangeProjector (broker, topic) =
     }
     IChangeFeedObserver.Create(Log.Logger, projectBatch, disposeProducer)
 //#else
-let mkRangeProcessor () =
+let createRangeHandler () =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let processBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after CFP hands off to us
@@ -187,9 +187,7 @@ let main argv =
         Logging.initialize args.Verbose args.ChangeFeedVerbose
         let (endpointUri,masterKey), connectionPolicy, source = args.Source.BuildConnectionDetails()
         let aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
-//#if !kafka
-        let createRangeHandler = mkRangeProcessor
-//#else
+//#if kafka
         let targetParams = args.Target.BuildTargetParams()
         let createRangeHandler () = mkRangeProjector targetParams
 //#endif
