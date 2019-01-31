@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <WarningLevel>5</WarningLevel>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
+    <WarningLevel>5</WarningLevel>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,11 +13,10 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.2.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
-    <!--<PackageReference Include="TypeShape" Version="6.0.1" />-->
     <PackageReference Include="Equinox.Codec" Version="1.1.0-beta3" />
     <PackageReference Include="Equinox.Projection.Codec" Version="1.1.0-beta3" />
     <PackageReference Include="Equinox.Projection.Kafka" Version="1.1.0-beta3" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
 
 </Project>
