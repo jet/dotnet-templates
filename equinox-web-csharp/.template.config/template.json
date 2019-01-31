@@ -2,9 +2,9 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
-    "Web",
     "Equinox",
-    "Event Sourcing"
+    "Event Sourcing",
+    "Web"
   ],
   "tags": {
     "language": "C#"

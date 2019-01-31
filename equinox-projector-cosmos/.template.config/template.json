@@ -22,7 +22,7 @@
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Include a code projecting to Kafka."
+      "description": "Include a code projecting to, and consuming from Kafka."
     }
   },
   "sources": [
@@ -31,7 +31,7 @@
         {
           "condition": "(!kafka)",
           "exclude": [
-            "**/Consumer"
+            "**/Consumer/**/*"
           ]
         }
       ]
