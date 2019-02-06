@@ -13,11 +13,3 @@ jobs:
     inputs:
       pathtoPublish: 'bin/nupkg'
       artifactName: 'nupkgs'
-  - task: NuGetCommand@2
-    inputs:
-      command: push
-      nuGetFeedType: external
-      publishFeedCredentials: 'Jet-MyGet'
-      versioningScheme: byEnvVar
-      versionEnvVar: Version
-      packagesToPush: 'bin/nupkg/*.nupkg'
