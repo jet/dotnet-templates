@@ -91,8 +91,8 @@ type View = { id: int; order: int; title: string; completed: bool }
 /// Defines operations that a Controller can perform on a Todo List
 type Service(handlerLog, resolve) =
     
-    /// Maps a ClientId to the CatId that specifies the Stream in which the data for that client will be held
-    let (|CategoryId|) (clientId: ClientId) = Equinox.CatId("Todos", if obj.ReferenceEquals(clientId,null) then "1" else clientId.Value)
+    /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
+    let (|CategoryId|) (clientId: ClientId) = Equinox.AggregateId("Todos", ClientId.toStringN clientId)
     
     /// Maps a ClientId to Handler for the relevant stream
     let (|Stream|) (CategoryId catId) = Handler(handlerLog, resolve catId)
