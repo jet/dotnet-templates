@@ -244,7 +244,7 @@ namespace TodoBackendTemplate
 
             /// Maps a ClientId to the CatId that specifies the Stream in which the data for that client will be held
             static Target CategoryId(ClientId id) =>
-                Target.NewCatId("Todos", id?.ToString() ?? "1");
+                Target.NewAggregateId("Todos", id?.ToString() ?? "1");
 
             public Service(ILogger handlerLog, Func<Target, IStream<Event, State>> resolve) =>
                 _stream = id => new Handler(handlerLog, resolve(CategoryId(id)));

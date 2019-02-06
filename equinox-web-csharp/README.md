@@ -28,9 +28,9 @@ To exercise the functionality of the sample TodoBackend (included because of the
 
 1. Run the API compliance test suite (can be useful to isolate issues if the application is experiencing internal errors):
 
-    start https://www.todobackend.com/specs/index.html?https://localhost:5001/todos
+       start https://www.todobackend.com/specs/index.html?https://localhost:5001/todos
     
 2. Once you've confirmed that the backend is listening and fulfulling the API obligations, you can run the frontend app:
 
-    # Interactive UI; NB error handling is pretty minimal, so hitting refresh and/or F12 is recommended ;)
-    start https://www.todobackend.com/client/index.html?https://localhost:5001/todos
+       # Interactive UI; NB error handling is pretty minimal, so hitting refresh and/or F12 is recommended ;)
+       start https://www.todobackend.com/client/index.html?https://localhost:5001/todos

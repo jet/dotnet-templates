@@ -119,10 +119,10 @@ namespace TodoBackendTemplate
             /// Maps a ClientId to Handler for the relevant stream
             readonly Func<string, Handler> _stream;
 
-            static Target CategoryId(string id) => Target.NewCatId("Aggregate", id);
+            static Target AggregateId(string id) => Target.NewAggregateId("Aggregate", id);
 
             public Service(ILogger handlerLog, Func<Target, IStream<Event, State>> resolve) =>
-                _stream = id => new Handler(handlerLog, resolve(CategoryId(id)));
+                _stream = id => new Handler(handlerLog, resolve(AggregateId(id)));
 
             /// Execute the specified command 
             public Task<Unit> Execute(string id, Command command) =>

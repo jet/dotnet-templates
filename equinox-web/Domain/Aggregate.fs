@@ -45,10 +45,10 @@ type View = { sorted : bool }
 
 type Service(handlerLog, resolve) =
     
-    let (|CategoryId|) (id: string) = Equinox.CatId("Aggregate", id)
+    let (|AggregateId|) (id: string) = Equinox.AggregateId("Aggregate", id)
     
     /// Maps a ClientId to Handler for the relevant stream
-    let (|Stream|) (CategoryId catId) = Handler(handlerLog, resolve catId)
+    let (|Stream|) (AggregateId aggregateId) = Handler(handlerLog, resolve aggregateId)
 
     let render (s: Folds.State) : View =
         {   sorted = s.happened }
