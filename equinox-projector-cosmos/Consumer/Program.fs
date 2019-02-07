@@ -100,13 +100,19 @@ module Consumer =
                 |> Seq.map handle
                 |> Seq.map dop.Throttle
                 |> Async.Parallel
-            log.Information("Batch {b} Favorited {f} Unfavorited {u} Saved {s} Cleared {c}",
+            log.Information("Consumed {b} Favorited {f} Unfavorited {u} Saved {s} Cleared {c}",
                 Array.length msgs, favorited, unfavorited, saved, cleared)
         }
         KafkaConsumer.Start log cfg consume
 
 module CmdParser =
     open Argu
+
+    exception MissingArg of string
+    let envBackstop msg key =
+        match Environment.GetEnvironmentVariable key with
+        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argment or via the %s environment variable" msg key)
+        | x -> x 
 
     [<NoEquality; NoComparison>]
     type Arguments =
@@ -131,10 +137,6 @@ module CmdParser =
         parser.ParseCommandLine argv
 
     type Parameters(args : ParseResults<Arguments>) =
-        let envBackstop msg key =
-            match Environment.GetEnvironmentVariable key with
-            | null -> failwithf "Please provide a %s, either as an argment or via the %s environment variable" msg key
-            | x -> x 
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
         member __.Group = match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "EQUINOX_KAFKA_GROUP"
@@ -144,7 +146,9 @@ module CmdParser =
 module Logging =
     let initialize verbose =
         Log.Logger <-
-            LoggerConfiguration().Enrich.FromLogContext()
+            LoggerConfiguration()
+                .Destructure.FSharpTypes()
+                .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
                         if not verbose then c.WriteTo.Console(theme=theme)
@@ -161,6 +165,6 @@ let main argv =
         use c = Consumer.start cfg args.Parallelism
         c.AwaitConsumer() |> Async.RunSynchronously
         0 
-    with
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
         | e -> Log.Fatal(e, "Exiting"); 1

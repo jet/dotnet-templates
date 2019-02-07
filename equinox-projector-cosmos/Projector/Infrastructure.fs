@@ -9,6 +9,7 @@ open System.Threading.Tasks
 #nowarn "40" // re AwaitKeyboardInterrupt
 
 type Async with
+    static member Sleep(t : TimeSpan) : Async<unit> = Async.Sleep(int t.TotalMilliseconds)
     /// Asynchronously awaits the next keyboard interrupt event
     static member AwaitKeyboardInterrupt () : Async<unit> = 
         Async.FromContinuations(fun (sc,_,_) ->
