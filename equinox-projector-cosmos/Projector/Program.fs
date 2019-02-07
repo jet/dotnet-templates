@@ -20,9 +20,10 @@ open System.Diagnostics
 module CmdParser =
     open Argu
 
+    exception MissingArg of string
     let envBackstop msg key =
         match Environment.GetEnvironmentVariable key with
-        | null -> failwithf "Please provide a %s, either as an argment or via the %s environment variable" msg key
+        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argment or via the %s environment variable" msg key)
         | x -> x 
 
     [<NoEquality; NoComparison>]
@@ -44,7 +45,7 @@ module CmdParser =
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosArguments>
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | LeaseId _ ->          "projector projector group name."
+                | LeaseId _ ->          "projector group name."
                 | Suffix _ ->           "specify Collection Name suffix (default: `-aux`)."
                 | ForceStartFromHere _ -> "(iff `suffix` represents a fresh LeaseId) - force skip to present Position. Default: Never skip an event on a lease."
                 | ChangeFeedBatchSize _ -> "maximum item count to supply to Changefeed Api when querying. Default: 1000"
@@ -129,7 +130,7 @@ module CmdParser =
 module Logging =
     let initialize verbose changeLogVerbose =
         Log.Logger <-
-            LoggerConfiguration().Enrich.FromLogContext()
+            LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
             |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
@@ -140,45 +141,48 @@ module Logging =
 let run (endpointUri, masterKey) connectionPolicy source
         (aux, leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
-    let! feedEventHost =
+    let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
+        Log.Information("Lags by Range {@rangeLags}", remainingWork)
+        return! Async.Sleep interval }
+    let maybeLogLag = lagReportFreq |> Option.map logLag
+    let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( Log.Logger, endpointUri, masterKey, connectionPolicy, source, aux, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
-            cfBatchSize = batchSize, createObserver = createRangeProjector, ?lagMonitorInterval = lagReportFreq)
-    do! Async.AwaitKeyboardInterrupt()
-    Log.Warning("Stopping...")
-    do! feedEventHost.StopAsync() |> Async.AwaitTaskCorrect
-}
+            cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
+    do! Async.AwaitKeyboardInterrupt() }
 
 //#if kafka
 let mkRangeProjector (broker, topic) =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
-    let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, maxInFlight = 1, compression = Config.Producer.LZ4)
+    let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, maxInFlight = 1, compression = Config.LZ4)
     let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
     let disposeProducer = (producer :> IDisposable).Dispose
     let projectBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after CFP hands off to us
-        let toKafkaEvent (e: Parse.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.TimeStamp; d = e.Data; m = e.Meta }
-        let pt,events = (fun () -> docs |> Seq.collect Parse.enumEvents |> Seq.map toKafkaEvent |> Array.ofSeq) |> Stopwatch.Time 
+        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.TimeStamp; d = e.Data; m = e.Meta }
+        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map toKafkaEvent |> Array.ofSeq) |> Stopwatch.Time 
         let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
         let! et,_ = producer.ProduceBatch es |> Stopwatch.Time
-        Log.Information("Range {rangeId} Fetch: {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s; Emit: {e:n1}s",
-            ctx.PartitionKeyRangeId, ctx.FeedResponse.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
+        let r = ctx.FeedResponse
+        Log.Information("{range} Fetch: {token} {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s; Emit: {e:n1}s",
+            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], r.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
             events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the CFP
     }
-    IChangeFeedObserver.Create(Log.Logger, projectBatch, disposeProducer)
+    ChangeFeedObserver.Create(Log.Logger, projectBatch, disposeProducer)
 //#else
 let createRangeHandler () =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let processBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after CFP hands off to us
-        let pt,events = (fun () -> docs |> Seq.collect Parse.enumEvents |> Seq.length) |> Stopwatch.Time 
-        Log.Information("Range {rangeId} Fetch: {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s",
-            ctx.PartitionKeyRangeId, ctx.FeedResponse.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
+        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.length) |> Stopwatch.Time
+        let r = ctx.FeedResponse
+        Log.Information("{range} Fetch: {token} {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s",
+            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], r.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
             events, (let e = pt.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the CFP
     }
-    IChangeFeedObserver.Create(Log.Logger, processBatch)
+    ChangeFeedObserver.Create(Log.Logger, processBatch)
  //#endif
  
 [<EntryPoint>]
@@ -196,6 +200,6 @@ let main argv =
             createRangeHandler     
         |> Async.RunSynchronously
         0 
-    with e ->
-        eprintfn "%s" e.Message
-        1
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
+        | e -> eprintfn "%s" e.Message; 1
