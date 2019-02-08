@@ -1,9 +1,9 @@
 ﻿module ProjectorTemplate.Consumer.Program
 
+open Equinox.Projection.Kafka
 open Serilog
 open System
 open System.Threading
-open Equinox.Projection.Kafka
 
 module EventParser =
     open Equinox.Projection.Codec
@@ -60,7 +60,7 @@ module EventParser =
         let log = Log.ForContext<Interpreter>()
 
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
-        member __.TryDecode(x : Equinox.Projection.Kafka.KafkaMessage) =
+        member __.TryDecode(x : Confluent.Kafka.ConsumeResult<_,_>) =
             let ke = JsonConvert.DeserializeObject<RenderedEvent>(x.Value)
             match tryExtractCategory ke with
             | Some "Favorites" -> tryDecode log Favorites.codec ke |> Option.map Choice1Of2
@@ -163,7 +163,7 @@ let main argv =
         let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group)
 
         use c = Consumer.start cfg args.Parallelism
-        c.AwaitConsumer() |> Async.RunSynchronously
+        c.AwaitCompletion() |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
