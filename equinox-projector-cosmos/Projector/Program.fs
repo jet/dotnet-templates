@@ -1,5 +1,8 @@
 ﻿module ProjectorTemplate.Projector.Program
 
+//#if kafka
+open Confluent.Kafka
+//#endif
 open Equinox.Cosmos
 open Equinox.Cosmos.Projection
 //#if kafka
@@ -154,7 +157,7 @@ let run (endpointUri, masterKey) connectionPolicy source
 //#if kafka
 let mkRangeProjector (broker, topic) =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
-    let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, maxInFlight = 1, compression = Config.LZ4)
+    let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = LZ4)
     let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
     let disposeProducer = (producer :> IDisposable).Dispose
     let projectBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
