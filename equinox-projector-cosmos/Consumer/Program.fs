@@ -43,7 +43,7 @@ module EventParser =
         let codec = Equinox.UnionCodec.JsonUtf8.Create<Event>(settings)
     
     let tryExtractCategory (x : RenderedEvent) =
-        x.s.Split([|'-'|],2,StringSplitOptions.RemoveEmptyEntries)
+        x.s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries)
         |> Array.tryHead
     let tryDecode (log : ILogger) (codec : Equinox.UnionCodec.IUnionEncoder<_,_>) (x : RenderedEvent) =
         match codec.TryDecode { caseName = x.c; payload = x.d } with
@@ -97,8 +97,7 @@ module Consumer =
             let! _ =
                 msgs
                 |> Seq.choose decoder.TryDecode
-                |> Seq.map handle
-                |> Seq.map dop.Throttle
+                |> Seq.map (handle >> dop.Throttle)
                 |> Async.Parallel
             log.Information("Consumed {b} Favorited {f} Unfavorited {u} Saved {s} Cleared {c}",
                 Array.length msgs, favorited, unfavorited, saved, cleared)
