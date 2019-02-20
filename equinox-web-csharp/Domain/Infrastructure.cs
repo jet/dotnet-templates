@@ -14,29 +14,46 @@ namespace TodoBackendTemplate
 {
     public static class HandlerExtensions
     {
-        public static void Execute<TEvent, TState>(this Context<TEvent, TState> that, Func<TState, IEnumerable<TEvent>> f) =>
+        public static void Execute<TEvent, TState>(this Accumulator<TEvent, TState> that, Func<TState, IEnumerable<TEvent>> f) =>
             that.Execute(FuncConvert.FromFunc<TState, FSharpList<TEvent>>(s => ListModule.OfSeq(f(s))));
     }
 
-    public class EquinoxHandler<TEvent, TState> : Handler<TEvent, TState>
+    public class EquinoxStream<TEvent, TState> : Stream<TEvent, TState>
     {
-        public EquinoxHandler
-            (   Func<TState, IEnumerable<TEvent>, TState> fold,
-                ILogger log,
-                IStream<TEvent, TState> stream,
-                int maxAttempts = 3)
-            : base(FuncConvert.FromFunc(fold), log, stream, maxAttempts)
+        private readonly Func<TState, IEnumerable<TEvent>, TState> _fold;
+
+        public EquinoxStream(
+                Func<TState, IEnumerable<TEvent>, TState> fold,
+                ILogger log, IStream<TEvent, TState> stream, int maxAttempts = 3)
+            : base(log, stream, maxAttempts)
         {
+            _fold = fold;
         }
 
-        // Run the decision method, letting it decide whether or not the Command's intent should manifest as Events
-        public async Task<Unit> Execute(Action<Context<TEvent, TState>> decide) =>
-            await FSharpAsync.StartAsTask(Decide(FuncConvert.ToFSharpFunc(decide)), null, null);
+        /// Run the decision method, letting it decide whether or not the Command's intent should manifest as Events
+        public async Task<Unit> Execute(Func<TState,IEnumerable<TEvent>> interpret)
+        {
+            FSharpList<TEvent> decide_(TState state)
+            {
+                var a = new Accumulator<TEvent, TState>(FuncConvert.FromFunc(_fold), state);
+                a.Execute(interpret);
+                return a.Accumulated;
+            }
+            return await FSharpAsync.StartAsTask(Transact(FuncConvert.FromFunc<TState,FSharpList<TEvent>>(decide_)), null, null);
+        }
 
-        // Execute a command, as Decide(Action) does, but also yield an outcome from the decision
-        public async Task<T> Decide<T>(Func<Context<TEvent, TState>,T> interpret) =>
-            await FSharpAsync.StartAsTask<T>(Decide(FuncConvert.FromFunc(interpret)), null, null);
-        
+        /// Execute a command, as Decide(Action) does, but also yield an outcome from the decision
+        public async Task<T> Decide<T>(Func<Accumulator<TEvent, TState>, T> decide)
+        {
+            Tuple<T, FSharpList<TEvent>> decide_(TState state)
+            {
+                var a = new Accumulator<TEvent, TState>(FuncConvert.FromFunc(_fold), state);
+                var r = decide(a);
+                return Tuple.Create(r, a.Accumulated);
+            }
+            return await FSharpAsync.StartAsTask<T>(Transact(FuncConvert.FromFunc<TState,Tuple<T,FSharpList<TEvent>>>(decide_)), null, null);
+        }
+
         // Project from the synchronized state, without the possibility of adding events that Decide(Func) admits
         public async Task<T> Query<T>(Func<TState, T> project) =>
             await FSharpAsync.StartAsTask(Query(FuncConvert.FromFunc(project)), null, null);
@@ -60,11 +77,11 @@ namespace TodoBackendTemplate
             }
         }
 
-        public T Decode<T>(byte[] json) where T: class
+        public T Decode<T>(byte[] json) where T : class
         {
             using (var ms = new MemoryStream(json))
             using (var jsonReader = new JsonTextReader(new StreamReader(ms)))
-               return _serializer.Deserialize<T>(jsonReader);
+                return _serializer.Deserialize<T>(jsonReader);
         }
     }
 }
