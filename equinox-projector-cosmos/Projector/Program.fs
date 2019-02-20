@@ -65,7 +65,7 @@ module CmdParser =
                 Log.Information("CosmosDb timeout: {timeout}s, {retries} retries; Throttling maxRetryWaitTime {maxRetryWaitTime}",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
                 let c =
-                    EqxConnector(log=Log.Logger, mode=x.Mode, requestTimeout=x.Timeout,
+                    CosmosConnector(log=Log.Logger, mode=x.Mode, requestTimeout=x.Timeout,
                         maxRetryAttemptsOnThrottledRequests=x.Retries, maxRetryWaitTimeInSeconds=x.MaxRetryWaitTime)
                 (endpointUri,masterKey), c.ConnectionPolicy, { database = x.Database; collection = x.Collection }
 
