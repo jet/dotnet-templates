@@ -67,35 +67,29 @@ module Commands =
         | Delete id -> if state.items |> List.exists (fun x -> x.id = id) then [Events.Deleted id] else []
         | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared state.nextId]
 
-/// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
-type Handler(log, stream, ?maxAttempts) =
-
-    let inner = Equinox.Handler(Folds.fold, log, stream, maxAttempts = defaultArg maxAttempts 2)
-
-    /// Execute `command`; does not emit the post state
-    member __.Execute command : Async<unit> =
-        inner.Decide <| fun ctx ->
-            ctx.Execute (Commands.interpret command)
-    /// Handle `command`, return the items after the command's intent has been applied to the stream
-    member __.Handle command : Async<Events.ItemData list> =
-        inner.Decide <| fun ctx ->
-            ctx.Execute (Commands.interpret command)
-            ctx.State.items
-    /// Establish the present state of the Stream, project from that as specified by `projection`
-    member __.Query(projection : Folds.State -> 't) : Async<'t> =
-        inner.Query projection
-
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }
 
 /// Defines operations that a Controller can perform on a Todo List
-type Service(handlerLog, resolve) =
-    
+type Service(handlerLog, resolve, ?maxAttempts) =
     /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|CategoryId|) (clientId: ClientId) = Equinox.AggregateId("Todos", ClientId.toStringN clientId)
+    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId("Todos", ClientId.toStringN clientId)
     
     /// Maps a ClientId to Handler for the relevant stream
-    let (|Stream|) (CategoryId catId) = Handler(handlerLog, resolve catId)
+    let (|Stream|) (AggregateId id) = Equinox.Stream(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
+
+    /// Execute `command`; does not emit the post state
+    let execute (Stream stream) command : Async<unit> =
+        stream.Transact(Commands.interpret command)
+    /// Handle `command`, return the items after the command's intent has been applied to the stream
+    let handle (Stream stream) command : Async<Events.ItemData list> =
+        stream.Transact(fun state ->
+            let ctx = Equinox.Accumulator(Folds.fold, state)
+            ctx.Execute (Commands.interpret command)
+            ctx.State.items,ctx.Accumulated)
+    /// Establish the present state of the Stream, project from that as specified by `projection`
+    let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
+        stream.Query projection
 
     let render (item: Events.ItemData) : View =
         {   id = item.id
@@ -106,27 +100,27 @@ type Service(handlerLog, resolve) =
     (* READ *)
 
     /// List all open items
-    member __.List(Stream stream) : Async<View seq> =
-        stream.Query (fun x -> seq { for x in x.items -> render x })
+    member __.List clientId  : Async<View seq> =
+        query clientId (fun x -> seq { for x in x.items -> render x })
 
     /// Load details for a single specific item
-    member __.TryGet(Stream stream, id) : Async<View option> =
-        stream.Query (fun x -> x.items |> List.tryFind (fun x -> x.id = id) |> Option.map render)
+    member __.TryGet(clientId, id) : Async<View option> =
+        query clientId (fun x -> x.items |> List.tryFind (fun x -> x.id = id) |> Option.map render)
 
     (* WRITE *)
 
     /// Execute the specified (blind write) command 
-    member __.Execute(Stream stream, command) : Async<unit> =
-        stream.Execute command
+    member __.Execute(clientId , command) : Async<unit> =
+        execute clientId command
 
     (* WRITE-READ *)
 
     /// Create a new ToDo List item; response contains the generated `id`
-    member __.Create(Stream stream, template: Props) : Async<View> = async {
-        let! state' = stream.Handle(Commands.Add template)
+    member __.Create(clientId , template: Props) : Async<View> = async {
+        let! state' = handle clientId (Commands.Add template)
         return List.head state' |> render }
 
     /// Update the specified item as referenced by the `item.id`
-    member __.Patch(Stream stream, id: int, value: Props) : Async<View> = async {
-        let! state' = stream.Handle(Commands.Update (id, value))
+    member __.Patch(clientId, id: int, value: Props) : Async<View> = async {
+        let! state' = handle clientId (Commands.Update (id, value))
         return state' |> List.find (fun x -> x.id = id) |> render}
