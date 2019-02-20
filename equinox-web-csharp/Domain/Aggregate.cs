@@ -94,15 +94,14 @@ namespace TodoBackendTemplate
 
         class Handler
         {
-            readonly EquinoxHandler<Event, State> _inner;
+            readonly EquinoxStream<Event, State> _inner;
 
             public Handler(ILogger log, IStream<Event, State> stream) =>
-                _inner = new EquinoxHandler<Event, State>(State.Fold, log, stream);
+                _inner = new EquinoxStream<Event, State>(State.Fold, log, stream);
 
             /// Execute `command`, syncing any events decided upon
             public Task<Unit> Execute(Command c) =>
-                _inner.Execute(ctx =>
-                    ctx.Execute(s => Command.Interpret(s, c)));
+                _inner.Execute(s => Command.Interpret(s, c));
 
             /// Establish the present state of the Stream, project from that as specified by `projection`
             public Task<T> Query<T>(Func<State, T> projection) =>
