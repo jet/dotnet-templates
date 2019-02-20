@@ -29,35 +29,27 @@ module Commands =
         match c with
         | MakeItSo -> if state.happened then [] else [Events.Happened]
 
-type Handler(log, stream, ?maxAttempts) =
-
-    let inner = Equinox.Handler(Folds.fold, log, stream, maxAttempts = defaultArg maxAttempts 2)
-
-    /// Execute `command`, syncing any events decided upon
-    member __.Execute command : Async<unit> =
-        inner.Decide <| fun ctx ->
-            ctx.Execute (Commands.interpret command)
-    /// Establish the present state of the Stream, project from that as specified by `projection`
-    member __.Query(projection : Folds.State -> 't) : Async<'t> =
-        inner.Query projection
-
 type View = { sorted : bool }
 
-type Service(handlerLog, resolve) =
-    
+type Service(handlerLog, resolve, ?maxAttempts) =
     let (|AggregateId|) (id: string) = Equinox.AggregateId("Aggregate", id)
-    
-    /// Maps a ClientId to Handler for the relevant stream
-    let (|Stream|) (AggregateId aggregateId) = Handler(handlerLog, resolve aggregateId)
+    let (|Stream|) (AggregateId id) = Equinox.Stream(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
+
+    /// Execute `command`, syncing any events decided upon
+    let execute (Stream stream) command : Async<unit> =
+        stream.Transact(Commands.interpret command)
+    /// Establish the present state of the Stream, project from that as specified by `projection`
+    let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
+        stream.Query projection
 
     let render (s: Folds.State) : View =
         {   sorted = s.happened }
 
     /// Read the present state
     // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
-    member __.Read(Stream stream) : Async<View> =
-        stream.Query (fun s -> render s)
+    member __.Read clientId : Async<View> =
+        query clientId render
 
     /// Execute the specified command 
-    member __.Execute(Stream stream, command) : Async<unit> =
-        stream.Execute command
+    member __.Execute(clientId, command) : Async<unit> =
+        execute clientId command
