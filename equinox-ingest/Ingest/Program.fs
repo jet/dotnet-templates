@@ -152,34 +152,16 @@ module CmdParser =
 module Logging =
     let initialize verbose =
         Log.Logger <-
-            LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
+            LoggerConfiguration()
+                .Destructure.FSharpTypes()
+                .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
-                            .CreateLogger()
-
-//let mkRangeProjector (broker, topic) =
-//    let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
-//    let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = LZ4)
-//    let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
-//    let disposeProducer = (producer :> IDisposable).Dispose
-//    let projectBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
-//        sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-//        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.TimeStamp; d = e.Data; m = e.Meta }
-//        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map toKafkaEvent |> Array.ofSeq) |> Stopwatch.Time 
-//        let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
-//        let! et,_ = producer.ProduceBatch es |> Stopwatch.Time
-//        let r = ctx.FeedResponse
-//        Log.Information("{range} Fetch: {token} {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s; Emit: {e:n1}s",
-//            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], r.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
-//            events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
-//        sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
-//    }
-//    ChangeFeedObserver.Create(Log.Logger, projectBatch, disposeProducer)
+            |> fun c -> c.CreateLogger()
 
 open System.Collections.Concurrent
 open System.Diagnostics
 open System.Threading
-open System.Threading.Tasks
 
 module Ingester =
     open Equinox.Cosmos.Core
@@ -197,8 +179,12 @@ module Ingester =
             match res with
             | AppendResult.Ok pos -> return Ok (batch.stream, pos.index) 
             | AppendResult.Conflict (pos, _) | AppendResult.ConflictUnknown pos ->
-                if pos.index >= batch.pos + batch.events.LongLength then return Duplicate (batch.stream, pos.index)
-                else return Conflict { stream = batch.stream; pos = pos.index; events = batch.events |> Array.skip (pos.index-(batch.pos+batch.events.LongLength) |> int) }
+                match pos.index, batch.pos + batch.events.LongLength with
+                | actual, expectedMax when actual >= expectedMax -> return Duplicate (batch.stream, pos.index)
+                | actual, _ when batch.pos >= actual -> return Conflict batch
+                | actual, _ ->
+                    Log.Warning("pos {pos} batch.pos {bpos} len {blen} skip {skio}", actual, batch.pos, batch.events.LongLength, actual-batch.pos)
+                    return Conflict { stream = batch.stream; pos = actual; events = batch.events |> Array.skip (actual-batch.pos |> int) }
         with e -> return Exn (e, batch) }
 
     /// Manages distribution of work across a specified number of concurrent writers
@@ -229,7 +215,9 @@ module Ingester =
             match res with
             | Ok (stream, pos) -> log.Information("Wrote     {stream} up to {pos}", stream, pos)
             | Duplicate (stream, pos) -> log.Information("Ignored   {stream} (synced up to {pos})", stream, pos)
-            | Conflict overage -> log.Information("Requeing  {stream} {pos} ({count} events)", overage.stream, overage.pos, overage.events.Length)
+            | Conflict overage ->
+                log.Warning("Requeing  {stream} {pos} ({count} events)", overage.stream, overage.pos, overage.events.Length)
+                writer.Add overage
             | Exn (exn, batch) ->
                 log.Warning(exn,"Writing   {stream} failed, retrying {count} events ....", batch.stream, batch.events.Length)
                 // TODO remove; this is not a sustainable idea
@@ -275,8 +263,11 @@ let run (destination : CosmosConnection, colls) (source : GesConnection) (leaseI
     let enumEvents (slice : AllEventsSlice) = seq {
         for e in slice.Events ->
             match e.Event with
-            | e when e.IsJson -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Cosmos.Store.EventData.Create(e.EventType, e.Data, e.Metadata))
-            | e -> Choice2Of2 e
+            | e when not e.IsJson
+                || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
+                || e.EventType = "$statsCollected" ->
+                    Choice2Of2 e
+            | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Cosmos.Store.EventData.Create(e.EventType, e.Data, e.Metadata))
     }
     let mutable total = 0L
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
@@ -312,30 +303,6 @@ let run (destination : CosmosConnection, colls) (source : GesConnection) (leaseI
         }
         fun pos -> loop pos
 
-    //let fetchBatches stream pos size =
-    //    let fetchFull pos = async {
-    //        let! currentSlice = source.ReadConnection.ReadStreamEventsBackwardAsync(stream, pos, batchSize, resolveLinkTos=true) |> Async.AwaitTaskCorrect
-    //        if currentSlice.IsEndOfStream then return None
-    //        else return Some (currentSlice.NextEventNumber,currentSlice.Events)
-    //    }
-    //    AsyncSeq.unfoldAsync fetchFull 0L
-
-    //let fetchSpecific streams = async {
-    //    let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
-    //    for stream in streams do
-    //        sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-    //        enumStreamEvents currentSlice
-    //        |> Seq.choose (function Choice1Of2 e -> Some e | Choice2Of2 _ -> None)
-    //        |> Seq.groupBy (fun (s,_,_) -> s)
-    //        |> Seq.map (fun (s,xs) -> s, [| for _s, i, e in xs -> i, e |])
-    //        |> Array.ofSeq
-    //        |> xs.AddRange 
-    //    sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
-    //    if not currentSlice.IsEndOfStream then return! fetch currentSlice.NextPosition
-            
-    //}
-
-
     let ctx = Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
     let! ingester = Ingester.start(ctx, writerQueueLen, writerCount)
     let! _ = Async.StartChild (Reader.loadSpecificStreamsTemp (source.ReadConnection, batchSize) streams ingester.Add)
@@ -352,7 +319,7 @@ let main argv =
         let destination = cosmos.Connnect "ProjectorTemplate" |> Async.RunSynchronously
         let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
         let leaseId, startFromHere, batchSize, lagFrequency, streams = args.BuildFeedParams()
-        let writerQueueLen, writerCount = 10, 2
+        let writerQueueLen, writerCount = 16,4
         run (destination, colls) source (leaseId, startFromHere, batchSize, writerQueueLen, writerCount, lagFrequency, streams) |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
