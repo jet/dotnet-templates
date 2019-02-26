@@ -262,17 +262,18 @@ module Ingester =
     type StreamStates() =
         let states = System.Collections.Generic.Dictionary<string, StreamState>()
         let dirty = System.Collections.Generic.Queue()
+        let markDirty stream = if dirty.Contains stream |> not then dirty.Enqueue stream
         
         let update stream (state : StreamState) =
             Log.Debug("Updated {s} r{r} w{w}", stream, state.read, state.write)
             match states.TryGetValue stream with
             | false, _ ->
                 states.Add(stream, state)
-                dirty.Enqueue stream
+                markDirty stream |> ignore
             | true, current ->
                 let updated = combine current state
                 states.[stream] <- updated
-                if updated.IsReady then dirty.Enqueue stream
+                if updated.IsReady then markDirty stream |> ignore
         let updateWritePos stream pos queue =
             update stream { read = None; write = Some pos; queue = queue }
 
@@ -292,6 +293,7 @@ module Ingester =
             | true, stream ->
 #endif        
                 let state = states.[stream]
+                
                 if not state.IsReady then None else
                     match state.queue |> Array.tryHead with
                     | None -> None
@@ -305,12 +307,15 @@ module Ingester =
         member __.HandleWriteResult = results.Enqueue
         member __.Pump() =
             let fiveMs = TimeSpan.FromMilliseconds 5.
-            let mutable wip = None
+            let mutable pendingWriterAdd = None
+            let resultsHandled, ingestionsHandled, workPended = ref 0, ref 0, ref 0
+            let progressTimer = Stopwatch.StartNew()
             while not cancellationToken.IsCancellationRequested do
                 let mutable moreResults = true
                 while moreResults do
                     match results.TryDequeue() with
                     | true, res ->
+                        incr resultsHandled
                         states.HandleWriteResult res
                         match res with
                         | Ok (stream, pos) ->           log.Information("Wrote     {stream} up to {pos}", stream, pos)
@@ -318,31 +323,35 @@ module Ingester =
                         | Conflict overage ->           log.Warning(    "Requeing  {stream} {pos} ({count} events)", overage.stream, overage.span.pos, overage.span.events.Length)
                         | Exn (exn, batch) ->           log.Warning(exn,"Writing   {stream} failed, retrying {count} events ....", batch.stream, batch.span.events.Length)
                     | false, _ -> moreResults <- false
+                let mutable t = Unchecked.defaultof<_>
+                while work.TryTake(&t, 5(*ms*), cancellationToken) do
+                    incr ingestionsHandled
+                    states.Add t
                 let mutable moreWork = true
                 while moreWork do
                     let wrk =
-                        match wip with
+                        match pendingWriterAdd with
                         | Some w ->
-                            wip <- None
+                            pendingWriterAdd <- None
                             Some w
                         | None ->
                             let pending = states.TryPending()
                             match pending with
                             | Some p -> Some p
                             | None ->
-                                let mutable t = Unchecked.defaultof<_>
-                                if work.TryTake(&t, 5(*ms*), cancellationToken) then
-                                    states.Add t
-                                    None
-                                else
-                                    moreWork <- false
-                                    None
+                                moreWork <- false
+                                None
                     match wrk with
                     | None -> ()
                     | Some w ->
                         if not (writer.TryAdd(w,fiveMs)) then
+                            incr workPended
                             moreWork <- false
-                            wip <- Some w
+                            pendingWriterAdd <- Some w
+                if progressTimer.ElapsedMilliseconds > 10000L then
+                    progressTimer.Restart()
+                    Log.Warning("Ingested {ingestions} Queued {queued} Completed {completed}", !ingestionsHandled, !workPended, !resultsHandled)
+                    ingestionsHandled := 0; workPended := 0; resultsHandled := 0
     type Ingester(queue : Queue) =
         member __.Add batch = queue.Add batch
 
@@ -411,9 +420,10 @@ let run (destination : CosmosConnection, colls) (source : GesConnection) (leaseI
                 |> Seq.map (fun (s,xs) -> s, [| for _s, i, e in xs -> i, e |])
                 |> Array.ofSeq
 
-            match streams |> Seq.map (fun (_s,xs) -> Array.length xs) |> Seq.sum with
-            | extracted when extracted <> received -> Log.Warning("Dropped {count} of {total}", received-extracted, received)
-            | _ -> ()
+            let dropped =
+                match streams |> Seq.map (fun (_s,xs) -> Array.length xs) |> Seq.sum with
+                | extracted when extracted <> received -> let dropped = received-extracted in dropped //Log.Warning("Dropped {count} of {total}", dropped, received)
+                | _ -> 0
 
             let category (s : string) = s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries) |> Array.head
             let cats = seq { for (s,_) in streams -> category s } |> Seq.distinct |> Seq.length
@@ -421,8 +431,8 @@ let run (destination : CosmosConnection, colls) (source : GesConnection) (leaseI
             for s,xs in streams do
                 for pos, item in xs do 
                     postBatch { stream = s; span =  { pos = pos; events = [| item |]}}
-            Log.Warning("Fetch {count} {ft:n0}ms; Parse c {categories} s {streams}; Post {pt:n0}ms",
-                received, sw.ElapsedMilliseconds, cats, streams.Length, postSw.ElapsedMilliseconds)
+            Log.Warning("Fetch {count} Dropped {dropped} {ft:n0}ms Pos {pos}; Parse c {categories} s {streams}; Post {pt:n0}ms",
+                received, dropped, sw.ElapsedMilliseconds, currentSlice.NextPosition.CommitPosition, cats, streams.Length, postSw.ElapsedMilliseconds)
             if currentSlice.IsEndOfStream then Log.Warning("Completed {total:n0}", total)
             
             sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
