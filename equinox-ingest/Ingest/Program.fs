@@ -28,8 +28,8 @@ module CmdParser =
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
-                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                    | Retries _ ->          "specify operation retries (default: 1)."
+                    | Timeout _ ->          "specify operation timeout in seconds (default: 10)."
+                    | Retries _ ->          "specify operation retries (default: 0)."
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                     | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
                     | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
@@ -40,9 +40,9 @@ module CmdParser =
             member __.Database =    match args.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
             member __.Collection =  match args.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
 
-            member __.Timeout = args.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+            member __.Timeout = args.GetResult(Timeout,10.) |> TimeSpan.FromSeconds
             member __.Mode = args.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
-            member __.Retries = args.GetResult(Retries, 1)
+            member __.Retries = args.GetResult(Retries, 0) 
             member __.MaxRetryWaitTime = args.GetResult(RetriesWaitTime, 5)
             
             /// Connect with the provided parameters and/or environment variables
@@ -80,8 +80,8 @@ module CmdParser =
                 member a.Usage =
                     match a with
                     | VerboseStore ->       "Include low level Store logging."
-                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                    | Retries _ ->          "specify operation retries (default: 1)."
+                    | Timeout _ ->          "specify operation timeout in seconds (default: 20)."
+                    | Retries _ ->          "specify operation retries (default: 3)."
                     | Host _ ->             "specify a DNS query, using Gossip-driven discovery against all A records returned (defaults: envvar:EQUINOX_ES_HOST, localhost)."
                     | Port _ ->             "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
                     | Username _ ->         "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
@@ -104,7 +104,7 @@ module CmdParser =
             member __.Password = match args.TryGetResult Password   with Some x -> x | None -> envBackstop "Password"   "EQUINOX_ES_PASSWORD"
             member val CacheStrategy = let c = Caching.Cache("ProjectorTemplate", sizeMb = 50) in CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             member __.Connect(log: ILogger, storeLog, connection) =
-                let (timeout, retries) as operationThrottling = args.GetResult(Timeout,5.) |> TimeSpan.FromSeconds, args.GetResult(Retries,1)
+                let (timeout, retries) as operationThrottling = args.GetResult(Timeout,20.) |> TimeSpan.FromSeconds, args.GetResult(Retries,3)
                 let heartbeatTimeout = args.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
                 let concurrentOperationsLimit = args.GetResult(ConcurrentOperationsLimit,5000)
                 log.Information("EventStore {host} heartbeat: {heartbeat}s MaxConcurrentRequests {concurrency} Timeout: {timeout}s Retries {retries}",
@@ -124,7 +124,7 @@ module CmdParser =
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
-                | BatchSize _ ->        "maximum item count to request from feed. Default: 1000"
+                | BatchSize _ ->        "maximum item count to request from feed. Default: 4096"
                 | Verbose ->            "request Verbose Logging. Default: off"
                 | VerboseConsole ->     "request Verbose Console Logging. Default: off"
                 | LocalSeq -> "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
@@ -136,7 +136,7 @@ module CmdParser =
         member __.Verbose = args.Contains Verbose
         member __.ConsoleMinLevel = if args.Contains VerboseConsole then LogEventLevel.Information else LogEventLevel.Warning
         member __.MaybeSeqEndpoint = if args.Contains LocalSeq then Some "http://localhost:5341" else None
-        member __.BatchSize = args.GetResult(BatchSize,1000)
+        member __.BatchSize = args.GetResult(BatchSize,4096)
         member x.BuildFeedParams() =
             Log.Information("Processing in batches of {batchSize}", x.BatchSize)
             let startPos = args.TryGetResult AllPos  
@@ -427,7 +427,7 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
         let run = async {
             let! lastItemBatch = source.ReadConnection.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
             let max = lastItemBatch.NextPosition.CommitPosition
-            Log.Warning("EventStore Max @{pos:n0}", max)
+            Log.Warning("EventStore Write Position: @ {pos}", max)
             let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
             let rec loop () = async {
                 let! currentSlice = source.ReadConnection.ReadAllEventsForwardAsync(currentPos, batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
@@ -435,7 +435,9 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                 sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
                 let received = currentSlice.Events.Length
                 totalEvents <- totalEvents + int64 received
-                for x in currentSlice.Events do totalBytes <- totalBytes + int64 (Ingester.esPayloadBytes x)
+                let mutable batchBytes = 0
+                for x in currentSlice.Events do batchBytes <- batchBytes + Ingester.esPayloadBytes x
+                totalBytes <- totalBytes + int64 batchBytes
                 let streams =
                     enumEvents currentSlice
                     |> Seq.choose (function Choice1Of2 e -> Some e | Choice2Of2 _ -> None)
@@ -451,9 +453,9 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                     for pos, item in xs do
                         incr extracted
                         postBatch { stream = s; span =  { pos = pos; events = [| item |]}}
-                Log.Warning("ES {ft:n3}s; Found c {categories} s {streams} e {count}-{dropped} {pt:n0}ms; Ingres {gb:n3}GB @{pos:n0} {pct:p1}",
-                    (let e = sw.Elapsed in e.TotalSeconds), cats, streams.Length, received, received- !extracted, postSw.ElapsedMilliseconds,
-                    float totalBytes / 1024. / 1024. / 1024., cur, float cur/float max)
+                Log.Warning("Read {count} {ft:n3}s {mb:n1}MB c {categories,2} s {streams,4} e {events,4} Queue {pt:n0}ms Total {gb:n3}GB @ {pos} {pct:p1}",
+                    received, (let e = sw.Elapsed in e.TotalSeconds), float batchBytes / 1024. / 1024., cats, streams.Length, !extracted,
+                    postSw.ElapsedMilliseconds, float totalBytes / 1024. / 1024. / 1024., cur, float cur/float max)
                 if currentSlice.IsEndOfStream then Log.Warning("Completed {total:n0}", totalEvents)
                 sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
                 if not currentSlice.IsEndOfStream then
