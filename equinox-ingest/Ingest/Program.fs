@@ -169,7 +169,6 @@ open System.Threading
 module Ingester =
     open Equinox.Cosmos.Core
     open Equinox.Cosmos.Store
-    open System.Threading.Tasks
 
     type [<NoComparison>] Span = { pos: int64; events: IEvent[] }
     module Span =
@@ -255,8 +254,10 @@ module Ingester =
         | None, x | x, None -> x
 
     let inline arrayBytes (x:byte[]) = if x = null then 0 else x.Length
+    let cosmosPayloadLimit = 2 * 1024 * 1024 - 1024
     let inline cosmosPayloadBytes (x: IEvent) = arrayBytes x.Data + arrayBytes x.Meta + 4
-    let inline esPayloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = arrayBytes x.Event.Data + arrayBytes x.Event.Metadata + x.OriginalStreamId.Length * 2
+    let inline esRecPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = arrayBytes x.Data + arrayBytes x.Metadata
+    let inline esPayloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = esRecPayloadBytes x.Event + x.OriginalStreamId.Length * 2
 
     let combine (s1: StreamState) (s2: StreamState) : StreamState =
         let writePos = optionCombine max s1.write s2.write
@@ -304,13 +305,13 @@ module Ingester =
                 | None -> None
                 | Some x ->
                 
-                let mutable bytesBudget = 1 * 1024 * 1024
-                let mutable countBudget = if x.pos = 0L then 10 else 1000
-                let max1MbMax1000EventsMax10EventsFirstTranche (x : IEvent) =
-                    bytesBudget <- bytesBudget - cosmosPayloadBytes x
-                    countBudget <- countBudget - 1
-                    countBudget >= 0 && bytesBudget >= 0
-                Some { stream = stream; span = { pos = x.pos; events = x.events |> Array.takeWhile max1MbMax1000EventsMax10EventsFirstTranche } }
+                let mutable bytesBudget = cosmosPayloadLimit
+                let mutable count = 0 
+                let max2MbMax1000EventsMax10EventsFirstTranche (y : IEvent) =
+                    bytesBudget <- bytesBudget - cosmosPayloadBytes y
+                    count <- count + 1
+                    count < (if x.pos = 0L then 10 else 1000) && (bytesBudget >= 0 || count = 1)
+                Some { stream = stream; span = { pos = x.pos; events = x.events |> Array.takeWhile max2MbMax1000EventsMax10EventsFirstTranche } }
 
     type Queue(log : Serilog.ILogger, writer : Writer, cancellationToken: CancellationToken, readerQueueLen) =
         let states = StreamStates()
@@ -336,7 +337,7 @@ module Ingester =
                     | false, _ -> moreResults <- false
                 let mutable t = Unchecked.defaultof<_>
                 let mutable toIngest = 4096 * 5
-                while work.TryTake(&t) && toIngest > 0 do
+                while work.TryTake(&t,fiveMs) && toIngest > 0 do
                     incr ingestionsHandled
                     toIngest <- toIngest - 1
                     states.Add t
@@ -412,13 +413,18 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
     (writerQueueLen, writerCount, readerQueueLen) = async {
     let enumEvents (slice : AllEventsSlice) = seq {
         for e in slice.Events ->
+            let eb = Ingester.esPayloadBytes e
             match e.Event with
             | e when not e.IsJson
                 || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
                 || e.EventStreamId.StartsWith("$") 
                 || e.EventStreamId.EndsWith("_checkpoints")
+                || e.EventStreamId.EndsWith("_checkpoint")
                 || e.EventStreamId = "thor_useast2_to_backup_qa2_main" ->
                     Choice2Of2 e
+            | e when eb > Ingester.cosmosPayloadLimit ->
+                Log.Error("ES Event Id {eventId} size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}", e.EventId, eb, Ingester.cosmosPayloadLimit)
+                Choice2Of2 e
             | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Cosmos.Store.EventData.Create(e.EventType, e.Data, e.Metadata))
     }
     let mutable totalEvents, totalBytes = 0L, 0L
@@ -487,7 +493,7 @@ let main argv =
         let destination = cosmos.Connnect "ProjectorTemplate" |> Async.RunSynchronously
         let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
         let batchSize, streams, startPos = args.BuildFeedParams()
-        let writerQueueLen, writerCount, readerQueueLen = 2048,32,4096*10*10
+        let writerQueueLen, writerCount, readerQueueLen = 2048,64,4096*10*10
         if Threading.ThreadPool.SetMaxThreads(512,512) |> not then failwith "Could not set max threads"
         run (destination, colls) source (batchSize, streams, startPos) (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
         0 
