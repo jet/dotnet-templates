@@ -1,6 +1,7 @@
-﻿module TestbedTemplate.Log
+﻿module TestbedTemplate.Metrics
 
 open Serilog.Events
+open System
 
 [<AutoOpen>]
 module SerilogHelpers =
@@ -41,3 +42,26 @@ module SerilogHelpers =
                 | CosmosMetric (CosmosWriteRc stats) -> RuCounterSink.Write.Ingest stats
                 | CosmosMetric (CosmosResyncRc stats) -> RuCounterSink.Resync.Ingest stats
                 | _ -> ()
+
+let dumpStats duration (log: Serilog.ILogger) =
+    let stats =
+      [ "Read", RuCounterSink.Read
+        "Write", RuCounterSink.Write
+        "Resync", RuCounterSink.Resync ]
+    let mutable totalCount, totalRc, totalMs = 0L, 0., 0L
+    let logActivity name count rc lat =
+        log.Information("{name}: {count:n0} requests costing {ru:n0} RU (average: {avg:n2}); Average latency: {lat:n0}ms",
+            name, count, rc, (if count = 0L then Double.NaN else rc/float count), (if count = 0L then Double.NaN else float lat/float count))
+    for name, stat in stats do
+        let ru = float stat.rux100 / 100.
+        totalCount <- totalCount + stat.count
+        totalRc <- totalRc + ru
+        totalMs <- totalMs + stat.ms
+        logActivity name stat.count ru stat.ms
+    logActivity "TOTAL" totalCount totalRc totalMs
+    let measures : (string * (TimeSpan -> float)) list =
+      [ "s", fun x -> x.TotalSeconds
+        "m", fun x -> x.TotalMinutes
+        "h", fun x -> x.TotalHours ]
+    let logPeriodicRate name count ru = log.Information("rp{name} {count:n0} = ~{ru:n0} RU", name, count, ru)
+    for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d)

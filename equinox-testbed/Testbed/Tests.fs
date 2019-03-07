@@ -1,21 +1,17 @@
 ﻿module TestbedTemplate.Tests
 
-open Domain
 open FSharp.UMX
-open Infrastructure
 open Microsoft.Extensions.DependencyInjection
 open System
-open System.Net.Http
-open System.Text
 
 type Test = Favorite
 
-let mkSkuId () = Guid.NewGuid() |> SkuId
+let mkSkuId () = % Guid.NewGuid()
 
 let executeLocal (container: ServiceProvider) test: ClientId -> Async<unit> =
     match test with
     | Favorite ->
-        let service = container.GetRequiredService<Backend.Favorites.Service>()
+        let service = container.GetRequiredService<Services.Domain.Favorites.Service>()
         fun clientId -> async {
             let sku = mkSkuId ()
             do! service.Favorite(clientId,[sku])

@@ -14,7 +14,7 @@
     <Compile Include="Infrastructure\LoadTestRunner.fs" />
     <Compile Include="Infrastructure\LocalLoadTestRunner.fs" />
     <Compile Include="Types.fs" />
-    <Compile Include="RuCounter.fs" />
+    <Compile Include="Metrics.fs" />
     <Compile Include="Services.fs" />
     <Compile Include="Tests.fs" />
     <Compile Include="Program.fs" />
