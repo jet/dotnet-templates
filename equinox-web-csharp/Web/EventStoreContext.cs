@@ -1,7 +1,7 @@
 using Equinox;
 using Equinox.EventStore;
 using Equinox.Store;
-using Equinox.UnionCodec;
+using Equinox.Codec;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
 using System;
@@ -67,7 +67,7 @@ namespace TodoBackendTemplate
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
             var resolver = new GesResolver<TEvent, TState>(_gateway, codec, FuncConvert.FromFunc(fold),
-                initial, accessStrategy, cacheStrategy);
+                initial, cacheStrategy, accessStrategy);
             return t => resolver.Resolve.Invoke(t);
         }
     }

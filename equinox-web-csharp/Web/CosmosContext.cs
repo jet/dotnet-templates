@@ -1,12 +1,13 @@
 using Equinox;
 using Equinox.Cosmos;
-using Equinox.UnionCodec;
+using Equinox.Codec.JsonNet;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Equinox.Codec;
 
 namespace TodoBackendTemplate
 {
@@ -78,7 +79,7 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new CosmosResolver<TEvent, TState>(_store, codec, FuncConvert.FromFunc(fold), initial, accessStrategy, cacheStrategy);
+            var resolver = new CosmosResolver<TEvent, TState>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy);
             return t => resolver.Resolve.Invoke(t);
         }
     }

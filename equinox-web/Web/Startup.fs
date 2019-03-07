@@ -99,12 +99,11 @@ module Services =
     let serializationSettings = Newtonsoft.Json.JsonSerializerSettings()
 
     /// Automatically generates a Union Codec based using the scheme described in https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
-    let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.UnionCodec.JsonUtf8.Create<'Union>(serializationSettings)
-
+    let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.JsonNet.JsonUtf8.Create<'Union>(serializationSettings)
     /// Builds a Stream Resolve function appropriate to the store being used
     type StreamResolver(storage : Storage.Instance) =
         member __.Resolve
-            (   codec : Equinox.UnionCodec.IUnionEncoder<'event,byte[]>,
+            (   codec : Equinox.Codec.IUnionEncoder<'event,byte[]>,
                 fold: ('state -> 'event seq -> 'state),
                 initial: 'state,
                 snapshot: (('event -> bool) * ('state -> 'event))) =
@@ -117,13 +116,13 @@ module Services =
             | Storage.EventStore (gateway, cache) ->
                 let accessStrategy = Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot
                 let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.EventStore.GesResolver<'event,'state>(gateway, codec, fold, initial, accessStrategy, cacheStrategy).Resolve
+                Equinox.EventStore.GesResolver<'event,'state>(gateway, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
 //#endif
 //#if cosmos
             | Storage.CosmosStore (store, cache) ->
                 let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot snapshot
                 let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.Cosmos.CosmosResolver<'event,'state>(store, codec, fold, initial, accessStrategy, cacheStrategy).Resolve
+                Equinox.Cosmos.CosmosResolver<'event,'state>(store, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
 //#endif
 
     /// Binds a storage independent Service's Handler's `resolve` function to a given Stream Policy using the StreamResolver

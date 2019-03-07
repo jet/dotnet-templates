@@ -1,7 +1,7 @@
 using Equinox;
 using Equinox.MemoryStore;
 using Equinox.Store;
-using Equinox.UnionCodec;
+using Equinox.Codec;
 using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
