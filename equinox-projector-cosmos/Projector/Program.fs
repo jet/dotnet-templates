@@ -7,7 +7,7 @@ open Equinox.Cosmos
 open Equinox.Cosmos.Projection
 //#if kafka
 open Equinox.Projection.Codec
-open Equinox.Projection.Kafka
+open Jet.ConfluentKafka.FSharp
 //#endif
 open Equinox.Store
 open Microsoft.Azure.Documents.ChangeFeedProcessor

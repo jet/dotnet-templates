@@ -1,6 +1,6 @@
 ﻿module ProjectorTemplate.Consumer.Program
 
-open Equinox.Projection.Kafka
+open Jet.ConfluentKafka.FSharp
 open Serilog
 open System
 open System.Threading
@@ -29,7 +29,7 @@ module EventParser =
             /// Addition of a collection of skus to the list
             | Added of Added
             interface TypeShape.UnionContract.IUnionContract
-        let codec = Equinox.UnionCodec.JsonUtf8.Create<Event>(settings)
+        let codec = Equinox.Codec.JsonNet.JsonUtf8.Create<Event>(settings)
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module Favorites =
@@ -40,13 +40,13 @@ module EventParser =
             | Favorited         of Favorited
             | Unfavorited       of Unfavorited
             interface TypeShape.UnionContract.IUnionContract
-        let codec = Equinox.UnionCodec.JsonUtf8.Create<Event>(settings)
+        let codec = Equinox.Codec.JsonNet.JsonUtf8.Create<Event>(settings)
     
     let tryExtractCategory (x : RenderedEvent) =
         x.s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries)
         |> Array.tryHead
-    let tryDecode (log : ILogger) (codec : Equinox.UnionCodec.IUnionEncoder<_,_>) (x : RenderedEvent) =
-        match codec.TryDecode { caseName = x.c; payload = x.d } with
+    let tryDecode (log : ILogger) (codec : Equinox.Codec.IUnionEncoder<_,_>) (x : RenderedEvent) =
+        match codec.TryDecode (Equinox.Codec.Core.EventData.Create(x.c, x.d)) with
         | None ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
                 log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.d), true)
