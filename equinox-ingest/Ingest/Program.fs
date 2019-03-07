@@ -170,7 +170,7 @@ module Ingester =
     open Equinox.Cosmos.Core
     open Equinox.Cosmos.Store
 
-    type [<NoComparison>] Span = { pos: int64; events: IEvent[] }
+    type [<NoComparison>] Span = { pos: int64; events: Equinox.Codec.IEvent<byte[]>[] }
     module Span =
         let private (|Max|) x = x.pos + x.events.LongLength
         let private trim min (Max m as x) =
@@ -255,7 +255,7 @@ module Ingester =
 
     let inline arrayBytes (x:byte[]) = if x = null then 0 else x.Length
     let cosmosPayloadLimit = 2 * 1024 * 1024 - 1024
-    let inline cosmosPayloadBytes (x: IEvent) = arrayBytes x.Data + arrayBytes x.Meta + 4
+    let inline cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 4
     let inline esRecPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = arrayBytes x.Data + arrayBytes x.Metadata
     let inline esPayloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = esRecPayloadBytes x.Event + x.OriginalStreamId.Length * 2
 
@@ -307,7 +307,7 @@ module Ingester =
                 
                 let mutable bytesBudget = cosmosPayloadLimit
                 let mutable count = 0 
-                let max2MbMax1000EventsMax10EventsFirstTranche (y : IEvent) =
+                let max2MbMax1000EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
                     bytesBudget <- bytesBudget - cosmosPayloadBytes y
                     count <- count + 1
                     count < (if x.pos = 0L then 10 else 1000) && (bytesBudget >= 0 || count = 1)
@@ -397,7 +397,7 @@ module Reader =
                 let events =
                     [| for x in currentSlice.Events ->
                         let e = x.Event
-                        Equinox.Cosmos.Store.EventData.Create (e.EventType, e.Data, e.Metadata) :> Equinox.Cosmos.Store.IEvent |]
+                        Equinox.Codec.Core.EventData.Create (e.EventType, e.Data, e.Metadata) :> Equinox.Codec.IEvent<byte[]> |]
                 postBatch { stream = stream; span = { pos = currentSlice.FromEventNumber; events = events } }
                 return! fetchFrom currentSlice.NextEventNumber }
             fetchFrom 0L
@@ -425,7 +425,7 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
             | e when eb > Ingester.cosmosPayloadLimit ->
                 Log.Error("ES Event Id {eventId} size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}", e.EventId, eb, Ingester.cosmosPayloadLimit)
                 Choice2Of2 e
-            | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Cosmos.Store.EventData.Create(e.EventType, e.Data, e.Metadata))
+            | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata))
     }
     let mutable totalEvents, totalBytes = 0L, 0L
     let followAll (postBatch : Ingester.Batch -> unit) = async {
