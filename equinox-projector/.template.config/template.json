@@ -11,7 +11,7 @@
   "tags": {
     "language": "F#"
   },
-  "identity": "Equinox.Template.Projector.Cosmos",
+  "identity": "Equinox.Template.Projector",
   "name": "Equinox Projector (with optional consumer)",
   "shortName": "eqxprojector",
   "sourceName": "ProjectorTemplate",
@@ -33,13 +33,13 @@
           "condition": "(!kafka)",
           "exclude": [
             "**/Consumer/**/*",
-            "equinox-projector-consumer-cosmos.sln"
+            "equinox-projector-consumer.sln"
           ]
         },
         {
           "condition": "(kafka)",
           "exclude": [
-            "equinox-projector-cosmos.sln"
+            "equinox-projector.sln"
           ]
         }
       ]
