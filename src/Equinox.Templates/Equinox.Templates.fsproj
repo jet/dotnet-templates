@@ -3,9 +3,9 @@
   <PropertyGroup>
     <Authors>@jet @bartelink contributors</Authors>
     <Company>Jet.com</Company>
-    <Description>dotnet new eqxweb, eqxwebcs: Equinox Web, Domain templates</Description>
+    <Description>dotnet new eqxweb, eqxwebcs, eqxprojector: Equinox Web, Domain, Projector, Consumer templates</Description>
     <PackageProjectUrl>https://github.com/jet/dotnet-templates</PackageProjectUrl>
-    <PackageTags>equinox fsharp eventsourcing cosmosdb eventstore</PackageTags>
+    <PackageTags>equinox fsharp eventsourcing cosmosdb eventstore changefeedprocessor kafka</PackageTags>
     <PackageLicense>Apache-2.0</PackageLicense>
     <Copyright>Copyright © 2018-9</Copyright>
 

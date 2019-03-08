@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Equinox",
+    "Event Sourcing",
+    "CosmosDb",
+    "ChangeFeed",
+    "Kafka"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Equinox.Template.Projector.Cosmos",
+  "name": "Equinox Projector (with optional consumer)",
+  "shortName": "eqxprojector",
+  "sourceName": "ProjectorTemplate",
+  "preferNameDirectory": true,
+
+  "symbols": {
+    "kafka": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Include a code projecting to, and consuming from Kafka."
+    }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "(!kafka)",
+          "exclude": [
+            "**/Consumer/**/*",
+            "equinox-projector-consumer-cosmos.sln"
+          ]
+        },
+        {
+          "condition": "(kafka)",
+          "exclude": [
+            "equinox-projector-cosmos.sln"
+          ]
+        }
+      ]
+    }
+  ]
+}
