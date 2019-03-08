@@ -1,8 +1,15 @@
 ﻿[<AutoOpen>]
-module TestbedTemplate.Types
+[<AutoOpen>]
+module TestbedTemplate.Infrastructure
 
 open FSharp.UMX
 open System
+
+type Exception with
+    // https://github.com/fsharp/fslang-suggestions/issues/660
+    member this.Reraise () =
+        (System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture this).Throw ()
+        Unchecked.defaultof<_>
 
 module Guid =
     let inline toStringN (x : Guid) = x.ToString "N"
@@ -17,7 +24,3 @@ module ClientId = let toStringN (value : ClientId) : string = Guid.toStringN %va
 type SkuId = Guid<skuId>
 and [<Measure>] skuId
 module SkuId = let toStringN (value : SkuId) : string = Guid.toStringN %value
-
-[<RequireQualifiedAccess; NoEquality; NoComparison>]
-type StorageConfig =
-    | Cosmos of Equinox.Cosmos.CosmosGateway * Equinox.Cosmos.CachingStrategy * unfolds: bool * databaseId: string * collectionId: string

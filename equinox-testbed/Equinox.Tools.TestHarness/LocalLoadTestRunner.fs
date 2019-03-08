@@ -1,4 +1,4 @@
-﻿namespace TestbedTemplate.Infrastructure
+﻿namespace Equinox.Tools.TestHarness
 
 open Serilog
 open System

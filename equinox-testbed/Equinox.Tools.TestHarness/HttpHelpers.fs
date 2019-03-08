@@ -1,4 +1,4 @@
-﻿module TestbedTemplate.Infrastructure.HttpHelpers
+﻿module Equinox.Tools.TestHarness.HttpHelpers
 
 open System
 open System.Net
@@ -77,4 +77,4 @@ type InvalidHttpResponseException =
     }
 
     static member Create(response : HttpResponseMessage, ?innerException : exn) =
-        InvalidHttpResponseException.Create("HTTP request yielded unexpected response.", response, ?innerException = innerException)
+        InvalidHttpResponseException.Create("HTTP request yielded unexpected response.", response, ?innerException = innerException) 

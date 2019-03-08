@@ -1,10 +1,10 @@
-﻿namespace TestbedTemplate.Infrastructure
+﻿namespace Equinox.Tools.TestHarness
 
 open System
 open System.Net
 open System.Threading.Tasks
 
-//open HttpHelpers
+open HttpHelpers
 
 /// Generic message envelope
 [<NoEquality; NoComparison>]
@@ -27,7 +27,7 @@ with
     static member FromException(e : exn) =
         match e with
         | InnermostExn (:? TimeoutException | :? TaskCanceledException) -> Timeout
-        //| InnermostExn (:? InvalidHttpResponseException as e) -> InvalidHttpResponse e.StatusCode
+        | InnermostExn (:? InvalidHttpResponseException as e) -> InvalidHttpResponse e.StatusCode
         | e ->
             let et = e.GetType()
             if et = typeof<exn> then OtherError e.Message
