@@ -30,7 +30,7 @@ To use from the command line, the outline is:
     # see readme.md in the generated code for further instructions regarding the TodoBackend the above -t switch above triggers the inclusion of
     start readme.md
 
-    # to add a Projector and a Consumer
+    # to add a Projector and a Consumer (-k emits to Kafka and hence implies having a Consumer)
     dotnet new eqxprojector -k
 
 ## CONTRIBUTING
