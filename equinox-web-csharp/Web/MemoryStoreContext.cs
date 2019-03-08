@@ -1,7 +1,7 @@
 using Equinox;
 using Equinox.MemoryStore;
 using Equinox.Store;
-using Equinox.UnionCodec;
+using Equinox.Codec;
 using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
@@ -23,7 +23,7 @@ namespace TodoBackendTemplate
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> compact = null)
         {
-            var resolver = new MemResolver<TEvent, TState>(_store, FuncConvert.FromFunc(fold), initial);
+            var resolver = new MemoryResolver<TEvent, TState>(_store, FuncConvert.FromFunc(fold), initial);
             return target => resolver.Resolve.Invoke(target);
         }
 

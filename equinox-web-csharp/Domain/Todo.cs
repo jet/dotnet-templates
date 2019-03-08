@@ -204,15 +204,14 @@ namespace TodoBackendTemplate
         /// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
         class Handler
         {
-            readonly EquinoxHandler<Event, State> _inner;
+            readonly EquinoxStream<Event, State> _inner;
 
             public Handler(ILogger log, IStream<Event, State> stream) =>
-                _inner = new EquinoxHandler<Event, State>(State.Fold, log, stream);
+                _inner = new EquinoxStream<Event, State>(State.Fold, log, stream);
 
             /// Execute `command`; does not emit the post state
             public Task<Unit> Execute(Command c) =>
-                _inner.Execute(ctx =>
-                    ctx.Execute(s => Command.Interpret(s, c)));
+                _inner.Execute(s => Command.Interpret(s, c));
 
             /// Handle `command`, return the items after the command's intent has been applied to the stream
             public Task<Event.ItemData[]> Decide(Command c) =>

@@ -1,12 +1,13 @@
 using Equinox;
 using Equinox.Cosmos;
-using Equinox.UnionCodec;
+using Equinox.Codec.JsonNet;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Equinox.Codec;
 
 namespace TodoBackendTemplate
 {
@@ -33,7 +34,7 @@ namespace TodoBackendTemplate
     {
         readonly Caching.Cache _cache;
 
-        EqxStore _store;
+        CosmosStore _store;
         readonly Func<Task> _connect;
 
         public CosmosContext(CosmosConfig config)
@@ -46,21 +47,21 @@ namespace TodoBackendTemplate
             {
                 var gateway = await Connect("App", config.Mode, discovery, timeout, retriesOn429Throttling,
                     (int)timeout.TotalSeconds);
-                var collectionMapping = new EqxCollections(config.Database, config.Collection);
+                var collectionMapping = new CosmosCollections(config.Database, config.Collection);
 
-                _store = new EqxStore(gateway, collectionMapping);
+                _store = new CosmosStore(gateway, collectionMapping);
             };
         }
 
         internal override async Task Connect() => await _connect();
 
-        static async Task<EqxGateway> Connect(string appName, ConnectionMode mode, Discovery discovery, TimeSpan operationTimeout,
+        static async Task<CosmosGateway> Connect(string appName, ConnectionMode mode, Discovery discovery, TimeSpan operationTimeout,
             int maxRetryForThrottling, int maxRetryWaitSeconds)
         {
             var log = Log.ForContext<CosmosContext>();
-            var c = new EqxConnector(operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds, log, mode: mode);
+            var c = new CosmosConnector(operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds, log, mode: mode);
             var conn = await FSharpAsync.StartAsTask(c.Connect(appName, discovery), null, null);
-            return new EqxGateway(conn, new EqxBatchingPolicy(defaultMaxItems: 500));
+            return new CosmosGateway(conn, new CosmosBatchingPolicy(defaultMaxItems: 500));
         }
 
         public override Func<Target,Equinox.Store.IStream<TEvent, TState>> Resolve<TEvent, TState>(
@@ -78,7 +79,7 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new EqxResolver<TEvent, TState>(_store, codec, FuncConvert.FromFunc(fold), initial, accessStrategy, cacheStrategy);
+            var resolver = new CosmosResolver<TEvent, TState>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy);
             return t => resolver.Resolve.Invoke(t);
         }
     }
