@@ -124,13 +124,13 @@ module CmdParser =
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
-                | BatchSize _ ->        "maximum item count to request from feed. Default: 4096"
-                | Verbose ->            "request Verbose Logging. Default: off"
-                | VerboseConsole ->     "request Verbose Console Logging. Default: off"
-                | LocalSeq -> "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
-                | Stream _ ->           "specify stream(s) to seed the processing with"
-                | AllPos _ ->           "Specify EventStore $all Stream Position to commence from"
-                | Es _ ->               "specify EventStore parameters"
+                | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
+                | Verbose ->                "request Verbose Logging. Default: off"
+                | VerboseConsole ->         "request Verbose Console Logging. Default: off"
+                | LocalSeq ->               "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
+                | Stream _ ->               "specify stream(s) to seed the processing with"
+                | AllPos _ ->               "Specify EventStore $all Stream Position to commence from"
+                | Es _ ->                   "specify EventStore parameters"
     and Parameters(args : ParseResults<Arguments>) =
         member val EventStore = EventStore.Info(args.GetResult Es)
         member __.Verbose = args.Contains Verbose
