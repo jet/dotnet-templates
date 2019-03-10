@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module private ProjectorTemplate.Ingester.Infrastructure
+module private SyncTemplate.Infrastructure
 
 open System
 open System.Threading

@@ -1,4 +1,4 @@
-﻿module ProjectorTemplate.Ingester.Program
+﻿module SyncTemplate.Program
 
 open Equinox.Store // Infra
 open FSharp.Control
