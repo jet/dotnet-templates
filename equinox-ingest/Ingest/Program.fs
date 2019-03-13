@@ -120,6 +120,7 @@ module CmdParser =
         | [<AltCommandLine "-S"; Unique>] LocalSeq
         | [<AltCommandLine "-s">] Stream of string
         | [<AltCommandLine "-p"; Unique>] AllPos of int64
+        | [<AltCommandLine "-P"; Unique>] PercentagePos of float
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Es of ParseResults<EventStore.Arguments>
         interface IArgParserTemplate with
             member a.Usage =
@@ -130,6 +131,7 @@ module CmdParser =
                 | LocalSeq ->               "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Stream _ ->               "specify stream(s) to seed the processing with"
                 | AllPos _ ->               "Specify EventStore $all Stream Position to commence from"
+                | PercentagePos _ ->        "Specify EventStore $all Stream Position to commence from (as a percentage of current tail position)"
                 | Es _ ->                   "specify EventStore parameters"
     and Parameters(args : ParseResults<Arguments>) =
         member val EventStore = EventStore.Info(args.GetResult Es)
@@ -139,8 +141,11 @@ module CmdParser =
         member __.BatchSize = args.GetResult(BatchSize,4096)
         member x.BuildFeedParams() =
             Log.Information("Processing in batches of {batchSize}", x.BatchSize)
-            let startPos = args.TryGetResult AllPos  
-            startPos |> Option.iter (fun p -> Log.Information("Processing will commence at $all Position {p}", p))
+            let startPos =
+                match args.TryGetResult AllPos, args.TryGetResult PercentagePos with
+                | Some p, _ -> Log.Warning("Processing will commence at $all Position {p}", p); Choice1Of3 p
+                | _, Some p -> Log.Warning("Processing will commence at $all Percentage {pct:P0}", p/100.); Choice2Of3 p 
+                | None, None -> Log.Warning "Processing will commence at start"; Choice3Of3 ()
             x.BatchSize, args.GetResults Stream, startPos
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -409,7 +414,7 @@ open Equinox.EventStore
 open Equinox.Cosmos
 
 let run (destination : CosmosConnection, colls) (source : GesConnection)
-    (batchSize, streams: string list, startPos: int64 option)
+    (batchSize, streams: string list, startPos: Choice<int64, float, unit>)
     (writerQueueLen, writerCount, readerQueueLen) = async {
     let enumEvents (slice : AllEventsSlice) = seq {
         for e in slice.Events ->
@@ -429,11 +434,18 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
     }
     let mutable totalEvents, totalBytes = 0L, 0L
     let followAll (postBatch : Ingester.Batch -> unit) = async {
-        let mutable currentPos = match startPos with Some p -> EventStore.ClientAPI.Position(p,0L) | None -> Position.Start
-        let run = async {
+        let fetchMax = async {
             let! lastItemBatch = source.ReadConnection.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
             let max = lastItemBatch.NextPosition.CommitPosition
             Log.Warning("EventStore Write Position: @ {pos}", max)
+            return max
+        }
+        let mutable currentPos =
+            match startPos with
+            | Choice1Of3 p -> EventStore.ClientAPI.Position(p,0L)
+            | Choice2Of3 _ -> Position.End // placeholder, will be overwritten below
+            | Choice3Of3 () -> Position.Start
+        let run max = async {
             let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
             let rec loop () = async {
                 let! currentSlice = source.ReadConnection.ReadAllEventsForwardAsync(currentPos, batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
@@ -471,14 +483,26 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
             do! loop ()
         }
         let mutable finished = false
+        let mutable max = None
         while not finished do
-            try do! run
+            try if max = None then
+                    let! currMax = fetchMax
+                    max <- Some currMax
+                    match startPos with
+                    | Choice2Of3 pct ->
+                        let rawPos = float currMax * pct / 100. |> int64
+                        let chunkBase = rawPos &&& 0xFFFFFFFFE0000000L  // rawPos / 256L / 1024L / 1024L * 1024L * 1024L * 256L ;)
+                        // event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
+                        Log.Warning("Start: {pos}",chunkBase)
+                        currentPos <- EventStore.ClientAPI.Position(chunkBase,0L)
+                    | _ -> ()
+                do! run (Option.get max)
                 finished <- true
             with e -> Log.Warning(e,"Ingestion error")
     }
 
     let ctx = Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
-    let! ingester = Ingester.start(ctx, writerQueueLen, writerCount, readerQueueLen)
+    let! ingester = Ingester.start(ctx, writerQueueLen, writerCount, readerQueueLen)    
     let! _ = Async.StartChild (Reader.loadSpecificStreamsTemp (source.ReadConnection, batchSize) streams ingester.Add)
     let! _ = Async.StartChild (followAll ingester.Add)
     do! Async.AwaitKeyboardInterrupt() }
