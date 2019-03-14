@@ -250,21 +250,28 @@ module Ingester =
         member __.TryAdd(item, timeout : TimeSpan) = buffer.TryAdd(item, int timeout.TotalMilliseconds, ct)
         [<CLIEvent>] member __.Result = result.Publish
 
+    let inline arrayBytes (x:byte[]) = if x = null then 0 else x.Length
+
     type [<NoComparison>] StreamState = { read: int64 option; write: int64 option; isMalformed : bool; queue: Span[] } with
-        member __.IsReady = __.queue <> null && not __.isMalformed && match Array.tryHead __.queue with Some x -> x.pos = defaultArg __.write 0L | None -> false
+        member __.IsHead = __.queue <> null && match Array.tryHead __.queue with Some x -> x.pos = defaultArg __.write 0L | None -> false
+        member __.IsReady = __.IsHead && not __.isMalformed
+        member __.Size =
+            if __.queue = null then 0
+            else __.queue |> Seq.collect (fun x -> x.events) |> Seq.sumBy (fun x -> arrayBytes x.Data + arrayBytes x.Meta + x.EventType.Length*2 + 16)
+
     let inline optionCombine f (r1: int64 option) (r2: int64 option) =
         match r1, r2 with
         | Some x, Some y -> f x y |> Some
         | None, None -> None
         | None, x | x, None -> x
 
-    let inline arrayBytes (x:byte[]) = if x = null then 0 else x.Length
     let cosmosPayloadLimit = 2 * 1024 * 1024 - 1024
     let inline cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 4
     let inline esRecPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = arrayBytes x.Data + arrayBytes x.Metadata
     let inline esPayloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = esRecPayloadBytes x.Event + x.OriginalStreamId.Length * 2
     let isMalformedException (e: #exn) =
         e.ToString().Contains "SyntaxError: JSON.parse Error: Unexpected input at position"
+        || e.ToString().Contains "SyntaxError: JSON.parse Error: Invalid character at position"
 
     let combine (s1: StreamState) (s2: StreamState) : StreamState =
         let writePos = optionCombine max s1.write s2.write
@@ -291,10 +298,10 @@ module Ingester =
 
         member __.Add (item: Batch, ?isMalformed) = updateWritePos item.stream 0L (defaultArg isMalformed false) [|item.span|]
         member __.HandleWriteResult = function
-            | Ok (stream, pos) -> updateWritePos stream pos false null
-            | Duplicate (stream, pos) -> updateWritePos stream pos false null
-            | Conflict overage -> updateWritePos overage.stream overage.span.pos false [|overage.span|]
-            | Exn (exn, batch) -> __.Add(batch,isMalformedException exn)
+            | Ok (stream, pos) -> updateWritePos stream pos false null; true
+            | Duplicate (stream, pos) -> updateWritePos stream pos false null; true
+            | Conflict overage -> updateWritePos overage.stream overage.span.pos false [|overage.span|]; true
+            | Exn (exn, batch) -> let malformed = isMalformedException exn in __.Add(batch,malformed); not malformed
         member __.TryPending() =
 #if NET461
             if dirty.Count = 0 then None else
@@ -319,8 +326,20 @@ module Ingester =
                     count <- count + 1
                     count < (if x.pos = 0L then 10 else 1000) && (bytesBudget >= 0 || count = 1)
                 Some { stream = stream; span = { pos = x.pos; events = x.events |> Array.takeWhile max2MbMax1000EventsMax10EventsFirstTranche } }
-
-    type Queue(log : Serilog.ILogger, writer : Writer, cancellationToken: CancellationToken, readerQueueLen) =
+        member __.Dump() =
+            let mutable synced, ready, waiting, malformed = 0, 0, 0, 0
+            let mutable syncedB, readyB, waitingB, malformedB = 0L, 0L, 0L, 0L
+            for x in states do
+                let sz = x.Value.Size
+                if x.Value.isMalformed then malformed <- malformed + 1; malformedB <- malformedB + int64 sz
+                elif sz = 0 then synced <- synced + 1; syncedB <- syncedB + int64 sz
+                elif x.Value.IsReady then ready <- ready + 1; readyB <- readyB + int64 sz
+                else waiting <- waiting + 1; waitingB <- waitingB + int64 sz
+            let mb x = x / 1024L / 1024L
+            Log.Warning("Queued {dirty} Ready {ready}/{readyMb}MB Waiting {waiting}/{waitingMb}MB Malformed {malformed}/{malformedMb}MB Synced {synced}/{syncedMb}MB",
+                dirty.Count, ready, mb readyB, waiting, mb waitingB, malformed, mb malformedB, synced, mb syncedB)
+    type Queue(log : Serilog.ILogger, writer : Writer, cancellationToken: CancellationToken, readerQueueLen, ?interval) =
+        let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
         let states = StreamStates()
         let results = ConcurrentQueue<_>()
         let work = new BlockingCollection<_>(ConcurrentQueue<_>(), readerQueueLen)
@@ -332,15 +351,14 @@ module Ingester =
             let mutable pendingWriterAdd = None
             let mutable bytesPended = 0L
             let resultsHandled, ingestionsHandled, workPended, eventsPended = ref 0, ref 0, ref 0, ref 0
-            let progressTimer = Stopwatch.StartNew()
+            let progressTimer, stateTimer = Stopwatch.StartNew(), Stopwatch.StartNew()
             while not cancellationToken.IsCancellationRequested do
                 let mutable moreResults = true
                 while moreResults do
                     match results.TryDequeue() with
                     | true, res ->
                         incr resultsHandled
-                        states.HandleWriteResult res
-                        res.WriteTo log
+                        if states.HandleWriteResult res then res.WriteTo log
                     | false, _ -> moreResults <- false
                 let mutable t = Unchecked.defaultof<_>
                 let mutable toIngest = 4096 * 5
@@ -373,11 +391,12 @@ module Ingester =
                             eventsPended := !eventsPended + w.span.events.Length
                             bytesPended <- bytesPended + int64 (Array.sumBy cosmosPayloadBytes w.span.events)
 
-                if progressTimer.ElapsedMilliseconds > 60L * 1000L then
+                if progressTimer.ElapsedMilliseconds > intervalMs then
                     progressTimer.Restart()
                     Log.Warning("Ingested {ingestions}; Sent {queued} req {events} events; Completed {completed} reqs; Egress {gb:n3}GB",
                         !ingestionsHandled, !workPended, !eventsPended,!resultsHandled, float bytesPended / 1024. / 1024. / 1024.)
                     ingestionsHandled := 0; workPended := 0; eventsPended := 0; resultsHandled := 0
+                    states.Dump()
 
     /// Manages establishing of the writer 'threads' - can be Stop()ped explicitly and/or will stop when caller does
     let start(ctx : CosmosContext, writerQueueLen, writerCount, readerQueueLen) = async {
@@ -430,7 +449,7 @@ type SliceStatsBuffer(?interval) =
         batchBytes
     member __.DumpIfIntervalExpired() =
         if accStart.ElapsedMilliseconds > intervalMs then
-            Log.Warning("Breakdown MB/cat/count {@cats}",
+            Log.Warning("Cats MB/cat/count {@cats}",
                 recentCats
                 |> Seq.sortByDescending (fun x -> snd x.Value)
                 |> Seq.truncate 10
