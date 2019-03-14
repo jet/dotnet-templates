@@ -378,8 +378,6 @@ module Ingester =
                     Log.Warning("Ingested {ingestions}; Sent {queued} req {events} events; Completed {completed} reqs; Egress {gb:n3}GB",
                         !ingestionsHandled, !workPended, !eventsPended,!resultsHandled, float bytesPended / 1024. / 1024. / 1024.)
                     ingestionsHandled := 0; workPended := 0; eventsPended := 0; resultsHandled := 0
-    type Ingester(queue : Queue) =
-        member __.Add batch = queue.Add batch
 
     /// Manages establishing of the writer 'threads' - can be Stop()ped explicitly and/or will stop when caller does
     let start(ctx : CosmosContext, writerQueueLen, writerCount, readerQueueLen) = async {
@@ -389,7 +387,7 @@ module Ingester =
         let _ = writer.Result.Subscribe queue.HandleWriteResult // codependent, wont worry about unsubcribing
         writer.StartConsumers writerCount
         let! _ = Async.StartChild(async { queue.Pump() })
-        return Ingester(queue)
+        return queue
     }
 
 open EventStore.ClientAPI
@@ -415,6 +413,31 @@ module Reader =
 open Equinox.EventStore
 open Equinox.Cosmos
 
+let category (s : string) = s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries) |> Array.head
+
+type SliceStatsBuffer(?interval) =
+    let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
+    let recentCats, accStart = System.Collections.Generic.Dictionary<string,int*int>(), Stopwatch.StartNew()
+    member __.Ingest(slice: AllEventsSlice) =
+        let mutable batchBytes = 0
+        for x in slice.Events do
+            let cat = category x.OriginalStreamId
+            let eventBytes = Ingester.esPayloadBytes x
+            match recentCats.TryGetValue cat with
+            | true, (currCount, currSize) -> recentCats.[cat] <- (currCount + 1, currSize+eventBytes)
+            | false, _ -> recentCats.[cat] <- (1, eventBytes)
+            batchBytes <- batchBytes + eventBytes
+        batchBytes
+    member __.DumpIfIntervalExpired() =
+        if accStart.ElapsedMilliseconds > intervalMs then
+            Log.Warning("Breakdown MB/cat/count {@cats}",
+                recentCats
+                |> Seq.sortByDescending (fun x -> snd x.Value)
+                |> Seq.truncate 10
+                |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c))
+            recentCats.Clear()
+            accStart.Restart()
+
 let run (destination : CosmosConnection, colls) (source : GesConnection)
     (batchSize, streams: string list, startPos: Choice<int64, float, unit>)
     (writerQueueLen, writerCount, readerQueueLen) = async {
@@ -439,24 +462,8 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
         let max = lastItemBatch.NextPosition.CommitPosition
         Log.Warning("EventStore Write Position: @ {pos}", max)
         return max }
-    let category (s : string) = s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries) |> Array.head
+    let stats = SliceStatsBuffer()
     let followAll (postBatch : Ingester.Batch -> unit) = async {
-        let recentCats, accStart = System.Collections.Generic.Dictionary<string,int*int>(), Stopwatch.StartNew()
-        let gatherStats (slice: AllEventsSlice) =
-            let mutable batchBytes = 0
-            for x in slice.Events do
-                let cat = category x.OriginalStreamId
-                let eventBytes = Ingester.esPayloadBytes x
-                match recentCats.TryGetValue cat with
-                | true, (currCount, currSize) -> recentCats.[cat] <- (currCount + 1, currSize+eventBytes)
-                | false, _ -> recentCats.[cat] <- (1, eventBytes)
-                batchBytes <- batchBytes + eventBytes
-            batchBytes
-        let dumpCatStatsIfNecessary () =
-            if accStart.ElapsedMilliseconds > 1000L * 60L then
-                Log.Warning("Top MB/cat/count {@cats}", recentCats |> Seq.sortByDescending (fun x -> snd x.Value) |> Seq.truncate 10 |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c))
-                recentCats.Clear()
-                accStart.Restart()
         let mutable currentPos =
             match startPos with
             | Choice1Of3 p -> EventStore.ClientAPI.Position(p,0L)
@@ -471,7 +478,7 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                 sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
                 let received = currentSlice.Events.Length
                 totalEvents <- totalEvents + int64 received
-                let batchBytes = gatherStats currentSlice
+                let batchBytes = stats.Ingest currentSlice
                 totalBytes <- totalBytes + int64 batchBytes
                 let streams =
                     enumEvents currentSlice
@@ -481,7 +488,7 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                     |> Array.ofSeq
 
                 let usedCats = streams |> Seq.map fst |> Seq.distinct |> Seq.length
-                dumpCatStatsIfNecessary ()
+                stats.DumpIfIntervalExpired()
                 let postSw = Stopwatch.StartNew()
                 let extracted = ref 0
                 for s,xs in streams do
