@@ -7,7 +7,6 @@ open System
 
 module CmdParser =
     open Argu
-    open Equinox.Cosmos
     type LogEventLevel = Serilog.Events.LogEventLevel
 
     exception MissingArg of string
@@ -17,6 +16,7 @@ module CmdParser =
         | x -> x 
 
     module Cosmos =
+        open Equinox.Cosmos
         type [<NoEquality; NoComparison>] Arguments =
             | [<AltCommandLine("-m")>] ConnectionMode of ConnectionMode
             | [<AltCommandLine("-o")>] Timeout of float
@@ -143,9 +143,9 @@ module CmdParser =
             Log.Information("Processing in batches of {batchSize}", x.BatchSize)
             let startPos =
                 match args.TryGetResult AllPos, args.TryGetResult PercentagePos with
-                | Some p, _ -> Log.Warning("Processing will commence at $all Position {p}", p); Choice1Of3 p
-                | _, Some p -> Log.Warning("Processing will commence at $all Percentage {pct:P0}", p/100.); Choice2Of3 p 
-                | None, None -> Log.Warning "Processing will commence at start"; Choice3Of3 ()
+                | Some p, _ ->  Log.Warning("Processing will commence at $all Position {p}", p); Choice1Of3 p
+                | _, Some p ->  Log.Warning("Processing will commence at $all Percentage {pct:P0}", p/100.); Choice2Of3 p 
+                | None, None -> Log.Warning "Processing will commence at $all Start"; Choice3Of3 ()
             x.BatchSize, args.GetResults Stream, startPos
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -250,8 +250,8 @@ module Ingester =
         member __.TryAdd(item, timeout : TimeSpan) = buffer.TryAdd(item, int timeout.TotalMilliseconds, ct)
         [<CLIEvent>] member __.Result = result.Publish
 
-    type [<NoComparison>] StreamState = { read: int64 option; write: int64 option; queue: Span[] } with
-        member __.IsReady = __.queue <> null && match Array.tryHead __.queue with Some x -> x.pos = defaultArg __.write 0L | None -> false
+    type [<NoComparison>] StreamState = { read: int64 option; write: int64 option; isMalformed : bool; queue: Span[] } with
+        member __.IsReady = __.queue <> null && not __.isMalformed && match Array.tryHead __.queue with Some x -> x.pos = defaultArg __.write 0L | None -> false
     let inline optionCombine f (r1: int64 option) (r2: int64 option) =
         match r1, r2 with
         | Some x, Some y -> f x y |> Some
@@ -263,11 +263,13 @@ module Ingester =
     let inline cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 4
     let inline esRecPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = arrayBytes x.Data + arrayBytes x.Metadata
     let inline esPayloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = esRecPayloadBytes x.Event + x.OriginalStreamId.Length * 2
+    let isMalformedException (e: #exn) =
+        e.ToString().Contains "SyntaxError: JSON.parse Error: Unexpected input at position"
 
     let combine (s1: StreamState) (s2: StreamState) : StreamState =
         let writePos = optionCombine max s1.write s2.write
         let items = seq { if s1.queue <> null then yield! s1.queue; if s2.queue <> null then yield! s2.queue }
-        { read = optionCombine max s1.read s2.read; write = writePos; queue = Span.merge (defaultArg writePos 0L) items}
+        { read = optionCombine max s1.read s2.read; write = writePos; isMalformed = s1.isMalformed || s2.isMalformed; queue = Span.merge (defaultArg writePos 0L) items}
 
     type StreamStates() =
         let states = System.Collections.Generic.Dictionary<string, StreamState>()
@@ -284,15 +286,15 @@ module Ingester =
                 let updated = combine current state
                 states.[stream] <- updated
                 if updated.IsReady then markDirty stream |> ignore
-        let updateWritePos stream pos queue =
-            update stream { read = None; write = Some pos; queue = queue }
+        let updateWritePos stream pos isMalformed span =
+            update stream { read = None; write = Some pos; isMalformed = isMalformed; queue = span }
 
-        member __.Add (item: Batch) = updateWritePos item.stream 0L [|item.span|]
+        member __.Add (item: Batch, ?isMalformed) = updateWritePos item.stream 0L (defaultArg isMalformed false) [|item.span|]
         member __.HandleWriteResult = function
-            | Ok (stream, pos) -> updateWritePos stream pos null
-            | Duplicate (stream, pos) -> updateWritePos stream pos null
-            | Conflict overage -> updateWritePos overage.stream overage.span.pos [|overage.span|]
-            | Exn (_exn, batch) -> __.Add batch
+            | Ok (stream, pos) -> updateWritePos stream pos false null
+            | Duplicate (stream, pos) -> updateWritePos stream pos false null
+            | Conflict overage -> updateWritePos overage.stream overage.span.pos false [|overage.span|]
+            | Exn (exn, batch) -> __.Add(batch,isMalformedException exn)
         member __.TryPending() =
 #if NET461
             if dirty.Count = 0 then None else
@@ -371,7 +373,7 @@ module Ingester =
                             eventsPended := !eventsPended + w.span.events.Length
                             bytesPended <- bytesPended + int64 (Array.sumBy cosmosPayloadBytes w.span.events)
 
-                if progressTimer.ElapsedMilliseconds > 10000L then
+                if progressTimer.ElapsedMilliseconds > 60L * 1000L then
                     progressTimer.Restart()
                     Log.Warning("Ingested {ingestions}; Sent {queued} req {events} events; Completed {completed} reqs; Egress {gb:n3}GB",
                         !ingestionsHandled, !workPended, !eventsPended,!resultsHandled, float bytesPended / 1024. / 1024. / 1024.)
@@ -432,19 +434,35 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                 Choice2Of2 e
             | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata))
     }
-    let mutable totalEvents, totalBytes = 0L, 0L
+    let fetchMax = async {
+        let! lastItemBatch = source.ReadConnection.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
+        let max = lastItemBatch.NextPosition.CommitPosition
+        Log.Warning("EventStore Write Position: @ {pos}", max)
+        return max }
+    let category (s : string) = s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries) |> Array.head
     let followAll (postBatch : Ingester.Batch -> unit) = async {
-        let fetchMax = async {
-            let! lastItemBatch = source.ReadConnection.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
-            let max = lastItemBatch.NextPosition.CommitPosition
-            Log.Warning("EventStore Write Position: @ {pos}", max)
-            return max
-        }
+        let recentCats, accStart = System.Collections.Generic.Dictionary<string,int*int>(), Stopwatch.StartNew()
+        let gatherStats (slice: AllEventsSlice) =
+            let mutable batchBytes = 0
+            for x in slice.Events do
+                let cat = category x.OriginalStreamId
+                let eventBytes = Ingester.esPayloadBytes x
+                match recentCats.TryGetValue cat with
+                | true, (currCount, currSize) -> recentCats.[cat] <- (currCount + 1, currSize+eventBytes)
+                | false, _ -> recentCats.[cat] <- (1, eventBytes)
+                batchBytes <- batchBytes + eventBytes
+            batchBytes
+        let dumpCatStatsIfNecessary () =
+            if accStart.ElapsedMilliseconds > 1000L * 60L then
+                Log.Warning("Top MB/cat/count {@cats}", recentCats |> Seq.sortByDescending (fun x -> snd x.Value) |> Seq.truncate 10 |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c))
+                recentCats.Clear()
+                accStart.Restart()
         let mutable currentPos =
             match startPos with
             | Choice1Of3 p -> EventStore.ClientAPI.Position(p,0L)
             | Choice2Of3 _ -> Position.End // placeholder, will be overwritten below
             | Choice3Of3 () -> Position.Start
+        let mutable totalEvents, totalBytes = 0L, 0L
         let run max = async {
             let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
             let rec loop () = async {
@@ -453,18 +471,17 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                 sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
                 let received = currentSlice.Events.Length
                 totalEvents <- totalEvents + int64 received
-                let mutable batchBytes = 0
-                for x in currentSlice.Events do batchBytes <- batchBytes + Ingester.esPayloadBytes x
+                let batchBytes = gatherStats currentSlice
                 totalBytes <- totalBytes + int64 batchBytes
                 let streams =
                     enumEvents currentSlice
                     |> Seq.choose (function Choice1Of2 e -> Some e | Choice2Of2 _ -> None)
-                    |> Seq.groupBy (fun (s,_,_) -> s)
-                    |> Seq.map (fun (s,xs) -> s, [| for _s, i, e in xs -> i, e |])
+                    |> Seq.groupBy (fun (streamId,_eventNumber,_eventData) -> streamId)
+                    |> Seq.map (fun (streamId,xs) -> streamId, [| for _s, i, e in xs -> i, e |])
                     |> Array.ofSeq
 
-                let category (s : string) = s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries) |> Array.head
-                let cats = seq { for (s,_) in streams -> category s } |> Seq.distinct |> Seq.length
+                let usedCats = streams |> Seq.map fst |> Seq.distinct |> Seq.length
+                dumpCatStatsIfNecessary ()
                 let postSw = Stopwatch.StartNew()
                 let extracted = ref 0
                 for s,xs in streams do
@@ -472,16 +489,14 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                         incr extracted
                         postBatch { stream = s; span =  { pos = pos; events = [| item |]}}
                 Log.Warning("Read {count} {ft:n3}s {mb:n1}MB c {categories,2} s {streams,4} e {events,4} Queue {pt:n0}ms Total {gb:n3}GB @ {pos} {pct:p1}",
-                    received, (let e = sw.Elapsed in e.TotalSeconds), float batchBytes / 1024. / 1024., cats, streams.Length, !extracted,
+                    received, (let e = sw.Elapsed in e.TotalSeconds), float batchBytes / 1024. / 1024., usedCats, streams.Length, !extracted,
                     postSw.ElapsedMilliseconds, float totalBytes / 1024. / 1024. / 1024., cur, float cur/float max)
                 if currentSlice.IsEndOfStream then Log.Warning("Completed {total:n0}", totalEvents)
                 sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
                 if not currentSlice.IsEndOfStream then
                     currentPos <- currentSlice.NextPosition
-                    return! loop ()
-            }
-            do! loop ()
-        }
+                    return! loop () }
+            do! loop () }
         let mutable finished = false
         let mutable max = None
         while not finished do
@@ -491,8 +506,8 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                     match startPos with
                     | Choice2Of3 pct ->
                         let rawPos = float currMax * pct / 100. |> int64
+                        // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
                         let chunkBase = rawPos &&& 0xFFFFFFFFE0000000L  // rawPos / 256L / 1024L / 1024L * 1024L * 1024L * 256L ;)
-                        // event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
                         Log.Warning("Start: {pos}",chunkBase)
                         currentPos <- EventStore.ClientAPI.Position(chunkBase,0L)
                     | _ -> ()
