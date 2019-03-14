@@ -29,7 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\equinox\tools\Equinox.Tools.TestHarness\Equinox.Tools.TestHarness.fsproj" />
+    <ProjectReference Include="..\Equinox.Tools.TestHarness\Equinox.Tools.TestHarness.fsproj" />
   </ItemGroup>
 
 </Project>
