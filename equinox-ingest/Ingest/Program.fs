@@ -352,7 +352,7 @@ module Ingester =
                 | sz when state.IsReady -> ready <- ready + 1; readyB <- readyB + sz
                 | sz -> waitCats.Ingest(category stream); waiting <- waiting + 1; waitingB <- waitingB + sz
             let mb x = x / 1024L / 1024L
-            Log.Warning("Queued {dirty} Ready {ready}/{readyMb}MB Waiting {waiting}/{waitingMb}MB Malformed {malformed}/{malformedMb}MB Synced {synced}",
+            Log.Warning("Syncing {dirty} Ready {ready}/{readyMb}MB Waiting {waiting}/{waitingMb}MB Malformed {malformed}/{malformedMb}MB Synced {synced}",
                 dirty.Count, ready, mb readyB, waiting, mb waitingB, malformed, mb malformedB, synced)
             if waitCats.Any then Log.Warning("Waiting {waitCats}", waitCats.StatsDescending)
     type Queue(log : Serilog.ILogger, writer : Writer, cancellationToken: CancellationToken, readerQueueLen, ?interval) =
@@ -476,8 +476,8 @@ type SliceStatsBuffer(?interval) =
                     |> Seq.truncate 10
                     |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c)
                     |> fun rendered -> Log.Warning("Processed {@cats} (MB/cat/count)", rendered)
-            recentCats |> Seq.where (fun x -> x.Key.StartsWith '$' |> not) |> Array.ofSeq |> log
-            recentCats |> Seq.where (fun x -> x.Key.StartsWith '$') |> Array.ofSeq |> log
+            recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> Array.ofSeq |> log
+            recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> Array.ofSeq |> log
             recentCats.Clear()
             accStart.Restart()
 
@@ -503,7 +503,7 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
     let fetchMax = async {
         let! lastItemBatch = source.ReadConnection.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
         let max = lastItemBatch.NextPosition.CommitPosition
-        Log.Warning("EventStore Write Position: @ {pos}", max)
+        Log.Warning("EventStore Write Position @ {pos}", max)
         return max }
     let stats = SliceStatsBuffer()
     let followAll (postBatch : Ingester.Batch -> unit) = async {
@@ -538,9 +538,10 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                     for pos, item in xs do
                         incr extracted
                         postBatch { stream = s; span =  { pos = pos; events = [| item |]}}
-                Log.Warning("Read {count} {ft:n3}s {mb:n1}MB c {categories,2} s {streams,4} e {events,4} Queue {pt:n0}ms Total {gb:n3}GB @ {pos} {pct:p1}",
-                    received, (let e = sw.Elapsed in e.TotalSeconds), float batchBytes / 1024. / 1024., usedCats, streams.Length, !extracted,
-                    postSw.ElapsedMilliseconds, float totalBytes / 1024. / 1024. / 1024., cur, float cur/float max)
+                Log.Warning("Read {count} {ft:n3}s {mb:n1}MB {gb:n3}GB Process c {categories,2} s {streams,4} e {events,4} {pt:n0}ms Pos @ {pos} {pct:p1}",
+                    received, (let e = sw.Elapsed in e.TotalSeconds), float batchBytes / 1024. / 1024., float totalBytes / 1024. / 1024. / 1024.,
+                    usedCats, streams.Length, !extracted, postSw.ElapsedMilliseconds,
+                    cur, float cur/float max)
                 if currentSlice.IsEndOfStream then Log.Warning("Completed {total:n0}", totalEvents)
                 sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
                 if not currentSlice.IsEndOfStream then
@@ -558,7 +559,7 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
                         let rawPos = float currMax * pct / 100. |> int64
                         // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
                         let chunkBase = rawPos &&& 0xFFFFFFFFE0000000L  // rawPos / 256L / 1024L / 1024L * 1024L * 1024L * 256L ;)
-                        Log.Warning("Effective Start Position: {pos}", chunkBase)
+                        Log.Warning("Effective Start Position {pos}", chunkBase)
                         currentPos <- EventStore.ClientAPI.Position(chunkBase,0L)
                     | _ -> ()
                 do! run (Option.get max)

@@ -11,6 +11,10 @@ let [<Fact>] ``nothing`` () =
     let r = mergeSpans 0L [ mk 0L 0; mk 0L 0 ]
     r =! null
 
+let [<Fact>] ``synced`` () =
+    let r = mergeSpans 1L [ mk 0L 1; mk 0L 0 ]
+    r =! null
+
 let [<Fact>] ``no overlap`` () =
     let r = mergeSpans 0L [ mk 0L 1; mk 2L 2 ]
     r =! [| mk 0L 1; mk 2L 2 |]
