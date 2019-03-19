@@ -5,6 +5,9 @@ open FSharp.Control
 open Serilog
 open System
 
+type StartPos = Absolute of int64 | Percentage of float | Start
+type ReaderSpec = { start: StartPos; batchSize: int; streams: string list }
+
 module CmdParser =
     open Argu
     type LogEventLevel = Serilog.Events.LogEventLevel
@@ -119,8 +122,8 @@ module CmdParser =
         | [<AltCommandLine "-vc"; Unique>] VerboseConsole
         | [<AltCommandLine "-S"; Unique>] LocalSeq
         | [<AltCommandLine "-s">] Stream of string
-        | [<AltCommandLine "-p"; Unique>] AllPos of int64
-        | [<AltCommandLine "-P"; Unique>] PercentagePos of float
+        | [<AltCommandLine "-o"; Unique>] Offset of int64
+        | [<AltCommandLine "-P"; Unique>] Percent of float
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Es of ParseResults<EventStore.Arguments>
         interface IArgParserTemplate with
             member a.Usage =
@@ -128,10 +131,10 @@ module CmdParser =
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off"
-                | LocalSeq ->               "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
-                | Stream _ ->               "specify stream(s) to seed the processing with"
-                | AllPos _ ->               "Specify EventStore $all Stream Position to commence from"
-                | PercentagePos _ ->        "Specify EventStore $all Stream Position to commence from (as a percentage of current tail position)"
+                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
+                | Stream _ ->               "specific stream(s) to read"
+                | Offset _ ->               "EventStore $all Stream Position to commence from"
+                | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
                 | Es _ ->                   "specify EventStore parameters"
     and Parameters(args : ParseResults<Arguments>) =
         member val EventStore = EventStore.Info(args.GetResult Es)
@@ -139,14 +142,14 @@ module CmdParser =
         member __.ConsoleMinLevel = if args.Contains VerboseConsole then LogEventLevel.Information else LogEventLevel.Warning
         member __.MaybeSeqEndpoint = if args.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.BatchSize = args.GetResult(BatchSize,4096)
-        member x.BuildFeedParams() =
+        member x.BuildFeedParams() : ReaderSpec =
             Log.Information("Processing in batches of {batchSize}", x.BatchSize)
             let startPos =
-                match args.TryGetResult AllPos, args.TryGetResult PercentagePos with
-                | Some p, _ ->  Log.Warning("Processing will commence at $all Position {p}", p); Choice1Of3 p
-                | _, Some p ->  Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Choice2Of3 p 
-                | None, None -> Log.Warning "Processing will commence at $all Start"; Choice3Of3 ()
-            x.BatchSize, args.GetResults Stream, startPos
+                match args.TryGetResult Offset, args.TryGetResult Percent with
+                | Some p, _ ->  Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
+                | _, Some p ->  Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
+                | None, None -> Log.Warning "Processing will commence at $all Start"; Start
+            { start = startPos; batchSize = x.BatchSize; streams = args.GetResults Stream }
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : Parameters =
@@ -355,6 +358,7 @@ module Ingester =
             Log.Warning("Syncing {dirty} Ready {ready}/{readyMb}MB Waiting {waiting}/{waitingMb}MB Malformed {malformed}/{malformedMb}MB Synced {synced}",
                 dirty.Count, ready, mb readyB, waiting, mb waitingB, malformed, mb malformedB, synced)
             if waitCats.Any then Log.Warning("Waiting {waitCats}", waitCats.StatsDescending)
+
     type Queue(log : Serilog.ILogger, writer : Writer, cancellationToken: CancellationToken, readerQueueLen, ?interval) =
         let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
         let states = StreamStates()
@@ -434,7 +438,7 @@ open EventStore.ClientAPI
 
 module Reader =
 
-    let loadSpecificStreamsTemp (conn:IEventStoreConnection, batchSize) streams (postBatch : (Ingester.Batch -> unit)) =
+    let loadSpecificStreams (conn:IEventStoreConnection, batchSize) streams (postBatch : (Ingester.Batch -> unit)) =
         let fetchStream stream =
             let rec fetchFrom pos = async {
                 let! currentSlice = conn.ReadStreamEventsBackwardAsync(stream, pos, batchSize, resolveLinkTos=true) |> Async.AwaitTaskCorrect
@@ -453,6 +457,23 @@ module Reader =
 open Equinox.EventStore
 open Equinox.Cosmos
 
+let enumEvents (slice : AllEventsSlice) = seq {
+    for e in slice.Events ->
+        let eb = Ingester.esPayloadBytes e
+        match e.Event with
+        | e when not e.IsJson
+            || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
+            || e.EventStreamId.StartsWith("$") 
+            || e.EventStreamId.EndsWith("_checkpoints")
+            || e.EventStreamId.EndsWith("_checkpoint")
+            || e.EventStreamId = "thor_useast2_to_backup_qa2_main" ->
+                Choice2Of2 e
+        | e when eb > Ingester.cosmosPayloadLimit ->
+            Log.Error("ES Event Id {eventId} size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}", e.EventId, eb, Ingester.cosmosPayloadLimit)
+            Choice2Of2 e
+        | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata))
+}
+
 type SliceStatsBuffer(?interval) =
     let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
     let recentCats, accStart = System.Collections.Generic.Dictionary<string,int*int>(), Stopwatch.StartNew()
@@ -465,7 +486,7 @@ type SliceStatsBuffer(?interval) =
             | true, (currCount, currSize) -> recentCats.[cat] <- (currCount + 1, currSize+eventBytes)
             | false, _ -> recentCats.[cat] <- (1, eventBytes)
             batchBytes <- batchBytes + eventBytes
-        batchBytes
+        slice.Events.Length, batchBytes
     member __.DumpIfIntervalExpired() =
         if accStart.ElapsedMilliseconds > intervalMs then
             let log = function
@@ -481,69 +502,55 @@ type SliceStatsBuffer(?interval) =
             recentCats.Clear()
             accStart.Restart()
 
-let run (destination : CosmosConnection, colls) (source : GesConnection)
-    (batchSize, streams: string list, startPos: Choice<int64, float, unit>)
-    (writerQueueLen, writerCount, readerQueueLen) = async {
-    let enumEvents (slice : AllEventsSlice) = seq {
-        for e in slice.Events ->
-            let eb = Ingester.esPayloadBytes e
-            match e.Event with
-            | e when not e.IsJson
-                || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
-                || e.EventStreamId.StartsWith("$") 
-                || e.EventStreamId.EndsWith("_checkpoints")
-                || e.EventStreamId.EndsWith("_checkpoint")
-                || e.EventStreamId = "thor_useast2_to_backup_qa2_main" ->
-                    Choice2Of2 e
-            | e when eb > Ingester.cosmosPayloadLimit ->
-                Log.Error("ES Event Id {eventId} size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}", e.EventId, eb, Ingester.cosmosPayloadLimit)
-                Choice2Of2 e
-            | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata))
-    }
+type OverallStats() =
+    let mutable totalEvents, totalBytes = 0L, 0L
+    member __.Ingest(batchEvents, batchBytes) = 
+        totalEvents <- totalEvents + int64 batchEvents
+        totalBytes <- totalBytes + int64 batchBytes
+    member __.Bytes = totalBytes
+    member __.Events = totalEvents
+
+let run (destination : CosmosConnection, colls) (source : GesConnection) (spec: ReaderSpec) (writerQueueLen, writerCount, readerQueueLen) = async {
     let fetchMax = async {
         let! lastItemBatch = source.ReadConnection.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
         let max = lastItemBatch.NextPosition.CommitPosition
         Log.Warning("EventStore Write Position @ {pos}", max)
         return max }
-    let stats = SliceStatsBuffer()
     let followAll (postBatch : Ingester.Batch -> unit) = async {
         let mutable currentPos =
-            match startPos with
-            | Choice1Of3 p -> EventStore.ClientAPI.Position(p,0L)
-            | Choice2Of3 _ -> Position.End // placeholder, will be overwritten below
-            | Choice3Of3 () -> Position.Start
-        let mutable totalEvents, totalBytes = 0L, 0L
+            match spec.start with
+            | Absolute p -> EventStore.ClientAPI.Position(p,0L)
+            | Percentage _ -> Position.End // placeholder, will be overwritten below
+            | Start -> Position.Start
+        let overall, slicesStats = OverallStats(), SliceStatsBuffer()
         let run max = async {
             let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
             let rec loop () = async {
-                let! currentSlice = source.ReadConnection.ReadAllEventsForwardAsync(currentPos, batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
-                let cur = currentSlice.NextPosition.CommitPosition
+                let! currentSlice = source.ReadConnection.ReadAllEventsForwardAsync(currentPos, spec.batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
                 sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-                let received = currentSlice.Events.Length
-                totalEvents <- totalEvents + int64 received
-                let batchBytes = stats.Ingest currentSlice
-                totalBytes <- totalBytes + int64 batchBytes
+                let batchEvents, batchBytes = slicesStats.Ingest currentSlice in overall.Ingest(batchEvents, batchBytes)
+                slicesStats.DumpIfIntervalExpired()
                 let streams =
                     enumEvents currentSlice
                     |> Seq.choose (function Choice1Of2 e -> Some e | Choice2Of2 _ -> None)
                     |> Seq.groupBy (fun (streamId,_eventNumber,_eventData) -> streamId)
                     |> Seq.map (fun (streamId,xs) -> streamId, [| for _s, i, e in xs -> i, e |])
                     |> Array.ofSeq
-
                 let usedCats = streams |> Seq.map fst |> Seq.distinct |> Seq.length
-                stats.DumpIfIntervalExpired()
+
                 let postSw = Stopwatch.StartNew()
-                let extracted = ref 0
-                for s,xs in streams do
-                    for pos, item in xs do
-                        incr extracted
-                        postBatch { stream = s; span =  { pos = pos; events = [| item |]}}
+                let usedEvents = ref 0
+                for stream,streamEvents in streams do
+                    for pos, item in streamEvents do
+                        incr usedEvents
+                        postBatch { stream = stream; span =  { pos = pos; events = [| item |]}}
+                let currentOffset = currentSlice.NextPosition.CommitPosition
                 Log.Warning("Read {count} {ft:n3}s {mb:n1}MB {gb:n3}GB Process c {categories,2} s {streams,4} e {events,4} {pt:n0}ms Pos @ {pos} {pct:p1}",
-                    received, (let e = sw.Elapsed in e.TotalSeconds), float batchBytes / 1024. / 1024., float totalBytes / 1024. / 1024. / 1024.,
-                    usedCats, streams.Length, !extracted, postSw.ElapsedMilliseconds,
-                    cur, float cur/float max)
-                if currentSlice.IsEndOfStream then Log.Warning("Completed {total:n0}", totalEvents)
-                sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
+                    batchEvents, (let e = sw.Elapsed in e.TotalSeconds), float batchBytes / 1024. / 1024., float overall.Bytes / 1024. / 1024. / 1024.,
+                    usedCats, streams.Length, !usedEvents, postSw.ElapsedMilliseconds,
+                    currentOffset, float currentOffset/float max)
+                if currentSlice.IsEndOfStream then Log.Warning("Completed {total:n0}", overall.Events)
+                sw.Restart() // restart the clock as we hand off back to the Reader
                 if not currentSlice.IsEndOfStream then
                     currentPos <- currentSlice.NextPosition
                     return! loop () }
@@ -554,22 +561,20 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
             try if max = None then
                     let! currMax = fetchMax
                     max <- Some currMax
-                    match startPos with
-                    | Choice2Of3 pct ->
+                    match spec.start with
+                    | Percentage pct ->
                         let rawPos = float currMax * pct / 100. |> int64
                         // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
                         let chunkBase = rawPos &&& 0xFFFFFFFFE0000000L  // rawPos / 256L / 1024L / 1024L * 1024L * 1024L * 256L ;)
-                        Log.Warning("Effective Start Position {pos}", chunkBase)
+                        Log.Warning("Effective Start Position {pos} (chunk {chunk})", chunkBase, chunkBase >>> 29)
                         currentPos <- EventStore.ClientAPI.Position(chunkBase,0L)
                     | _ -> ()
                 do! run (Option.get max)
                 finished <- true
-            with e -> Log.Warning(e,"Ingestion error")
-    }
-
+            with e -> Log.Warning(e,"Ingestion error") }
     let ctx = Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
     let! ingester = Ingester.start(ctx, writerQueueLen, writerCount, readerQueueLen)    
-    let! _ = Async.StartChild (Reader.loadSpecificStreamsTemp (source.ReadConnection, batchSize) streams ingester.Add)
+    let! _ = Async.StartChild (Reader.loadSpecificStreams (source.ReadConnection, spec.batchSize) spec.streams ingester.Add)
     let! _ = Async.StartChild (followAll ingester.Add)
     do! Async.AwaitKeyboardInterrupt() }
  
@@ -577,15 +582,14 @@ let run (destination : CosmosConnection, colls) (source : GesConnection)
 let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ConsoleMinLevel args.MaybeSeqEndpoint
-        let connectionMode = ConnectionStrategy.ClusterSingle NodePreference.Master
-        let source = args.EventStore.Connect(Log.Logger, Log.Logger, connectionMode) |> Async.RunSynchronously
+        let source = args.EventStore.Connect(Log.Logger, Log.Logger, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) |> Async.RunSynchronously
+        let readerSpec = args.BuildFeedParams()
+        let writerQueueLen, writerCount, readerQueueLen = 2048,64,4096*10*10
+        if Threading.ThreadPool.SetMaxThreads(512,512) |> not then failwith "Could not set max threads"
         let cosmos = args.EventStore.Cosmos // wierd nesting is due to me not finding a better way to express the semantics in Argu
         let destination = cosmos.Connnect "ProjectorTemplate" |> Async.RunSynchronously
         let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
-        let batchSize, streams, startPos = args.BuildFeedParams()
-        let writerQueueLen, writerCount, readerQueueLen = 2048,64,4096*10*10
-        if Threading.ThreadPool.SetMaxThreads(512,512) |> not then failwith "Could not set max threads"
-        run (destination, colls) source (batchSize, streams, startPos) (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
+        run (destination, colls) source readerSpec (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
