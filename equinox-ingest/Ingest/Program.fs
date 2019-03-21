@@ -599,19 +599,24 @@ module EventStoreReader =
                     let bs = adjust batchSize
                     Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
                     __.AddStream(name, bs)
+                return false
             | Tranche (range, batchSize) ->
                 use _ = Serilog.Context.LogContext.PushProperty("Tranche",chunk range.Current)
                 Log.Warning("Reading chunk; batch size {bs}", batchSize)
                 let! eofOption, range, stats = pullSourceRange (conn, batchSize) range enumEvents postBatch
                 lock __.OverallStats <| fun () -> __.OverallStats.Ingest(stats.Events, stats.Bytes)
                 match eofOption with
-                | PullResult.EndOfTranche -> Log.Warning("Completed tranche")
-                | PullResult.Eof -> Log.Warning("REACHED THE END!")
+                | PullResult.EndOfTranche ->
+                    Log.Warning("Completed tranche")
+                    return false
+                | PullResult.Eof ->
+                    Log.Warning("REACHED THE END!")
+                    return true
                 | PullResult.Exn e ->
                     let bs = adjust batchSize
                     Log.Warning(e, "Could not read All, retrying with batch size {bs}", bs)
                     __.AddTranche(range, bs) 
-        }
+                    return false }
 
     type Reader(conn : IEventStoreConnection, spec: ReaderSpec, enumEvents, postBatch : Ingester.Batch -> unit, max, ct : CancellationToken, ?statsInterval) = 
         let work = FeedQueue(spec.batchSize, max, ?statsInterval=statsInterval)
@@ -639,7 +644,8 @@ module EventStoreReader =
                 work.OverallStats.DumpIfIntervalExpired()
                 let forkRunRelease task = async {
                     let! _ = Async.StartChild <| async {
-                        do! work.Process(conn, enumEvents, postBatch, task) 
+                        let! eof = work.Process(conn, enumEvents, postBatch, task)
+                        if eof then remainder <- None
                         dop.Release() |> ignore }
                     return () }
                 match work.TryDequeue() with
@@ -647,13 +653,13 @@ module EventStoreReader =
                     do! forkRunRelease task
                 | false, _ ->
                     match remainder with
-                    | None ->
-                        finished <- true
-                        Log.Warning("Processing completed")
                     | Some pos -> 
                         let nextPos = posFromChunkAfter pos
                         remainder <- Some nextPos
-                        do! forkRunRelease <| Work.Tranche (Range(pos, Some nextPos, max), spec.batchSize) }
+                        do! forkRunRelease <| Work.Tranche (Range(pos, Some nextPos, max), spec.batchSize)
+                    | None ->
+                        finished <- true
+                        Log.Warning("No further work to commence") }
 
     let start (conn, spec, enumEvents, postBatch) = async {
         let! ct = Async.CancellationToken
