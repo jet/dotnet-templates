@@ -5,8 +5,8 @@ open FSharp.Control
 open Serilog
 open System
 
-type StartPos = Absolute of int64 | Chunk of int | Percentage of float | Start
-type ReaderSpec = { start: StartPos; stripes: int; batchSize: int; streams: string list }
+type StartPos = Absolute of int64 | Chunk of int | Percentage of float | Start | Ignore
+type ReaderSpec = { start: StartPos; stripes: int; batchSize: int; streams: string list; tailInterval: TimeSpan option }
 let mb x = float x / 1024. / 1024.
 
 module CmdParser =
@@ -121,11 +121,12 @@ module CmdParser =
         | [<AltCommandLine "-vc"; Unique>] VerboseConsole
         | [<AltCommandLine "-S"; Unique>] LocalSeq
         | [<AltCommandLine "-s">] Stream of string
+        | [<AltCommandLine "-A"; Unique>] All
         | [<AltCommandLine "-o"; Unique>] Offset of int64
         | [<AltCommandLine "-c"; Unique>] Chunk of int
         | [<AltCommandLine "-P"; Unique>] Percent of float
         | [<AltCommandLine "-i"; Unique>] Stripes of int
-        | [<AltCommandLine "-t"; Unique>] Tail of intervalMs: int
+        | [<AltCommandLine "-t"; Unique>] Tail of intervalS: float
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Es of ParseResults<EventStore.Arguments>
         interface IArgParserTemplate with
             member a.Usage =
@@ -135,11 +136,12 @@ module CmdParser =
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off"
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Stream _ ->               "specific stream(s) to read"
+                | All ->                    "traverse EventStore $all from Start"
                 | Offset _ ->               "EventStore $all Stream Position to commence from"
                 | Chunk _ ->                "EventStore $all Chunk to commence from"
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
                 | Stripes _ ->              "number of concurrent readers"
-                | Tail _ ->                 "attempt to read from tail at specified interval in milliseconds"
+                | Tail _ ->                 "attempt to read from tail at specified interval in Seconds"
                 | Es _ ->                   "specify EventStore parameters"
     and Parameters(args : ParseResults<Arguments>) =
         member val EventStore = EventStore.Info(args.GetResult Es)
@@ -148,20 +150,21 @@ module CmdParser =
         member __.MaybeSeqEndpoint = if args.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.BatchSize = args.GetResult(BatchSize,4096)
         member __.Stripes = args.GetResult(Stripes,1)
-        member __.TailInterval = match args.TryGetResult Tail with Some s -> s |> float |> TimeSpan.FromMilliseconds |> Some | None -> None
+        member __.TailInterval = match args.TryGetResult Tail with Some s -> TimeSpan.FromSeconds s |> Some | None -> None
         member x.BuildFeedParams() : ReaderSpec =
             Log.Warning("Processing in batches of {batchSize}", x.BatchSize)
             Log.Warning("Reading with {stripes} stripes", x.Stripes)
+            let startPos =
+                match args.TryGetResult Offset, args.TryGetResult Chunk, args.TryGetResult Percent, args.Contains All with
+                | Some p, _, _, _ ->  Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
+                | _, Some c, _, _ ->  Log.Warning("Processing will commence at $all Chunk {c}", c); StartPos.Chunk c
+                | _, _, Some p, _ ->  Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
+                | None, None, None, true -> Log.Warning "Processing will commence at $all Start"; Start
+                | None, None, None, false -> Log.Warning "No $all processing requested"; Ignore
             match x.TailInterval with
             | Some interval -> Log.Warning("Following tail at {seconds}s interval", interval.TotalSeconds)
             | None -> Log.Warning "Not following tail"
-            let startPos =
-                match args.TryGetResult Offset, args.TryGetResult Chunk, args.TryGetResult Percent with
-                | Some p, _, _ ->  Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
-                | _, Some c, _ ->  Log.Warning("Processing will commence at $all Chunk {c}", c); StartPos.Chunk c
-                | _, _, Some p ->  Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
-                | None, None, None -> Log.Warning "Processing will commence at $all Start"; Start
-            { start = startPos; stripes = x.Stripes; batchSize = x.BatchSize; streams = args.GetResults Stream }
+            { start = startPos; stripes = x.Stripes; batchSize = x.BatchSize; streams = args.GetResults Stream; tailInterval = x.TailInterval }
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : Parameters =
@@ -178,7 +181,7 @@ module Logging =
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Tranche} {Message:lj} {Properties} {NewLine}{Exception}"
+            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Tranche} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(consoleMinLevel, theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
@@ -441,62 +444,67 @@ module Ingester =
         return queue
     }
 
-type SliceStatsBuffer(?interval) =
-    let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
-    let recentCats, accStart = System.Collections.Generic.Dictionary<string,int*int>(), Stopwatch.StartNew()
-    member __.Ingest(slice: EventStore.ClientAPI.AllEventsSlice) =
-        let mutable batchBytes = 0
-        for x in slice.Events do
-            let cat = Ingester.category x.OriginalStreamId
-            let eventBytes = Ingester.esPayloadBytes x
-            match recentCats.TryGetValue cat with
-            | true, (currCount, currSize) -> recentCats.[cat] <- (currCount + 1, currSize+eventBytes)
-            | false, _ -> recentCats.[cat] <- (1, eventBytes)
-            batchBytes <- batchBytes + eventBytes
-        slice.Events.Length, int64 batchBytes
-    member __.DumpIfIntervalExpired(?force) =
-        if accStart.ElapsedMilliseconds > intervalMs || defaultArg force false then
-            let log = function
-                | [||] -> ()
-                | xs ->
-                    xs
-                    |> Seq.sortByDescending (fun (KeyValue (_,(_,b))) -> b)
-                    |> Seq.truncate 10
-                    |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c)
-                    |> fun rendered -> Log.Warning("Processed {@cats} (MB/cat/count)", rendered)
-            recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> Array.ofSeq |> log
-            recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> Array.ofSeq |> log
-            recentCats.Clear()
-            accStart.Restart()
-
-type OverallStats(?statsInterval) =
-    let intervalMs = let t = defaultArg statsInterval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
-    let overallStart, progressStart = Stopwatch.StartNew(), Stopwatch.StartNew()
-    let mutable totalEvents, totalBytes = 0L, 0L
-    member __.Ingest(batchEvents, batchBytes) = 
-        totalEvents <- totalEvents + batchEvents
-        totalBytes <- totalBytes + batchBytes
-    member __.Bytes = totalBytes
-    member __.Events = totalEvents
-    member __.DumpIfIntervalExpired() =
-        if progressStart.ElapsedMilliseconds > intervalMs then
-            let totalMb = mb totalBytes
-            Log.Warning("Traversed {events} events {gb:n1}GB {mbs}MB/s", totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
-            progressStart.Restart()
-
-type Range(start, sliceEnd : EventStore.ClientAPI.Position option, max : EventStore.ClientAPI.Position) =
-    member val Current = start with get, set
-    member __.TryNext(pos: EventStore.ClientAPI.Position) =
-        __.Current <- pos
-        __.IsCompleted
-    member __.IsCompleted =
-        match sliceEnd with
-        | Some send when __.Current.CommitPosition >= send.CommitPosition -> false
-        | _ -> true
-    member __.PositionAsRangePercentage = float __.Current.CommitPosition/float max.CommitPosition
-
 module EventStoreReader =
     open EventStore.ClientAPI
+
+    type SliceStatsBuffer(?interval) =
+        let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
+        let recentCats, accStart = System.Collections.Generic.Dictionary<string,int*int>(), Stopwatch.StartNew()
+        member __.Ingest(slice: AllEventsSlice) =
+            lock recentCats <| fun () ->
+                let mutable batchBytes = 0
+                for x in slice.Events do
+                    let cat = Ingester.category x.OriginalStreamId
+                    let eventBytes = Ingester.esPayloadBytes x
+                    match recentCats.TryGetValue cat with
+                    | true, (currCount, currSize) -> recentCats.[cat] <- (currCount + 1, currSize+eventBytes)
+                    | false, _ -> recentCats.[cat] <- (1, eventBytes)
+                    batchBytes <- batchBytes + eventBytes
+                __.DumpIfIntervalExpired()
+                slice.Events.Length, int64 batchBytes
+        member __.DumpIfIntervalExpired(?force) =
+            if accStart.ElapsedMilliseconds > intervalMs || defaultArg force false then
+                lock recentCats <| fun () ->
+                    let log = function
+                        | [||] -> ()
+                        | xs ->
+                            xs
+                            |> Seq.sortByDescending (fun (KeyValue (_,(_,b))) -> b)
+                            |> Seq.truncate 10
+                            |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c)
+                            |> fun rendered -> Log.Warning("Processed {@cats} (MB/cat/count)", rendered)
+                    recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> Array.ofSeq |> log
+                    recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> Array.ofSeq |> log
+                    recentCats.Clear()
+                    accStart.Restart()
+
+    type OverallStats(?statsInterval) =
+        let intervalMs = let t = defaultArg statsInterval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
+        let overallStart, progressStart = Stopwatch.StartNew(), Stopwatch.StartNew()
+        let mutable totalEvents, totalBytes = 0L, 0L
+        member __.Ingest(batchEvents, batchBytes) = 
+            Interlocked.Add(&totalEvents,batchEvents) |> ignore
+            Interlocked.Add(&totalBytes,batchBytes) |> ignore
+        member __.Bytes = totalBytes
+        member __.Events = totalEvents
+        member __.DumpIfIntervalExpired(?force) =
+            if progressStart.ElapsedMilliseconds > intervalMs || force = Some true then
+                let totalMb = mb totalBytes
+                Log.Warning("Traversed {events} events {gb:n1}GB {mbs:n2}MB/s", totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
+                progressStart.Restart()
+
+    type Range(start, sliceEnd : Position option, max : Position) =
+        member val Current = start with get, set
+        member __.TryNext(pos: Position) =
+            __.Current <- pos
+            __.IsCompleted
+        member __.IsCompleted =
+            match sliceEnd with
+            | Some send when __.Current.CommitPosition >= send.CommitPosition -> false
+            | _ -> true
+        member __.PositionAsRangePercentage =
+            if max.CommitPosition=0L then Double.NaN
+            else float __.Current.CommitPosition/float max.CommitPosition
 
     // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
     let chunk (pos: Position) = uint64 pos.CommitPosition >>> 28
@@ -513,7 +521,7 @@ module EventStoreReader =
     let fetchMax (conn : IEventStoreConnection) = async {
         let! lastItemBatch = conn.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
         let max = lastItemBatch.NextPosition
-        Log.Warning("EventStore {chunks} chunks Write Position @ {pos} ", chunk max, max.CommitPosition)
+        Log.Warning("EventStore {chunks} chunks, ~{gb:n1}GB Write Position @ {pos} ", chunk max, mb max.CommitPosition/1024., max.CommitPosition)
         return max }
     let establishMax (conn : IEventStoreConnection) = async {
         let mutable max = None
@@ -537,59 +545,61 @@ module EventStoreReader =
         fetchFrom 0L
 
     type [<NoComparison>] PullResult = Exn of exn: exn | Eof | EndOfTranche
-    let pullSourceRange (conn : IEventStoreConnection, batchSize) (range : Range) enumEvents (postBatch : Ingester.Batch -> unit) =
-        let stats, slicesStats = OverallStats(), SliceStatsBuffer()
-        let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
-        let rec loop () = async {
-            let! currentSlice = conn.ReadAllEventsForwardAsync(range.Current, batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
-            sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-            let postSw = Stopwatch.StartNew()
-            let batchEvents, batchBytes = slicesStats.Ingest currentSlice in stats.Ingest(int64 batchEvents, batchBytes)
-            slicesStats.DumpIfIntervalExpired()
-            let streams =
-                enumEvents currentSlice.Events
-                |> Seq.choose (function Choice1Of2 e -> Some e | Choice2Of2 _ -> None)
-                |> Seq.groupBy (fun (streamId,_eventNumber,_eventData) -> streamId)
-                |> Seq.map (fun (streamId,xs) -> streamId, [| for _s, i, e in xs -> i, e |])
-                |> Array.ofSeq
-            let usedStreams, usedCats = streams.Length, streams |> Seq.map fst |> Seq.distinct |> Seq.length
-            let mutable usedEvents = 0
-            for stream,streamEvents in streams do
-                for pos, item in streamEvents do
-                    usedEvents <- usedEvents + 1
-                    postBatch { stream = stream; span =  { pos = pos; events = [| item |]}}
-            let shouldLoop = range.TryNext currentSlice.NextPosition
-            Log.Warning("Read {count} {ft:n3}s {mb:n1}MB Process c {categories,2} s {streams,4} e {events,4} {pt:n0}ms Pos @ {pos} {pct:p1}",
-                batchEvents, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
-                usedCats, usedStreams, usedEvents, postSw.ElapsedMilliseconds,
-                currentSlice.NextPosition.CommitPosition, range.PositionAsRangePercentage)
-            if shouldLoop && not currentSlice.IsEndOfStream then
-                sw.Restart() // restart the clock as we hand off back to the Reader
-                return! loop ()
-            else
-                slicesStats.DumpIfIntervalExpired(force=true)
-                return currentSlice.IsEndOfStream }
-        async {
-            try let! eof = loop ()
-                return (if eof then Eof else EndOfTranche), range, stats
-            with e -> return Exn e, range, stats }
+    type ReaderGroup(conn : IEventStoreConnection, enumEvents, postBatch : Ingester.Batch -> unit) =
+        member __.Pump(range : Range, batchSize, slicesStats : SliceStatsBuffer, overallStats : OverallStats, ?ignoreEmptyEof) =
+            let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
+            let rec loop () = async {
+                let! currentSlice = conn.ReadAllEventsForwardAsync(range.Current, batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
+                sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
+                let postSw = Stopwatch.StartNew()
+                let batchEvents, batchBytes = slicesStats.Ingest currentSlice in overallStats.Ingest(int64 batchEvents, batchBytes)
+                let streams =
+                    enumEvents currentSlice.Events
+                    |> Seq.choose (function Choice1Of2 e -> Some e | Choice2Of2 _ -> None)
+                    |> Seq.groupBy (fun (streamId,_eventNumber,_eventData) -> streamId)
+                    |> Seq.map (fun (streamId,xs) -> streamId, [| for _s, i, e in xs -> i, e |])
+                    |> Array.ofSeq
+                let usedStreams, usedCats = streams.Length, streams |> Seq.map fst |> Seq.distinct |> Seq.length
+                let mutable usedEvents = 0
+                for stream,streamEvents in streams do
+                    for pos, item in streamEvents do
+                        usedEvents <- usedEvents + 1
+                        postBatch { stream = stream; span =  { pos = pos; events = [| item |]}}
+                if not(ignoreEmptyEof = Some true && batchEvents = 0 && not currentSlice.IsEndOfStream) then // ES doesnt report EOF on the first call :(
+                    Log.Warning("Read {pos,10} {pct:p1} {ft:n3}s {count,4} {mb:n1}MB {categories,3}c {streams,4}s {events,4}e Post {pt:n0}ms",
+                        range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), batchEvents, mb batchBytes,
+                        usedCats, usedStreams, usedEvents, postSw.ElapsedMilliseconds)
+                let shouldLoop = range.TryNext currentSlice.NextPosition
+                if shouldLoop && not currentSlice.IsEndOfStream then
+                    sw.Restart() // restart the clock as we hand off back to the Reader
+                    return! loop ()
+                else
+                    return currentSlice.IsEndOfStream }
+            async {
+                try let! eof = loop ()
+                    return if eof then Eof else EndOfTranche
+                with e -> return Exn e }
 
     type [<NoComparison>] Work =
         | Stream of name: string * batchSize: int
         | Tranche of range: Range * batchSize : int
+        | Tail of pos: Position * interval: TimeSpan * batchSize : int
     type FeedQueue(batchSize, max, ?statsInterval) =
         let work = ConcurrentQueue()
-        member val OverallStats = OverallStats(?statsInterval=statsInterval) with get
+        member val OverallStats = OverallStats(?statsInterval=statsInterval)
+        member val SlicesStats = SliceStatsBuffer()
         member __.AddTranche(range, ?batchSizeOverride) =
             work.Enqueue <| Work.Tranche (range, defaultArg batchSizeOverride batchSize)
         member __.AddTranche(pos, nextPos, ?batchSizeOverride) =
             __.AddTranche(Range (pos, Some nextPos, max), ?batchSizeOverride=batchSizeOverride)
         member __.AddStream(name, ?batchSizeOverride) =
             work.Enqueue <| Work.Stream (name, defaultArg batchSizeOverride batchSize)
+        member __.AddTail(pos, interval, ?batchSizeOverride) =
+            work.Enqueue <| Work.Tail (pos, interval, defaultArg batchSizeOverride batchSize)
         member __.TryDequeue () =
             work.TryDequeue()
         member __.Process(conn, enumEvents, postBatch, work) = async {
-            let adjust batchSize = if batchSize > 128 then batchSize / 2 else batchSize
+            let adjust batchSize = if batchSize > 128 then batchSize - 128 else batchSize
             match work with
             | Stream (name,batchSize) ->
                 use _ = Serilog.Context.LogContext.PushProperty("Stream",name)
@@ -603,24 +613,60 @@ module EventStoreReader =
             | Tranche (range, batchSize) ->
                 use _ = Serilog.Context.LogContext.PushProperty("Tranche",chunk range.Current)
                 Log.Warning("Reading chunk; batch size {bs}", batchSize)
-                let! eofOption, range, stats = pullSourceRange (conn, batchSize) range enumEvents postBatch
-                lock __.OverallStats <| fun () -> __.OverallStats.Ingest(stats.Events, stats.Bytes)
-                match eofOption with
+                let reader = ReaderGroup(conn, enumEvents, postBatch)
+                let! res = reader.Pump(range, batchSize, __.SlicesStats, __.OverallStats)
+                match res with
                 | PullResult.EndOfTranche ->
                     Log.Warning("Completed tranche")
+                    __.OverallStats.DumpIfIntervalExpired()
                     return false
                 | PullResult.Eof ->
                     Log.Warning("REACHED THE END!")
+                    __.OverallStats.DumpIfIntervalExpired(true)
                     return true
                 | PullResult.Exn e ->
                     let bs = adjust batchSize
                     Log.Warning(e, "Could not read All, retrying with batch size {bs}", bs)
+                    __.OverallStats.DumpIfIntervalExpired()
                     __.AddTranche(range, bs) 
-                    return false }
+                    return false 
+            | Tail (pos, interval, batchSize) ->
+                let mutable first, count, batchSize, range = true, 0, batchSize, Range(pos,None, Position.Start)
+                let statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.)
+                let progressIntervalMs, tailIntervalMs = int64 statsInterval.TotalMilliseconds, int64 interval.TotalMilliseconds
+                let progressSw, tailSw = Stopwatch.StartNew(), Stopwatch.StartNew()
+                let reader = ReaderGroup(conn, enumEvents, postBatch)
+                let slicesStats, stats = SliceStatsBuffer(), OverallStats()
+                while true do
+                    let currentPos = range.Current
+                    use _ = Serilog.Context.LogContext.PushProperty("Tranche", "Tail")
+                    if first then
+                        first <- false
+                        Log.Warning("Tailing at {interval}s interval", interval.TotalSeconds)
+                    elif progressSw.ElapsedMilliseconds > progressIntervalMs then
+                        Log.Warning("Performed {count} tails to date @ {pos} chunk {chunk}", count, currentPos.CommitPosition, chunk currentPos)
+                        progressSw.Restart()
+                    count <- count + 1
+                    let! res = reader.Pump(range,batchSize,slicesStats,stats,ignoreEmptyEof=true)
+                    stats.DumpIfIntervalExpired()
+                    match tailIntervalMs - tailSw.ElapsedMilliseconds with
+                    | waitTimeMs when waitTimeMs > 0L -> do! Async.Sleep (int waitTimeMs)
+                    | _ -> ()
+                    tailSw.Restart()
+                    match res with
+                    | PullResult.EndOfTranche | PullResult.Eof -> ()
+                    | PullResult.Exn e ->
+                        batchSize <- adjust batchSize
+                        Log.Warning(e, "Tail $all failed, adjusting batch size to {bs}", batchSize)
+                return true }
 
     type Reader(conn : IEventStoreConnection, spec: ReaderSpec, enumEvents, postBatch : Ingester.Batch -> unit, max, ct : CancellationToken, ?statsInterval) = 
         let work = FeedQueue(spec.batchSize, max, ?statsInterval=statsInterval)
-        do for s in spec.streams do work.AddStream(s)
+        do  match spec.tailInterval with
+            | Some interval -> work.AddTail(max, interval)
+            | None -> ()
+            for s in spec.streams do
+                work.AddStream s
         let mutable remainder =
             let startPos =
                 match spec.start with
@@ -628,15 +674,18 @@ module EventStoreReader =
                 | Absolute p -> Position(p, 0L)
                 | Chunk c -> posFromChunk c
                 | Percentage pct -> posFromPercentage (pct, max)
+                | Ignore -> max
             Log.Warning("Start Position {pos} (chunk {chunk}, {pct:p1})",
                 startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/ float max.CommitPosition)
-            let nextPos = posFromChunkAfter startPos
-            work.AddTranche(startPos, nextPos)
-            Some nextPos
+            if spec.start = Ignore then None
+            else
+                let nextPos = posFromChunkAfter startPos
+                work.AddTranche(startPos, nextPos)
+                Some nextPos
 
         member __.Pump () = async {
             (*if spec.tail then enqueue tail work*)
-            let maxDop = spec.stripes
+            let maxDop = spec.stripes + Option.count spec.tailInterval
             let dop = new SemaphoreSlim(maxDop)
             let mutable finished = false
             while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
@@ -644,9 +693,9 @@ module EventStoreReader =
                 work.OverallStats.DumpIfIntervalExpired()
                 let forkRunRelease task = async {
                     let! _ = Async.StartChild <| async {
-                        let! eof = work.Process(conn, enumEvents, postBatch, task)
-                        if eof then remainder <- None
-                        dop.Release() |> ignore }
+                        try let! eof = work.Process(conn, enumEvents, postBatch, task)
+                            if eof then remainder <- None
+                        finally dop.Release() |> ignore }
                     return () }
                 match work.TryDequeue() with
                 | true, task ->
@@ -658,8 +707,9 @@ module EventStoreReader =
                         remainder <- Some nextPos
                         do! forkRunRelease <| Work.Tranche (Range(pos, Some nextPos, max), spec.batchSize)
                     | None ->
-                        finished <- true
-                        Log.Warning("No further work to commence") }
+                        if finished then do! Async.Sleep 1000 
+                        else Log.Warning("No further ingestion work to commence")
+                        finished <- true }
 
     let start (conn, spec, enumEvents, postBatch) = async {
         let! ct = Async.CancellationToken
