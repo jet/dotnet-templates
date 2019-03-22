@@ -50,7 +50,7 @@ module CmdParser =
             member __.MaxRetryWaitTime = args.GetResult(RetriesWaitTime, 5)
             
             /// Connect with the provided parameters and/or environment variables
-            member x.Connnect
+            member x.Connect
                 /// Connection/Client identifier for logging purposes
                 name : Async<CosmosConnection> =
                 let (Discovery.UriAndKey (endpointUri,_masterKey)) as discovery = Discovery.FromConnectionString x.Connection
@@ -739,8 +739,7 @@ let enumEvents (xs : EventStore.ClientAPI.ResolvedEvent[]) = seq {
         | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata))
 }
 
-let run (destination : CosmosConnection, colls) (source : GesConnection) (spec: ReaderSpec) (writerQueueLen, writerCount, readerQueueLen) = async {
-    let ctx = Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
+let run (ctx : Equinox.Cosmos.Core.CosmosContext) (source : GesConnection) (spec: ReaderSpec) (writerQueueLen, writerCount, readerQueueLen) = async {
     let! ingester = Ingester.start(ctx, writerQueueLen, writerCount, readerQueueLen)
     let! _feeder = EventStoreReader.start(source.ReadConnection, spec, enumEvents, ingester.Add)
     do! Async.AwaitKeyboardInterrupt() }
@@ -752,11 +751,12 @@ let main argv =
         let source = args.EventStore.Connect(Log.Logger, Log.Logger, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) |> Async.RunSynchronously
         let readerSpec = args.BuildFeedParams()
         let writerQueueLen, writerCount, readerQueueLen = 2048,64,4096*10*10
-        if Threading.ThreadPool.SetMaxThreads(512,512) |> not then failwith "Could not set max threads"
         let cosmos = args.EventStore.Cosmos // wierd nesting is due to me not finding a better way to express the semantics in Argu
-        let destination = cosmos.Connnect "ProjectorTemplate" |> Async.RunSynchronously
-        let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
-        run (destination, colls) source readerSpec (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
+        let ctx =
+            let destination = cosmos.Connect "ProjectorTemplate" |> Async.RunSynchronously
+            let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
+            Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
+        run ctx source readerSpec (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
