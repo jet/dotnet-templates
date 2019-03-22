@@ -11,14 +11,16 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
 
+  <!--TODO remove-->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\equinox\src\Equinox.Cosmos.Projection\Equinox.Cosmos.Projection.fsproj" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.2.0" />
     <PackageReference Include="Destructurama.FSharp.NetCore" Version="1.0.14" />
-    <PackageReference Include="Equinox.Cosmos.Projection" Version="2.0.0-preview1" />
-    <!--#if (kafka)-->
-    <PackageReference Include="Equinox.Projection.Codec" Version="2.0.0-preview1" />
-    <PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-preview1" />
-    <!--#endif-->
+    <!-- TODO reinstate  <PackageReference Include="Equinox.Cosmos.Projection" Version="2.0.0-preview1" />-->
+    <PackageReference Include="Microsoft.Azure.DocumentDB.ChangeFeedProcessor" Version="2.2.6" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
 
