@@ -9,6 +9,7 @@ open Serilog
 open System
 open System.Collections.Generic
 open System.Diagnostics
+open System.Threading
 
 module CmdParser =
     open Argu
@@ -155,8 +156,147 @@ module Logging =
             // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
             |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
+            |> fun c -> let ol = if verbose then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
+                        c.MinimumLevel.Override(typeof<ChangeFeedObserver>.FullName, ol)
+            |> fun c -> let cl = if verbose then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
+                        c.MinimumLevel.Override("Equinox.Cosmos.Core.CosmosContext", cl)
             |> fun c -> c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
             |> fun c -> c.CreateLogger()
+        Log.ForContext<ChangeFeedObserver>()
+
+module Ingester =
+    open Equinox.Cosmos.Core
+    open Equinox.Cosmos.Store
+
+    type [<NoComparison>] Span = { pos: int64; events: Equinox.Codec.IEvent<byte[]>[] }
+    module Span =
+        let private (|Max|) x = x.pos + x.events.LongLength
+        let private trim min (Max m as x) =
+            // Full remove
+            if m <= min then { pos = min; events = [||] }
+            // Trim until min
+            elif m > min && x.pos < min then { pos = min; events = x.events |> Array.skip (min - x.pos |> int) }
+            // Leave it
+            else x
+        let merge min (xs : Span seq) =
+            let buffer = ResizeArray()
+            let mutable curr = { pos = min; events = [||]}
+            for x in xs |> Seq.sortBy (fun x -> x.pos) do
+                match curr, trim min x with
+                // no data incoming, skip
+                | _, x when x.events.Length = 0 ->
+                    ()
+                // Not overlapping, no data buffered -> buffer
+                | c, x when c.events.Length = 0 ->
+                    curr <- x
+                // Overlapping, join
+                | Max cMax as c, x when cMax >= x.pos ->
+                    curr <- { c with events = Array.append c.events (trim cMax x).events }
+                // Not overlapping, new data
+                | c, x ->
+                    buffer.Add c
+                    curr <- x
+            if curr.events.Length <> 0 then buffer.Add curr
+            if buffer.Count = 0 then null else buffer.ToArray()
+
+    type [<NoComparison>] Batch = { stream: string; span: Span }
+    type [<NoComparison>] Result =
+        | Ok of stream: string * updatedPos: int64
+        | Duplicate of stream: string * updatedPos: int64
+        | Conflict of overage: Batch
+        | Exn of exn: exn * batch: Batch with
+        member __.WriteTo(log: ILogger) =
+            match __ with
+            | Ok (stream, pos) ->           log.Information("Wrote     {stream} up to {pos}", stream, pos)
+            | Duplicate (stream, pos) ->    log.Information("Ignored   {stream} (synced up to {pos})", stream, pos)
+            | Conflict overage ->           log.Information("Requeing  {stream} {pos} ({count} events)", overage.stream, overage.span.pos, overage.span.events.Length)
+            | Exn (exn, batch) ->           log.Warning(exn,"Writing   {stream} failed, retrying {count} events ....", batch.stream, batch.span.events.Length)
+    let private write (log : ILogger) (ctx : CosmosContext) ({ stream = s; span={ pos = p; events = e}} as batch) = async {
+        let stream = ctx.CreateStream s
+        log.Information("Writing {s}@{i}x{n}",s,p,e.Length)
+        try let! res = ctx.Sync(stream, { index = p; etag = None }, e)
+            match res with
+            | AppendResult.Ok pos -> return Ok (s, pos.index) 
+            | AppendResult.Conflict (pos, _) | AppendResult.ConflictUnknown pos ->
+                match pos.index, p + e.LongLength with
+                | actual, expectedMax when actual >= expectedMax -> return Duplicate (s, pos.index)
+                | actual, _ when p >= actual -> return Conflict batch
+                | actual, _ ->
+                    log.Information("pos {pos} batch.pos {bpos} len {blen} skip {skip}", actual, p, e.LongLength, actual-p)
+                    return Conflict { stream = s; span = { pos = actual; events = e |> Array.skip (actual-p |> int) } }
+        with e -> return Exn (e, batch) }
+
+    module Queue =
+        type [<NoComparison>] StreamState = { write: int64; queue: Span[] }
+        let inline optionCombine f (r1: int64 option) (r2: int64 option) =
+            match r1, r2 with
+            | Some x, Some y -> f x y |> Some
+            | None, None -> None
+            | None, x | x, None -> x
+
+        let combine (s1: StreamState) (s2: StreamState) : StreamState =
+            let writePos = max s1.write s2.write
+            let items = seq { if s1.queue <> null then yield! s1.queue; if s2.queue <> null then yield! s2.queue }
+            { write = writePos; queue = Span.merge writePos items}
+
+        type StreamStates() =
+            let states = System.Collections.Generic.Dictionary<string, StreamState>()
+            
+            let update stream (state : StreamState) =
+                match states.TryGetValue stream with
+                | false, _ ->
+                    states.Add(stream, state)
+                | true, current ->
+                    let updated = combine current state
+                    states.[stream] <- updated
+            let updateWritePos stream pos span =
+                update stream { write = pos; queue = span }
+
+            member __.Add (item: Batch) = updateWritePos item.stream 0L [|item.span|]
+            member __.HandleWriteResult = function
+                | Ok (stream, pos) -> updateWritePos stream pos null
+                | Duplicate (stream, pos) -> updateWritePos stream pos null
+                | Conflict overage -> updateWritePos overage.stream overage.span.pos [|overage.span|]
+                | Exn (_exn, batch) -> __.Add(batch)
+
+            member __.PendingBatches =
+                [| for KeyValue (stream, state) in states do
+                    if state.queue <> null then
+                        let x = state.queue |> Array.head
+                        let mutable count = 0 
+                        let max1000EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
+                            count <- count + 1
+                            // Reduce the item count when we don't yet know the write position
+                            count <= (if state.write = 0L then 2 else 4)
+                        yield { stream = stream; span = { pos = x.pos; events = x.events |> Array.takeWhile max1000EventsMax10EventsFirstTranche } } |]
+
+    /// Manages distribution of work across a specified number of concurrent writers
+    type SynchronousWriter(ctx : CosmosContext, log, ?maxDop) =
+        let states = Queue.StreamStates()
+        let dop = new SemaphoreSlim(defaultArg maxDop 10)
+        member __.Add item = states.Add item
+        member __.Pump(?attempts) = async {
+            let attempts = defaultArg attempts 5
+            let rec loop pending remaining = async {
+                let! results = Async.Parallel <| seq { for batch in pending -> write log ctx batch |> dop.Throttle }
+                let mutable retriesRequired = false
+                for res in results do
+                    states.HandleWriteResult res
+                    res.WriteTo log
+                    match res with
+                    | Ok _ | Duplicate _ -> ()
+                    | Conflict _ | Exn _ -> retriesRequired <- true
+                let pending = states.PendingBatches
+                if not <| Array.isEmpty pending then
+                    if retriesRequired then Log.Warning("Retrying; {count} streams to sync", Array.length pending)
+                    else log.Information("Syncing {count} streams", Array.length pending)
+                    if remaining <= 1 then log.Error("{retries} Sync attempts exceeded", attempts); failwith "Sync failed"
+                    else return! loop pending (remaining-1) }
+            let pending = states.PendingBatches
+            let streams = Array.length pending
+            log.Information("Syncing {count} streams", streams)
+            do! loop pending attempts
+            return streams }
 
 let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
@@ -170,23 +310,27 @@ let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId,
             cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
     do! Async.AwaitKeyboardInterrupt() }
 
-let createRangeSyncHandler log (ctx: Core.CosmosContext) (transform : Microsoft.Azure.Documents.Document -> Equinox.Codec.IEvent<byte[]> seq) =
+let createRangeSyncHandler log (ctx: Core.CosmosContext) (transform : Microsoft.Azure.Documents.Document -> Ingester.Batch seq) =
     let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
+    let writer = Ingester.SynchronousWriter(ctx, log)
     let processBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let pt, events = (fun () -> docs |> Seq.collect transform |> Array.ofSeq) |> Stopwatch.Time
-        let et = Stopwatch.StartNew()
+        let pt, events = Stopwatch.Time (fun () ->
+            let items = docs |> Seq.collect transform |> Array.ofSeq
+            items |> Array.iter writer.Add
+            items)
+        let! et,streams = writer.Pump() |> Stopwatch.Time
         let r = ctx.FeedResponse
-        Log.Information("{range} Fetch: {token} {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s Emit: {e:n1}s",
-            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], r.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
-            events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
+        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Gen {events,5} events {p:n3}s Sync {streams,5} streams {e:n1}s",
+            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = r.RequestCharge in c.ToString("n1")),
+            float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), streams, (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
     ChangeFeedObserver.Create(log, processBatch)
 
 open Microsoft.Azure.Documents
 
-//#if marvelEqx
+//#if marveleqx
 [<RequireQualifiedAccess>]
 module EventV0Parser =
     open Newtonsoft.Json
@@ -233,29 +377,29 @@ module EventV0Parser =
               member __.TimeStamp = x.c
               member __.Stream = x.s }
 
-let transformV0 (v0SchemaDocument: Document) : Equinox.Codec.IEvent<byte[]> seq = seq {
+let transformV0 (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
-    yield parsed :> _ }
+    let streamName = "A12-"+parsed.Stream // if parsed.Stream.Contains '-' then parsed.Stream else "Goals-"+parsed.Stream
+    yield { stream = streamName; span = { pos = parsed.Index; events = [| parsed |] } } }
 //#else
-let transform (changeFeedDocument: Document) : Equinox.Codec.IEvent<byte[]> seq = seq {
-    failwith "TODO"
-    do () }
+let transform (changeFeedDocument: Document) : Ingester.Batch seq = seq {
+    do failwith "TODO" }
 //#endif
 
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
-        Logging.initialize args.Verbose args.ChangeFeedVerbose
+        let log = Logging.initialize args.Verbose args.ChangeFeedVerbose
         let discovery, source, connectionPolicy = args.Source.BuildConnectionDetails()
-        let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
         let target =
             let destination = args.Destination.Connect "EtlTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
-            Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
+            Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
+        let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
 //#if !marveleqx
-        let createSyncHandler () = createRangeSyncHandler Log.Logger target transform
+        let createSyncHandler () = createRangeSyncHandler log target transform
 //#else
-        let createSyncHandler () = createRangeSyncHandler Log.Logger target transformV0
+        let createSyncHandler () = createRangeSyncHandler log target transformV0
 //#endif 
         run (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, batchSize, lagFrequency)
