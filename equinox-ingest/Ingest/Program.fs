@@ -56,7 +56,7 @@ module CmdParser =
                 let (Discovery.UriAndKey (endpointUri,_masterKey)) as discovery = Discovery.FromConnectionString x.Connection
                 Log.Information("CosmosDb {mode} {endpointUri} Database {database} Collection {collection}.",
                     x.Mode, endpointUri, x.Database, x.Collection)
-                Log.Information("CosmosDb timeout: {timeout}s, {retries} retries; Throttling maxRetryWaitTime {maxRetryWaitTime}",
+                Log.Information("CosmosDb timeout: {timeout}s; Throttling {retries} retries; Throttling maxRetryWaitTime {maxRetryWaitTime}",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
                 let c =
                     CosmosConnector(log=Log.Logger, mode=x.Mode, requestTimeout=x.Timeout,
@@ -444,6 +444,9 @@ module Ingester =
         return queue
     }
 
+type EventStore.ClientAPI.RecordedEvent with
+    member __.Timestamp = System.DateTimeOffset.FromUnixTimeMilliseconds(__.CreatedEpoch)
+
 module EventStoreReader =
     open EventStore.ClientAPI
 
@@ -539,7 +542,7 @@ module EventStoreReader =
             let events =
                 [| for x in currentSlice.Events ->
                     let e = x.Event
-                    Equinox.Codec.Core.EventData.Create (e.EventType, e.Data, e.Metadata) :> Equinox.Codec.IEvent<byte[]> |]
+                    Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata, e.Timestamp) :> Equinox.Codec.IEvent<byte[]> |]
             postBatch { stream = stream; span = { pos = currentSlice.FromEventNumber; events = events } }
             return! fetchFrom currentSlice.NextEventNumber }
         fetchFrom 0L
@@ -736,7 +739,7 @@ let enumEvents (xs : EventStore.ClientAPI.ResolvedEvent[]) = seq {
         | e when eb > Ingester.cosmosPayloadLimit ->
             Log.Error("ES Event Id {eventId} size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}", e.EventId, eb, Ingester.cosmosPayloadLimit)
             Choice2Of2 e
-        | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata))
+        | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata, e.Timestamp))
 }
 
 let run (ctx : Equinox.Cosmos.Core.CosmosContext) (source : GesConnection) (spec: ReaderSpec) (writerQueueLen, writerCount, readerQueueLen) = async {
