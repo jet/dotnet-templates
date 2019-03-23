@@ -82,8 +82,8 @@ module CmdParser =
                 | Cosmos _ ->               "CosmosDb destination parameters."
     and SourceArguments(args : ParseResults<SourceParameters>) =
         member val Destination =        DestinationArguments(args.GetResult Cosmos)
-        member __.Connection =          args.GetResult SourceConnection
         member __.Mode =                args.GetResult(SourceConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Connection =          args.GetResult SourceConnection
         member __.Database =            args.GetResult SourceDatabase
         member __.Collection =          args.GetResult SourceCollection
 
@@ -95,7 +95,7 @@ module CmdParser =
             let (Discovery.UriAndKey (endpointUri,_)) as discovery = Discovery.FromConnectionString x.Connection
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Collection {collection}",
                 x.Mode, endpointUri, x.Database, x.Collection)
-            Log.Information("Source CosmosDb timeout {timeout}s Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+            Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; collection = x.Collection }, c.ConnectionPolicy
@@ -118,8 +118,8 @@ module CmdParser =
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                 | ConnectionMode _ ->       "override the connection mode (default: DirectTcp)."
     and DestinationArguments(args : ParseResults<DestinationParameters>) =
-        member __.Connection =          match args.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Mode =                args.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Connection =          match args.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Database =            match args.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
         member __.Collection =          match args.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
         member __.Discovery =           Discovery.FromConnectionString __.Connection
@@ -135,7 +135,7 @@ module CmdParser =
             let (Discovery.UriAndKey (endpointUri,_masterKey)) as discovery = x.Discovery
             Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Collection {collection}",
                 x.Mode, endpointUri, x.Database, x.Collection)
-            Log.Information("Destination CosmosDb timeout {timeout}s Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+            Log.Information("Destination CosmosDb CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             c.Connect(name, discovery)
@@ -362,7 +362,6 @@ module EventV0Parser =
     type IEvent =
         inherit Equinox.Codec.Core.IIndexedEvent<byte[]>
             abstract member Stream : string
-            abstract member TimeStamp : DateTimeOffset
     /// Infers whether the document represents a valid Event-Batch
     let parse (d : Document) =
         //if d.GetPropertyValue("p") <> null && d.GetPropertyValue("i") <> null
@@ -374,7 +373,7 @@ module EventV0Parser =
               member __.EventType = x.t
               member __.Data = x.d
               member __.Meta = null
-              member __.TimeStamp = x.c
+              member __.Timestamp = x.c
               member __.Stream = x.s }
 
 let transformV0 (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
