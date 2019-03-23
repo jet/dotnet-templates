@@ -156,11 +156,11 @@ module CmdParser =
             Log.Warning("Reading with {stripes} stripes", x.Stripes)
             let startPos =
                 match args.TryGetResult Offset, args.TryGetResult Chunk, args.TryGetResult Percent, args.Contains All with
-                | Some p, _, _, _ ->  Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
-                | _, Some c, _, _ ->  Log.Warning("Processing will commence at $all Chunk {c}", c); StartPos.Chunk c
-                | _, _, Some p, _ ->  Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
+                | Some p, _, _, _ ->        Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
+                | _, Some c, _, _ ->        Log.Warning("Processing will commence at $all Chunk {c}", c); StartPos.Chunk c
+                | _, _, Some p, _ ->        Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
                 | None, None, None, true -> Log.Warning "Processing will commence at $all Start"; Start
-                | None, None, None, false -> Log.Warning "No $all processing requested"; Ignore
+                | None, None, None, false ->Log.Warning "No $all processing requested"; Ignore
             match x.TailInterval with
             | Some interval -> Log.Warning("Following tail at {seconds}s interval", interval.TotalSeconds)
             | None -> Log.Warning "Not following tail"
@@ -242,13 +242,13 @@ module Ingester =
         Log.Information("Writing {s}@{i}x{n}",s,p,e.Length)
         try let! res = ctx.Sync(stream, { index = p; etag = None }, e)
             match res with
-            | AppendResult.Ok _pos -> return Ok (s, p) 
+            | AppendResult.Ok pos -> return Ok (s, pos.index) 
             | AppendResult.Conflict (pos, _) | AppendResult.ConflictUnknown pos ->
                 match pos.index, p + e.LongLength with
                 | actual, expectedMax when actual >= expectedMax -> return Duplicate (s, pos.index)
                 | actual, _ when p >= actual -> return Conflict batch
                 | actual, _ ->
-                    Log.Debug("pos {pos} batch.pos {bpos} len {blen} skip {skio}", actual, p, e.LongLength, actual-p)
+                    Log.Debug("pos {pos} batch.pos {bpos} len {blen} skip {skip}", actual, p, e.LongLength, actual-p)
                     return Conflict { stream = s; span = { pos = actual; events = e |> Array.skip (actual-p |> int) } }
         with e -> return Exn (e, batch) }
 
