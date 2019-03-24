@@ -12,7 +12,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - `dotnet new eqxprojector` template, providing a CosmosDb `ChangeFeedProcessor` host app, with or without a Kafka Producer and Kafka Consumer host app using [the `Jet.ConfluentKafka.FSharp` wrapper for `Confluent.Kafka` v `1.0.0-beta3`](https://github.com/jet/Jet.ConfluentKafka.FSharp/tree/v1) [#11](https://github.com/jet/dotnet-templates/pull/11)
 - `dotnet new eqxtestbed` template, providing a host that allows running back-to-back benchmarks when prototyping models, using different stores and/or store configuration parameters [#14](https://github.com/jet/dotnet-templates/pull/14)
-- `dotnet new eqxetl` template, providing a CosmosDb `ChangeFeedProcessor` that ingests/transforms/filters documents from a source store, feeding events (consistently) into an `Equinox.Cosmos` store  [#12](https://github.com/jet/dotnet-templates/pull/12)
+- `dotnet new eqxetl` template, providing a CosmosDb `ChangeFeedProcessor` that ingests/transforms/filters documents from a source store, feeding events (consistently) into an `Equinox.Cosmos` store [#17](https://github.com/jet/dotnet-templates/pull/17)
 
 ### Changed
 
