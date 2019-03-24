@@ -377,7 +377,11 @@ let transformV0 (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
     yield { stream = streamName; span = { pos = parsed.Index; events = [| parsed |] } } }
 //#else
 let transform (changeFeedDocument: Document) : Ingester.Batch seq = seq {
-    do failwith "TODO" }
+    (* TODO MAKE THIS DO YOUR BIDDING *)
+    for e in DocumentParser.enumEvents changeFeedDocument ->
+        let streamName = "Cloned-" + e.Stream
+        { stream = streamName; span = { pos = e.Index; events = [| e |] } }
+}
 //#endif
 
 [<EntryPoint>]
