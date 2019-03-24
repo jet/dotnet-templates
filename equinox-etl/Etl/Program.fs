@@ -228,11 +228,6 @@ module Ingester =
 
     module Queue =
         type [<NoComparison>] StreamState = { write: int64; queue: Span[] }
-        let inline optionCombine f (r1: int64 option) (r2: int64 option) =
-            match r1, r2 with
-            | Some x, Some y -> f x y |> Some
-            | None, None -> None
-            | None, x | x, None -> x
 
         let combine (s1: StreamState) (s2: StreamState) : StreamState =
             let writePos = max s1.write s2.write
@@ -267,7 +262,7 @@ module Ingester =
                         let max1000EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
                             count <- count + 1
                             // Reduce the item count when we don't yet know the write position
-                            count <= (if state.write = 0L then 2 else 4)
+                            count <= (if state.write = 0L then 10 else 1000)
                         yield { stream = stream; span = { pos = x.pos; events = x.events |> Array.takeWhile max1000EventsMax10EventsFirstTranche } } |]
 
     /// Manages distribution of work across a specified number of concurrent writers
@@ -378,7 +373,7 @@ module EventV0Parser =
 
 let transformV0 (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
-    let streamName = "A12-"+parsed.Stream // if parsed.Stream.Contains '-' then parsed.Stream else "Goals-"+parsed.Stream
+    let streamName = if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+parsed.Stream
     yield { stream = streamName; span = { pos = parsed.Index; events = [| parsed |] } } }
 //#else
 let transform (changeFeedDocument: Document) : Ingester.Batch seq = seq {
