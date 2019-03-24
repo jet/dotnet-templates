@@ -8,6 +8,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project _ported to C#_.
 - [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic.
 - [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models, using different stores and/or store configuration parameters.
+- [`eqxetl`](equinox-etl/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor that traverses each document in a source store, filtering/enriching/mapping to Events to be written (consistently) into an `Equinox.Cosmos` store.
 
 ## How to use
 
@@ -48,6 +49,12 @@ To use from the command line, the outline is:
     dotnet run -p Testbed -- run -f 2000 es
     # run for two minutes against CosmosDb (see https://github.com/jet/equinox#quickstart) for provisioning instructions
     dotnet run -p Testbed -- run -d 2 cosmos
+
+	# ... to add an ETL tool
+    md -p ../tools/My.Tools.Etl | Set-Location
+	# (-m includes an example of how to upconvert from similar event-sourced representations in an existing store)
+	dotnet new eqxetl -m
+	start Etl/README.md
 
 ## CONTRIBUTING
 
