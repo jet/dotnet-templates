@@ -6,7 +6,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 - [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project.
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project _ported to C#_.
-- [`eqxprojector`](equinox-projector-cosmos/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic.
+- [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic.
 
 ## How to use
 
@@ -30,8 +30,11 @@ To use from the command line, the outline is:
     # see readme.md in the generated code for further instructions regarding the TodoBackend the above -t switch above triggers the inclusion of
     start readme.md
 
-    # to add a Projector and a Consumer (-k emits to Kafka and hence implies having a Consumer)
+    # ... to add a Projector and a Consumer
+    md -p ../tools/My.Tools.Projector | Set-Location
+    # (-k emits to Kafka and hence implies having a Consumer)
     dotnet new eqxprojector -k
+    start README.md
 
 ## CONTRIBUTING
 

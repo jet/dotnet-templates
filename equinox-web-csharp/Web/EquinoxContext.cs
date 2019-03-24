@@ -29,13 +29,13 @@ namespace TodoBackendTemplate
             Func<string, byte[], TEvent> tryDecode,
             JsonSerializerSettings settings = null) where TEvent: class
         {
-            return Equinox.Codec.JsonUtf8.Create<TEvent>(
+            return Equinox.Codec.Custom.Create<TEvent>(
                 FuncConvert.FromFunc(encode),
                 FuncConvert.FromFunc((Func<Tuple<string, byte[]>, FSharpOption<TEvent>>) TryDecodeImpl));
             FSharpOption<TEvent> TryDecodeImpl(Tuple<string, byte[]> encoded) => OptionModule.OfObj(tryDecode(encoded.Item1, encoded.Item2));
         }
 
         public static Equinox.Codec.IUnionEncoder<TEvent, byte[]> Create<TEvent>(JsonSerializerSettings settings = null) where TEvent: UnionContract.IUnionContract =>
-            Equinox.Codec.JsonNet.JsonUtf8.Create<TEvent>(settings ?? _defaultSerializationSettings);
+            Equinox.Codec.NewtonsoftJson.Json.Create<TEvent>(settings ?? _defaultSerializationSettings);
     } 
 }

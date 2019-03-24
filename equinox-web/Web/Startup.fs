@@ -99,7 +99,7 @@ module Services =
     let serializationSettings = Newtonsoft.Json.JsonSerializerSettings()
 
     /// Automatically generates a Union Codec based using the scheme described in https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
-    let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.JsonNet.JsonUtf8.Create<'Union>(serializationSettings)
+    let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.NewtonsoftJson.Json.Create<'Union>(serializationSettings)
     /// Builds a Stream Resolve function appropriate to the store being used
     type StreamResolver(storage : Storage.Instance) =
         member __.Resolve

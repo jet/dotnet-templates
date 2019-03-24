@@ -10,10 +10,12 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
-- `dotnet net eqxprojector` template, providing a CosmosDb `ChangeFeedProcessor` host app, with or without a Kafka Producer and Kafka Consumer host app using [the `Jet.ConfluentKafka.FSharp` wrapper for `Confluent.Kafka` v `1.0.0-beta3`](https://github.com/jet/Jet.ConfluentKafka.FSharp/tree/v1) [#11](https://github.com/jet/dotnet-templates/pull/11)
-- `dotnet net eqxweb` now uses Anonymous Records syntax HT [@ameier38](https://github.com/ameier38)
+- `dotnet new eqxprojector` template, providing a CosmosDb `ChangeFeedProcessor` host app, with or without a Kafka Producer and Kafka Consumer host app using [the `Jet.ConfluentKafka.FSharp` wrapper for `Confluent.Kafka` v `1.0.0-beta3`](https://github.com/jet/Jet.ConfluentKafka.FSharp/tree/v1) [#11](https://github.com/jet/dotnet-templates/pull/11)
 
 ### Changed
+
+- `dotnet new eqxweb` now uses Anonymous Records syntax HT [@ameier38](https://github.com/ameier38)
+
 ### Removed
 ### Fixed
 
@@ -22,7 +24,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- `dotnet net eqxweb` now uses FSharp.UMX to make Id types more succinct [#12](https://github.com/jet/dotnet-templates/pull/12)
+- `dotnet new eqxweb` now uses FSharp.UMX to make Id types more succinct [#12](https://github.com/jet/dotnet-templates/pull/12)
 - Target Equinox 1.0.4-rc1, which entails minor source changes to both C# and F# [#12](https://github.com/jet/dotnet-templates/pull/12)
 
 ### Fixed

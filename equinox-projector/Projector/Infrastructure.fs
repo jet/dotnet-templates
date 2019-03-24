@@ -16,4 +16,4 @@ type Async with
             let isDisposed = ref 0
             let rec callback _ = Task.Run(fun () -> if Interlocked.Increment isDisposed = 1 then d.Dispose() ; sc ()) |> ignore
             and d : IDisposable = Console.CancelKeyPress.Subscribe callback
-            in ())
+            in ()) 

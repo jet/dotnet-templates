@@ -29,7 +29,7 @@ module EventParser =
             /// Addition of a collection of skus to the list
             | Added of Added
             interface TypeShape.UnionContract.IUnionContract
-        let codec = Equinox.Codec.JsonNet.JsonUtf8.Create<Event>(settings)
+        let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module Favorites =
@@ -40,7 +40,7 @@ module EventParser =
             | Favorited         of Favorited
             | Unfavorited       of Unfavorited
             interface TypeShape.UnionContract.IUnionContract
-        let codec = Equinox.Codec.JsonNet.JsonUtf8.Create<Event>(settings)
+        let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
     
     let tryExtractCategory (x : RenderedEvent) =
         x.s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries)
@@ -114,7 +114,7 @@ module CmdParser =
         | x -> x 
 
     [<NoEquality; NoComparison>]
-    type Arguments =
+    type Parameters =
         | [<AltCommandLine("-b"); Unique>] Broker of string
         | [<AltCommandLine("-t"); Unique>] Topic of string
         | [<AltCommandLine("-g"); Unique>] Group of string
@@ -130,12 +130,12 @@ module CmdParser =
                 | Verbose _ ->  "request verbose logging."
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse argv : ParseResults<Arguments> =
+    let parse argv : ParseResults<Parameters> =
         let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Arguments>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv
 
-    type Parameters(args : ParseResults<Arguments>) =
+    type Arguments(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
         member __.Group = match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "EQUINOX_KAFKA_GROUP"
@@ -157,7 +157,7 @@ module Logging =
 [<EntryPoint>]
 let main argv =
     try let parsed = CmdParser.parse argv
-        let args = CmdParser.Parameters(parsed)
+        let args = CmdParser.Arguments(parsed)
         Logging.initialize args.Verbose
         let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group)
 

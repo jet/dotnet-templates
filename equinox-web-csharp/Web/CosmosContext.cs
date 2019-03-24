@@ -1,6 +1,6 @@
 using Equinox;
 using Equinox.Cosmos;
-using Equinox.Codec.JsonNet;
+using Equinox.Codec.NewtonsoftJson;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
 using Serilog;

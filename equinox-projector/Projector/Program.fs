@@ -30,7 +30,7 @@ module CmdParser =
         | x -> x 
 
     module Cosmos =
-        type [<NoEquality; NoComparison>] Arguments =
+        type [<NoEquality; NoComparison>] Parameters =
             | [<AltCommandLine("-m")>] ConnectionMode of Equinox.Cosmos.ConnectionMode
             | [<AltCommandLine("-o")>] Timeout of float
             | [<AltCommandLine("-r")>] Retries of int
@@ -48,29 +48,27 @@ module CmdParser =
                     | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
                     | Database _ ->         "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
                     | Collection _ ->       "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION, test)."
-        type Info(args : ParseResults<Arguments>) =
-            member __.Connection =  match args.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-            member __.Database =    match args.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-            member __.Collection =  match args.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
+        type Arguments(a : ParseResults<Parameters>) =
+            member __.Mode = a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+            member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+            member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
+            member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
 
-            member __.Timeout = args.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
-            member __.Mode = args.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
-            member __.Retries = args.GetResult(Retries, 1)
-            member __.MaxRetryWaitTime = args.GetResult(RetriesWaitTime, 5)
+            member __.Timeout = a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+            member __.Retries = a.GetResult(Retries, 1)
+            member __.MaxRetryWaitTime = a.GetResult(RetriesWaitTime, 5)
 
             member x.BuildConnectionDetails() =
-                let (Discovery.UriAndKey (endpointUri,masterKey)) = Discovery.FromConnectionString x.Connection
+                let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
                 Log.Information("CosmosDb {mode} {endpointUri} Database {database} Collection {collection}.",
                     x.Mode, endpointUri, x.Database, x.Collection)
-                Log.Information("CosmosDb timeout: {timeout}s, {retries} retries; Throttling maxRetryWaitTime {maxRetryWaitTime}",
+                Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
-                let c =
-                    CosmosConnector(log=Log.Logger, mode=x.Mode, requestTimeout=x.Timeout,
-                        maxRetryAttemptsOnThrottledRequests=x.Retries, maxRetryWaitTimeInSeconds=x.MaxRetryWaitTime)
-                (endpointUri,masterKey), c.ConnectionPolicy, { database = x.Database; collection = x.Collection }
+                let connector = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
+                discovery, connector, { database = x.Database; collection = x.Collection } 
 
     [<NoEquality; NoComparison>]
-    type Arguments =
+    type Parameters =
         (* ChangeFeed Args*)
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
         | [<AltCommandLine("-s"); Unique>] LeaseCollectionSuffix of string
@@ -85,7 +83,7 @@ module CmdParser =
         | [<AltCommandLine("-t"); Unique>] Topic of string
 //#endif
         (* ChangeFeed Args *)
-        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Arguments>
+        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
@@ -101,36 +99,36 @@ module CmdParser =
                 | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable EQUINOX_KAFKA_TOPIC, if specified)"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
-    and Parameters(args : ParseResults<Arguments>) =
-        member val Cosmos = Cosmos.Info(args.GetResult Cosmos)
+    and Arguments(args : ParseResults<Parameters>) =
+        member val Cosmos = Cosmos.Arguments(args.GetResult Cosmos)
 //#if kafka
         member val Target = TargetInfo args
 //#endif
-        member __.LeaseId = args.GetResult ConsumerGroupName
-        member __.Suffix = args.GetResult(LeaseCollectionSuffix,"-aux")
-        member __.Verbose = args.Contains Verbose
-        member __.ChangeFeedVerbose = args.Contains ChangeFeedVerbose
-        member __.BatchSize = args.GetResult(BatchSize,1000)
-        member __.LagFrequency = args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
-        member __.AuxCollectionName = __.Cosmos.Collection + __.Suffix
-        member __.StartFromHere = args.Contains ForceStartFromHere
+        member __.LeaseId =                 args.GetResult ConsumerGroupName
+        member __.Suffix =                  args.GetResult(LeaseCollectionSuffix,"-aux")
+        member __.Verbose =                 args.Contains Verbose
+        member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
+        member __.BatchSize =               args.GetResult(BatchSize,1000)
+        member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
+        member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
+        member __.StartFromHere =           args.Contains ForceStartFromHere
         member x.BuildChangeFeedParams() =
             Log.Information("Processing {leaseId} in {auxCollName} in batches of {batchSize}", x.LeaseId, x.AuxCollectionName, x.BatchSize)
             if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
 //#if kafka
-    and TargetInfo(args : ParseResults<Arguments>) =
+    and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
         member x.BuildTargetParams() = x.Broker, x.Topic
 //#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse argv : Parameters =
+    let parse argv : Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Arguments>(programName = programName)
-        parser.ParseCommandLine argv |> Parameters
+        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        parser.ParseCommandLine argv |> Arguments
 
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
@@ -145,7 +143,7 @@ module Logging =
             |> fun c -> c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
                             .CreateLogger()
 
-let run (endpointUri, masterKey) connectionPolicy source
+let run discovery connectionPolicy source
         (aux, leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
@@ -154,7 +152,7 @@ let run (endpointUri, masterKey) connectionPolicy source
     let maybeLogLag = lagReportFreq |> Option.map logLag
     let! _feedEventHost =
         ChangeFeedProcessor.Start
-          ( Log.Logger, endpointUri, masterKey, connectionPolicy, source, aux, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
+          ( Log.Logger, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
             cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
     do! Async.AwaitKeyboardInterrupt() }
 
@@ -166,14 +164,15 @@ let mkRangeProjector (broker, topic) =
     let disposeProducer = (producer :> IDisposable).Dispose
     let projectBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.TimeStamp; d = e.Data; m = e.Meta }
+        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.Timestamp; d = e.Data; m = e.Meta }
         let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map toKafkaEvent |> Array.ofSeq) |> Stopwatch.Time 
         let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
         let! et,_ = producer.ProduceBatch es |> Stopwatch.Time
         let r = ctx.FeedResponse
-        Log.Information("{range} Fetch: {token} {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s; Emit: {e:n1}s",
-            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], r.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
-            events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
+
+        Log.Information("Read {range,2} -{token} {count} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
+            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = r.RequestCharge in c.ToString("n1")),
+            float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
     ChangeFeedObserver.Create(Log.Logger, projectBatch, disposeProducer)
@@ -184,8 +183,8 @@ let createRangeHandler () =
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
         let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.length) |> Stopwatch.Time
         let r = ctx.FeedResponse
-        Log.Information("{range} Fetch: {token} {requestCharge:n0}RU {count} docs {l:n1}s; Parse: {events} events {p:n3}s",
-            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], r.RequestCharge, docs.Count, float sw.ElapsedMilliseconds / 1000., 
+        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge:n0}RU {l:n1}s Parse {events,5} events {p:n3}s",
+            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, r.RequestCharge, float sw.ElapsedMilliseconds / 1000., 
             events, (let e = pt.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
@@ -196,13 +195,13 @@ let createRangeHandler () =
 let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ChangeFeedVerbose
-        let (endpointUri, masterKey), connectionPolicy, source = args.Cosmos.BuildConnectionDetails()
+        let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
         let aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
 //#if kafka
         let targetParams = args.Target.BuildTargetParams()
         let createRangeHandler () = mkRangeProjector targetParams
 //#endif
-        run (endpointUri, masterKey) connectionPolicy source
+        run discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromHere, batchSize, lagFrequency)
             createRangeHandler     
         |> Async.RunSynchronously
