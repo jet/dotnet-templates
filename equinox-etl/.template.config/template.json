@@ -22,7 +22,7 @@
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Include code to transform from Equinox V0 to Equinox.Cosmos."
+      "description": "Include example code to transform from the Equinox V0 schema to that of `Equinox.Cosmos`"
     }
   }
 }

@@ -41,19 +41,19 @@ module CmdParser =
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | Source _ ->               "CosmosDb input parameters."
-    and Arguments(args : ParseResults<Parameters>) =
-        member __.LeaseId =             args.GetResult ConsumerGroupName
+    and Arguments(a : ParseResults<Parameters>) =
+        member __.LeaseId =             a.GetResult ConsumerGroupName
 
-        member __.Verbose =             args.Contains Verbose
+        member __.Verbose =             a.Contains Verbose
 
-        member __.Suffix =              args.GetResult(LeaseCollectionSuffix,"-aux")
-        member __.ChangeFeedVerbose =   args.Contains ChangeFeedVerbose
-        member __.BatchSize =           args.GetResult(BatchSize,1000)
-        member __.LagFrequency =        args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
+        member __.Suffix =              a.GetResult(LeaseCollectionSuffix,"-aux")
+        member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
+        member __.BatchSize =           a.GetResult(BatchSize,1000)
+        member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =   __.Destination.Collection + __.Suffix
-        member __.StartFromHere =       args.Contains ForceStartFromHere
+        member __.StartFromHere =       a.Contains ForceStartFromHere
 
-        member val Source = SourceArguments(args.GetResult Source)
+        member val Source = SourceArguments(a.GetResult Source)
         member __.Destination : DestinationArguments = __.Source.Destination
         member x.BuildChangeFeedParams() =
             Log.Information("Processing {leaseId} in {auxCollName} in batches of {batchSize}", x.LeaseId, x.AuxCollectionName, x.BatchSize)
@@ -80,16 +80,16 @@ module CmdParser =
                 | SourceDatabase _ ->       "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
                 | SourceCollection _ ->     "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION, test)."
                 | Cosmos _ ->               "CosmosDb destination parameters."
-    and SourceArguments(args : ParseResults<SourceParameters>) =
-        member val Destination =        DestinationArguments(args.GetResult Cosmos)
-        member __.Mode =                args.GetResult(SourceConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
-        member __.Connection =          args.GetResult SourceConnection
-        member __.Database =            args.GetResult SourceDatabase
-        member __.Collection =          args.GetResult SourceCollection
+    and SourceArguments(a : ParseResults<SourceParameters>) =
+        member val Destination =        DestinationArguments(a.GetResult Cosmos)
+        member __.Mode =                a.GetResult(SourceConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Connection =          a.GetResult SourceConnection
+        member __.Database =            a.GetResult SourceDatabase
+        member __.Collection =          a.GetResult SourceCollection
 
-        member __.Timeout =             args.GetResult(SourceTimeout,5.) |> TimeSpan.FromSeconds
-        member __.Retries =             args.GetResult(SourceRetries, 1)
-        member __.MaxRetryWaitTime =    args.GetResult(SourceRetriesWaitTime, 5)
+        member __.Timeout =             a.GetResult(SourceTimeout,5.) |> TimeSpan.FromSeconds
+        member __.Retries =             a.GetResult(SourceRetries, 1)
+        member __.MaxRetryWaitTime =    a.GetResult(SourceRetriesWaitTime, 5)
 
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,_)) as discovery = Discovery.FromConnectionString x.Connection
@@ -117,16 +117,16 @@ module CmdParser =
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                 | ConnectionMode _ ->       "override the connection mode (default: DirectTcp)."
-    and DestinationArguments(args : ParseResults<DestinationParameters>) =
-        member __.Mode =                args.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
-        member __.Connection =          match args.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Database =            match args.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Collection =          match args.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
+    and DestinationArguments(a : ParseResults<DestinationParameters>) =
+        member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+        member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
+        member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
         member __.Discovery =           Discovery.FromConnectionString __.Connection
 
-        member __.Timeout =             args.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
-        member __.Retries =             args.GetResult(Retries, 1)
-        member __.MaxRetryWaitTime =    args.GetResult(RetriesWaitTime, 5)
+        member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+        member __.Retries =             a.GetResult(Retries, 1)
+        member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
 
         /// Connect with the provided parameters and/or environment variables
         member x.Connect
@@ -168,71 +168,73 @@ module Ingester =
     open Equinox.Cosmos.Core
     open Equinox.Cosmos.Store
 
-    type [<NoComparison>] Span = { pos: int64; events: Equinox.Codec.IEvent<byte[]>[] }
-    module Span =
-        let private (|Max|) x = x.pos + x.events.LongLength
-        let private trim min (Max m as x) =
-            // Full remove
-            if m <= min then { pos = min; events = [||] }
-            // Trim until min
-            elif m > min && x.pos < min then { pos = min; events = x.events |> Array.skip (min - x.pos |> int) }
-            // Leave it
-            else x
-        let merge min (xs : Span seq) =
-            let buffer = ResizeArray()
-            let mutable curr = { pos = min; events = [||]}
-            for x in xs |> Seq.sortBy (fun x -> x.pos) do
-                match curr, trim min x with
-                // no data incoming, skip
-                | _, x when x.events.Length = 0 ->
-                    ()
-                // Not overlapping, no data buffered -> buffer
-                | c, x when c.events.Length = 0 ->
-                    curr <- x
-                // Overlapping, join
-                | Max cMax as c, x when cMax >= x.pos ->
-                    curr <- { c with events = Array.append c.events (trim cMax x).events }
-                // Not overlapping, new data
-                | c, x ->
-                    buffer.Add c
-                    curr <- x
-            if curr.events.Length <> 0 then buffer.Add curr
-            if buffer.Count = 0 then null else buffer.ToArray()
-
+    type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
     type [<NoComparison>] Batch = { stream: string; span: Span }
-    type [<NoComparison>] Result =
-        | Ok of stream: string * updatedPos: int64
-        | Duplicate of stream: string * updatedPos: int64
-        | Conflict of overage: Batch
-        | Exn of exn: exn * batch: Batch with
-        member __.WriteTo(log: ILogger) =
-            match __ with
-            | Ok (stream, pos) ->           log.Information("Wrote     {stream} up to {pos}", stream, pos)
-            | Duplicate (stream, pos) ->    log.Information("Ignored   {stream} (synced up to {pos})", stream, pos)
-            | Conflict overage ->           log.Information("Requeing  {stream} {pos} ({count} events)", overage.stream, overage.span.pos, overage.span.events.Length)
-            | Exn (exn, batch) ->           log.Warning(exn,"Writing   {stream} failed, retrying {count} events ....", batch.stream, batch.span.events.Length)
-    let private write (log : ILogger) (ctx : CosmosContext) ({ stream = s; span={ pos = p; events = e}} as batch) = async {
-        let stream = ctx.CreateStream s
-        log.Information("Writing {s}@{i}x{n}",s,p,e.Length)
-        try let! res = ctx.Sync(stream, { index = p; etag = None }, e)
-            match res with
-            | AppendResult.Ok pos -> return Ok (s, pos.index) 
-            | AppendResult.Conflict (pos, _) | AppendResult.ConflictUnknown pos ->
-                match pos.index, p + e.LongLength with
-                | actual, expectedMax when actual >= expectedMax -> return Duplicate (s, pos.index)
-                | actual, _ when p >= actual -> return Conflict batch
-                | actual, _ ->
-                    log.Information("pos {pos} batch.pos {bpos} len {blen} skip {skip}", actual, p, e.LongLength, actual-p)
-                    return Conflict { stream = s; span = { pos = actual; events = e |> Array.skip (actual-p |> int) } }
-        with e -> return Exn (e, batch) }
+
+    module Writer =
+        type [<NoComparison>] Result =
+            | Ok of stream: string * updatedPos: int64
+            | Duplicate of stream: string * updatedPos: int64
+            | Conflict of overage: Batch
+            | Exn of exn: exn * batch: Batch
+            member __.WriteTo(log: ILogger) =
+                match __ with
+                | Ok (stream, pos) ->           log.Information("Wrote     {stream} up to {pos}", stream, pos)
+                | Duplicate (stream, pos) ->    log.Information("Ignored   {stream} (synced up to {pos})", stream, pos)
+                | Conflict overage ->           log.Information("Requeing  {stream} {pos} ({count} events)", overage.stream, overage.span.index, overage.span.events.Length)
+                | Exn (exn, batch) ->           log.Warning(exn,"Writing   {stream} failed, retrying {count} events ....", batch.stream, batch.span.events.Length)
+        let write (log : ILogger) (ctx : CosmosContext) ({ stream = s; span = { index = p; events = e}} as batch) = async {
+            let stream = ctx.CreateStream s
+            log.Information("Writing {s}@{i}x{n}",s,p,e.Length)
+            try let! res = ctx.Sync(stream, { index = p; etag = None }, e)
+                match res with
+                | AppendResult.Ok pos -> return Ok (s, pos.index) 
+                | AppendResult.Conflict (pos, _) | AppendResult.ConflictUnknown pos ->
+                    match pos.index, p + e.LongLength with
+                    | actual, expectedMax when actual >= expectedMax -> return Duplicate (s, pos.index)
+                    | actual, _ when p >= actual -> return Conflict batch
+                    | actual, _ ->
+                        log.Information("pos {pos} batch.pos {bpos} len {blen} skip {skip}", actual, p, e.LongLength, actual-p)
+                        return Conflict { stream = s; span = { index = actual; events = e |> Array.skip (actual-p |> int) } }
+            with e -> return Exn (e, batch) }
 
     module Queue =
-        type [<NoComparison>] StreamState = { write: int64; queue: Span[] }
+        module Span =
+            let private (|Max|) x = x.index + x.events.LongLength
+            let private trim min (Max m as x) =
+                // Full remove
+                if m <= min then { index = min; events = [||] }
+                // Trim until min
+                elif m > min && x.index < min then { index = min; events = x.events |> Array.skip (min - x.index |> int) }
+                // Leave it
+                else x
+            let merge min (xs : Span seq) =
+                let buffer = ResizeArray()
+                let mutable curr = { index = min; events = [||]}
+                for x in xs |> Seq.sortBy (fun x -> x.index) do
+                    match curr, trim min x with
+                    // no data incoming, skip
+                    | _, x when x.events.Length = 0 ->
+                        ()
+                    // Not overlapping, no data buffered -> buffer
+                    | c, x when c.events.Length = 0 ->
+                        curr <- x
+                    // Overlapping, join
+                    | Max cMax as c, x when cMax >= x.index ->
+                        curr <- { c with events = Array.append c.events (trim cMax x).events }
+                    // Not overlapping, new data
+                    | c, x ->
+                        buffer.Add c
+                        curr <- x
+                if curr.events.Length <> 0 then buffer.Add curr
+                if buffer.Count = 0 then null else buffer.ToArray()
 
-        let combine (s1: StreamState) (s2: StreamState) : StreamState =
-            let writePos = max s1.write s2.write
-            let items = seq { if s1.queue <> null then yield! s1.queue; if s2.queue <> null then yield! s2.queue }
-            { write = writePos; queue = Span.merge writePos items}
+        type [<NoComparison>] StreamState = { write: int64; queue: Span[] }
+        module StreamState =
+            let combine (s1: StreamState) (s2: StreamState) : StreamState =
+                let writePos = max s1.write s2.write
+                let items = seq { if s1.queue <> null then yield! s1.queue; if s2.queue <> null then yield! s2.queue }
+                { write = writePos; queue = Span.merge writePos items}
 
         type StreamStates() =
             let states = System.Collections.Generic.Dictionary<string, StreamState>()
@@ -242,17 +244,17 @@ module Ingester =
                 | false, _ ->
                     states.Add(stream, state)
                 | true, current ->
-                    let updated = combine current state
+                    let updated = StreamState.combine current state
                     states.[stream] <- updated
             let updateWritePos stream pos span =
                 update stream { write = pos; queue = span }
 
             member __.Add (item: Batch) = updateWritePos item.stream 0L [|item.span|]
             member __.HandleWriteResult = function
-                | Ok (stream, pos) -> updateWritePos stream pos null
-                | Duplicate (stream, pos) -> updateWritePos stream pos null
-                | Conflict overage -> updateWritePos overage.stream overage.span.pos [|overage.span|]
-                | Exn (_exn, batch) -> __.Add(batch)
+                | Writer.Result.Ok (stream, pos) -> updateWritePos stream pos null
+                | Writer.Result.Duplicate (stream, pos) -> updateWritePos stream pos null
+                | Writer.Result.Conflict overage -> updateWritePos overage.stream overage.span.index [|overage.span|]
+                | Writer.Result.Exn (_exn, batch) -> __.Add(batch)
 
             member __.PendingBatches =
                 [| for KeyValue (stream, state) in states do
@@ -263,7 +265,7 @@ module Ingester =
                             count <- count + 1
                             // Reduce the item count when we don't yet know the write position
                             count <= (if state.write = 0L then 10 else 1000)
-                        yield { stream = stream; span = { pos = x.pos; events = x.events |> Array.takeWhile max1000EventsMax10EventsFirstTranche } } |]
+                        yield { stream = stream; span = { index = x.index; events = x.events |> Array.takeWhile max1000EventsMax10EventsFirstTranche } } |]
 
     /// Manages distribution of work across a specified number of concurrent writers
     type SynchronousWriter(ctx : CosmosContext, log, ?maxDop) =
@@ -273,14 +275,14 @@ module Ingester =
         member __.Pump(?attempts) = async {
             let attempts = defaultArg attempts 5
             let rec loop pending remaining = async {
-                let! results = Async.Parallel <| seq { for batch in pending -> write log ctx batch |> dop.Throttle }
+                let! results = Async.Parallel <| seq { for batch in pending -> Writer.write log ctx batch |> dop.Throttle }
                 let mutable retriesRequired = false
                 for res in results do
                     states.HandleWriteResult res
                     res.WriteTo log
                     match res with
-                    | Ok _ | Duplicate _ -> ()
-                    | Conflict _ | Exn _ -> retriesRequired <- true
+                    | Writer.Result.Ok _ | Writer.Result.Duplicate _ -> ()
+                    | Writer.Result.Conflict _ | Writer.Result.Exn _ -> retriesRequired <- true
                 let pending = states.PendingBatches
                 if not <| Array.isEmpty pending then
                     if retriesRequired then Log.Warning("Retrying; {count} streams to sync", Array.length pending)
@@ -374,13 +376,13 @@ module EventV0Parser =
 let transformV0 (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
     let streamName = if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+parsed.Stream
-    yield { stream = streamName; span = { pos = parsed.Index; events = [| parsed |] } } }
+    yield { stream = streamName; span = { index = parsed.Index; events = [| parsed |] } } }
 //#else
 let transform (changeFeedDocument: Document) : Ingester.Batch seq = seq {
     (* TODO MAKE THIS DO YOUR BIDDING *)
     for e in DocumentParser.enumEvents changeFeedDocument ->
         let streamName = "Cloned-" + e.Stream
-        { stream = streamName; span = { pos = e.Index; events = [| e |] } }
+        { stream = streamName; span = { index = e.Index; events = [| e |] } }
 }
 //#endif
 
