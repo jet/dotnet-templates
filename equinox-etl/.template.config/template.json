@@ -11,8 +11,8 @@
     "language": "F#"
   },
   "identity": "Equinox.Template.CosmosEtl",
-  "name": "Equinox Etl",
-  "shortName": "eqxcosmosetl",
+  "name": "Equinox Extract/Transform/Load",
+  "shortName": "eqxetl",
   "sourceName": "EtlTemplate",
   "preferNameDirectory": true,
 

@@ -1,14 +1,14 @@
-# Equinox Cosmos ETL template
+# Equinox.Cosmos ETL template
 
 This project was generated using:
 
 //#if marveleqx
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new eqxcosmosetl -m # -m - include Marvel V0 import logic
+    dotnet new eqxetl -m # -m - include Marvel V0 import logic
 //#else
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -m to include Marvel V0 import logic
-    dotnet new eqxcosmosetl # use --help to see options
+    dotnet new eqxetl # use --help to see options
 //#endif
 
 ## Usage instructions
@@ -45,6 +45,6 @@ This project was generated using:
         $env:EQUINOX_COSMOS_DATABASE_SOURCE="input-database" # or use -d
         $env:EQUINOX_COSMOS_COLLECTION_SOURCE="input_collection" # or use - c
 
-        dotnet run -p CosmosEtl -- defaultEtl `
+        dotnet run -p Etl -- defaultEtl `
 			source -s $env:EQUINOX_COSMOS_CONNECTION_SOURCE -d $env:EQUINOX_COSMOS_DATABASE_SOURCE -c $env:EQUINOX_COSMOS_COLLECTION_SOURCE `
 			cosmos # Can add overrides for destination here
