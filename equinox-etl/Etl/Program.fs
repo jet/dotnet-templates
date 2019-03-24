@@ -135,7 +135,7 @@ module CmdParser =
             let (Discovery.UriAndKey (endpointUri,_masterKey)) as discovery = x.Discovery
             Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Collection {collection}",
                 x.Mode, endpointUri, x.Database, x.Collection)
-            Log.Information("Destination CosmosDb CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+            Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             c.Connect(name, discovery)
