@@ -10,12 +10,12 @@ open System.Threading
 [<AutoOpen>]
 module CmdParser =
     type [<NoEquality; NoComparison>]
-        Arguments =
+        Parameters =
         | [<AltCommandLine("-v")>] Verbose
         | [<AltCommandLine("-vc")>] VerboseConsole
         | [<AltCommandLine("-S")>] LocalSeq
         | [<AltCommandLine("-l")>] LogFile of string
-        | [<CliPrefix(CliPrefix.None); Last; Unique>] Run of ParseResults<TestArguments>
+        | [<CliPrefix(CliPrefix.None); Last; Unique>] Run of ParseResults<TestParameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
@@ -25,7 +25,7 @@ module CmdParser =
                 | LogFile _ ->          "specify a log file to write the result breakdown into (default: eqx.log)."
                 | Run _ ->              "Run a load test"
     and [<NoComparison>]
-        TestArguments =
+        TestParameters =
         | [<AltCommandLine("-t"); Unique>] Name of Tests.Test
         | [<AltCommandLine("-s")>] Size of int
         | [<AltCommandLine("-C")>] Cached
@@ -35,9 +35,9 @@ module CmdParser =
         | [<AltCommandLine("-d")>] DurationM of float
         | [<AltCommandLine("-e")>] ErrorCutoff of int64
         | [<AltCommandLine("-i")>] ReportIntervalS of int
-        | [<CliPrefix(CliPrefix.None); Last; Unique>] Memory of ParseResults<Storage.MemoryStore.Arguments>
-        | [<CliPrefix(CliPrefix.None); Last; Unique>] Es of ParseResults<Storage.EventStore.Arguments>
-        | [<CliPrefix(CliPrefix.None); Last; Unique>] Cosmos of ParseResults<Storage.Cosmos.Arguments>
+        | [<CliPrefix(CliPrefix.None); Last; Unique>] Memory of ParseResults<Storage.MemoryStore.Parameters>
+        | [<CliPrefix(CliPrefix.None); Last; Unique>] Es of ParseResults<Storage.EventStore.Parameters>
+        | [<CliPrefix(CliPrefix.None); Last; Unique>] Cosmos of ParseResults<Storage.Cosmos.Parameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Name _ ->             "specify which test to run. (default: Favorite)."
@@ -52,15 +52,15 @@ module CmdParser =
                 | Memory _ ->           "target in-process Transient Memory Store (Default if not other target specified)."
                 | Es _ ->               "Run transactions in-process against EventStore."
                 | Cosmos _ ->           "Run transactions in-process against CosmosDb."
-    and TestInfo(args: ParseResults<TestArguments>) =
-        member __.Options = args.GetResults Cached @ args.GetResults Unfolds
-        member __.Cache = __.Options |> List.contains Cached
-        member __.Unfolds = __.Options |> List.contains Unfolds
-        member __.BatchSize = args.GetResult(BatchSize,500)
-        member __.Test = args.GetResult(Name,Tests.Favorite)
-        member __.ErrorCutoff = args.GetResult(ErrorCutoff,10000L)
-        member __.TestsPerSecond = args.GetResult(TestsPerSecond,1000)
-        member __.Duration = args.GetResult(DurationM,30.) |> TimeSpan.FromMinutes
+    and TestArguments(args: ParseResults<TestParameters>) =
+        member __.Options =             args.GetResults Cached @ args.GetResults Unfolds
+        member __.Cache =               __.Options |> List.contains Cached
+        member __.Unfolds =             __.Options |> List.contains Unfolds
+        member __.BatchSize =           args.GetResult(BatchSize,500)
+        member __.Test =                args.GetResult(Name,Tests.Favorite)
+        member __.ErrorCutoff =         args.GetResult(ErrorCutoff,10000L)
+        member __.TestsPerSecond =      args.GetResult(TestsPerSecond,1000)
+        member __.Duration =            args.GetResult(DurationM,30.) |> TimeSpan.FromMinutes
         member __.ReportingIntervals =
             match args.GetResults(ReportIntervalS) with
             | [] -> TimeSpan.FromSeconds 10.|> Seq.singleton
@@ -69,16 +69,17 @@ module CmdParser =
         member __.ConfigureStore(log : ILogger, createStoreLog) = 
             match args.TryGetSubCommand() with
             | Some (Es sargs) ->
-                let storeLog = createStoreLog <| sargs.Contains Storage.EventStore.Arguments.VerboseStore
+                let storeLog = createStoreLog <| sargs.Contains Storage.EventStore.Parameters.VerboseStore
                 log.Information("Running transactions in-process against EventStore with storage options: {options:l}", __.Options)
                 storeLog, Storage.EventStore.config (log,storeLog) (__.Cache, __.Unfolds, __.BatchSize) sargs
             | Some (Cosmos sargs) ->
-                let storeLog = createStoreLog <| sargs.Contains Storage.Cosmos.Arguments.VerboseStore
+                let storeLog = createStoreLog <| sargs.Contains Storage.Cosmos.Parameters.VerboseStore
                 log.Information("Running transactions in-process against CosmosDb with storage options: {options:l}", __.Options)
-                storeLog, Storage.Cosmos.config (log,storeLog) (__.Cache, __.Unfolds, __.BatchSize) (Storage.Cosmos.Info sargs)
-            | _  | Some (Memory _) ->
+                storeLog, Storage.Cosmos.config (log,storeLog) (__.Cache, __.Unfolds, __.BatchSize) (Storage.Cosmos.Arguments sargs)
+            | Some (Memory _) ->
                 log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", __.Options)
                 createStoreLog false, Storage.MemoryStore.config ()
+            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: cosmos, memory, es")
 
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration().Destructure.FSharpTypes()
@@ -107,7 +108,7 @@ module LoadTest =
                 with e -> domainLog.Warning(e, "Test threw an exception"); e.Reraise () }
         execute
     let private createResultLog fileName = LoggerConfiguration().WriteTo.File(fileName).CreateLogger()
-    let run (log: ILogger) (verbose,verboseConsole,maybeSeq) reportFilename (a:CmdParser.TestInfo) =
+    let run (log: ILogger) (verbose,verboseConsole,maybeSeq) reportFilename (a:CmdParser.TestArguments) =
         let createStoreLog verboseStore = createStoreLog verboseStore verboseConsole maybeSeq
         let storeLog, storeConfig: ILogger * Storage.StorageConfig = a.ConfigureStore(log, createStoreLog)
         let runSingleTest : ClientId -> Async<unit> =
@@ -143,7 +144,7 @@ let createDomainLog verbose verboseConsole maybeSeqEndpoint =
 [<EntryPoint>]
 let main argv =
     let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-    let parser = ArgumentParser.Create<Arguments>(programName = programName)
+    let parser = ArgumentParser.Create<Parameters>(programName = programName)
     try
         let args = parser.ParseCommandLine argv
         let verboseConsole = args.Contains VerboseConsole
@@ -153,8 +154,8 @@ let main argv =
         match args.GetSubCommand() with
         | Run rargs ->
             let reportFilename = args.GetResult(LogFile,programName+".log") |> fun n -> System.IO.FileInfo(n).FullName
-            LoadTest.run log (verbose,verboseConsole,maybeSeq) reportFilename (TestInfo rargs)
-        | _ -> failwith "Please specify a valid subcommand :- init, initAux, project or run"
+            LoadTest.run log (verbose,verboseConsole,maybeSeq) reportFilename (TestArguments rargs)
+        | _ -> failwith "Please specify a valid subcommand :- run"
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | Storage.MissingArg msg -> eprintfn "%s" msg; 1

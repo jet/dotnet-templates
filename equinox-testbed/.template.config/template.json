@@ -4,14 +4,15 @@
   "classifications": [
     "Equinox",
     "Event Sourcing",
-    "CosmosDb"
+    "CosmosDb",
+	"EventStore"
   ],
   "tags": {
     "language": "F#"
   },
   "identity": "Equinox.Template.Testbed",
   "name": "Equinox Testbed",
-  "shortName": "eqxtest",
+  "shortName": "eqxtestbed",
   "sourceName": "TestbedTemplate",
   "preferNameDirectory": true
 }

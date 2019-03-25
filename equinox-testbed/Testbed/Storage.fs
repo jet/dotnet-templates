@@ -12,7 +12,7 @@ type StorageConfig =
     | Cosmos of Equinox.Cosmos.CosmosGateway * Equinox.Cosmos.CachingStrategy * unfolds: bool * databaseId: string * collectionId: string
     
 module MemoryStore =
-    type [<NoEquality; NoComparison>] Arguments =
+    type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine("-vs")>] VerboseStore
         interface IArgParserTemplate with
             member a.Usage = a |> function
@@ -26,7 +26,7 @@ module Cosmos =
         | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argment or via the %s environment variable" msg key)
         | x -> x 
 
-    type [<NoEquality; NoComparison>] Arguments =
+    type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine("-vs")>] VerboseStore
         | [<AltCommandLine("-m")>] ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine("-o")>] Timeout of float
@@ -35,7 +35,6 @@ module Cosmos =
         | [<AltCommandLine("-s")>] Connection of string
         | [<AltCommandLine("-d")>] Database of string
         | [<AltCommandLine("-c")>] Collection of string
-        | [<AltCommandLine("-a")>] PageSize of int
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
@@ -47,17 +46,15 @@ module Cosmos =
                 | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
                 | Database _ ->         "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
                 | Collection _ ->       "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION, test)."
-                | PageSize _ ->         "specify maximum number of events to record on a page before switching to a new one (default: 1)"
-    type Info(args : ParseResults<Arguments>) =
-        member __.Connection =  match args.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Database =    match args.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Collection =  match args.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
+    type Arguments(a : ParseResults<Parameters>) =
+        member __.Mode = a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+        member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
+        member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
 
-        member __.Timeout = args.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
-        member __.Mode = args.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
-        member __.Retries = args.GetResult(Retries,1)
-        member __.MaxRetryWaitTime = args.GetResult(RetriesWaitTime, 5)
-        member __.PageSize = args.GetResult(PageSize,1)
+        member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+        member __.Retries =             a.GetResult(Retries,1)
+        member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
 
     /// Standing up an Equinox instance is necessary to run for test purposes; You'll need to either:
     /// 1) replace connection below with a connection string or Uri+Key for an initialized Equinox instance with a database and collection named "equinox-test"
@@ -66,28 +63,24 @@ module Cosmos =
     open Equinox.Cosmos
     open Serilog
 
-    let private createGateway connection (maxItems,maxEvents) = CosmosGateway(connection, CosmosBatchingPolicy(defaultMaxItems=maxItems, maxEventsPerSlice=maxEvents))
-    let private ctx (log: ILogger, storeLog: ILogger) (a : Info) =
+    let private createGateway connection maxItems = CosmosGateway(connection, CosmosBatchingPolicy(defaultMaxItems=maxItems))
+    let private context (log: ILogger, storeLog: ILogger) (a : Arguments) =
         let (Discovery.UriAndKey (endpointUri,_)) as discovery = a.Connection|> Discovery.FromConnectionString
         log.Information("CosmosDb {mode} {connection} Database {database} Collection {collection}",
             a.Mode, endpointUri, a.Database, a.Collection)
-        log.Information("CosmosDb timeout: {timeout}s, {retries} retries; Throttling maxRetryWaitTime {maxRetryWaitTime}",
+        Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
             (let t = a.Timeout in t.TotalSeconds), a.Retries, a.MaxRetryWaitTime)
-        let c = CosmosConnector(log=storeLog, mode=a.Mode, requestTimeout=a.Timeout, maxRetryAttemptsOnThrottledRequests=a.Retries, maxRetryWaitTimeInSeconds=a.MaxRetryWaitTime)
-        discovery, a.Database, a.Collection, c
-    let connect (log : ILogger, storeLog) info =
-        let discovery, dbName, collName, connector = ctx (log,storeLog) info
-        let pageSize = info.PageSize
-        log.Information("CosmosDb MaxItems {maxItems} MaxEventsPerSlice {pageSize}", pageSize)
-        dbName, collName, pageSize, connector.Connect("TestbedTemplate", discovery) |> Async.RunSynchronously
+        let connector = CosmosConnector(a.Timeout, a.Retries, a.MaxRetryWaitTime, storeLog, mode=a.Mode)
+        discovery, a.Database, a.Collection, connector
     let config (log: ILogger, storeLog) (cache, unfolds, batchSize) info =
-        let dbName, collName, pageSize, conn = connect (log, storeLog) info
+        let discovery, dbName, collName, connector = context (log, storeLog) info
+        let conn = connector.Connect("TestbedTemplate", discovery) |> Async.RunSynchronously
         let cacheStrategy =
             if cache then
                 let c = Caching.Cache("TestbedTemplate", sizeMb = 50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else CachingStrategy.NoCaching
-        StorageConfig.Cosmos (createGateway conn (batchSize,pageSize), cacheStrategy, unfolds, dbName, collName)
+        StorageConfig.Cosmos (createGateway conn batchSize, cacheStrategy, unfolds, dbName, collName)
 
     open Serilog.Events
     open Equinox.Cosmos.Store
@@ -156,7 +149,7 @@ module Cosmos =
 ///   1. cinst eventstore-oss -y # where cinst is an invocation of the Chocolatey Package Installer on Windows
 ///   2. & $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
 module EventStore =
-    type [<NoEquality; NoComparison>] Arguments =
+    type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine("-vs")>] VerboseStore
         | [<AltCommandLine("-o")>] Timeout of float
         | [<AltCommandLine("-r")>] Retries of int
@@ -178,26 +171,24 @@ module EventStore =
 
     open Equinox.EventStore
 
-    type Info(args : ParseResults<Arguments>) =
-        member __.Host = args.GetResult(Host,"localhost")
-        member __.Credentials = args.GetResult(Username,"admin"), args.GetResult(Password,"changeit")
+    type Arguments(a : ParseResults<Parameters>) =
+        member __.Host =                a.GetResult(Host,"localhost")
+        member __.Credentials =         a.GetResult(Username,"admin"), a.GetResult(Password,"changeit")
 
-        member __.Timeout = args.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
-        member __.Retries = args.GetResult(Retries, 1)
-        member __.HeartbeatTimeout = args.GetResult(HeartbeatTimeout,1.5) |> float |> TimeSpan.FromSeconds
-        member __.ConcurrentOperationsLimit = args.GetResult(ConcurrentOperationsLimit,5000)
+        member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+        member __.Retries =             a.GetResult(Retries, 1)
+        member __.HeartbeatTimeout =    a.GetResult(HeartbeatTimeout,1.5) |> float |> TimeSpan.FromSeconds
+        member __.ConcurrentOperationsLimit = a.GetResult(ConcurrentOperationsLimit,5000)
 
-    open Serilog
-
-    let private connect (log: ILogger) (dnsQuery, heartbeatTimeout, col) (username, password) (operationTimeout, operationRetries) =
+    let private connect (log: Serilog.ILogger) (dnsQuery, heartbeatTimeout, col) (username, password) (operationTimeout, operationRetries) =
         GesConnector(username, password, reqTimeout=operationTimeout, reqRetries=operationRetries,
                 heartbeatTimeout=heartbeatTimeout, concurrentOperationsLimit = col,
                 log=(if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
                 tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
             .Establish("TestbedTemplate", Discovery.GossipDns dnsQuery, ConnectionStrategy.ClusterTwinPreferSlaveReads)
     let private createGateway connection batchSize = GesGateway(connection, GesBatchingPolicy(maxBatchSize = batchSize))
-    let config (log: ILogger, storeLog) (cache, unfolds, batchSize) (args : ParseResults<Arguments>) =
-        let a = Info(args)
+    let config (log: Serilog.ILogger, storeLog) (cache, unfolds, batchSize) (args : ParseResults<Parameters>) =
+        let a = Arguments(args)
         let (timeout, retries) as operationThrottling = a.Timeout, a.Retries
         let heartbeatTimeout = a.HeartbeatTimeout
         let concurrentOperationsLimit = a.ConcurrentOperationsLimit

@@ -82,7 +82,7 @@ module Domain =
 open Microsoft.Extensions.DependencyInjection
 
 let serializationSettings = Newtonsoft.Json.JsonSerializerSettings()
-let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.JsonNet.JsonUtf8.Create<'Union>(serializationSettings)
+let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.NewtonsoftJson.Json.Create<'Union>(serializationSettings)
 
 type StreamResolver(storage) =
     member __.Resolve
