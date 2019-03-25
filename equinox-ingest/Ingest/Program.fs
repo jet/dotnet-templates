@@ -616,7 +616,7 @@ module EventStoreReader =
                 return false
             | Tranche (range, batchSize) ->
                 use _ = Serilog.Context.LogContext.PushProperty("Tranche",chunk range.Current)
-                Log.Warning("Reading chunk; batch size {bs}", batchSize)
+                Log.Warning("Commencing tranche, batch size {bs}", batchSize)
                 let reader = ReaderGroup(conn, enumEvents, postBatch)
                 let! res = reader.Pump(range, batchSize, __.SlicesStats, __.OverallStats)
                 match res with
@@ -760,6 +760,7 @@ let main argv =
             let destination = cosmos.Connect "ProjectorTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
+        Thread.Sleep(100) // https://github.com/EventStore/EventStore/issues/1899
         run ctx source readerSpec (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
