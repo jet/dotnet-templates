@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Equinox",
+    "Event Sourcing",
+    "CosmosDb",
+    "ChangeFeed"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Equinox.Template.CosmosEtl",
+  "name": "Equinox Extract/Transform/Load",
+  "shortName": "eqxetl",
+  "sourceName": "EtlTemplate",
+  "preferNameDirectory": true,
+
+  "symbols": {
+    "marveleqx": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Include example code to transform from the Equinox V0 schema to that of `Equinox.Cosmos`"
+    }
+  }
+}
