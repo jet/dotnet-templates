@@ -164,7 +164,11 @@ let mkRangeProjector (broker, topic) =
     let disposeProducer = (producer :> IDisposable).Dispose
     let projectBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.Timestamp; d = e.Data; m = e.Meta }
+        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent =
+            // Late breaking hack compensating for the way the Equinox.Codec JsonConverter renders invalid json
+            // TODO remove when it's fixed
+            let meta' = if e.Meta = null || e.Meta.Length = 0 then System.Text.Encoding.UTF8.GetBytes("{}") else e.Meta
+            { s = e.Stream; i = e.Index; c = e.EventType; t = e.Timestamp; d = e.Data; m = meta' }
         let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map toKafkaEvent |> Array.ofSeq) |> Stopwatch.Time 
         let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
         let! et,_ = producer.ProduceBatch es |> Stopwatch.Time
@@ -183,9 +187,9 @@ let createRangeHandler () =
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
         let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.length) |> Stopwatch.Time
         let r = ctx.FeedResponse
-        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge:6}RU {l:n1}s Parse {events,5} events {p:n3}s",
-            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = r.RequestCharge in c.ToString("n1")), float sw.ElapsedMilliseconds / 1000., 
-            events, (let e = pt.Elapsed in e.TotalSeconds))
+        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s",
+            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = r.RequestCharge in c.ToString("n1")),
+            float sw.ElapsedMilliseconds / 1000., events, (let e = pt.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
     ChangeFeedObserver.Create(Log.Logger, processBatch)
