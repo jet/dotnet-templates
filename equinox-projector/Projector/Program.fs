@@ -170,7 +170,7 @@ let mkRangeProjector (broker, topic) =
         let! et,_ = producer.ProduceBatch es |> Stopwatch.Time
         let r = ctx.FeedResponse
 
-        Log.Information("Read {range,2} -{token} {count} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
+        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
             ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = r.RequestCharge in c.ToString("n1")),
             float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
@@ -183,8 +183,8 @@ let createRangeHandler () =
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
         let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.length) |> Stopwatch.Time
         let r = ctx.FeedResponse
-        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge:n0}RU {l:n1}s Parse {events,5} events {p:n3}s",
-            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, r.RequestCharge, float sw.ElapsedMilliseconds / 1000., 
+        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge:6}RU {l:n1}s Parse {events,5} events {p:n3}s",
+            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = r.RequestCharge in c.ToString("n1")), float sw.ElapsedMilliseconds / 1000., 
             events, (let e = pt.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
