@@ -80,7 +80,7 @@ module CmdParser =
             |> fun intervals -> [| yield __.Duration; yield! intervals |]
         member __.ConfigureStore(log : ILogger, createStoreLog) = 
             match args.TryGetSubCommand() with
-//#if (memoryStore || (!cosmos && !eventStore))
+//#if memoryStore || (!cosmos && !eventStore)
             | Some (Memory _) ->
                 log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", __.Options)
                 createStoreLog false, Storage.MemoryStore.config ()
@@ -97,7 +97,7 @@ module CmdParser =
                 log.Information("Running transactions in-process against CosmosDb with storage options: {options:l}", __.Options)
                 storeLog, Storage.Cosmos.config (log,storeLog) (__.Cache, __.Unfolds, __.BatchSize) (Storage.Cosmos.Arguments sargs)
 //#endif
-#if (!cosmos && !eventStore) || (cosmos && eventStore)
+#if ((!cosmos && !eventStore) || (cosmos && eventStore))
             | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es, cosmos")
 #endif
 #if eventStore
