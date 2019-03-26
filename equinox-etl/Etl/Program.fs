@@ -396,11 +396,14 @@ let main argv =
             let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
         let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
-//#if !marveleqx
-        let createSyncHandler () = createRangeSyncHandler log target transform
-//#else
+#if marveleqx
         let createSyncHandler () = createRangeSyncHandler log target transformV0
-//#endif 
+#else
+        let createSyncHandler () = createRangeSyncHandler log target transform
+#endif
+//#if Testing
+        let createSyncHandler () = createRangeSyncHandler log target transformV0
+//#endif
         run (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, batchSize, lagFrequency)
             createSyncHandler
