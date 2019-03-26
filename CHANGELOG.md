@@ -16,6 +16,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - `dotnet new eqxweb` now uses Anonymous Records syntax HT [@ameier38](https://github.com/ameier38)
+- `dotnet new eqxprojector` now uses `Jet.ConfluentKafka.FSharp 1.0.0-preview2` (which uses `Confluent.Kafka 1.0.0-RC1`)
 
 ### Removed
 ### Fixed
