@@ -14,5 +14,26 @@
   "name": "Equinox Testbed",
   "shortName": "eqxtestbed",
   "sourceName": "TestbedTemplate",
-  "preferNameDirectory": true
+  "preferNameDirectory": true,
+
+  "symbols": {
+    "memoryStore": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "true",
+      "description": "'Store' Events in an In-Memory volatile store (for test purposes only.)"
+    },
+    "eventStore": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "false",
+      "description": "Store Events in an EventStore Cluster (see https://eventstore.org)"
+    },
+    "cosmos": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "false",
+      "description": "Store Events in an Azure CosmosDb Account"
+    }
+  }
 }

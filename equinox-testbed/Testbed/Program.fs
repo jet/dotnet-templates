@@ -35,9 +35,15 @@ module CmdParser =
         | [<AltCommandLine("-d")>] DurationM of float
         | [<AltCommandLine("-e")>] ErrorCutoff of int64
         | [<AltCommandLine("-i")>] ReportIntervalS of int
+//#if (memoryStore || (!cosmos && !eventStore))
         | [<CliPrefix(CliPrefix.None); Last; Unique>] Memory of ParseResults<Storage.MemoryStore.Parameters>
+//#endif
+//#if eventStore
         | [<CliPrefix(CliPrefix.None); Last; Unique>] Es of ParseResults<Storage.EventStore.Parameters>
+//#endif
+//#if cosmos
         | [<CliPrefix(CliPrefix.None); Last; Unique>] Cosmos of ParseResults<Storage.Cosmos.Parameters>
+//#endif
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Name _ ->             "specify which test to run. (default: Favorite)."
@@ -45,13 +51,19 @@ module CmdParser =
                 | Cached ->             "employ a 50MB cache, wire in to Stream configuration."
                 | Unfolds ->            "employ a store-appropriate Rolling Snapshots and/or Unfolding strategy."
                 | BatchSize _ ->        "Maximum item count to supply when querying. Default: 500"
-                | TestsPerSecond _ ->   "specify a target number of requests per second (default: 1000)."
+                | TestsPerSecond _ ->   "specify a target number of requests per second (default: 100)."
                 | DurationM _ ->        "specify a run duration in minutes (default: 30)."
                 | ErrorCutoff _ ->      "specify an error cutoff; test ends when exceeded (default: 10000)."
                 | ReportIntervalS _ ->  "specify reporting intervals in seconds (default: 10)."
+//#if (memoryStore || (!cosmos && !eventStore))
                 | Memory _ ->           "target in-process Transient Memory Store (Default if not other target specified)."
+//#endif
+//#if eventStore
                 | Es _ ->               "Run transactions in-process against EventStore."
+//#endif
+//#if cosmos
                 | Cosmos _ ->           "Run transactions in-process against CosmosDb."
+//#endif
     and TestArguments(args: ParseResults<TestParameters>) =
         member __.Options =             args.GetResults Cached @ args.GetResults Unfolds
         member __.Cache =               __.Options |> List.contains Cached
@@ -59,7 +71,7 @@ module CmdParser =
         member __.BatchSize =           args.GetResult(BatchSize,500)
         member __.Test =                args.GetResult(Name,Tests.Favorite)
         member __.ErrorCutoff =         args.GetResult(ErrorCutoff,10000L)
-        member __.TestsPerSecond =      args.GetResult(TestsPerSecond,1000)
+        member __.TestsPerSecond =      args.GetResult(TestsPerSecond,100)
         member __.Duration =            args.GetResult(DurationM,30.) |> TimeSpan.FromMinutes
         member __.ReportingIntervals =
             match args.GetResults(ReportIntervalS) with
@@ -68,18 +80,32 @@ module CmdParser =
             |> fun intervals -> [| yield __.Duration; yield! intervals |]
         member __.ConfigureStore(log : ILogger, createStoreLog) = 
             match args.TryGetSubCommand() with
+//#if (memoryStore || (!cosmos && !eventStore))
+            | Some (Memory _) ->
+                log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", __.Options)
+                createStoreLog false, Storage.MemoryStore.config ()
+//#endif
+//#if eventStore
             | Some (Es sargs) ->
                 let storeLog = createStoreLog <| sargs.Contains Storage.EventStore.Parameters.VerboseStore
                 log.Information("Running transactions in-process against EventStore with storage options: {options:l}", __.Options)
                 storeLog, Storage.EventStore.config (log,storeLog) (__.Cache, __.Unfolds, __.BatchSize) sargs
+//#endif
+//#if cosmos
             | Some (Cosmos sargs) ->
                 let storeLog = createStoreLog <| sargs.Contains Storage.Cosmos.Parameters.VerboseStore
                 log.Information("Running transactions in-process against CosmosDb with storage options: {options:l}", __.Options)
                 storeLog, Storage.Cosmos.config (log,storeLog) (__.Cache, __.Unfolds, __.BatchSize) (Storage.Cosmos.Arguments sargs)
-            | Some (Memory _) ->
-                log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", __.Options)
-                createStoreLog false, Storage.MemoryStore.config ()
-            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: cosmos, memory, es")
+//#endif
+#if (!cosmos && !eventStore) || (cosmos && eventStore)
+            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es, cosmos")
+#endif
+#if eventStore
+            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es")
+#endif
+#if cosmos
+            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, cosmos")
+#endif            
 
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration().Destructure.FSharpTypes()
@@ -108,7 +134,7 @@ module LoadTest =
                 with e -> domainLog.Warning(e, "Test threw an exception"); e.Reraise () }
         execute
     let private createResultLog fileName = LoggerConfiguration().WriteTo.File(fileName).CreateLogger()
-    let run (log: ILogger) (verbose,verboseConsole,maybeSeq) reportFilename (a:CmdParser.TestArguments) =
+    let run (log: ILogger) (verbose,verboseConsole,maybeSeq) reportFilename (a : CmdParser.TestArguments) =
         let createStoreLog verboseStore = createStoreLog verboseStore verboseConsole maybeSeq
         let storeLog, storeConfig: ILogger * Storage.StorageConfig = a.ConfigureStore(log, createStoreLog)
         let runSingleTest : ClientId -> Async<unit> =
@@ -127,11 +153,13 @@ module LoadTest =
         for r in results do
             resultFile.Information("Aggregate: {aggregate}", r)
         log.Information("Run completed; Current memory allocation: {bytes:n2} MiB", (GC.GetTotalMemory(true) |> float) / 1024./1024.)
+//#if cosmos
 
         match storeConfig with
         | Storage.StorageConfig.Cosmos _ ->
             Storage.Cosmos.dumpStats duration log
         | _ -> ()
+//#endif
 
 let createDomainLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
@@ -147,12 +175,12 @@ let main argv =
     let parser = ArgumentParser.Create<Parameters>(programName = programName)
     try
         let args = parser.ParseCommandLine argv
-        let verboseConsole = args.Contains VerboseConsole
-        let maybeSeq = if args.Contains LocalSeq then Some "http://localhost:5341" else None
-        let verbose = args.Contains Verbose
-        let log = createDomainLog verbose verboseConsole maybeSeq
         match args.GetSubCommand() with
         | Run rargs ->
+            let verboseConsole = args.Contains VerboseConsole
+            let maybeSeq = if args.Contains LocalSeq then Some "http://localhost:5341" else None
+            let verbose = args.Contains Verbose
+            let log = createDomainLog verbose verboseConsole maybeSeq
             let reportFilename = args.GetResult(LogFile,programName+".log") |> fun n -> System.IO.FileInfo(n).FullName
             LoadTest.run log (verbose,verboseConsole,maybeSeq) reportFilename (TestArguments rargs)
         | _ -> failwith "Please specify a valid subcommand :- run"

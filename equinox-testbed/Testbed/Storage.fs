@@ -7,10 +7,17 @@ exception MissingArg of string
 
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type StorageConfig =
+//#if (memoryStore || (!cosmos && !eventStore))
     | Memory of Equinox.MemoryStore.VolatileStore
+//#endif
+//#if eventStore
     | Es of Equinox.EventStore.GesGateway * Equinox.EventStore.CachingStrategy option * unfolds: bool
+//#endif
+//#if cosmos
     | Cosmos of Equinox.Cosmos.CosmosGateway * Equinox.Cosmos.CachingStrategy * unfolds: bool * databaseId: string * collectionId: string
+//#endif
     
+//#if (memoryStore || (!cosmos && !eventStore))
 module MemoryStore =
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine("-vs")>] VerboseStore
@@ -20,6 +27,8 @@ module MemoryStore =
     let config () =
         StorageConfig.Memory (Equinox.MemoryStore.VolatileStore())
 
+//#endif
+//#if cosmos
 module Cosmos =
     let envBackstop msg key =
         match Environment.GetEnvironmentVariable key with
@@ -145,6 +154,8 @@ module Cosmos =
         let logPeriodicRate name count ru = log.Information("rp{name} {count:n0} = ~{ru:n0} RU", name, count, ru)
         for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d)
 
+//#endif
+//#if eventStore
 /// To establish a local node to run the tests against:
 ///   1. cinst eventstore-oss -y # where cinst is an invocation of the Chocolatey Package Installer on Windows
 ///   2. & $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
@@ -201,3 +212,4 @@ module EventStore =
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
             else None
         StorageConfig.Es ((createGateway conn batchSize), cacheStrategy, unfolds)
+//#endif
