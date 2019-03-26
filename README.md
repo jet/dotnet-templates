@@ -7,6 +7,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 - [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project.
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project _ported to C#_.
 - [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic.
+- [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models, using different stores and/or store configuration parameters.
 
 ## How to use
 
@@ -35,6 +36,18 @@ To use from the command line, the outline is:
     # (-k emits to Kafka and hence implies having a Consumer)
     dotnet new eqxprojector -k
     start README.md
+
+    # ... to add a Testbed
+    md -p ../tools/My.Tools.Testbed | Set-Location
+    # -e -c # add EventStore and CosmosDb suppport to got with the default support for MemoryStore
+    dotnet new eqxtestbed -c -e
+    start README.md
+    # run for 1 min with 10000 rps against an in-memory store
+    dotnet run -p Testbed -- run -d 1 -f 10000 memory
+    # run for 30 mins with 2000 rps against a local EventStore
+    dotnet run -p Testbed -- run -f 2000 es
+    # run for two minutes against CosmosDb (see https://github.com/jet/equinox#quickstart) for provisioning instructions
+    dotnet run -p Testbed -- run -d 2 cosmos
 
 ## CONTRIBUTING
 
