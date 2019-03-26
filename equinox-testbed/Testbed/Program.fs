@@ -110,7 +110,9 @@ module CmdParser =
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration().Destructure.FSharpTypes()
     let c = if verbose then c.MinimumLevel.Debug() else c
+//#if cosmos
     let c = c.WriteTo.Sink(Storage.Cosmos.RuCounterSink())
+//#endif
     let c = c.WriteTo.Console((if verbose && verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning), theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
     let c = match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
     c.CreateLogger() :> ILogger
@@ -158,13 +160,17 @@ module LoadTest =
         match storeConfig with
         | Storage.StorageConfig.Cosmos _ ->
             Storage.Cosmos.dumpStats duration log
+//#if eventStore || memory
         | _ -> ()
+//#endif
 //#endif
 
 let createDomainLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
     let c = if verbose then c.MinimumLevel.Debug() else c
+//#if cosmos
     let c = c.WriteTo.Sink(Storage.Cosmos.RuCounterSink())
+//#endif
     let c = c.WriteTo.Console((if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information), theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
     let c = match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
     c.CreateLogger()

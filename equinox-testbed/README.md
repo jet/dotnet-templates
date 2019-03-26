@@ -26,12 +26,12 @@ This project was generated using:
 
 1. read the [Equinox README section on Benchmarks](https://github.com/jet/equinox#benchmarks)
 
-2. running against in-Memory Store
+2. running against in-Memory Store (can be removed with `-m=false` if not invoked with `-e` or `-c`)
 
     It can be useful to baseline the intrinsic cost of your model's processing, including serialization/deserialization and the baseline costs of the Equinox Decision processing in the `Equinox` and `Equinox.Codec` packages without going out of process. This uses `Equinox.MemoryStore`, which uses a `ConcurrentDictionary` to store the streams. Tens of thousands of RPS are normally attainable without any issues
 
-      # Against in-memory store 10000rps, for 1 minute 
-      dotnet run -p Testbed -- run -d 1 -f 10000 memory
+       # run against in-memory store 10000rps, for 1 minute 
+       dotnet run -p Testbed -- run -d 1 -f 10000 memory
 
 2. running against EventStore (iff run with `-e`)
 
