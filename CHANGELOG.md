@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="2.0.0"></a>
+## [2.0.0] - 2019-03-26
+
+### Added
 
 - `dotnet new eqxprojector` template, providing a CosmosDb `ChangeFeedProcessor` host app, with or without a Kafka Producer and Kafka Consumer host app using [the `Jet.ConfluentKafka.FSharp` wrapper for `Confluent.Kafka` v `1.0.0-beta3`](https://github.com/jet/Jet.ConfluentKafka.FSharp/tree/v1) [#11](https://github.com/jet/dotnet-templates/pull/11)
 - `dotnet new eqxtestbed` template, providing a host that allows running back-to-back benchmarks when prototyping models, using different stores and/or store configuration parameters [#14](https://github.com/jet/dotnet-templates/pull/14)
@@ -51,6 +59,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/1.2.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.0.0...HEAD
+[2.0.0]: https://github.com/jet/dotnet-templates/compare/1.2.0...2.0.0
 [1.2.0]: https://github.com/jet/dotnet-templates/compare/1.1.1...1.2.0
 [1.1.1]: https://github.com/jet/dotnet-templates/compare/1061b32ff1d86633e4adb0ce591992aea9c48c1e...1.1.1
