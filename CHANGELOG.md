@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- `dotnet new eqxprojector` now uses `Jet.ConfluentKafka.FSharp 1.0.0-rc1` (which uses `Confluent.Kafka 1.0.0-RC2`, `librdkafka 1.0.0`)
+
 ### Removed
 ### Fixed
 
