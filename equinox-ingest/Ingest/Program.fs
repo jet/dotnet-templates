@@ -748,11 +748,10 @@ let enumEvents (xs : EventStore.ClientAPI.ResolvedEvent[]) = seq {
             || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
             || e.EventStreamId.StartsWith("$") 
             || e.EventStreamId.EndsWith("_checkpoints")
-            || e.EventStreamId.EndsWith("_checkpoint")
-            || e.EventStreamId = "thor_useast2_to_backup_qa2_main" ->
+            || e.EventStreamId.EndsWith("_checkpoint") ->
                 Choice2Of2 e
         | e when eb > Ingester.cosmosPayloadLimit ->
-            Log.Error("ES Event Id {eventId} size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}", e.EventId, eb, Ingester.cosmosPayloadLimit)
+            Log.Error("ES Event Id {eventId} (#{index} in {stream}, type {type}) size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}", e.EventId, e.EventNumber, e.EventStreamId, e.EventType, eb, Ingester.cosmosPayloadLimit)
             Choice2Of2 e
         | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata, e.Timestamp))
 }
