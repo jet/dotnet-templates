@@ -38,7 +38,7 @@ module CmdParser =
                 | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
                 | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
-                | LeaseCollectionDestination _ ->"specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
+                | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
@@ -57,11 +57,11 @@ module CmdParser =
         member x.BuildChangeFeedParams() =
             let disco, db =
                 match a.TryGetResult LeaseCollectionSource, a.TryGetResult LeaseCollectionDestination with
-                | None, None -> x.Source.Discovery, { database = x.Source.Database; collection = x.Source.Collection + "-aux" }
-                | Some sc, None -> x.Source.Discovery, { database = x.Source.Database; collection = sc }
-                | None, Some dc -> x.Destination.Discovery, { database = x.Destination.Database; collection = dc }
+                | None, None ->     x.Source.Discovery, { database = x.Source.Database; collection = x.Source.Collection + "-aux" }
+                | Some sc, None ->  x.Source.Discovery, { database = x.Source.Database; collection = sc }
+                | None, Some dc ->  x.Destination.Discovery, { database = x.Destination.Database; collection = dc }
                 | Some _, Some _ -> raise (MissingArg "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
-            Log.Information("Processing {leaseId} in {db} in batches of {batchSize}", x.LeaseId, db, x.BatchSize)
+            Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} in batches of {batchSize}", x.LeaseId, db.database, db.collection, x.BatchSize)
             if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             disco, db, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
@@ -73,6 +73,8 @@ module CmdParser =
         | [<AltCommandLine "-s">] SourceConnection of string
         | [<AltCommandLine "-d">] SourceDatabase of string
         | [<AltCommandLine "-c"; Unique(*Mandatory is not supported*)>] SourceCollection of string
+        | [<AltCommandLine "-x">] CategoryBlacklist of string
+        | [<AltCommandLine "-i">] CategoryWhitelist of string
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<DestinationParameters>
         interface IArgParserTemplate with
             member a.Usage =
@@ -84,6 +86,8 @@ module CmdParser =
                 | SourceRetries _ ->        "specify operation retries (default: 1)."
                 | SourceRetriesWaitTime _ ->"specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                 | SourceConnectionMode _ -> "override the connection mode (default: DirectTcp)."
+                | CategoryBlacklist _ ->    "Category whitelist"
+                | CategoryWhitelist _ ->    "Category blacklist"
                 | Cosmos _ ->               "CosmosDb destination parameters."
     and SourceArguments(a : ParseResults<SourceParameters>) =
         member val Destination =        DestinationArguments(a.GetResult Cosmos)
@@ -103,8 +107,14 @@ module CmdParser =
                 x.Mode, endpointUri, x.Database, x.Collection)
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
+            let catFilter = 
+                match a.GetResults CategoryBlacklist, a.GetResults CategoryWhitelist with
+                | [], [] ->     Log.Information("Not filtering by category"); fun _ -> true 
+                | bad, [] ->    let black = Set.ofList bad in Log.Information("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
+                | [], good ->   let white = Set.ofList good in Log.Information("Only copying categories: {cats}", white); fun x -> white.Contains x
+                | _, _ -> raise (MissingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
             let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; collection = x.Collection }, c.ConnectionPolicy
+            discovery, { database = x.Database; collection = x.Collection }, c.ConnectionPolicy, catFilter
     and [<NoEquality; NoComparison>] DestinationParameters =
         | [<AltCommandLine("-s")>] Connection of string
         | [<AltCommandLine("-d")>] Database of string
@@ -333,6 +343,8 @@ let createRangeSyncHandler log (ctx: Core.CosmosContext) (transform : Microsoft.
 
 open Microsoft.Azure.Documents
 
+let category (streamName : string) = streamName.Split([|'-'|],2).[0]
+
 //#if marveleqx
 [<RequireQualifiedAccess>]
 module EventV0Parser =
@@ -379,39 +391,36 @@ module EventV0Parser =
               member __.Timestamp = x.c
               member __.Stream = x.s }
 
-let transformV0 (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
+let transformV0 catFilter (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
     let streamName = if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+parsed.Stream
-    yield { stream = streamName; span = { index = parsed.Index; events = [| parsed |] } } }
+    if catFilter (category streamName) then
+        yield { stream = streamName; span = { index = parsed.Index; events = [| parsed |] } } }
 //#else
-let transformOrFilter (changeFeedDocument: Document) : Ingester.Batch seq = seq {
+let transformOrFilter catFilter (changeFeedDocument: Document) : Ingester.Batch seq = seq {
     for e in DocumentParser.enumEvents changeFeedDocument do
-        match e.Stream.Split([|'-'|],2).[0] with
-        | "PickTicket" ->
+        if catFilter (category e.Stream) then
             // NB the index needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-            yield { stream = e.Stream; span = { index = e.Index; events = [| e |] } }
-        | _ -> ()
-}
+            yield { stream = e.Stream; span = { index = e.Index; events = [| e |] } } }
 //#endif
 
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
         let log = Logging.initialize args.Verbose args.ChangeFeedVerbose
-        let discovery, source, connectionPolicy = args.Source.BuildConnectionDetails()
+        let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let target =
             let destination = args.Destination.Connect "EtlTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
         let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
 #if marveleqx
-        let createSyncHandler () = createRangeSyncHandler log target transformV0
+        let createSyncHandler () = createRangeSyncHandler log target (transformV0 catFilter)
 #else
-        let createSyncHandler () = createRangeSyncHandler log target transformOrFilter
+        let createSyncHandler () = createRangeSyncHandler log target (transformOrFilter catFilter)
+        // Uncomment to test marveleqx mode
+        // let createSyncHandler () = createRangeSyncHandler log target (transformV0 catFilter)
 #endif
-//#if Testing
-        let createSyncHandler () = createRangeSyncHandler log target transformV0
-//#endif
         run (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, batchSize, lagFrequency)
             createSyncHandler
