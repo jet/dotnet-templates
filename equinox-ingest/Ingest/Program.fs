@@ -99,7 +99,7 @@ module CmdParser =
                 let log = if log.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose log else Logger.SerilogNormal log
                 GesConnector(username, password, operationTimeout, operationRetries,heartbeatTimeout=heartbeatTimeout,
                         concurrentOperationsLimit=col, log=log, tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
-                    .Establish("ProjectorTemplate", discovery, connection)
+                    .Establish("IngestTemplate", discovery, connection)
             member val Cosmos =             Cosmos.Arguments(a.GetResult Cosmos)
             member __.Host =                match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
             member __.Port =                match a.TryGetResult Port       with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
@@ -770,7 +770,7 @@ let main argv =
         let writerQueueLen, writerCount, readerQueueLen = 2048,64,4096*10*10
         let cosmos = args.EventStore.Cosmos // wierd nesting is due to me not finding a better way to express the semantics in Argu
         let ctx =
-            let destination = cosmos.Connect "ProjectorTemplate" |> Async.RunSynchronously
+            let destination = cosmos.Connect "IngestTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
         Thread.Sleep(100) // https://github.com/EventStore/EventStore/issues/1899
