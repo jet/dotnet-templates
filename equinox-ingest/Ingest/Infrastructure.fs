@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module private SyncTemplate.Infrastructure
+module private IngestTemplate.Infrastructure
 
 open Equinox.Store // AwaitTaskCorrect
 open System

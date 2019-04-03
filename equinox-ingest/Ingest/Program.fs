@@ -1,4 +1,4 @@
-﻿module SyncTemplate.Program
+﻿module IngestTemplate.Program
 
 open Equinox.Store // Infra
 open FSharp.Control

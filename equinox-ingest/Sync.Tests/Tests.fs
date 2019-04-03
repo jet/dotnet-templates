@@ -1,7 +1,7 @@
-module SyncTemplate.Tests.IngesterTests
+module IngestTemplate.Tests.IngesterTests
 
 open Swensen.Unquote
-open SyncTemplate.Program.Ingester
+open IngestTemplate.Program.Ingester
 open Xunit
 
 let canonicalTime = System.DateTimeOffset.UtcNow

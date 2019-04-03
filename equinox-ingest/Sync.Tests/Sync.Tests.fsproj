@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Sync\Sync.fsproj" />
+    <ProjectReference Include="..\Ingest\Ingest.fsproj" />
   </ItemGroup>
 
 </Project>
