@@ -12,7 +12,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - `dotnet new eqxprojector` now uses `Jet.ConfluentKafka.FSharp 1.0.0-rc2` (which uses `Confluent.Kafka 1.0.0-RC3`, `librdkafka 1.0.0`)
-- Target `Equinox`.* v `2.0.0-preview3`
+- Target `Equinox`.* v `2.0.0-preview4`
 - `dotnet new eqxetl` now supports command-line category white/blacklist [#18](https://github.com/jet/dotnet-templates/pull/18)
 - `dotnet new eqxetl` now supports command-line selection of an `aux` collection in either the `source` or destination collections [#18](https://github.com/jet/dotnet-templates/pull/18)
 

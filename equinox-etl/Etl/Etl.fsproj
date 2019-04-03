@@ -14,7 +14,7 @@
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.2.0" />
     <PackageReference Include="Destructurama.FSharp.NetCore" Version="1.0.14" />
-    <PackageReference Include="Equinox.Cosmos.Projection" Version="2.0.0-preview3" />
+    <PackageReference Include="Equinox.Cosmos.Projection" Version="2.0.0-preview4" />
     <PackageReference Include="Microsoft.Azure.DocumentDB.ChangeFeedProcessor" Version="2.2.6" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
