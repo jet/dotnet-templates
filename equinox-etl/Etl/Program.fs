@@ -23,82 +23,98 @@ module CmdParser =
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
-        | [<AltCommandLine "-v"; Unique>] Verbose
-        | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
-        | [<AltCommandLine "-s"; Unique>] LeaseCollectionSuffix of string
+        | [<AltCommandLine "-as"; Unique>] LeaseCollectionSource of string
+        | [<AltCommandLine "-ad"; Unique>] LeaseCollectionDestination of string
         | [<AltCommandLine "-i"; Unique>] ForceStartFromHere
         | [<AltCommandLine "-m"; Unique>] BatchSize of int
         | [<AltCommandLine "-l"; Unique>] LagFreqS of float
+        | [<AltCommandLine "-v"; Unique>] Verbose
+        | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | LeaseCollectionSuffix _ ->"specify Collection Name suffix for Leases collection, relative to `cosmos` arguments (default: `-aux`)."
                 | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
+                | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
+                | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | Source _ ->               "CosmosDb input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.LeaseId =             a.GetResult ConsumerGroupName
-
-        member __.Verbose =             a.Contains Verbose
-
-        member __.Suffix =              a.GetResult(LeaseCollectionSuffix,"-aux")
-        member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
+        member __.StartFromHere =       a.Contains ForceStartFromHere
         member __.BatchSize =           a.GetResult(BatchSize,1000)
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
-        member __.AuxCollectionName =   __.Destination.Collection + __.Suffix
-        member __.StartFromHere =       a.Contains ForceStartFromHere
 
-        member val Source = SourceArguments(a.GetResult Source)
+        member __.Verbose =             a.Contains Verbose
+        member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
+
+        member val Source : SourceArguments = SourceArguments(a.GetResult Source)
         member __.Destination : DestinationArguments = __.Source.Destination
         member x.BuildChangeFeedParams() =
-            Log.Information("Processing {leaseId} in {auxCollName} in batches of {batchSize}", x.LeaseId, x.AuxCollectionName, x.BatchSize)
+            let disco, db =
+                match a.TryGetResult LeaseCollectionSource, a.TryGetResult LeaseCollectionDestination with
+                | None, None ->     x.Source.Discovery, { database = x.Source.Database; collection = x.Source.Collection + "-aux" }
+                | Some sc, None ->  x.Source.Discovery, { database = x.Source.Database; collection = sc }
+                | None, Some dc ->  x.Destination.Discovery, { database = x.Destination.Database; collection = dc }
+                | Some _, Some _ -> raise (MissingArg "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
+            Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} in batches of {batchSize}", x.LeaseId, db.database, db.collection, x.BatchSize)
             if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
-            x.Destination.Discovery, { database = x.Destination.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
+            disco, db, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
     and [<NoEquality; NoComparison>] SourceParameters =
         | [<AltCommandLine "-m">] SourceConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-o">] SourceTimeout of float
         | [<AltCommandLine "-r">] SourceRetries of int
         | [<AltCommandLine "-rt">] SourceRetriesWaitTime of int
-        | [<AltCommandLine "-s"; Unique(*Mandatory is not supported*)>] SourceConnection of string
-        | [<AltCommandLine "-d"; Unique(*Mandatory is not supported*)>] SourceDatabase of string
+        | [<AltCommandLine "-s">] SourceConnection of string
+        | [<AltCommandLine "-d">] SourceDatabase of string
         | [<AltCommandLine "-c"; Unique(*Mandatory is not supported*)>] SourceCollection of string
+        | [<AltCommandLine "-x">] CategoryBlacklist of string
+        | [<AltCommandLine "-i">] CategoryWhitelist of string
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<DestinationParameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
+                | SourceConnection _ ->     "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
+                | SourceDatabase _ ->       "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
+                | SourceCollection _ ->     "specify a collection name within `SourceDatabase`."
                 | SourceTimeout _ ->        "specify operation timeout in seconds (default: 5)."
                 | SourceRetries _ ->        "specify operation retries (default: 1)."
                 | SourceRetriesWaitTime _ ->"specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-                | SourceConnection _ ->     "specify a connection string for a Cosmos account."
                 | SourceConnectionMode _ -> "override the connection mode (default: DirectTcp)."
-                | SourceDatabase _ ->       "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
-                | SourceCollection _ ->     "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION, test)."
+                | CategoryBlacklist _ ->    "Category whitelist"
+                | CategoryWhitelist _ ->    "Category blacklist"
                 | Cosmos _ ->               "CosmosDb destination parameters."
     and SourceArguments(a : ParseResults<SourceParameters>) =
         member val Destination =        DestinationArguments(a.GetResult Cosmos)
-        member __.Mode =                a.GetResult(SourceConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
-        member __.Connection =          a.GetResult SourceConnection
-        member __.Database =            a.GetResult SourceDatabase
+        member __.Mode =                a.GetResult(SourceConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Discovery =           Discovery.FromConnectionString __.Connection
+        member __.Connection =          match a.TryGetResult SourceConnection   with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+        member __.Database =            match a.TryGetResult SourceDatabase     with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
         member __.Collection =          a.GetResult SourceCollection
 
-        member __.Timeout =             a.GetResult(SourceTimeout,5.) |> TimeSpan.FromSeconds
+        member __.Timeout =             a.GetResult(SourceTimeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(SourceRetries, 1)
         member __.MaxRetryWaitTime =    a.GetResult(SourceRetriesWaitTime, 5)
 
         member x.BuildConnectionDetails() =
-            let (Discovery.UriAndKey (endpointUri,_)) as discovery = Discovery.FromConnectionString x.Connection
+            let (Discovery.UriAndKey (endpointUri,_)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Collection {collection}",
                 x.Mode, endpointUri, x.Database, x.Collection)
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
+            let catFilter = 
+                match a.GetResults CategoryBlacklist, a.GetResults CategoryWhitelist with
+                | [], [] ->     Log.Information("Not filtering by category"); fun _ -> true 
+                | bad, [] ->    let black = Set.ofList bad in Log.Information("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
+                | [], good ->   let white = Set.ofList good in Log.Information("Only copying categories: {cats}", white); fun x -> white.Contains x
+                | _, _ -> raise (MissingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
             let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; collection = x.Collection }, c.ConnectionPolicy
+            discovery, { database = x.Database; collection = x.Collection }, c.ConnectionPolicy, catFilter
     and [<NoEquality; NoComparison>] DestinationParameters =
         | [<AltCommandLine("-s")>] Connection of string
         | [<AltCommandLine("-d")>] Database of string
@@ -110,21 +126,21 @@ module CmdParser =
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
-                | Connection _ ->           "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
-                | Database _ ->             "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
-                | Collection _ ->           "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION)."
+                | Connection _ ->           "specify a connection string for a Cosmos account (default: envvar:EQUINOX_COSMOS_CONNECTION)."
+                | Database _ ->             "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
+                | Collection _ ->           "specify a collection name for Cosmos account (default: envvar:EQUINOX_COSMOS_COLLECTION)."
                 | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                 | ConnectionMode _ ->       "override the connection mode (default: DirectTcp)."
     and DestinationArguments(a : ParseResults<DestinationParameters>) =
-        member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Discovery =           Discovery.FromConnectionString __.Connection
         member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
         member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
-        member __.Discovery =           Discovery.FromConnectionString __.Connection
 
-        member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+        member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(Retries, 1)
         member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
 
@@ -327,6 +343,8 @@ let createRangeSyncHandler log (ctx: Core.CosmosContext) (transform : Microsoft.
 
 open Microsoft.Azure.Documents
 
+let category (streamName : string) = streamName.Split([|'-'|],2).[0]
+
 //#if marveleqx
 [<RequireQualifiedAccess>]
 module EventV0Parser =
@@ -373,37 +391,36 @@ module EventV0Parser =
               member __.Timestamp = x.c
               member __.Stream = x.s }
 
-let transformV0 (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
+let transformV0 catFilter (v0SchemaDocument: Document) : Ingester.Batch seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
     let streamName = if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+parsed.Stream
-    yield { stream = streamName; span = { index = parsed.Index; events = [| parsed |] } } }
+    if catFilter (category streamName) then
+        yield { stream = streamName; span = { index = parsed.Index; events = [| parsed |] } } }
 //#else
-let transform (changeFeedDocument: Document) : Ingester.Batch seq = seq {
-    (* TODO MAKE THIS DO YOUR BIDDING *)
-    for e in DocumentParser.enumEvents changeFeedDocument ->
-        let streamName = "Cloned-" + e.Stream
-        { stream = streamName; span = { index = e.Index; events = [| e |] } }
-}
+let transformOrFilter catFilter (changeFeedDocument: Document) : Ingester.Batch seq = seq {
+    for e in DocumentParser.enumEvents changeFeedDocument do
+        if catFilter (category e.Stream) then
+            // NB the index needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
+            yield { stream = e.Stream; span = { index = e.Index; events = [| e |] } } }
 //#endif
 
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
         let log = Logging.initialize args.Verbose args.ChangeFeedVerbose
-        let discovery, source, connectionPolicy = args.Source.BuildConnectionDetails()
+        let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let target =
             let destination = args.Destination.Connect "EtlTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
         let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
 #if marveleqx
-        let createSyncHandler () = createRangeSyncHandler log target transformV0
+        let createSyncHandler () = createRangeSyncHandler log target (transformV0 catFilter)
 #else
-        let createSyncHandler () = createRangeSyncHandler log target transform
+        let createSyncHandler () = createRangeSyncHandler log target (transformOrFilter catFilter)
+        // Uncomment to test marveleqx mode
+        // let createSyncHandler () = createRangeSyncHandler log target (transformV0 catFilter)
 #endif
-//#if Testing
-        let createSyncHandler () = createRangeSyncHandler log target transformV0
-//#endif
         run (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, batchSize, lagFrequency)
             createSyncHandler
