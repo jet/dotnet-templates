@@ -3,12 +3,16 @@
 This project was generated using:
 
 //#if marveleqx
+
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     dotnet new eqxetl -m # -m - include Marvel V0 import logic
+
 //#else
+
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -m to include Marvel V0 import logic
     dotnet new eqxetl # use --help to see options
+
 //#endif
 
 ## Usage instructions
@@ -41,9 +45,9 @@ This project was generated using:
         # `cosmos` specifies the destination (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         # `source -s connection -d database -c collection` specifies the input datasource
 
-        $env:EQUINOX_COSMOS_CONNECTION_SOURCE="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
-        $env:EQUINOX_COSMOS_DATABASE_SOURCE="input-database" # or use -d
-        $env:EQUINOX_COSMOS_COLLECTION_SOURCE="input_collection" # or use - c
+        $env:EQUINOX_COSMOS_CONNECTION_SOURCE="AccountEndpoint=https://....;AccountKey=....=;" # or use -s # or defaults to EQUINOX_COSMOS_CONNECTION
+        $env:EQUINOX_COSMOS_DATABASE_SOURCE="input-database" # or use -d # or defaults to EQUINOX_COSMOS_DATABASE
+        $env:EQUINOX_COSMOS_COLLECTION_SOURCE="input_collection" # or use -c # NB DOES NOT HAVE A DEFAULT VALUE
 
         dotnet run -p Etl -- defaultEtl `
             source -s $env:EQUINOX_COSMOS_CONNECTION_SOURCE -d $env:EQUINOX_COSMOS_DATABASE_SOURCE -c $env:EQUINOX_COSMOS_COLLECTION_SOURCE `
