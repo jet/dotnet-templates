@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module private EtlTemplate.Infrastructure
+module private SyncTemplate.Infrastructure
 
 open System
 open System.Threading

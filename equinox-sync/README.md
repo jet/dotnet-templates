@@ -1,17 +1,17 @@
-# Equinox.Cosmos ETL template
+# Equinox Sync template
 
 This project was generated using:
 
 //#if marveleqx
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new eqxetl -m # -m - include Marvel V0 import logic
+    dotnet new eqxsync -m # -m - include Marvel V0 import logic
 
 //#else
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -m to include Marvel V0 import logic
-    dotnet new eqxetl # use --help to see options
+    dotnet new eqxsync # use --help to see options
 
 //#endif
 
@@ -31,16 +31,16 @@ This project was generated using:
         # generate a cosmos collection to store events in
         eqx init -ru 1000 cosmos
 
-2. We'll be operating a changefeed, so use `eqx initaux` to make a `-aux` collection (unless there already is one)
+2. We'll be operating a ChangeFeedProcessor, so use `eqx initaux` to make a `-aux` collection (unless there already is one)
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
         # default name is "($EQUINOX_COSMOS_COLLECTION)-aux"
         eqx initaux -ru 400 cosmos
 
-3. To run an instance of the Etl tool
+3. To run an instance of the Sync tool
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
-        # `defaultEtl` defines the Projector Group identity - each id has separated state in the aux collection (aka LeaseId)
+        # `defaultSync` defines the Projector Group identity ('LeaseId') - each id has separated state in the aux collection
         # `-m 1000` sets the max batch size to 1000
         # `cosmos` specifies the destination (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         # `source -s connection -d database -c collection` specifies the input datasource
@@ -49,6 +49,6 @@ This project was generated using:
         $env:EQUINOX_COSMOS_DATABASE_SOURCE="input-database" # or use -d # or defaults to EQUINOX_COSMOS_DATABASE
         $env:EQUINOX_COSMOS_COLLECTION_SOURCE="input_collection" # or use -c # NB DOES NOT HAVE A DEFAULT VALUE
 
-        dotnet run -p Etl -- defaultEtl `
+        dotnet run -p Sync -- defaultSync `
             source -s $env:EQUINOX_COSMOS_CONNECTION_SOURCE -d $env:EQUINOX_COSMOS_DATABASE_SOURCE -c $env:EQUINOX_COSMOS_COLLECTION_SOURCE `
             cosmos # Can add overrides for destination here

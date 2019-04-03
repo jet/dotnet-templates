@@ -1,4 +1,4 @@
-﻿module EtlTemplate.Program
+﻿module SyncTemplate.Program
 
 open Equinox.Cosmos
 open Equinox.Cosmos.Projection
@@ -410,7 +410,7 @@ let main argv =
         let log = Logging.initialize args.Verbose args.ChangeFeedVerbose
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let target =
-            let destination = args.Destination.Connect "EtlTemplate" |> Async.RunSynchronously
+            let destination = args.Destination.Connect "SyncTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
         let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()

@@ -2,7 +2,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.28714.193
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Etl", "Etl\Etl.fsproj", "{EB9D803D-2E0C-437E-9282-8E29E479F066}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Sync", "Sync\Sync.fsproj", "{EB9D803D-2E0C-437E-9282-8E29E479F066}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{5025E2C2-7A30-4F57-8777-FD39F9BF41D4}"
 	ProjectSection(SolutionItems) = preProject

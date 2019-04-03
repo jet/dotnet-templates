@@ -10,10 +10,10 @@
   "tags": {
     "language": "F#"
   },
-  "identity": "Equinox.Template.CosmosEtl",
-  "name": "Equinox Extract/Transform/Load",
-  "shortName": "eqxetl",
-  "sourceName": "EtlTemplate",
+  "identity": "Equinox.Template.Sync",
+  "name": "Equinox Store Sync System",
+  "shortName": "eqxsync",
+  "sourceName": "SyncTemplate",
   "preferNameDirectory": true,
 
   "symbols": {
@@ -22,7 +22,7 @@
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Include example code to transform from the Equinox V0 schema to that of `Equinox.Cosmos`"
+      "description": "Include example code to transform from the Equinox V0 (internal) schema to that of `Equinox.Cosmos`"
     }
   }
 }
