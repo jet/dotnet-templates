@@ -23,7 +23,8 @@ module CmdParser =
 
     module Cosmos =
         open Equinox.Cosmos
-        type [<NoEquality; NoComparison>] Parameters =
+        [<NoEquality; NoComparison>]
+        type Parameters =
             | [<AltCommandLine("-m")>] ConnectionMode of ConnectionMode
             | [<AltCommandLine("-o")>] Timeout of float
             | [<AltCommandLine("-r")>] Retries of int
@@ -34,34 +35,35 @@ module CmdParser =
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
-                    | Timeout _ ->          "specify operation timeout in seconds (default: 10)."
-                    | Retries _ ->          "specify operation retries (default: 0)."
+                    | Connection _ ->       "specify a connection string for a Cosmos account (default: envvar:EQUINOX_COSMOS_CONNECTION)."
+                    | Database _ ->         "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
+                    | Collection _ ->       "specify a collection name for Cosmos account (default: envvar:EQUINOX_COSMOS_COLLECTION)."
+                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
+                    | Retries _ ->          "specify operation retries (default: 1)."
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-                    | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
                     | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
-                    | Database _ ->         "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
-                    | Collection _ ->       "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION, test)."
         type Arguments(a : ParseResults<Parameters>) =
             member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+            member __.Discovery =           Discovery.FromConnectionString __.Connection
             member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
             member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
             member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
 
-            member __.Timeout =             a.GetResult(Timeout,10.) |> TimeSpan.FromSeconds
-            member __.Retries =             a.GetResult(Retries, 0) 
+            member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+            member __.Retries =             a.GetResult(Retries, 1)
             member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
-            
+
             /// Connect with the provided parameters and/or environment variables
             member x.Connect
                 /// Connection/Client identifier for logging purposes
                 name : Async<CosmosConnection> =
-                let (Discovery.UriAndKey (endpointUri,_masterKey)) as discovery = Discovery.FromConnectionString x.Connection
+                let (Discovery.UriAndKey (endpointUri,_masterKey)) as discovery = x.Discovery
                 Log.Information("CosmosDb {mode} {endpointUri} Database {database} Collection {collection}.",
                     x.Mode, endpointUri, x.Database, x.Collection)
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
-                let connector = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-                connector.Connect(name, discovery)
+                let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
+                c.Connect(name, discovery)
 
     /// To establish a local node to run against:
     ///   1. cinst eventstore-oss -y # where cinst is an invocation of the Chocolatey Package Installer on Windows
@@ -115,7 +117,7 @@ module CmdParser =
                 connect storeLog (heartbeatTimeout, concurrentOperationsLimit) operationThrottling discovery (__.User,__.Password) connection
 
     [<NoEquality; NoComparison>]
-    type Arguments =
+    type Parameters =
         | [<AltCommandLine "-m"; Unique>] BatchSize of int
         | [<AltCommandLine "-b"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-v"; Unique>] Verbose
@@ -145,7 +147,7 @@ module CmdParser =
                 | Stripes _ ->              "number of concurrent readers"
                 | Tail _ ->                 "attempt to read from tail at specified interval in Seconds"
                 | Es _ ->                   "specify EventStore parameters"
-    and Parameters(args : ParseResults<Arguments>) =
+    and Arguments(args : ParseResults<Parameters>) =
         member val EventStore =             EventStore.Arguments(args.GetResult Es)
         member __.Verbose =                 args.Contains Verbose
         member __.ConsoleMinLevel =         if args.Contains VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
@@ -170,10 +172,10 @@ module CmdParser =
                 batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; stripes = x.Stripes }
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse argv : Parameters =
+    let parse argv : Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Arguments>(programName = programName)
-        parser.ParseCommandLine argv |> Parameters
+        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        parser.ParseCommandLine argv |> Arguments
 
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
@@ -201,7 +203,7 @@ module Ingester =
             | Ok of stream: string * updatedPos: int64
             | Duplicate of stream: string * updatedPos: int64
             | Conflict of overage: Batch
-            | Exn of exn: exn * batch: Batch with
+            | Exn of exn: exn * batch: Batch
             member __.WriteTo(log: ILogger) =
                 match __ with
                 | Ok (stream, pos) ->           log.Information("Wrote     {stream} up to {pos}", stream, pos)
@@ -773,7 +775,7 @@ let main argv =
             let destination = cosmos.Connect "IngestTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
-        Thread.Sleep(100) // https://github.com/EventStore/EventStore/issues/1899
+        Thread.Sleep(1000) // https://github.com/EventStore/EventStore/issues/1899
         run ctx source readerSpec (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
