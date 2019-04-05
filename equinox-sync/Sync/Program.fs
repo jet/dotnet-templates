@@ -172,6 +172,9 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
+//#if eventstore
+module EventStoreSource = ()
+//#endif
 module CosmosSource =
     open Microsoft.Azure.Documents
     open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
