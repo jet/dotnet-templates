@@ -78,7 +78,6 @@ module CmdParser =
             | [<AltCommandLine("-x")>] Port of int
             | [<AltCommandLine("-u")>] Username of string
             | [<AltCommandLine("-p")>] Password of string
-            | [<AltCommandLine("-c")>] ConcurrentOperationsLimit of int
             | [<AltCommandLine("-h")>] HeartbeatTimeout of float
             | [<AltCommandLine("-m"); Unique>] MaxItems of int
             | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
@@ -92,29 +91,26 @@ module CmdParser =
                     | Port _ ->             "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
                     | Username _ ->         "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
                     | Password _ ->         "specify a Password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
-                    | ConcurrentOperationsLimit _ -> "max concurrent operations in flight (default: 5000)."
                     | HeartbeatTimeout _ -> "specify heartbeat timeout in seconds (default: 1.5)."
                     | MaxItems _ ->         "maximum item count to request. Default: 4096"
                     | Cosmos _ ->           "specify CosmosDb parameters"
         type Arguments(a : ParseResults<Parameters> ) =
-            let connect (log: ILogger) (heartbeatTimeout, col) (operationTimeout, operationRetries) discovery (username, password) connection =
-                let log = if log.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose log else Logger.SerilogNormal log
-                GesConnector(username, password, operationTimeout, operationRetries,heartbeatTimeout=heartbeatTimeout,
-                        concurrentOperationsLimit=col, log=log, tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
-                    .Establish("IngestTemplate", discovery, connection)
             member val Cosmos =             Cosmos.Arguments(a.GetResult Cosmos)
             member __.Host =                match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
             member __.Port =                match a.TryGetResult Port       with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
+            member __.Discovery =           match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host 
             member __.User =                match a.TryGetResult Username   with Some x -> x | None -> envBackstop "Username"   "EQUINOX_ES_USERNAME"
             member __.Password =            match a.TryGetResult Password   with Some x -> x | None -> envBackstop "Password"   "EQUINOX_ES_PASSWORD"
-            member __.Connect(log: ILogger, storeLog, connection) =
-                let (timeout, retries) as operationThrottling = a.GetResult(Timeout,20.) |> TimeSpan.FromSeconds, a.GetResult(Retries,3)
-                let heartbeatTimeout = a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
-                let concurrentOperationsLimit = a.GetResult(ConcurrentOperationsLimit,5000)
-                log.Information("EventStore {host} heartbeat: {heartbeat}s MaxConcurrentRequests {concurrency} Timeout: {timeout}s Retries {retries}",
-                    __.Host, heartbeatTimeout.TotalSeconds, concurrentOperationsLimit, timeout.TotalSeconds, retries)
-                let discovery = match __.Port with None -> Discovery.GossipDns __.Host | Some p -> Discovery.GossipDnsCustomPort (__.Host, p)
-                connect storeLog (heartbeatTimeout, concurrentOperationsLimit) operationThrottling discovery (__.User,__.Password) connection
+            member __.Heartbeat =           a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
+            member __.Timeout =             a.GetResult(SourceTimeout,20.) |> TimeSpan.FromSeconds
+            member __.Retries =             a.GetResult(SourceRetries,3)
+            member __.Connect(log: ILogger, storeLog, connectionStrategy) =
+                let s (x : TimeSpan) = s.TotalSeconds
+                log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s heartbeatTimeout, s timeout, retries)
+                let log = if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
+                let tags = ["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
+                GesConnector(__.User,__.Password, __.Timeout, __.Retries, log, heartbeatTimeout=__.Heartbeat, tags=tags)
+                    .Establish("IngestTemplate", __.Discovery, connectionStrategy)
 
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -152,7 +148,7 @@ module CmdParser =
         member __.Verbose =                 args.Contains Verbose
         member __.ConsoleMinLevel =         if args.Contains VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
         member __.MaybeSeqEndpoint =        if args.Contains LocalSeq then Some "http://localhost:5341" else None
-        member __.StartingBatchSize =               args.GetResult(BatchSize,4096)
+        member __.StartingBatchSize =       args.GetResult(BatchSize,4096)
         member __.MinBatchSize =            args.GetResult(MinBatchSize,512)
         member __.Stripes =                 args.GetResult(Stripes,1)
         member __.TailInterval =            match args.TryGetResult Tail with Some s -> TimeSpan.FromSeconds s |> Some | None -> None
