@@ -102,11 +102,11 @@ module CmdParser =
             member __.User =                match a.TryGetResult Username   with Some x -> x | None -> envBackstop "Username"   "EQUINOX_ES_USERNAME"
             member __.Password =            match a.TryGetResult Password   with Some x -> x | None -> envBackstop "Password"   "EQUINOX_ES_PASSWORD"
             member __.Heartbeat =           a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
-            member __.Timeout =             a.GetResult(SourceTimeout,20.) |> TimeSpan.FromSeconds
-            member __.Retries =             a.GetResult(SourceRetries,3)
-            member __.Connect(log: ILogger, storeLog, connectionStrategy) =
-                let s (x : TimeSpan) = s.TotalSeconds
-                log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s heartbeatTimeout, s timeout, retries)
+            member __.Timeout =             a.GetResult(Timeout,20.) |> TimeSpan.FromSeconds
+            member __.Retries =             a.GetResult(Retries,3)
+            member __.Connect(log: ILogger, storeLog : ILogger, connectionStrategy) =
+                let s (x : TimeSpan) = x.TotalSeconds
+                log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s __.Heartbeat, s __.Timeout, __.Retries)
                 let log = if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
                 let tags = ["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
                 GesConnector(__.User,__.Password, __.Timeout, __.Retries, log, heartbeatTimeout=__.Heartbeat, tags=tags)

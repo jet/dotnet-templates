@@ -3,6 +3,9 @@
 open Equinox.Cosmos
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Projection
+//#if eventStore
+open Equinox.EventStore
+//#endif
 open Equinox.Store
 open Serilog
 open System
@@ -19,6 +22,11 @@ let every ms f =
             f ()
             timer.Restart()
 
+//#if eventStore
+type StartPos = Absolute of int64 | Chunk of int | Percentage of float | Start | Ignore
+type ReaderSpec = { start: StartPos; streams: string list; tailInterval: TimeSpan option; stripes: int; batchSize: int; minBatchSize: int }
+//#endif
+
 module CmdParser =
     open Argu
 
@@ -32,11 +40,23 @@ module CmdParser =
     type Parameters =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
         | [<AltCommandLine "-S"; Unique>] LocalSeq
+#if cosmos
         | [<AltCommandLine "-as"; Unique>] LeaseCollectionSource of string
         | [<AltCommandLine "-ad"; Unique>] LeaseCollectionDestination of string
         | [<AltCommandLine "-l"; Unique>] LagFreqS of float
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
-        | [<AltCommandLine "-f"; Unique>] ForceStartFromHere
+#else
+        | [<AltCommandLine "-b"; Unique>] MinBatchSize of int
+        | [<AltCommandLine "-s">] Stream of string
+        | [<AltCommandLine "-A"; Unique>] All
+        | [<AltCommandLine "-o"; Unique>] Offset of int64
+        | [<AltCommandLine "-c"; Unique>] Chunk of int
+        | [<AltCommandLine "-P"; Unique>] Percent of float
+        | [<AltCommandLine "-i"; Unique>] Stripes of int
+        | [<AltCommandLine "-t"; Unique>] Tail of intervalS: float
+        | [<AltCommandLine "-vc"; Unique>] VerboseConsole
+#endif
+        | [<AltCommandLine "-i"; Unique>] ForceStartFromHere
         | [<AltCommandLine "-m"; Unique>] BatchSize of int
         | [<AltCommandLine "-v"; Unique>] Verbose
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
@@ -46,25 +66,48 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+#if cosmos
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
                 | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
                 | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
-                | Source _ ->               "CosmosDb input parameters."
+#else
+                | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
+                | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
+                | Stream _ ->               "specific stream(s) to read"
+                | All ->                    "traverse EventStore $all from Start"
+                | Offset _ ->               "EventStore $all Stream Position to commence from"
+                | Chunk _ ->                "EventStore $all Chunk to commence from"
+                | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
+                | Stripes _ ->              "number of concurrent readers"
+                | Tail _ ->                 "attempt to read from tail at specified interval in Seconds"
+                | VerboseConsole ->         "request Verbose Console Logging. Default: off"
+#endif
                 | Verbose ->                "request Verbose Logging. Default: off"
+                | Source _ ->               "CosmosDb input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.BatchSize =           a.GetResult(BatchSize,1000)
-        member __.StartFromHere =       a.Contains ForceStartFromHere
+        member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
+#if cosmos
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
+#else
+        member __.VerboseConsole =      a.Contains VerboseConsole
+        member __.ConsoleMinLevel =     if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
+        member __.StartingBatchSize =   a.GetResult(BatchSize,4096)
+        member __.MinBatchSize =        a.GetResult(MinBatchSize,512)
+        member __.Stripes =             a.GetResult(Stripes,1)
+        member __.TailInterval =        match a.TryGetResult Tail with Some s -> TimeSpan.FromSeconds s |> Some | None -> None
+#endif
 
         member __.Verbose =             a.Contains Verbose
 
         member val Source : SourceArguments = SourceArguments(a.GetResult Source)
         member __.Destination : DestinationArguments = __.Source.Destination
+#if cosmos
         member x.BuildChangeFeedParams() =
             let disco, db =
                 match a.TryGetResult LeaseCollectionSource, a.TryGetResult LeaseCollectionDestination with
@@ -76,7 +119,24 @@ module CmdParser =
             if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             disco, db, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
+#else
+        member x.BuildFeedParams() : ReaderSpec =
+            Log.Warning("Processing in batches of [{minBatchSize}..{batchSize}] with {stripes} stripes", x.MinBatchSize, x.StartingBatchSize, x.Stripes)
+            let startPos =
+                match a.TryGetResult Offset, a.TryGetResult Chunk, a.TryGetResult Percent, a.Contains All with
+                | Some p, _, _, _ ->        Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
+                | _, Some c, _, _ ->        Log.Warning("Processing will commence at $all Chunk {c}", c); StartPos.Chunk c
+                | _, _, Some p, _ ->        Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
+                | None, None, None, true -> Log.Warning "Processing will commence at $all Start"; Start
+                | None, None, None, false ->Log.Warning "No $all processing requested"; Ignore
+            match x.TailInterval with
+            | Some interval -> Log.Warning("Following tail at {seconds}s interval", interval.TotalSeconds)
+            | None -> Log.Warning "Not following tail"
+            {   start = startPos; streams = a.GetResults Stream; tailInterval = x.TailInterval
+                batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; stripes = x.Stripes }
+#endif
     and [<NoEquality; NoComparison>] SourceParameters =
+#if cosmos
         | [<AltCommandLine "-m">] SourceConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-o">] SourceTimeout of float
         | [<AltCommandLine "-r">] SourceRetries of int
@@ -84,12 +144,23 @@ module CmdParser =
         | [<AltCommandLine "-s">] SourceConnection of string
         | [<AltCommandLine "-d">] SourceDatabase of string
         | [<AltCommandLine "-c"; Unique(*Mandatory is not supported*)>] SourceCollection of string
+#else
+        | [<AltCommandLine("-v")>] VerboseStore
+        | [<AltCommandLine("-o")>] SourceTimeout of float
+        | [<AltCommandLine("-r")>] SourceRetries of int
+        | [<AltCommandLine("-g")>] Host of string
+        | [<AltCommandLine("-x")>] Port of int
+        | [<AltCommandLine("-u")>] Username of string
+        | [<AltCommandLine("-p")>] Password of string
+        | [<AltCommandLine("-h")>] HeartbeatTimeout of float
+#endif
         | [<AltCommandLine "-e">] CategoryBlacklist of string
         | [<AltCommandLine "-i">] CategoryWhitelist of string
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<DestinationParameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
+#if cosmos
                 | SourceConnection _ ->     "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
                 | SourceDatabase _ ->       "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
                 | SourceCollection _ ->     "specify a collection name within `SourceDatabase`."
@@ -97,6 +168,16 @@ module CmdParser =
                 | SourceRetries _ ->        "specify operation retries (default: 1)."
                 | SourceRetriesWaitTime _ ->"specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                 | SourceConnectionMode _ -> "override the connection mode (default: DirectTcp)."
+#else
+                | VerboseStore ->           "Include low level Store logging."
+                | SourceTimeout _ ->        "specify operation timeout in seconds (default: 20)."
+                | SourceRetries _ ->        "specify operation retries (default: 3)."
+                | Host _ ->                 "specify a DNS query, using Gossip-driven discovery against all A records returned (defaults: envvar:EQUINOX_ES_HOST, localhost)."
+                | Port _ ->                 "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
+                | Username _ ->             "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
+                | Password _ ->             "specify a Password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
+                | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds (default: 1.5)."
+#endif
                 | CategoryBlacklist _ ->    "Category whitelist"
                 | CategoryWhitelist _ ->    "Category blacklist"
                 | Cosmos _ ->               "CosmosDb destination parameters."
@@ -108,6 +189,7 @@ module CmdParser =
             | bad, [] ->    let black = Set.ofList bad in Log.Information("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
             | [], good ->   let white = Set.ofList good in Log.Information("Only copying categories: {cats}", white); fun x -> white.Contains x
             | _, _ -> raise (InvalidArguments "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
+#if cosmos
         member __.Mode =                a.GetResult(SourceConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
         member __.Discovery =           Discovery.FromConnectionString __.Connection
         member __.Connection =          match a.TryGetResult SourceConnection   with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
@@ -125,6 +207,24 @@ module CmdParser =
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; collection = x.Collection }, c.ConnectionPolicy, x.CategoryFilterFunction
+#else
+        member __.Host =                match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
+        member __.Port =                match a.TryGetResult Port       with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
+        member __.Discovery =           match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host 
+        member __.User =                match a.TryGetResult Username   with Some x -> x | None -> envBackstop "Username"   "EQUINOX_ES_USERNAME"
+        member __.Password =            match a.TryGetResult Password   with Some x -> x | None -> envBackstop "Password"   "EQUINOX_ES_PASSWORD"
+        member __.Heartbeat =           a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
+        member __.Timeout =             a.GetResult(SourceTimeout,20.) |> TimeSpan.FromSeconds
+        member __.Retries =             a.GetResult(SourceRetries,3)
+        member __.Connect(log: ILogger, storeLog: ILogger, connectionStrategy) =
+            let s (x : TimeSpan) = x.TotalSeconds
+            log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s __.Heartbeat, s __.Timeout, __.Retries)
+            let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
+            let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
+            let catFilter = __.CategoryFilterFunction
+            GesConnector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
+                .Establish("SyncTemplate", __.Discovery, connectionStrategy) |> Async.RunSynchronously, catFilter
+#endif
     and [<NoEquality; NoComparison>] DestinationParameters =
         | [<AltCommandLine("-s")>] Connection of string
         | [<AltCommandLine("-d")>] Database of string
@@ -172,9 +272,315 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-//#if eventstore
-module EventStoreSource = ()
-//#endif
+#if !cosmos
+type EventStore.ClientAPI.RecordedEvent with
+    member __.Timestamp = System.DateTimeOffset.FromUnixTimeMilliseconds(__.CreatedEpoch)
+
+module EventStoreSource =
+    open EventStore.ClientAPI
+
+    let inline arrayBytes (x:byte[]) = if x = null then 0 else x.Length
+    let inline esRecPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = arrayBytes x.Data + arrayBytes x.Metadata
+    let inline esPayloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = esRecPayloadBytes x.Event + x.OriginalStreamId.Length * 2
+    let cosmosPayloadLimit = 2 * 1024 * 1024 - 1024
+    let mb x = float x / 1024. / 1024.
+
+    type SliceStatsBuffer(?interval) =
+        let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
+        let recentCats, accStart = System.Collections.Generic.Dictionary<string,int*int>(), Stopwatch.StartNew()
+        member __.Ingest(slice: AllEventsSlice) =
+            lock recentCats <| fun () ->
+                let mutable batchBytes = 0
+                for x in slice.Events do
+                    let cat = category x.OriginalStreamId
+                    let eventBytes = esPayloadBytes x
+                    match recentCats.TryGetValue cat with
+                    | true, (currCount, currSize) -> recentCats.[cat] <- (currCount + 1, currSize+eventBytes)
+                    | false, _ -> recentCats.[cat] <- (1, eventBytes)
+                    batchBytes <- batchBytes + eventBytes
+                __.DumpIfIntervalExpired()
+                slice.Events.Length, int64 batchBytes
+        member __.DumpIfIntervalExpired(?force) =
+            if accStart.ElapsedMilliseconds > intervalMs || defaultArg force false then
+                lock recentCats <| fun () ->
+                    let log = function
+                        | [||] -> ()
+                        | xs ->
+                            xs
+                            |> Seq.sortByDescending (fun (KeyValue (_,(_,b))) -> b)
+                            |> Seq.truncate 10
+                            |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c)
+                            |> fun rendered -> Log.Warning("Processed {@cats} (MB/cat/count)", rendered)
+                    recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> Array.ofSeq |> log
+                    recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> Array.ofSeq |> log
+                    recentCats.Clear()
+                    accStart.Restart()
+
+    type OverallStats(?statsInterval) =
+        let intervalMs = let t = defaultArg statsInterval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
+        let overallStart, progressStart = Stopwatch.StartNew(), Stopwatch.StartNew()
+        let mutable totalEvents, totalBytes = 0L, 0L
+        member __.Ingest(batchEvents, batchBytes) = 
+            Interlocked.Add(&totalEvents,batchEvents) |> ignore
+            Interlocked.Add(&totalBytes,batchBytes) |> ignore
+        member __.Bytes = totalBytes
+        member __.Events = totalEvents
+        member __.DumpIfIntervalExpired(?force) =
+            if progressStart.ElapsedMilliseconds > intervalMs || force = Some true then
+                let totalMb = mb totalBytes
+                Log.Warning("Traversed {events} events {gb:n1}GB {mbs:n2}MB/s", totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
+                progressStart.Restart()
+
+    type Range(start, sliceEnd : Position option, max : Position) =
+        member val Current = start with get, set
+        member __.TryNext(pos: Position) =
+            __.Current <- pos
+            __.IsCompleted
+        member __.IsCompleted =
+            match sliceEnd with
+            | Some send when __.Current.CommitPosition >= send.CommitPosition -> false
+            | _ -> true
+        member __.PositionAsRangePercentage =
+            if max.CommitPosition=0L then Double.NaN
+            else float __.Current.CommitPosition/float max.CommitPosition
+
+    // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
+    let chunk (pos: Position) = uint64 pos.CommitPosition >>> 28
+    let posFromChunk (chunk: int) =
+        let chunkBase = int64 chunk * 1024L * 1024L * 256L
+        Position(chunkBase,0L)
+    let posFromPercentage (pct,max : Position) =
+        let rawPos = Position(float max.CommitPosition * pct / 100. |> int64, 0L)
+        let chunk = int (chunk rawPos) in posFromChunk chunk // &&& 0xFFFFFFFFE0000000L // rawPos / 256L / 1024L / 1024L * 1024L * 1024L * 256L
+    let posFromChunkAfter (pos: Position) =
+        let nextChunk = 1 + int (chunk pos)
+        posFromChunk nextChunk
+
+    let fetchMax (conn : IEventStoreConnection) = async {
+        let! lastItemBatch = conn.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
+        let max = lastItemBatch.NextPosition
+        Log.Warning("EventStore {chunks} chunks, ~{gb:n1}GB Write Position @ {pos} ", chunk max, mb max.CommitPosition/1024., max.CommitPosition)
+        return max }
+    let establishMax (conn : IEventStoreConnection) = async {
+        let mutable max = None
+        while Option.isNone max do
+            try let! max_ = fetchMax conn
+                max <- Some max_
+            with e ->
+                Log.Warning(e,"Could not establish max position")
+                do! Async.Sleep 5000 
+        return Option.get max }
+    let pullStream (conn : IEventStoreConnection, batchSize) stream (postBatch : CosmosIngester.Batch -> unit) =
+        let rec fetchFrom pos = async {
+            let! currentSlice = conn.ReadStreamEventsBackwardAsync(stream, pos, batchSize, resolveLinkTos=true) |> Async.AwaitTaskCorrect
+            if currentSlice.IsEndOfStream then return () else
+            let events =
+                [| for x in currentSlice.Events ->
+                    let e = x.Event
+                    Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata, e.Timestamp) :> Equinox.Codec.IEvent<byte[]> |]
+            postBatch { stream = stream; span = { index = currentSlice.FromEventNumber; events = events } }
+            return! fetchFrom currentSlice.NextEventNumber }
+        fetchFrom 0L
+
+    type [<NoComparison>] PullResult = Exn of exn: exn | Eof | EndOfTranche
+    type ReaderGroup(conn : IEventStoreConnection, enumEvents, postBatch : CosmosIngester.Batch -> unit) =
+        member __.Pump(range : Range, batchSize, slicesStats : SliceStatsBuffer, overallStats : OverallStats, ?ignoreEmptyEof) =
+            let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
+            let rec loop () = async {
+                let! currentSlice = conn.ReadAllEventsForwardAsync(range.Current, batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
+                sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
+                let postSw = Stopwatch.StartNew()
+                let batchEvents, batchBytes = slicesStats.Ingest currentSlice in overallStats.Ingest(int64 batchEvents, batchBytes)
+                let streams =
+                    enumEvents currentSlice.Events
+                    |> Seq.choose (function Choice1Of2 e -> Some e | Choice2Of2 _ -> None)
+                    |> Seq.groupBy (fun (streamId,_eventNumber,_eventData) -> streamId)
+                    |> Seq.map (fun (streamId,xs) -> streamId, [| for _s, i, e in xs -> i, e |])
+                    |> Array.ofSeq
+                let usedStreams, usedCats = streams.Length, streams |> Seq.map fst |> Seq.distinct |> Seq.length
+                let mutable usedEvents = 0
+                for stream,streamEvents in streams do
+                    for pos, item in streamEvents do
+                        usedEvents <- usedEvents + 1
+                        postBatch { stream = stream; span =  { index = pos; events = [| item |]}}
+                if not(ignoreEmptyEof = Some true && batchEvents = 0 && not currentSlice.IsEndOfStream) then // ES doesnt report EOF on the first call :(
+                    Log.Warning("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,3}c {streams,4}s {events,4}e Post {pt:n0}ms",
+                        range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
+                        batchEvents, usedCats, usedStreams, usedEvents, postSw.ElapsedMilliseconds)
+                let shouldLoop = range.TryNext currentSlice.NextPosition
+                if shouldLoop && not currentSlice.IsEndOfStream then
+                    sw.Restart() // restart the clock as we hand off back to the Reader
+                    return! loop ()
+                else
+                    return currentSlice.IsEndOfStream }
+            async {
+                try let! eof = loop ()
+                    return if eof then Eof else EndOfTranche
+                with e -> return Exn e }
+
+    type [<NoComparison>] Work =
+        | Stream of name: string * batchSize: int
+        | Tranche of range: Range * batchSize : int
+        | Tail of pos: Position * interval: TimeSpan * batchSize : int
+    type FeedQueue(batchSize, minBatchSize, max, ?statsInterval) =
+        let work = System.Collections.Concurrent.ConcurrentQueue()
+        member val OverallStats = OverallStats(?statsInterval=statsInterval)
+        member val SlicesStats = SliceStatsBuffer()
+        member __.AddTranche(range, ?batchSizeOverride) =
+            work.Enqueue <| Work.Tranche (range, defaultArg batchSizeOverride batchSize)
+        member __.AddTranche(pos, nextPos, ?batchSizeOverride) =
+            __.AddTranche(Range (pos, Some nextPos, max), ?batchSizeOverride=batchSizeOverride)
+        member __.AddStream(name, ?batchSizeOverride) =
+            work.Enqueue <| Work.Stream (name, defaultArg batchSizeOverride batchSize)
+        member __.AddTail(pos, interval, ?batchSizeOverride) =
+            work.Enqueue <| Work.Tail (pos, interval, defaultArg batchSizeOverride batchSize)
+        member __.TryDequeue () =
+            work.TryDequeue()
+        member __.Process(conn, enumEvents, postBatch, work) = async {
+            let adjust batchSize = if batchSize > minBatchSize then batchSize - 128 else batchSize
+            match work with
+            | Stream (name,batchSize) ->
+                use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
+                Log.Warning("Reading stream; batch size {bs}", batchSize)
+                try do! pullStream (conn, batchSize) name postBatch
+                    Log.Warning("completed stream")
+                with e ->
+                    let bs = adjust batchSize
+                    Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
+                    __.AddStream(name, bs)
+                return false
+            | Tranche (range, batchSize) ->
+                use _ = Serilog.Context.LogContext.PushProperty("Tranche",chunk range.Current)
+                Log.Warning("Commencing tranche, batch size {bs}", batchSize)
+                let reader = ReaderGroup(conn, enumEvents, postBatch)
+                let! res = reader.Pump(range, batchSize, __.SlicesStats, __.OverallStats)
+                match res with
+                | PullResult.EndOfTranche ->
+                    Log.Warning("Completed tranche")
+                    __.OverallStats.DumpIfIntervalExpired()
+                    return false
+                | PullResult.Eof ->
+                    Log.Warning("REACHED THE END!")
+                    __.OverallStats.DumpIfIntervalExpired(true)
+                    return true
+                | PullResult.Exn e ->
+                    let bs = adjust batchSize
+                    Log.Warning(e, "Could not read All, retrying with batch size {bs}", bs)
+                    __.OverallStats.DumpIfIntervalExpired()
+                    __.AddTranche(range, bs) 
+                    return false 
+            | Tail (pos, interval, batchSize) ->
+                let mutable first, count, batchSize, range = true, 0, batchSize, Range(pos,None, Position.Start)
+                let statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.)
+                let progressIntervalMs, tailIntervalMs = int64 statsInterval.TotalMilliseconds, int64 interval.TotalMilliseconds
+                let progressSw, tailSw = Stopwatch.StartNew(), Stopwatch.StartNew()
+                let reader = ReaderGroup(conn, enumEvents, postBatch)
+                let slicesStats, stats = SliceStatsBuffer(), OverallStats()
+                while true do
+                    let currentPos = range.Current
+                    use _ = Serilog.Context.LogContext.PushProperty("Tranche", "Tail")
+                    if first then
+                        first <- false
+                        Log.Warning("Tailing at {interval}s interval", interval.TotalSeconds)
+                    elif progressSw.ElapsedMilliseconds > progressIntervalMs then
+                        Log.Warning("Performed {count} tails to date @ {pos} chunk {chunk}", count, currentPos.CommitPosition, chunk currentPos)
+                        progressSw.Restart()
+                    count <- count + 1
+                    let! res = reader.Pump(range,batchSize,slicesStats,stats,ignoreEmptyEof=true)
+                    stats.DumpIfIntervalExpired()
+                    match tailIntervalMs - tailSw.ElapsedMilliseconds with
+                    | waitTimeMs when waitTimeMs > 0L -> do! Async.Sleep (int waitTimeMs)
+                    | _ -> ()
+                    tailSw.Restart()
+                    match res with
+                    | PullResult.EndOfTranche | PullResult.Eof -> ()
+                    | PullResult.Exn e ->
+                        batchSize <- adjust batchSize
+                        Log.Warning(e, "Tail $all failed, adjusting batch size to {bs}", batchSize)
+                return true }
+
+    type Reader(conn : IEventStoreConnection, spec: ReaderSpec, enumEvents, postBatch : CosmosIngester.Batch -> unit, max, ct : CancellationToken, ?statsInterval) = 
+        let work = FeedQueue(spec.batchSize, spec.minBatchSize, max, ?statsInterval=statsInterval)
+        do  match spec.tailInterval with
+            | Some interval -> work.AddTail(max, interval)
+            | None -> ()
+            for s in spec.streams do
+                work.AddStream s
+        let mutable remainder =
+            let startPos =
+                match spec.start with
+                | StartPos.Start -> Position.Start
+                | Absolute p -> Position(p, 0L)
+                | Chunk c -> posFromChunk c
+                | Percentage pct -> posFromPercentage (pct, max)
+                | Ignore -> max
+            Log.Warning("Start Position {pos} (chunk {chunk}, {pct:p1})",
+                startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/ float max.CommitPosition)
+            if spec.start = Ignore then None
+            else
+                let nextPos = posFromChunkAfter startPos
+                work.AddTranche(startPos, nextPos)
+                Some nextPos
+
+        member __.Pump () = async {
+            (*if spec.tail then enqueue tail work*)
+            let maxDop = spec.stripes + Option.count spec.tailInterval
+            let dop = new SemaphoreSlim(maxDop)
+            let mutable finished = false
+            while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
+                let! _ = dop.Await()
+                work.OverallStats.DumpIfIntervalExpired()
+                let forkRunRelease task = async {
+                    let! _ = Async.StartChild <| async {
+                        try let! eof = work.Process(conn, enumEvents, postBatch, task)
+                            if eof then remainder <- None
+                        finally dop.Release() |> ignore }
+                    return () }
+                match work.TryDequeue() with
+                | true, task ->
+                    do! forkRunRelease task
+                | false, _ ->
+                    match remainder with
+                    | Some pos -> 
+                        let nextPos = posFromChunkAfter pos
+                        remainder <- Some nextPos
+                        do! forkRunRelease <| Work.Tranche (Range(pos, Some nextPos, max), spec.batchSize)
+                    | None ->
+                        if finished then do! Async.Sleep 1000 
+                        else Log.Warning("No further ingestion work to commence")
+                        finished <- true }
+
+    let start log (leaseId, startFromHere, batchSize) (conn, spec, enumEvents, cosmosContext) = async {
+        let! ct = Async.CancellationToken
+        let! max = establishMax conn 
+        let writer = CosmosIngester.SynchronousWriter(cosmosContext, log)
+        let reader = Reader(conn, spec, enumEvents, writer.Add, max, ct)
+        let! _ = Async.StartChild <| reader.Pump()
+        return ()
+    }
+
+    //let run (ctx : Equinox.Cosmos.Core.CosmosContext) (source : GesConnection) (spec: ReaderSpec) (writerQueueLen, writerCount, readerQueueLen) = async {
+    //    let! ingester = EventStoreSource.start(source.ReadConnection, writerQueueLen, writerCount, readerQueueLen)
+    //    let! _feeder = EventStoreSource.start(source.ReadConnection, spec, enumEvents, ingester.Add)
+    //    do! Async.AwaitKeyboardInterrupt() }
+let enumEvents catFilter (xs : EventStore.ClientAPI.ResolvedEvent[]) = seq {
+    for e in xs ->
+        let eb = EventStoreSource.esPayloadBytes e
+        match e.Event with
+        | e when not e.IsJson
+            || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
+            || e.EventStreamId.StartsWith("$") 
+            || e.EventStreamId.EndsWith("_checkpoints")
+            || e.EventStreamId.EndsWith("_checkpoint")
+            || not (catFilter e.EventStreamId) ->
+                Choice2Of2 e
+        | e when eb > EventStoreSource.cosmosPayloadLimit ->
+            Log.Error("ES Event Id {eventId} (#{index} in {stream}, type {type}) size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}",
+                e.EventId, e.EventNumber, e.EventStreamId, e.EventType, eb, EventStoreSource.cosmosPayloadLimit)
+            Choice2Of2 e
+        | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata, e.Timestamp))
+}
+#else
 module CosmosSource =
     open Microsoft.Azure.Documents
     open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
@@ -415,6 +821,7 @@ module CosmosSource =
                 // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
                 yield { stream = e.Stream; span = { index = e.Index; events = [| e |] } } }
     //#endif
+#endif
 
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
@@ -445,6 +852,7 @@ let main argv =
             let destination = args.Destination.Connect "SyncTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
+#if cosmos
         let log = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
@@ -458,6 +866,12 @@ let main argv =
         CosmosSource.run (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, batchSize, lagFrequency)
             createSyncHandler
+#else
+        let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
+        let esConnection, catFilter = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.Master)
+        let spec = args.BuildFeedParams()
+        EventStoreSource.start log (esConnection.ReadConnection, spec, enumEvents catFilter, target) 
+#endif
         |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
