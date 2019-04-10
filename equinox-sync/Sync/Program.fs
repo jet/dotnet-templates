@@ -69,7 +69,7 @@ module CmdParser =
         | [<AltCommandLine "-t"; Unique>] Tail of intervalS: float
         | [<AltCommandLine "-vc"; Unique>] VerboseConsole
 #endif
-        | [<AltCommandLine "-i"; Unique>] ForceStartFromHere
+        | [<AltCommandLine "-f"; Unique>] ForceStartFromHere
         | [<AltCommandLine "-m"; Unique>] BatchSize of int
         | [<AltCommandLine "-v"; Unique>] Verbose
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
@@ -85,6 +85,7 @@ module CmdParser =
                 | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
+                | Source _ ->               "CosmosDb input parameters."
 #else
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
@@ -95,14 +96,14 @@ module CmdParser =
                 | Stripes _ ->              "number of concurrent readers"
                 | Tail _ ->                 "attempt to read from tail at specified interval in Seconds. Default: 1"
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off"
+                | Source _ ->               "EventStore input parameters."
 #endif
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | Source _ ->               "CosmosDb input parameters."
     and Arguments(a : ParseResults<Parameters>) =
-        member __.BatchSize =           a.GetResult(BatchSize,1000)
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
 #if cosmos
         member __.LeaseId =             a.GetResult ConsumerGroupName
+        member __.BatchSize =           a.GetResult(BatchSize,1000)
         member __.StartFromHere =       a.Contains ForceStartFromHere
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
@@ -137,13 +138,14 @@ module CmdParser =
             Log.Warning("Processing in batches of [{minBatchSize}..{batchSize}] with {stripes} stripes", x.MinBatchSize, x.StartingBatchSize, x.Stripes)
             let startPos =
                 match a.TryGetResult Offset, a.TryGetResult Chunk, a.TryGetResult Percent with
-                | Some p, _, _ ->   Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
-                | _, Some c, _ ->   Log.Warning("Processing will commence at $all Chunk {c}", c); StartPos.Chunk c
-                | _, _, Some p ->   Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
-                | None, None, None -> Log.Warning "Processing will commence at $all Tail"; StartPos.Tail
-            Log.Information("Processing ConsumerGroupName {groupName} in Database {db} Collection {coll} in batches of {batchSize}",
-                x.ConsumerGroupName, x.Destination.Database, x.Destination.Collection, x.BatchSize)
-            Log.Warning("Following tail at {seconds}s interval", let i = x.TailInterval in i.TotalSeconds)
+                | Some p, _, _ ->   Absolute p
+                | _, Some c, _ ->   StartPos.Chunk c
+                | _, _, Some p ->   Percentage p 
+                | None, None, None -> StartPos.Tail
+            Log.Information("Syncing Consumer Group {groupName} in Database {db} Collection {coll}",
+                x.ConsumerGroupName, x.Destination.Database, x.Destination.Collection)
+            Log.Information("Ingesting from {startPos} in batches of [{minBatchSize}..{batchSize}] with {stripes} stream readers",
+                startPos, x.MinBatchSize, x.StartingBatchSize, x.Stripes)
             {   groupName = x.ConsumerGroupName; start = startPos; streams = a.GetResults Stream; tailInterval = x.TailInterval
                 batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; stripes = x.Stripes }
 #endif
@@ -233,9 +235,8 @@ module CmdParser =
             log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s __.Heartbeat, s __.Timeout, __.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
-            let catFilter = __.CategoryFilterFunction
             GesConnector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
-                .Establish("SyncTemplate", __.Discovery, connectionStrategy) |> Async.RunSynchronously, catFilter
+                .Establish("SyncTemplate", __.Discovery, connectionStrategy) |> Async.RunSynchronously
 #endif
     and [<NoEquality; NoComparison>] DestinationParameters =
         | [<AltCommandLine("-s")>] Connection of string
@@ -322,7 +323,7 @@ module EventStoreSource =
                             |> Seq.sortByDescending (fun (KeyValue (_,(_,b))) -> b)
                             |> Seq.truncate 10
                             |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c)
-                            |> fun rendered -> Log.Warning("Processed {@cats} (MB/cat/count)", rendered)
+                            |> fun rendered -> Log.Information("EventStore categories {@cats} (MB/cat/count)", rendered)
                     recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> Array.ofSeq |> log
                     recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> Array.ofSeq |> log
                     recentCats.Clear()
@@ -340,10 +341,11 @@ module EventStoreSource =
         member __.DumpIfIntervalExpired(?force) =
             if progressStart.ElapsedMilliseconds > intervalMs || force = Some true then
                 let totalMb = mb totalBytes
-                Log.Warning("Traversed {events} events {gb:n1}GB {mbs:n2}MB/s", totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
+                Log.Information("EventStore throughput {events} events {gb:n1}GB {mbs:n2}MB/s",
+                    totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
                 progressStart.Restart()
 
-    type Range(start, sliceEnd : Position option, max : Position) =
+    type Range(start, sliceEnd : Position option, ?max : Position) =
         member val Current = start with get, set
         member __.TryNext(pos: Position) =
             __.Current <- pos
@@ -353,8 +355,9 @@ module EventStoreSource =
             | Some send when __.Current.CommitPosition >= send.CommitPosition -> false
             | _ -> true
         member __.PositionAsRangePercentage =
-            if max.CommitPosition=0L then Double.NaN
-            else float __.Current.CommitPosition/float max.CommitPosition
+            match max with
+            | None -> Double.NaN
+            | Some max -> float __.Current.CommitPosition/float max.CommitPosition
 
     // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
     let chunk (pos: Position) = uint64 pos.CommitPosition >>> 28
@@ -367,14 +370,14 @@ module EventStoreSource =
 
     let fetchMax (conn : IEventStoreConnection) = async {
         let! lastItemBatch = conn.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
-        let max = lastItemBatch.NextPosition
-        Log.Warning("EventStore {chunks} chunks, ~{gb:n1}GB Write Position @ {pos} ", chunk max, mb max.CommitPosition/1024., max.CommitPosition)
+        let max = lastItemBatch.FromPosition
+        Log.Information("EventStore Write @ {pos} ({chunks} chunks, ~{gb:n1}GB)", max.CommitPosition, chunk max, mb max.CommitPosition/1024.)
         return max }
     let establishMax (conn : IEventStoreConnection) = async {
         let mutable max = None
         while Option.isNone max do
-            try let! max_ = fetchMax conn
-                max <- Some max_
+            try let! currentMax = fetchMax conn
+                max <- Some currentMax
             with e ->
                 Log.Warning(e,"Could not establish max position")
                 do! Async.Sleep 5000 
@@ -413,7 +416,7 @@ module EventStoreSource =
                         yield { stream = stream; span = { index = pos; events = [| item |]}} |]
                 postBatch currentSlice.NextPosition events
                 if not(ignoreEmptyEof = Some true && batchEvents = 0 && not currentSlice.IsEndOfStream) then // ES doesnt report EOF on the first call :(
-                    Log.Warning("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,3}c {streams,4}s {events,4}e Post {pt:n0}ms",
+                    Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,3}c {streams,4}s {events,4}e Post {pt:n0}ms",
                         range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
                         batchEvents, usedCats, usedStreams, events.Length, postSw.ElapsedMilliseconds)
                 let shouldLoop = range.TryNext currentSlice.NextPosition
@@ -454,10 +457,10 @@ module EventStoreSource =
                     __.AddStream(name, bs)
                 return false
             | Tail (pos, interval, batchSize) ->
-                let mutable first, count, pauses, batchSize, range = true, 0, 0, batchSize, Range(pos,None, Position.Start)
+                let mutable count, pauses, batchSize, range = 0, 0, batchSize, Range(pos, None)
                 let statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.)
                 let progressIntervalMs, tailIntervalMs = int64 statsInterval.TotalMilliseconds, int64 interval.TotalMilliseconds
-                let progressSw, tailSw = Stopwatch.StartNew(), Stopwatch.StartNew()
+                let tailSw = Stopwatch.StartNew()
                 let awaitInterval = async {
                     match tailIntervalMs - tailSw.ElapsedMilliseconds with
                     | waitTimeMs when waitTimeMs > 0L -> do! Async.Sleep (int waitTimeMs)
@@ -466,13 +469,12 @@ module EventStoreSource =
                 let reader = ReaderGroup(conn, enumEvents, postTail)
                 let slicesStats, stats = SliceStatsBuffer(), OverallStats()
                 use _ = Serilog.Context.LogContext.PushProperty("Tranche", "Tail")
+                let progressSw = Stopwatch.StartNew()
                 while true do
                     let currentPos = range.Current
-                    if first then
-                        first <- false
-                        Log.Warning("Tailing at {interval}s interval", interval.TotalSeconds)
-                    elif progressSw.ElapsedMilliseconds > progressIntervalMs then
-                        Log.Warning("Performed {count} tails ({pauses} pauses) to date @ {pos} chunk {chunk}", count, pauses, currentPos.CommitPosition, chunk currentPos)
+                    if progressSw.ElapsedMilliseconds > progressIntervalMs then
+                        Log.Information("Tailed {count} times ({pauses} pauses @ {pos} (chunk {chunk})",
+                            count, pauses, currentPos.CommitPosition, chunk currentPos)
                         progressSw.Restart()
                     count <- count + 1
                     if shouldTail () then
@@ -491,17 +493,21 @@ module EventStoreSource =
 
     type Reader(conn : IEventStoreConnection, spec: ReaderSpec, enumEvents, max, ?statsInterval) = 
         let work = FeedQueue(spec.batchSize, spec.minBatchSize, ?statsInterval=statsInterval)
-        do  work.AddTail(max, spec.tailInterval)
-            for s in spec.streams do
-                work.AddStream s
-            let startPos =
+        do  let startPos =
                 match spec.start with
                 | StartPos.Tail -> max
                 | Absolute p -> Position(p, 0L)
                 | Chunk c -> posFromChunk c
                 | Percentage pct -> posFromPercentage (pct, max)
-            Log.Warning("Start Position {pos} (chunk {chunk}, {pct:p1})",
-                startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/ float max.CommitPosition)
+            work.AddTail(startPos, spec.tailInterval)
+            match spec.streams with
+            | [] -> ()
+            | streams ->
+                Log.Information("EventStore Additional Streams {streams}", streams)
+                for s in streams do
+                    work.AddStream s
+            Log.Information("EventStore Tailing @ {pos} (chunk {chunk}, {pct:p1}) every {interval}s",
+                startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/ float max.CommitPosition, spec.tailInterval.TotalSeconds)
 
         member __.Pump(postItem, shouldTail, postTail) = async {
             let maxDop = spec.stripes + 1
@@ -520,7 +526,7 @@ module EventStoreSource =
                 | true, task ->
                     do! forkRunRelease task
                 | false, _ when not finished->
-                    Log.Warning("No further ingestion work to commence")
+                    if spec.streams <> [] then Log.Information("Initial streams seeded")
                     finished <- true
                 | _ -> () }
 
@@ -557,14 +563,17 @@ module EventStoreSource =
             let! _ = Async.StartChild <| writers.Pump()
             let! ct = Async.CancellationToken
             let mutable bytesPended = 0L
-            let resultsHandled, ingestionsHandled, workPended, eventsPended = ref 0, ref 0, ref 0, ref 0
-            let mutable rateLimited, timedOut, malformed = ref 0, ref 0, ref 0
+            let resultsHandled, workPended, eventsPended = ref 0, ref 0, ref 0
+            let rateLimited, timedOut, malformed = ref 0, ref 0, ref 0
+            let badCats = CosmosIngester.Queue.CatStats()
             let dumpStats () =
-                log.Warning("Writer Exceptions {rateLimited} rate-limited, {timedOut} timed out, {malformed} malformed",!rateLimited, !timedOut, !malformed)
-                rateLimited := 0; timedOut := 0; malformed := 0 
-                Log.Warning("Sent {queued} req {events} events; Completed {completed} reqs; Egress {gb:n3}GB",
+                if !rateLimited <> 0 || !timedOut <> 0 || !malformed <> 0 then
+                    Log.Warning("Writer exceptions {rateLimited} Rate-limited, {timedOut} Timed out, {malformed}", !rateLimited, !timedOut, !malformed)
+                    rateLimited := 0; timedOut := 0; malformed := 0 
+                    if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
+                Log.Information("Writer throughput {queued} req {events} events Completed {completed} reqs Egress {gb:n3}GB",
                     !workPended, !eventsPended,!resultsHandled, mb bytesPended / 1024.)
-                ingestionsHandled := 0; workPended := 0; eventsPended := 0; resultsHandled := 0
+                workPended := 0; eventsPended := 0; resultsHandled := 0
                 buffer.Dump log
             let tryDumpStats = every statsIntervalMs dumpStats
             let handle = function
@@ -583,7 +592,7 @@ module EventStoreSource =
                     | CosmosIngester.Queue.Ok -> res.WriteTo log
                     | CosmosIngester.Queue.RateLimited -> incr rateLimited
                     | CosmosIngester.Queue.TimedOut -> incr timedOut
-                    | CosmosIngester.Queue.Malformed -> incr malformed
+                    | CosmosIngester.Queue.Malformed -> category stream |> badCats.Ingest; incr malformed
             let queueWrite (w : CosmosIngester.Batch) =
                 incr workPended
                 eventsPended := !eventsPended + w.span.events.Length
@@ -919,7 +928,8 @@ let main argv =
             createSyncHandler
 #else
         let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
-        let esConnection, catFilter = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.Master)
+        let esConnection = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.Master)
+        let catFilter = args.Source.CategoryFilterFunction
         let spec = args.BuildFeedParams()
         EventStoreSource.start log (esConnection.ReadConnection, spec, enumEvents catFilter) (256, target)
 #endif
