@@ -13,6 +13,24 @@ open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
 
+//#if eventStore
+type StartPos = Absolute of int64 | Chunk of int | Percentage of float | Tail
+type ReaderSpec =
+    {   /// Identifier for this projection and it's state
+        groupName: string
+        /// Start position from which forward reading is to commence // Assuming no stored position
+        start: StartPos
+        /// Additional streams with which to seed the reading
+        streams: string list
+        /// Delay when reading yields an empty batch
+        tailInterval: TimeSpan
+        /// Maximum number of stream readers to permit
+        stripes: int
+        /// Initial batch size to use when commencing reading
+        batchSize: int
+        /// Smallest batch size to degrade to in the presence of failures
+        minBatchSize: int }
+//#endif
 let mb x = float x / 1024. / 1024.
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 let every ms f =
@@ -22,10 +40,6 @@ let every ms f =
             f ()
             timer.Restart()
 
-//#if eventStore
-type StartPos = Absolute of int64 | Chunk of int | Percentage of float | Start | Ignore
-type ReaderSpec = { start: StartPos; streams: string list; tailInterval: TimeSpan option; stripes: int; batchSize: int; minBatchSize: int }
-//#endif
 
 module CmdParser =
     open Argu
@@ -48,7 +62,6 @@ module CmdParser =
 #else
         | [<AltCommandLine "-b"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-s">] Stream of string
-        | [<AltCommandLine "-A"; Unique>] All
         | [<AltCommandLine "-o"; Unique>] Offset of int64
         | [<AltCommandLine "-c"; Unique>] Chunk of int
         | [<AltCommandLine "-P"; Unique>] Percent of float
@@ -76,31 +89,31 @@ module CmdParser =
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
                 | Stream _ ->               "specific stream(s) to read"
-                | All ->                    "traverse EventStore $all from Start"
                 | Offset _ ->               "EventStore $all Stream Position to commence from"
                 | Chunk _ ->                "EventStore $all Chunk to commence from"
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
                 | Stripes _ ->              "number of concurrent readers"
-                | Tail _ ->                 "attempt to read from tail at specified interval in Seconds"
+                | Tail _ ->                 "attempt to read from tail at specified interval in Seconds. Default: 1"
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off"
 #endif
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | Source _ ->               "CosmosDb input parameters."
     and Arguments(a : ParseResults<Parameters>) =
-        member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
-        member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.BatchSize =           a.GetResult(BatchSize,1000)
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
 #if cosmos
+        member __.LeaseId =             a.GetResult ConsumerGroupName
+        member __.StartFromHere =       a.Contains ForceStartFromHere
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
 #else
+        member __.ConsumerGroupName =   a.GetResult ConsumerGroupName
         member __.VerboseConsole =      a.Contains VerboseConsole
         member __.ConsoleMinLevel =     if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
         member __.StartingBatchSize =   a.GetResult(BatchSize,4096)
         member __.MinBatchSize =        a.GetResult(MinBatchSize,512)
         member __.Stripes =             a.GetResult(Stripes,1)
-        member __.TailInterval =        match a.TryGetResult Tail with Some s -> TimeSpan.FromSeconds s |> Some | None -> None
+        member __.TailInterval =        a.GetResult(Tail,1.) |> TimeSpan.FromSeconds
 #endif
 
         member __.Verbose =             a.Contains Verbose
@@ -123,16 +136,15 @@ module CmdParser =
         member x.BuildFeedParams() : ReaderSpec =
             Log.Warning("Processing in batches of [{minBatchSize}..{batchSize}] with {stripes} stripes", x.MinBatchSize, x.StartingBatchSize, x.Stripes)
             let startPos =
-                match a.TryGetResult Offset, a.TryGetResult Chunk, a.TryGetResult Percent, a.Contains All with
-                | Some p, _, _, _ ->        Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
-                | _, Some c, _, _ ->        Log.Warning("Processing will commence at $all Chunk {c}", c); StartPos.Chunk c
-                | _, _, Some p, _ ->        Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
-                | None, None, None, true -> Log.Warning "Processing will commence at $all Start"; Start
-                | None, None, None, false ->Log.Warning "No $all processing requested"; Ignore
-            match x.TailInterval with
-            | Some interval -> Log.Warning("Following tail at {seconds}s interval", interval.TotalSeconds)
-            | None -> Log.Warning "Not following tail"
-            {   start = startPos; streams = a.GetResults Stream; tailInterval = x.TailInterval
+                match a.TryGetResult Offset, a.TryGetResult Chunk, a.TryGetResult Percent with
+                | Some p, _, _ ->   Log.Warning("Processing will commence at $all Position {p}", p); Absolute p
+                | _, Some c, _ ->   Log.Warning("Processing will commence at $all Chunk {c}", c); StartPos.Chunk c
+                | _, _, Some p ->   Log.Warning("Processing will commence at $all Percentage {pct:P}", p/100.); Percentage p 
+                | None, None, None -> Log.Warning "Processing will commence at $all Tail"; StartPos.Tail
+            Log.Information("Processing ConsumerGroupName {groupName} in Database {db} Collection {coll} in batches of {batchSize}",
+                x.ConsumerGroupName, x.Destination.Database, x.Destination.Collection, x.BatchSize)
+            Log.Warning("Following tail at {seconds}s interval", let i = x.TailInterval in i.TotalSeconds)
+            {   groupName = x.ConsumerGroupName; start = startPos; streams = a.GetResults Stream; tailInterval = x.TailInterval
                 batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; stripes = x.Stripes }
 #endif
     and [<NoEquality; NoComparison>] SourceParameters =
@@ -352,9 +364,6 @@ module EventStoreSource =
     let posFromPercentage (pct,max : Position) =
         let rawPos = Position(float max.CommitPosition * pct / 100. |> int64, 0L)
         let chunk = int (chunk rawPos) in posFromChunk chunk // &&& 0xFFFFFFFFE0000000L // rawPos / 256L / 1024L / 1024L * 1024L * 1024L * 256L
-    let posFromChunkAfter (pos: Position) =
-        let nextChunk = 1 + int (chunk pos)
-        posFromChunk nextChunk
 
     let fetchMax (conn : IEventStoreConnection) = async {
         let! lastItemBatch = conn.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
@@ -383,7 +392,7 @@ module EventStoreSource =
         fetchFrom 0L
 
     type [<NoComparison>] PullResult = Exn of exn: exn | Eof | EndOfTranche
-    type ReaderGroup(conn : IEventStoreConnection, enumEvents, postBatch : CosmosIngester.Batch -> unit) =
+    type ReaderGroup(conn : IEventStoreConnection, enumEvents, postBatch : Position -> CosmosIngester.Batch[] -> unit) =
         member __.Pump(range : Range, batchSize, slicesStats : SliceStatsBuffer, overallStats : OverallStats, ?ignoreEmptyEof) =
             let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
             let rec loop () = async {
@@ -398,15 +407,15 @@ module EventStoreSource =
                     |> Seq.map (fun (streamId,xs) -> streamId, [| for _s, i, e in xs -> i, e |])
                     |> Array.ofSeq
                 let usedStreams, usedCats = streams.Length, streams |> Seq.map fst |> Seq.distinct |> Seq.length
-                let mutable usedEvents = 0
-                for stream,streamEvents in streams do
-                    for pos, item in streamEvents do
-                        usedEvents <- usedEvents + 1
-                        postBatch { stream = stream; span =  { index = pos; events = [| item |]}}
+                let events : CosmosIngester.Batch[] =
+                    [| for stream,streamEvents in streams do
+                        for pos, item in streamEvents do
+                        yield { stream = stream; span = { index = pos; events = [| item |]}} |]
+                postBatch currentSlice.NextPosition events
                 if not(ignoreEmptyEof = Some true && batchEvents = 0 && not currentSlice.IsEndOfStream) then // ES doesnt report EOF on the first call :(
                     Log.Warning("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,3}c {streams,4}s {events,4}e Post {pt:n0}ms",
                         range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
-                        batchEvents, usedCats, usedStreams, usedEvents, postSw.ElapsedMilliseconds)
+                        batchEvents, usedCats, usedStreams, events.Length, postSw.ElapsedMilliseconds)
                 let shouldLoop = range.TryNext currentSlice.NextPosition
                 if shouldLoop && not currentSlice.IsEndOfStream then
                     sw.Restart() // restart the clock as we hand off back to the Reader
@@ -420,149 +429,190 @@ module EventStoreSource =
 
     type [<NoComparison>] Work =
         | Stream of name: string * batchSize: int
-        | Tranche of range: Range * batchSize : int
         | Tail of pos: Position * interval: TimeSpan * batchSize : int
-    type FeedQueue(batchSize, minBatchSize, max, ?statsInterval) =
+    type FeedQueue(batchSize, minBatchSize, ?statsInterval) =
         let work = System.Collections.Concurrent.ConcurrentQueue()
         member val OverallStats = OverallStats(?statsInterval=statsInterval)
         member val SlicesStats = SliceStatsBuffer()
-        member __.AddTranche(range, ?batchSizeOverride) =
-            work.Enqueue <| Work.Tranche (range, defaultArg batchSizeOverride batchSize)
-        member __.AddTranche(pos, nextPos, ?batchSizeOverride) =
-            __.AddTranche(Range (pos, Some nextPos, max), ?batchSizeOverride=batchSizeOverride)
         member __.AddStream(name, ?batchSizeOverride) =
             work.Enqueue <| Work.Stream (name, defaultArg batchSizeOverride batchSize)
         member __.AddTail(pos, interval, ?batchSizeOverride) =
             work.Enqueue <| Work.Tail (pos, interval, defaultArg batchSizeOverride batchSize)
         member __.TryDequeue () =
             work.TryDequeue()
-        member __.Process(conn, enumEvents, postBatch, work) = async {
+        member __.Process(conn, enumEvents, postItem, shouldTail, postTail, work) = async {
             let adjust batchSize = if batchSize > minBatchSize then batchSize - 128 else batchSize
             match work with
             | Stream (name,batchSize) ->
                 use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
                 Log.Warning("Reading stream; batch size {bs}", batchSize)
-                try do! pullStream (conn, batchSize) name postBatch
+                try do! pullStream (conn, batchSize) name postItem
                     Log.Warning("completed stream")
                 with e ->
                     let bs = adjust batchSize
                     Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
                     __.AddStream(name, bs)
                 return false
-            | Tranche (range, batchSize) ->
-                use _ = Serilog.Context.LogContext.PushProperty("Tranche",chunk range.Current)
-                Log.Warning("Commencing tranche, batch size {bs}", batchSize)
-                let reader = ReaderGroup(conn, enumEvents, postBatch)
-                let! res = reader.Pump(range, batchSize, __.SlicesStats, __.OverallStats)
-                match res with
-                | PullResult.EndOfTranche ->
-                    Log.Warning("Completed tranche")
-                    __.OverallStats.DumpIfIntervalExpired()
-                    return false
-                | PullResult.Eof ->
-                    Log.Warning("REACHED THE END!")
-                    __.OverallStats.DumpIfIntervalExpired(true)
-                    return true
-                | PullResult.Exn e ->
-                    let bs = adjust batchSize
-                    Log.Warning(e, "Could not read All, retrying with batch size {bs}", bs)
-                    __.OverallStats.DumpIfIntervalExpired()
-                    __.AddTranche(range, bs) 
-                    return false 
             | Tail (pos, interval, batchSize) ->
-                let mutable first, count, batchSize, range = true, 0, batchSize, Range(pos,None, Position.Start)
+                let mutable first, count, pauses, batchSize, range = true, 0, 0, batchSize, Range(pos,None, Position.Start)
                 let statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.)
                 let progressIntervalMs, tailIntervalMs = int64 statsInterval.TotalMilliseconds, int64 interval.TotalMilliseconds
                 let progressSw, tailSw = Stopwatch.StartNew(), Stopwatch.StartNew()
-                let reader = ReaderGroup(conn, enumEvents, postBatch)
+                let awaitInterval = async {
+                    match tailIntervalMs - tailSw.ElapsedMilliseconds with
+                    | waitTimeMs when waitTimeMs > 0L -> do! Async.Sleep (int waitTimeMs)
+                    | _ -> ()
+                    tailSw.Restart() }
+                let reader = ReaderGroup(conn, enumEvents, postTail)
                 let slicesStats, stats = SliceStatsBuffer(), OverallStats()
+                use _ = Serilog.Context.LogContext.PushProperty("Tranche", "Tail")
                 while true do
                     let currentPos = range.Current
-                    use _ = Serilog.Context.LogContext.PushProperty("Tranche", "Tail")
                     if first then
                         first <- false
                         Log.Warning("Tailing at {interval}s interval", interval.TotalSeconds)
                     elif progressSw.ElapsedMilliseconds > progressIntervalMs then
-                        Log.Warning("Performed {count} tails to date @ {pos} chunk {chunk}", count, currentPos.CommitPosition, chunk currentPos)
+                        Log.Warning("Performed {count} tails ({pauses} pauses) to date @ {pos} chunk {chunk}", count, pauses, currentPos.CommitPosition, chunk currentPos)
                         progressSw.Restart()
                     count <- count + 1
-                    let! res = reader.Pump(range,batchSize,slicesStats,stats,ignoreEmptyEof=true)
+                    if shouldTail () then
+                        let! res = reader.Pump(range,batchSize,slicesStats,stats,ignoreEmptyEof=true)
+                        do! awaitInterval
+                        match res with
+                        | PullResult.EndOfTranche | PullResult.Eof -> ()
+                        | PullResult.Exn e ->
+                            batchSize <- adjust batchSize
+                            Log.Warning(e, "Tail $all failed, adjusting batch size to {bs}", batchSize)
+                    else
+                        pauses <- pauses + 1
+                        do! awaitInterval
                     stats.DumpIfIntervalExpired()
-                    match tailIntervalMs - tailSw.ElapsedMilliseconds with
-                    | waitTimeMs when waitTimeMs > 0L -> do! Async.Sleep (int waitTimeMs)
-                    | _ -> ()
-                    tailSw.Restart()
-                    match res with
-                    | PullResult.EndOfTranche | PullResult.Eof -> ()
-                    | PullResult.Exn e ->
-                        batchSize <- adjust batchSize
-                        Log.Warning(e, "Tail $all failed, adjusting batch size to {bs}", batchSize)
                 return true }
 
-    type Reader(conn : IEventStoreConnection, spec: ReaderSpec, enumEvents, postBatch : CosmosIngester.Batch -> unit, max, ct : CancellationToken, ?statsInterval) = 
-        let work = FeedQueue(spec.batchSize, spec.minBatchSize, max, ?statsInterval=statsInterval)
-        do  match spec.tailInterval with
-            | Some interval -> work.AddTail(max, interval)
-            | None -> ()
+    type Reader(conn : IEventStoreConnection, spec: ReaderSpec, enumEvents, max, ?statsInterval) = 
+        let work = FeedQueue(spec.batchSize, spec.minBatchSize, ?statsInterval=statsInterval)
+        do  work.AddTail(max, spec.tailInterval)
             for s in spec.streams do
                 work.AddStream s
-        let mutable remainder =
             let startPos =
                 match spec.start with
-                | StartPos.Start -> Position.Start
+                | StartPos.Tail -> max
                 | Absolute p -> Position(p, 0L)
                 | Chunk c -> posFromChunk c
                 | Percentage pct -> posFromPercentage (pct, max)
-                | Ignore -> max
             Log.Warning("Start Position {pos} (chunk {chunk}, {pct:p1})",
                 startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/ float max.CommitPosition)
-            if spec.start = Ignore then None
-            else
-                let nextPos = posFromChunkAfter startPos
-                work.AddTranche(startPos, nextPos)
-                Some nextPos
 
-        member __.Pump () = async {
-            (*if spec.tail then enqueue tail work*)
-            let maxDop = spec.stripes + Option.count spec.tailInterval
+        member __.Pump(postItem, shouldTail, postTail) = async {
+            let maxDop = spec.stripes + 1
             let dop = new SemaphoreSlim(maxDop)
             let mutable finished = false
-            while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
+            let! ct = Async.CancellationToken
+            while not ct.IsCancellationRequested do
                 let! _ = dop.Await()
                 work.OverallStats.DumpIfIntervalExpired()
                 let forkRunRelease task = async {
                     let! _ = Async.StartChild <| async {
-                        try let! eof = work.Process(conn, enumEvents, postBatch, task)
-                            if eof then remainder <- None
+                        try let! _ = work.Process(conn, enumEvents, postItem, shouldTail, postTail, task) in ()
                         finally dop.Release() |> ignore }
                     return () }
                 match work.TryDequeue() with
                 | true, task ->
                     do! forkRunRelease task
+                | false, _ when not finished->
+                    Log.Warning("No further ingestion work to commence")
+                    finished <- true
+                | _ -> () }
+
+    type [<RequireQualifiedAccess; NoComparison>] CoordinationWork<'Pos> =
+        | Result of CosmosIngester.Writer.Result
+        | Unbatched of CosmosIngester.Batch
+        | BatchWithTracking of 'Pos * CosmosIngester.Batch[]
+
+    let every ms f =
+        let timer = Stopwatch.StartNew()
+        fun () ->
+            if timer.ElapsedMilliseconds > ms then
+                f ()
+                timer.Restart()
+
+    type Coordinator(log : Serilog.ILogger, reader : Reader, cosmosContext, ?maxWriters, ?interval) =
+        let statsIntervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
+        let sleepIntervalMs = 100
+        let work = System.Collections.Concurrent.ConcurrentQueue()
+        let buffer = CosmosIngester.Queue.StreamStates()
+        let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log cosmosContext, defaultArg maxWriters 32)
+        let tailSyncState = Progress.State()
+        let pumpReaders =
+            let postWrite = work.Enqueue << CoordinationWork.Unbatched
+            let postBatch pos xs = work.Enqueue(CoordinationWork.BatchWithTracking (pos,xs))
+            // Yes, there is a race, but its constrained by the number of parallel readers and the fact that batches get ingested quickly here
+            let shouldTailNow () = let _, pendingBatchCount = tailSyncState.Validate(fun _ -> None) in pendingBatchCount < 10 // TODO remove 10
+            reader.Pump(postWrite, shouldTailNow, postBatch)
+        let postWriteResult = work.Enqueue << CoordinationWork.Result
+
+        member __.Pump () = async {
+            use _ = writers.Result.Subscribe postWriteResult
+            let! _ = Async.StartChild pumpReaders
+            let! _ = Async.StartChild <| writers.Pump()
+            let! ct = Async.CancellationToken
+            let mutable bytesPended = 0L
+            let resultsHandled, ingestionsHandled, workPended, eventsPended = ref 0, ref 0, ref 0, ref 0
+            let mutable rateLimited, timedOut, malformed = ref 0, ref 0, ref 0
+            let dumpStats () =
+                log.Warning("Writer Exceptions {rateLimited} rate-limited, {timedOut} timed out, {malformed} malformed",!rateLimited, !timedOut, !malformed)
+                rateLimited := 0; timedOut := 0; malformed := 0 
+                Log.Warning("Sent {queued} req {events} events; Completed {completed} reqs; Egress {gb:n3}GB",
+                    !workPended, !eventsPended,!resultsHandled, mb bytesPended / 1024.)
+                ingestionsHandled := 0; workPended := 0; eventsPended := 0; resultsHandled := 0
+                buffer.Dump log
+            let tryDumpStats = every statsIntervalMs dumpStats
+            let handle = function
+                | CoordinationWork.Unbatched item ->
+                    buffer.Add item |> ignore
+                | CoordinationWork.BatchWithTracking(pos, items) ->
+                    for item in items do
+                        buffer.Add item |> ignore
+                    tailSyncState.AppendBatch(pos, [|for x in items -> x.stream, x.span.index + int64 x.span.events.Length |])
+                | CoordinationWork.Result res ->
+                    incr resultsHandled
+                    let (stream, updatedState), kind = buffer.HandleWriteResult res
+                    match updatedState.write with None -> () | Some wp -> tailSyncState.MarkStreamProgress(stream, wp)
+                    res.WriteTo log
+                    match kind with
+                    | CosmosIngester.Queue.Ok -> res.WriteTo log
+                    | CosmosIngester.Queue.RateLimited -> incr rateLimited
+                    | CosmosIngester.Queue.TimedOut -> incr timedOut
+                    | CosmosIngester.Queue.Malformed -> incr malformed
+            let queueWrite (w : CosmosIngester.Batch) =
+                incr workPended
+                eventsPended := !eventsPended + w.span.events.Length
+                bytesPended <- bytesPended + int64 (Array.sumBy CosmosIngester.cosmosPayloadBytes w.span.events)
+                writers.Enqueue w
+            while not ct.IsCancellationRequested do
+                // 1. propagate read items to buffer; propagate write results to buffer + Progress 
+                match work.TryDequeue() with
+                | true, item ->
+                    handle item
                 | false, _ ->
-                    match remainder with
-                    | Some pos -> 
-                        let nextPos = posFromChunkAfter pos
-                        remainder <- Some nextPos
-                        do! forkRunRelease <| Work.Tranche (Range(pos, Some nextPos, max), spec.batchSize)
-                    | None ->
-                        if finished then do! Async.Sleep 1000 
-                        else Log.Warning("No further ingestion work to commence")
-                        finished <- true }
+                    // 2. After that, [over] provision writers queue
+                    let mutable more = writers.HasCapacity
+                    while more do
+                        match buffer.TryReady() with
+                        | Some w -> queueWrite w; more <- writers.HasCapacity
+                        | None -> (); more <- false
+                    // 3. Periodically emit status info
+                    tryDumpStats ()
+                    // TODO trigger periodic progress writing
+                    // 5. Sleep if
+                    do! Async.Sleep sleepIntervalMs }
 
-    let start log (leaseId, startFromHere, batchSize) (conn, spec, enumEvents, cosmosContext) = async {
-        let! ct = Async.CancellationToken
+    let start (log : Serilog.ILogger) (conn, spec, enumEvents) (maxWriters, cosmosContext) = async {
         let! max = establishMax conn 
-        let writer = CosmosIngester.SynchronousWriter(cosmosContext, log)
-        let reader = Reader(conn, spec, enumEvents, writer.Add, max, ct)
-        let! _ = Async.StartChild <| reader.Pump()
-        return ()
-    }
+        let reader = Reader(conn, spec, enumEvents, max)
+        let coordinator = Coordinator(log, reader, cosmosContext, maxWriters)
+        do! coordinator.Pump () }
 
-    //let run (ctx : Equinox.Cosmos.Core.CosmosContext) (source : GesConnection) (spec: ReaderSpec) (writerQueueLen, writerCount, readerQueueLen) = async {
-    //    let! ingester = EventStoreSource.start(source.ReadConnection, writerQueueLen, writerCount, readerQueueLen)
-    //    let! _feeder = EventStoreSource.start(source.ReadConnection, spec, enumEvents, ingester.Add)
-    //    do! Async.AwaitKeyboardInterrupt() }
 let enumEvents catFilter (xs : EventStore.ClientAPI.ResolvedEvent[]) = seq {
     for e in xs ->
         let eb = EventStoreSource.esPayloadBytes e
@@ -580,7 +630,8 @@ let enumEvents catFilter (xs : EventStore.ClientAPI.ResolvedEvent[]) = seq {
             Choice2Of2 e
         | e -> Choice1Of2 (e.EventStreamId, e.EventNumber, Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata, e.Timestamp))
 }
-#else
+
+//#else
 module CosmosSource =
     open Microsoft.Azure.Documents
     open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
@@ -870,7 +921,7 @@ let main argv =
         let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
         let esConnection, catFilter = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.Master)
         let spec = args.BuildFeedParams()
-        EventStoreSource.start log (esConnection.ReadConnection, spec, enumEvents catFilter, target) 
+        EventStoreSource.start log (esConnection.ReadConnection, spec, enumEvents catFilter) (256, target)
 #endif
         |> Async.RunSynchronously
         0 
