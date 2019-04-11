@@ -483,14 +483,14 @@ module EventStoreSource =
                             batchSize <- adjust batchSize
                             Log.Warning(e, "Tail $all failed, adjusting batch size to {bs}", batchSize)
                     else
-                        if not paused then Log.Information("Pausing...")
+                        if not paused then Log.Information("Pausing due to backlog of incomplete batches...")
                         paused <- true
                         pauses <- pauses + 1
                         do! awaitInterval
                     stats.DumpIfIntervalExpired()
                 return true }
 
-    type Reader(conn : IEventStoreConnection, spec: ReaderSpec, enumEvents, max, ?statsInterval) = 
+    type Reader(conn : IEventStoreConnection, spec : ReaderSpec, enumEvents, max, ?statsInterval) = 
         let work = FeedQueue(spec.batchSize, spec.minBatchSize, ?statsInterval=statsInterval)
         do  let startPos =
                 match spec.start with
