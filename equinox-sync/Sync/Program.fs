@@ -379,17 +379,21 @@ module EventStoreSource =
                 Log.Warning(e,"Could not establish max position")
                 do! Async.Sleep 5000 
         return Option.get max }
-    let pullStream (conn : IEventStoreConnection, batchSize) stream (postBatch : CosmosIngester.Batch -> unit) =
-        let rec fetchFrom pos = async {
-            let! currentSlice = conn.ReadStreamEventsBackwardAsync(stream, pos, batchSize, resolveLinkTos=true) |> Async.AwaitTaskCorrect
-            if currentSlice.IsEndOfStream then return () else
+    let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : CosmosIngester.Batch -> unit) =
+        let rec fetchFrom pos limit = async {
+            let reqLen = match limit with Some limit -> min limit batchSize | None -> batchSize
+            let! currentSlice = conn.ReadStreamEventsBackwardAsync(stream, pos, reqLen, resolveLinkTos=true) |> Async.AwaitTaskCorrect
             let events =
                 [| for x in currentSlice.Events ->
                     let e = x.Event
                     Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata, e.Timestamp) :> Equinox.Codec.IEvent<byte[]> |]
             postBatch { stream = stream; span = { index = currentSlice.FromEventNumber; events = events } }
-            return! fetchFrom currentSlice.NextEventNumber }
-        fetchFrom 0L
+            match limit with
+            | None when currentSlice.IsEndOfStream -> return ()
+            | Some limit when events.Length >= limit -> return ()
+            | None -> return! fetchFrom currentSlice.NextEventNumber None
+            | Some limit -> return! fetchFrom currentSlice.NextEventNumber (Some (limit - events.Length)) }
+        fetchFrom pos limit
 
     type [<NoComparison>] PullResult = Exn of exn: exn | Eof | EndOfTranche
     type ReaderGroup(conn : IEventStoreConnection, enumEvents, postBatch : Position -> CosmosIngester.Batch[] -> unit) =
@@ -427,6 +431,7 @@ module EventStoreSource =
 
     type [<NoComparison>] Work =
         | Stream of name: string * batchSize: int
+        | StreamPrefix of name: string * pos: int64 * len: int * batchSize: int
         | Tail of pos: Position * interval: TimeSpan * batchSize : int
     type FeedQueue(batchSize, minBatchSize, ?statsInterval) =
         let work = System.Collections.Concurrent.ConcurrentQueue()
@@ -434,6 +439,8 @@ module EventStoreSource =
         member val SlicesStats = SliceStatsBuffer()
         member __.AddStream(name, ?batchSizeOverride) =
             work.Enqueue <| Work.Stream (name, defaultArg batchSizeOverride batchSize)
+        member __.AddStreamPrefix(name, pos, len, ?batchSizeOverride) =
+            work.Enqueue <| Work.StreamPrefix (name, pos, len, defaultArg batchSizeOverride batchSize)
         member __.AddTail(pos, interval, ?batchSizeOverride) =
             work.Enqueue <| Work.Tail (pos, interval, defaultArg batchSizeOverride batchSize)
         member __.TryDequeue () =
@@ -441,11 +448,21 @@ module EventStoreSource =
         member __.Process(conn, enumEvents, postItem, shouldTail, postTail, work) = async {
             let adjust batchSize = if batchSize > minBatchSize then batchSize - 128 else batchSize
             match work with
+            | StreamPrefix (name,pos,len,batchSize) ->
+                use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
+                Log.Information("Reading stream prefix; pos {pos} len {len} batch size {bs}", pos, len, batchSize)
+                try do! pullStream (conn, batchSize) (name, pos, Some len) postItem
+                    Log.Information("completed stream")
+                with e ->
+                    let bs = adjust batchSize
+                    Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
+                    __.AddStreamPrefix(name, pos, len, bs)
+                return false
             | Stream (name,batchSize) ->
                 use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
                 Log.Warning("Reading stream; batch size {bs}", batchSize)
-                try do! pullStream (conn, batchSize) name postItem
-                    Log.Warning("completed stream")
+                try do! pullStream (conn, batchSize) (name,0L,None) postItem
+                    Log.Information("completed stream")
                 with e ->
                     let bs = adjust batchSize
                     Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
@@ -491,6 +508,8 @@ module EventStoreSource =
                 return true }
 
     type Reader(conn : IEventStoreConnection, spec : ReaderSpec, enumEvents, max, ?statsInterval) = 
+        let maxDop = spec.stripes + 1
+        let dop = new SemaphoreSlim(maxDop)
         let work = FeedQueue(spec.batchSize, spec.minBatchSize, ?statsInterval=statsInterval)
         do  let startPos =
                 match spec.start with
@@ -507,10 +526,10 @@ module EventStoreSource =
                     work.AddStream s
             Log.Information("EventStore Tailing @ {pos} (chunk {chunk}, {pct:p1}) every {interval}s",
                 startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/ float max.CommitPosition, spec.tailInterval.TotalSeconds)
-
+        /// Computes number of streams that can be admitted to the stream loading queue by AddStreamPrefix
+        member __.ReadersHeadroom = dop.CurrentCount * 2
+        member __.AddStreamPrefix(stream, pos, len) = work.AddStreamPrefix(stream, pos, len)
         member __.Pump(postItem, shouldTail, postTailBatch) = async {
-            let maxDop = spec.stripes + 1
-            let dop = new SemaphoreSlim(maxDop)
             let mutable finished = false
             let! ct = Async.CancellationToken
             while not ct.IsCancellationRequested do
@@ -609,8 +628,12 @@ module EventStoreSource =
                 | true, item ->
                     handle item
                 | false, _ ->
-//                    for ps in tailSyncState.PeekPendingStreams do
-//                        buffer.IsReady
+                    // 2. Enqueue streams with gaps if there is capacity (not too early to avoid redundant work)
+                    let mutable capacity = reader.ReadersHeadroom
+                    while capacity > 0 do
+                        match buffer.TryGap() with
+                        | None -> capacity <- 0
+                        | Some (stream,pos,len) -> reader.AddStreamPrefix(stream,pos,len); capacity <- capacity - 1
                     // 3. After that, [over] provision writers queue
                     let mutable more = writers.HasCapacity
                     while more do
