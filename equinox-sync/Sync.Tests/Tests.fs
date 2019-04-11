@@ -1,6 +1,6 @@
 module SyncTemplate.Tests.IngesterTests
 
-open SyncTemplate.Program.Ingester
+open SyncTemplate.Program.CosmosIngester
 open Swensen.Unquote
 open Xunit
 
