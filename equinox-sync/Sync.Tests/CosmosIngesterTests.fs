@@ -1,4 +1,4 @@
-module SyncTemplate.Tests.IngesterTests
+module SyncTemplate.Tests.CosmosIngesterTests
 
 open SyncTemplate.Program.CosmosIngester
 open Swensen.Unquote
