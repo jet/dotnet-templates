@@ -18,6 +18,17 @@ type Async with
             and d : IDisposable = Console.CancelKeyPress.Subscribe callback
             in ())
 
+module Queue =
+    let tryDequeue (x : System.Collections.Generic.Queue<'T>) =
+#if NET461
+        if x.Count = 0 then None
+        else x.Dequeue() |> Some
+#else
+        match x.TryDequeue() with
+        | false, _ -> None
+        | true, res -> Some res
+#endif
+
 open Equinox.Store // AwaitTaskCorrect
 
 type SemaphoreSlim with
