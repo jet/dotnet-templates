@@ -548,18 +548,6 @@ module CosmosSource =
         member __.PendingBatches = pendingBatches
         interface IDisposable with member __.Dispose() = cts.Cancel()
 
-    let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
-            createRangeProjector = async {
-        let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
-            Log.Information("Lags {@rangeLags} (Range, Docs count)", remainingWork)
-            return! Async.Sleep interval }
-        let maybeLogLag = lagReportFreq |> Option.map logLag
-        let! _feedEventHost =
-            ChangeFeedProcessor.Start
-              ( Log.Logger, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
-                cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
-        do! Async.AwaitKeyboardInterrupt() }
-
     let createRangeSyncHandler (log:ILogger) (ctx: Core.CosmosContext) (transform : Microsoft.Azure.Documents.Document -> CosmosIngester.Batch seq) =
         let busyPauseMs = 500
         let maxUnconfirmedBatches = 10
@@ -598,6 +586,18 @@ module CosmosSource =
             sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
         }
         ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
+
+    let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
+            createRangeProjector = async {
+        let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
+            Log.Information("Lags {@rangeLags} (Range, Docs count)", remainingWork)
+            return! Async.Sleep interval }
+        let maybeLogLag = lagReportFreq |> Option.map logLag
+        let! _feedEventHost =
+            ChangeFeedProcessor.Start
+              ( Log.Logger, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
+                cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
+        do! Async.AwaitKeyboardInterrupt() }
 
     //#if marveleqx
     [<RequireQualifiedAccess>]
