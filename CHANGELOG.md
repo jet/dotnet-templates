@@ -8,13 +8,23 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ## [Unreleased]
 
+### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="2.1.0"></a>
+## [2.1.0] - 2019-03-26
+
+### Added
+
+- `dotnet new eqxsync` has separated processing for progress computation, progress writing and batch loading (this also happens to be the only way in which to balance throughput with correctness in the context of a ChangeFeedProcessor) [#19](https://github.com/jet/dotnet-templates/pull/19)
+
 ### Changed
 
 - `dotnet new eqxetl` is now `dotnet new eqxsync`
 - `dotnet new eqxsync` now supports command-line category white/blacklist [#18](https://github.com/jet/dotnet-templates/pull/18)
 - `dotnet new eqxsync` now supports command-line selection of an `aux` collection in either the `source` or destination collections [#18](https://github.com/jet/dotnet-templates/pull/18)
-- `dotnet new eqxsync` has separated processing for progress computation, progress writing and batch loading (this also happens to be the only way in which to balance throughput with correctness in the context of a ChangeFeedProcessor) [#19](https://github.com/jet/dotnet-templates/pull/19)
-
 - targets `Equinox`.* v `2.0.0-preview5`
 - `dotnet new eqxprojector` now targets `Jet.ConfluentKafka.FSharp 1.0.0-rc3` (which targets `Confluent.Kafka 1.0.0-RC4`, `librdkafka 1.0.0`)
 
@@ -61,7 +71,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.0.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.1.0...HEAD
+[2.1.0]: https://github.com/jet/dotnet-templates/compare/2.0.0...2.1.0
 [2.0.0]: https://github.com/jet/dotnet-templates/compare/1.2.0...2.0.0
 [1.2.0]: https://github.com/jet/dotnet-templates/compare/1.1.1...1.2.0
 [1.1.1]: https://github.com/jet/dotnet-templates/compare/1061b32ff1d86633e4adb0ce591992aea9c48c1e...1.1.1

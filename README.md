@@ -8,7 +8,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project _ported to C#_.
 - [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic.
 - [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models, using different stores and/or store configuration parameters.
-- [`eqxsync`](equinox-sync/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor that traverses each document in a source store, filtering/enriching/mapping those to Events to be written (consistently) into an `Equinox.Cosmos` store.
+- [`eqxsync`](equinox-sync/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor that traverses each document in a source store, filtering/enriching/mapping those to Events to be written (consistently) into an `Equinox.Cosmos` store with optimized throughput.
 
 ## How to use
 
