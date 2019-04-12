@@ -230,7 +230,7 @@ module CosmosIngester =
                                                                     batch.stream, batch.span.events.Length)
         let write (log : ILogger) (ctx : CosmosContext) ({ stream = s; span = { index = p; events = e}} as batch) = async {
             let stream = ctx.CreateStream s
-            log.Information("Writing {s}@{i}x{n}",s,p,e.Length)
+            log.Debug("Writing {s}@{i}x{n}",s,p,e.Length)
             try let! res = ctx.Sync(stream, { index = p; etag = None }, e)
                 match res with
                 | AppendResult.Ok pos -> return Ok (s, pos.index) 
@@ -239,7 +239,7 @@ module CosmosIngester =
                     | actual, expectedMax when actual >= expectedMax -> return Duplicate (s, pos.index)
                     | actual, _ when p > actual -> return PrefixMissing (batch, actual)
                     | actual, _ ->
-                        log.Information("pos {pos} batch.pos {bpos} len {blen} skip {skip}", actual, p, e.LongLength, actual-p)
+                        log.Debug("pos {pos} batch.pos {bpos} len {blen} skip {skip}", actual, p, e.LongLength, actual-p)
                         return PartialDuplicate { stream = s; span = { index = actual; events = e |> Array.skip (actual-p |> int) } }
             with e -> return Exn (e, batch) }
 
@@ -448,7 +448,7 @@ module CosmosSource =
     type PendingWork = { batches : int; streams : int }
     type Coordinator private (cosmosContext, cts : CancellationTokenSource, ?maxWriters, ?interval) =
         let pumpSleepMs = 100
-        let maxWriters = defaultArg maxWriters 64
+        let maxWriters = defaultArg maxWriters 256
         let statsIntervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
         let work = System.Collections.Concurrent.ConcurrentQueue()
         let buffer = CosmosIngester.Queue.StreamStates()
