@@ -17,7 +17,7 @@
     <PackageReference Include="Equinox.Cosmos.Projection" Version="2.0.0-preview5" />
     <!--#if (kafka)-->
     <PackageReference Include="Equinox.Projection" Version="2.0.0-preview5" />
-    <PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-rc2" />
+    <PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-rc3" />
     <!--#endif-->
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
