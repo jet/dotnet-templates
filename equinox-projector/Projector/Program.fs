@@ -130,19 +130,6 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-// Illustrates how to emit direct to the Console using Serilog
-// Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
-module Logging =
-    let initialize verbose changeLogVerbose =
-        Log.Logger <-
-            LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
-            |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
-                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-            |> fun c -> c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
-                            .CreateLogger()
-
 let run discovery connectionPolicy source
         (aux, leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
@@ -162,39 +149,50 @@ let mkRangeProjector (broker, topic) =
     let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = CompressionType.Lz4)
     let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
     let disposeProducer = (producer :> IDisposable).Dispose
-    let projectBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+    let projectBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent =
-            // Late breaking hack compensating for the way the Equinox.Codec JsonConverter renders invalid json
-            // TODO remove when it's fixed
-            let meta' = if e.Meta = null || e.Meta.Length = 0 then System.Text.Encoding.UTF8.GetBytes("{}") else e.Meta
-            { s = e.Stream; i = e.Index; c = e.EventType; t = e.Timestamp; d = e.Data; m = meta' }
+        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.Timestamp; d = e.Data; m = e.Meta }
         let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map toKafkaEvent |> Array.ofSeq) |> Stopwatch.Time 
         let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
-        let! et,_ = producer.ProduceBatch es |> Stopwatch.Time
-        let r = ctx.FeedResponse
+        let! et,() = async {
+            let! _ = producer.ProduceBatch es
+            do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect } |> Stopwatch.Time
 
-        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
-            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = r.RequestCharge in c.ToString("n1")),
+        log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
+            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")),
             float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
-    ChangeFeedObserver.Create(Log.Logger, projectBatch, disposeProducer)
+    ChangeFeedObserver.Create(Log.Logger, projectBatch, dispose = disposeProducer)
 //#else
 let createRangeHandler () =
     let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
-    let processBatch (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+    let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
         let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.length) |> Stopwatch.Time
-        let r = ctx.FeedResponse
-        Log.Information("Read {range,2} -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s",
-            ctx.PartitionKeyRangeId, r.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = r.RequestCharge in c.ToString("n1")),
-            float sw.ElapsedMilliseconds / 1000., events, (let e = pt.Elapsed in e.TotalSeconds))
+        let! ct,() = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect } |> Stopwatch.Time
+        log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Checkpoint {c:n3}s",
+            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")),
+            float sw.ElapsedMilliseconds / 1000., events, (let e = pt.Elapsed in e.TotalSeconds), (let e = ct.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
     ChangeFeedObserver.Create(Log.Logger, processBatch)
  //#endif
  
+// Illustrates how to emit direct to the Console using Serilog
+// Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
+module Logging =
+    let initialize verbose changeLogVerbose =
+        Log.Logger <-
+            LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
+            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
+            // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
+            |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
+                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
+            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Message:lj} {NewLine}{Exception}"
+                        c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+                            .CreateLogger()
+
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
