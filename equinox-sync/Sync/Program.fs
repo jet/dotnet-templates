@@ -25,6 +25,7 @@ module CmdParser =
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
+        | [<AltCommandLine "-S"; Unique>] LocalSeq
         | [<AltCommandLine "-as"; Unique>] LeaseCollectionSource of string
         | [<AltCommandLine "-ad"; Unique>] LeaseCollectionDestination of string
         | [<AltCommandLine "-l"; Unique>] LagFreqS of float
@@ -37,6 +38,7 @@ module CmdParser =
             member a.Usage =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
+                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
                 | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
@@ -46,6 +48,7 @@ module CmdParser =
                 | Source _ ->               "CosmosDb input parameters."
                 | Verbose ->                "request Verbose Logging. Default: off"
     and Arguments(a : ParseResults<Parameters>) =
+        member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.BatchSize =           a.GetResult(BatchSize,1000)
         member __.StartFromHere =       a.Contains ForceStartFromHere
@@ -217,19 +220,17 @@ module CosmosIngester =
             | Exn of exn: exn * batch: Batch
             member __.WriteTo(log: ILogger) =
                 match __ with
-                | Ok (stream, pos) ->
-                    log.Information("Wrote     {stream} up to {pos}", stream, pos)
-                | Duplicate (stream, pos) ->
-                    log.Information("Ignored   {stream} (synced up to {pos})", stream, pos)
-                | PartialDuplicate  overage ->
-                    log.Information("Requeing  {stream} {pos} ({count} events)", overage.stream, overage.span.index, overage.span.events.Length)
-                | PrefixMissing ({stream=stream; span=span},pos) ->
-                    log.Information("Waiting   {stream} missing {gap} events ({count} events @ {pos})", stream, span.index-pos, span.events.Length, span.index)
-                | Exn (exn, batch) ->
-                    log.Warning(exn,"Writing   {stream} failed, retrying {count} events ....", batch.stream, batch.span.events.Length)
+                | Ok (stream, pos) ->           log.Information("Wrote     {stream} up to {pos}", stream, pos)
+                | Duplicate (stream, pos) ->    log.Information("Ignored   {stream} (synced up to {pos})", stream, pos)
+                | PartialDuplicate  overage ->  log.Information("Requeing  {stream} {pos} ({count} events)",
+                                                                    overage.stream, overage.span.index, overage.span.events.Length)
+                | PrefixMissing (batch,pos) ->  log.Information("Waiting   {stream} missing {gap} events ({count} events @ {pos})",
+                                                                    batch.stream, batch.span.index-pos, batch.span.events.Length, batch.span.index)
+                | Exn (exn, batch) ->           log.Warning(exn,"Writing   {stream} failed, retrying {count} events ....",
+                                                                    batch.stream, batch.span.events.Length)
         let write (log : ILogger) (ctx : CosmosContext) ({ stream = s; span = { index = p; events = e}} as batch) = async {
             let stream = ctx.CreateStream s
-            log.Debug("Writing {s}@{i}x{n}",s,p,e.Length)
+            log.Information("Writing {s}@{i}x{n}",s,p,e.Length)
             try let! res = ctx.Sync(stream, { index = p; etag = None }, e)
                 match res with
                 | AppendResult.Ok pos -> return Ok (s, pos.index) 
@@ -238,7 +239,7 @@ module CosmosIngester =
                     | actual, expectedMax when actual >= expectedMax -> return Duplicate (s, pos.index)
                     | actual, _ when p > actual -> return PrefixMissing (batch, actual)
                     | actual, _ ->
-                        log.Debug("pos {pos} batch.pos {bpos} len {blen} skip {skip}", actual, p, e.LongLength, actual-p)
+                        log.Information("pos {pos} batch.pos {bpos} len {blen} skip {skip}", actual, p, e.LongLength, actual-p)
                         return PartialDuplicate { stream = s; span = { index = actual; events = e |> Array.skip (actual-p |> int) } }
             with e -> return Exn (e, batch) }
 
@@ -659,7 +660,7 @@ module CosmosSource =
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
 module Logging =
-    let initialize verbose changeLogVerbose =
+    let initialize verbose changeLogVerbose maybeSeqEndpoint =
         Log.Logger <-
             LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
@@ -674,6 +675,7 @@ module Logging =
                         c.MinimumLevel.Override(typeof<CosmosContext>.FullName, cl)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+            |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
         Log.ForContext<ChangeFeedObserver>()
 
@@ -684,7 +686,7 @@ let main argv =
             let destination = args.Destination.Connect "SyncTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
-        let log = Logging.initialize args.Verbose args.ChangeFeedVerbose
+        let log = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
 #if marveleqx
@@ -692,7 +694,7 @@ let main argv =
 #else
         let createSyncHandler () = CosmosSource.createRangeSyncHandler log target (CosmosSource.transformOrFilter catFilter)
         // Uncomment to test marveleqx mode
-        let createSyncHandler () = CosmosSource.createRangeSyncHandler log target (CosmosSource.transformV0 catFilter)
+        // let createSyncHandler () = CosmosSource.createRangeSyncHandler log target (CosmosSource.transformV0 catFilter)
 #endif
         CosmosSource.run (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, batchSize, lagFrequency)
