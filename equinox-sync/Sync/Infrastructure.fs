@@ -5,6 +5,7 @@ open Equinox.Store // AwaitTaskCorrect
 open System
 open System.Threading
 open System.Threading.Tasks
+open System.Collections.Generic
 
 #nowarn "21" // re AwaitKeyboardInterrupt
 #nowarn "40" // re AwaitKeyboardInterrupt
@@ -45,3 +46,38 @@ type SemaphoreSlim with
         try return! workflow
         finally semaphore.Release() |> ignore
     }
+
+type RefCounted<'T> = { mutable refCount: int; value: 'T }
+
+// via https://stackoverflow.com/a/31194647/11635
+type SemaphorePool(gen : unit -> SemaphoreSlim) =
+    let inners: Dictionary<string, RefCounted<SemaphoreSlim>> = Dictionary()
+
+    let getOrCreateSlot key =
+        lock inners <| fun () ->
+            match inners.TryGetValue key with
+            | true, inner ->
+                inner.refCount <- inner.refCount + 1
+                inner.value
+            | false, _ ->
+                let value = gen ()
+                inners.[key] <- { refCount = 1; value = value }
+                value
+    let slotReleaseGuard key : IDisposable =
+        { new System.IDisposable with
+            member __.Dispose() =
+                lock inners <| fun () ->
+                    let item = inners.[key]
+                    match item.refCount with
+                    | 1 -> inners.Remove key |> ignore
+                    | current -> item.refCount <- current - 1 }
+
+    member __.ExecuteAsync(k,f) = async {
+        let x = getOrCreateSlot k
+        use _ = slotReleaseGuard k
+        return! f x }
+
+    member __.Execute(k,f) =
+        let x = getOrCreateSlot k
+        use _l = slotReleaseGuard k
+        f x
