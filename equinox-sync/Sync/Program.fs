@@ -553,16 +553,17 @@ module EventStoreSource =
         | Unbatched of CosmosIngester.Batch
         | BatchWithTracking of 'Pos * CosmosIngester.Batch[]
 
-    type Coordinator(log : Serilog.ILogger, readers : Readers, cosmosContext, maxWriters, ?interval) =
+    type Coordinator(log : Serilog.ILogger, readers : Readers, cosmosContext, maxWriters, ?interval, ?maxPendingBatches) =
+        let maxPendingBatches = defaultArg maxPendingBatches 32
         let statsIntervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
         let sleepIntervalMs = 100
         let work = System.Collections.Concurrent.ConcurrentQueue()
-        let buffer = CosmosIngester.Queue.StreamStates()
+        let buffer = CosmosIngester.StreamStates()
         let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log cosmosContext, maxWriters)
-        let tailSyncState = Progress.State()
+        let tailSyncState = ProgressBatcher.State()
         // Yes, there is a race, but its constrained by the number of parallel readers and the fact that batches get ingested quickly here
         let mutable pendingBatchCount = 0
-        let shouldThrottle () = pendingBatchCount > 32
+        let shouldThrottle () = pendingBatchCount > maxPendingBatches
         let mutable progressEpoch = None
         let pumpReaders =
             let postWrite = work.Enqueue << CoordinationWork.Unbatched
@@ -580,7 +581,7 @@ module EventStoreSource =
             let workPended, eventsPended = ref 0, ref 0
             let rateLimited, timedOut, malformed = ref 0, ref 0, ref 0
             let resultOk, resultDup, resultPartialDup, resultPrefix, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0
-            let badCats = CosmosIngester.Queue.CatStats()
+            let badCats = CosmosIngester.CatStats()
             let dumpStats () =
                 if !rateLimited <> 0 || !timedOut <> 0 || !malformed <> 0 then
                     Log.Warning("Writer exceptions {rateLimited} rate-limited, {timedOut} timed out, {malformed} malformed",
@@ -620,10 +621,10 @@ module EventStoreSource =
                     let (stream, updatedState), kind = buffer.HandleWriteResult res
                     match updatedState.write with None -> () | Some wp -> tailSyncState.MarkStreamProgress(stream, wp)
                     match kind with
-                    | CosmosIngester.Queue.Ok -> res.WriteTo writerResultLog
-                    | CosmosIngester.Queue.RateLimited -> incr rateLimited
-                    | CosmosIngester.Queue.Malformed -> category stream |> badCats.Ingest; incr malformed
-                    | CosmosIngester.Queue.TimedOut -> incr timedOut
+                    | CosmosIngester.Ok -> res.WriteTo writerResultLog
+                    | CosmosIngester.RateLimited -> incr rateLimited
+                    | CosmosIngester.Malformed -> category stream |> badCats.Ingest; incr malformed
+                    | CosmosIngester.TimedOut -> incr timedOut
             let queueWrite (w : CosmosIngester.Batch) =
                 incr workPended
                 eventsPended := !eventsPended + w.span.events.Length
