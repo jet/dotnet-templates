@@ -129,6 +129,17 @@ type CatStats() =
     member __.Clear() = cats.Clear()
     member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
 
+module Queue =
+    let tryDequeue (x : System.Collections.Generic.Queue<'T>) =
+#if NET461
+        if x.Count = 0 then None
+        else x.Dequeue() |> Some
+#else
+        match x.TryDequeue() with
+        | false, _ -> None
+        | true, res -> Some res
+#endif
+
 type ResultKind = TimedOut | RateLimited | Malformed | Ok
 
 type StreamStates() =

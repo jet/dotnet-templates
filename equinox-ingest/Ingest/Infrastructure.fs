@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module private IngestTemplate.Infrastructure
+module private Infrastructure
 
 open Equinox.Store // AwaitTaskCorrect
 open System
@@ -15,16 +15,12 @@ type SemaphoreSlim with
         return! Async.AwaitTaskCorrect task
     }
 
-module Queue =
-    let tryDequeue (x : System.Collections.Generic.Queue<'T>) =
-#if NET461
-        if x.Count = 0 then None
-        else x.Dequeue() |> Some
-#else
-        match x.TryDequeue() with
-        | false, _ -> None
-        | true, res -> Some res
-#endif
+    /// Throttling wrapper which waits asynchronously until the semaphore has available capacity
+    member semaphore.Throttle(workflow : Async<'T>) : Async<'T> = async {
+        let! _ = semaphore.Await()
+        try return! workflow
+        finally semaphore.Release() |> ignore
+    }
 
 #nowarn "21" // re AwaitKeyboardInterrupt
 #nowarn "40" // re AwaitKeyboardInterrupt

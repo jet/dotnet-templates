@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
+    <Compile Include="..\..\equinox-sync\Sync\CosmosIngester.fs" Link="CosmosIngester.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
