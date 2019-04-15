@@ -13,12 +13,13 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
-<a name="2.1.0"></a>
-## [2.1.0] - 2019-03-26
+<a name="2.1.2"></a>
+## [2.1.2] - 2019-04-15
 
 ### Added
 
 - `dotnet new eqxsync` has separated processing for progress computation, progress writing and batch loading (this also happens to be the only way in which to balance throughput with correctness in the context of a ChangeFeedProcessor) [#19](https://github.com/jet/dotnet-templates/pull/19)
+- `dotnet new eqxsync` separates out notion of the `CosmosIngester` and `ProgressBatcher` and their respective tests [#20](https://github.com/jet/dotnet-templates/pull/20)
 
 ### Changed
 
@@ -71,8 +72,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.1.0...HEAD
-[2.1.0]: https://github.com/jet/dotnet-templates/compare/2.0.0...2.1.0
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.1.2...HEAD
+[2.1.2]: https://github.com/jet/dotnet-templates/compare/2.0.0...2.1.2
 [2.0.0]: https://github.com/jet/dotnet-templates/compare/1.2.0...2.0.0
 [1.2.0]: https://github.com/jet/dotnet-templates/compare/1.1.1...1.2.0
 [1.1.1]: https://github.com/jet/dotnet-templates/compare/1061b32ff1d86633e4adb0ce591992aea9c48c1e...1.1.1
