@@ -10,6 +10,7 @@
     <Compile Include="ProgressBatcher.fs" />
     <Compile Include="Infrastructure.fs" />
     <Compile Include="CosmosIngester.fs" />
+    <Compile Include="EventStoreSource.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
