@@ -32,7 +32,7 @@ module Queue =
 
 type SemaphoreSlim with
     /// F# friendly semaphore await function
-    member semaphore.Await(?timeout : System.TimeSpan) = async {
+    member semaphore.Await(?timeout : TimeSpan) = async {
         let! ct = Async.CancellationToken
         let timeout = defaultArg timeout Timeout.InfiniteTimeSpan
         let task = semaphore.WaitAsync(timeout, ct) 
