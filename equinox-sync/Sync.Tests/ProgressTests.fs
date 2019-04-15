@@ -1,18 +1,18 @@
-﻿module ProgressTests
+﻿module SyncTemplate.Tests.ProgressTests
 
-open SyncTemplate.Program
+open SyncTemplate
 
 open Swensen.Unquote
 open Xunit
 
 let [<Fact>] ``Empty has zero streams pending or progress to write`` () =
-    let sut = Progress.State<_>()
+    let sut = ProgressBatcher.State<_>()
     let validatedPos, batches = sut.Validate(fun _ -> None)
     None =! validatedPos
     0 =! batches
 
 let [<Fact>] ``Can add multiple batches`` () =
-    let sut = Progress.State<_>()
+    let sut = ProgressBatcher.State<_>()
     sut.AppendBatch(0,["a",1L; "b",2L])
     sut.AppendBatch(1,["b",2L; "c",3L])
     let validatedPos, batches = sut.Validate(fun _ -> None)
@@ -20,7 +20,7 @@ let [<Fact>] ``Can add multiple batches`` () =
     2 =! batches
 
 let [<Fact>] ``Marking Progress Removes batches and updates progress`` () =
-    let sut = Progress.State<_>()
+    let sut = ProgressBatcher.State<_>()
     sut.AppendBatch(0,["a",1L; "b",2L])
     sut.MarkStreamProgress("a",1L)
     sut.MarkStreamProgress("b",1L)
@@ -29,7 +29,7 @@ let [<Fact>] ``Marking Progress Removes batches and updates progress`` () =
     1 =! batches
 
 let [<Fact>] ``Marking progress is not persistent`` () =
-    let sut = Progress.State<_>()
+    let sut = ProgressBatcher.State<_>()
     sut.AppendBatch(0,["a",1L])
     sut.MarkStreamProgress("a",2L)
     sut.AppendBatch(1,["a",1L; "b",2L])

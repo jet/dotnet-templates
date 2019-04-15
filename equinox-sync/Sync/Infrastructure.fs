@@ -1,6 +1,7 @@
 ﻿[<AutoOpen>]
-module private SyncTemplate.Infrastructure
+module SyncTemplate.Infrastructure
 
+open Equinox.Store // AwaitTaskCorrect
 open System
 open System.Threading
 open System.Threading.Tasks
@@ -28,8 +29,6 @@ module Queue =
         | false, _ -> None
         | true, res -> Some res
 #endif
-
-open Equinox.Store // AwaitTaskCorrect
 
 type SemaphoreSlim with
     /// F# friendly semaphore await function
