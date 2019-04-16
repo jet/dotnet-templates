@@ -357,7 +357,7 @@ module EventStoreSource =
             let! _ = Async.StartChild <| progressWriter.Pump()
             let! ct = Async.CancellationToken
             let writerResultLog = log.ForContext<CosmosIngester.Writer.Result>()
-            let mutable bytesPended = 0L
+            let mutable bytesPended, bytesPendedAgg = 0L, 0L
             let workPended, eventsPended = ref 0, ref 0
             let rateLimited, timedOut, malformed = ref 0, ref 0, ref 0
             let resultOk, resultDup, resultPartialDup, resultPrefix, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0
@@ -370,9 +370,10 @@ module EventStoreSource =
                     rateLimited := 0; timedOut := 0; malformed := 0 
                     if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
                 let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
-                Log.Information("Writer Throughput {queued} reqs {events} events; Completed {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns); Egress {gb:n3}GB",
-                    !workPended, !eventsPended, results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn, mb bytesPended / 1024.)
-                workPended := 0; eventsPended := 0
+                bytesPendedAgg <- bytesPendedAgg + bytesPended
+                Log.Information("Writer Throughput {queued} reqs {events} events {mb:n}MB; Completed {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns); Egress {gb:n3}GB",
+                    !workPended, !eventsPended, mb bytesPended, results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn, mb bytesPendedAgg / 1024.)
+                workPended := 0; eventsPended := 0; bytesPended <- 0L
                 resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
 
                 let throttle = shouldThrottle ()
