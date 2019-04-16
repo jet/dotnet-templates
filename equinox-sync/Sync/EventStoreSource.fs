@@ -52,7 +52,7 @@ type OverallStats(?statsInterval) =
     member __.DumpIfIntervalExpired(?force) =
         if progressStart.ElapsedMilliseconds > intervalMs || force = Some true then
             let totalMb = mb totalBytes
-            Log.Information("EventStore throughput {events} events {gb:n1}GB {mbs:n2}MB/s",
+            Log.Information("Reader Throughput {events} events {gb:n1}GB {mbs:n2}MB/s",
                 totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
             progressStart.Restart()
 
@@ -74,16 +74,15 @@ type SliceStatsBuffer(?interval) =
     member __.DumpIfIntervalExpired(?force) =
         if accStart.ElapsedMilliseconds > intervalMs || defaultArg force false then
             lock recentCats <| fun () ->
-                let log = function
-                    | [||] -> ()
-                    | xs ->
-                        xs
-                        |> Seq.sortByDescending (fun (KeyValue (_,(_,b))) -> b)
-                        |> Seq.truncate 10
-                        |> Seq.map (fun (KeyValue (s,(c,b))) -> b/1024/1024, s, c)
-                        |> fun rendered -> Log.Information("EventStore categories {@cats} (MB/cat/count)", rendered)
-                recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> Array.ofSeq |> log
-                recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> Array.ofSeq |> log
+                let log kind xs =
+                    let cats =
+                        [| for KeyValue (s,(c,b)) in xs |> Seq.sortByDescending (fun (KeyValue (_,(_,b))) -> b) ->
+                            mb (int64 b) |> round, s, c |]
+                    if (not << Array.isEmpty) cats then
+                        let mb, events, top = Array.sumBy (fun (mb, _, _) -> mb) cats, Array.sumBy (fun (_, _, c) -> c) cats, Seq.truncate 100 cats
+                        Log.Information("Reader {kind} {mb:n1}MB {events} events categories: {@cats} (MB/cat/count)", kind, mb, events, top)
+                recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> log "payload"
+                recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> log "meta"
                 recentCats.Clear()
                 accStart.Restart()
 
@@ -113,7 +112,7 @@ let posFromPercentage (pct,max : Position) =
 let fetchMax (conn : IEventStoreConnection) = async {
     let! lastItemBatch = conn.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
     let max = lastItemBatch.FromPosition
-    Log.Information("EventStore Write @ {pos} ({chunks} chunks, ~{gb:n1}GB)", max.CommitPosition, chunk max, mb max.CommitPosition/1024.)
+    Log.Information("EventStore Tail Position: @ {pos} ({chunks} chunks, ~{gb:n1}GB)", max.CommitPosition, chunk max, mb max.CommitPosition/1024.)
     return max }
 let establishMax (conn : IEventStoreConnection) = async {
     let mutable max = None

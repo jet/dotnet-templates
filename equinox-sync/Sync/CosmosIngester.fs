@@ -230,7 +230,7 @@ type StreamStates() =
                 waitCats.Ingest(category stream)
                 waiting <- waiting + 1
                 waitingB <- waitingB + sz
-        log.Information("Streams Synced {synced} Dirty {dirty} Ready {ready}/{readyMb:n1}MB Awaiting prefix {waiting}/{waitingMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
+        log.Information("Synced {synced} Dirty {dirty} Ready {ready}/{readyMb:n1}MB Awaiting prefix {waiting}/{waitingMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
             synced, dirty.Count, ready, mb readyB, waiting, mb waitingB, malformed, mb malformedB)
         if waitCats.Any then log.Warning("Waiting {waitCats}", waitCats.StatsDescending)
         if readyCats.Any then log.Information("Ready {readyCats} {readyStreams}", readyCats.StatsDescending, readyStreams.StatsDescending)
