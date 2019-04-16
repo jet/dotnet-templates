@@ -359,7 +359,7 @@ module EventStoreSource =
             let! ct = Async.CancellationToken
             let writerResultLog = log.ForContext<CosmosIngester.Writer.Result>()
             let mutable bytesPended, bytesPendedAgg = 0L, 0L
-            let workPended, eventsPended = ref 0, ref 0
+            let workPended, eventsPended, cycles = ref 0, ref 0, ref 0
             let rateLimited, timedOut, malformed = ref 0, ref 0, ref 0
             let resultOk, resultDup, resultPartialDup, resultPrefix, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0
             let progCommitFails, progCommits = ref 0, ref 0
@@ -372,9 +372,9 @@ module EventStoreSource =
                     if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
                 let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
                 bytesPendedAgg <- bytesPendedAgg + bytesPended
-                Log.Information("Writer Throughput {queued} reqs {events} events {mb:n}MB; Completed {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns); Egress {gb:n3}GB",
-                    !workPended, !eventsPended, mb bytesPended, results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn, mb bytesPendedAgg / 1024.)
-                workPended := 0; eventsPended := 0; bytesPended <- 0L
+                Log.Information("Writer Throughput {cycles} cycles {queued} reqs {events} events {mb:n}MB; Completed {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns); Egress {gb:n3}GB",
+                    !cycles, !workPended, !eventsPended, mb bytesPended, results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn, mb bytesPendedAgg / 1024.)
+                cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
                 resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
 
                 let throttle = shouldThrottle ()
@@ -430,35 +430,37 @@ module EventStoreSource =
                 bytesPended <- bytesPended + int64 (Array.sumBy CosmosIngester.cosmosPayloadBytes w.span.events)
                 writers.Enqueue w
             while not ct.IsCancellationRequested do
-                try // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
-                    let mutable more = true
-                    while more do
-                        match work.TryTake() with
-                        | true, item -> handle item
-                        | false, _ -> more <- false
-                    // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
-                    let (_validatedPos, _pendingBatchCount) = tailSyncState.Validate buffer.TryGetStreamWritePos
-                    pendingBatchCount <- _pendingBatchCount
-                    validatedEpoch <- _validatedPos |> Option.map (fun x -> x.CommitPosition)
-                    // 3. Feed latest position to store
-                    validatedEpoch |> Option.iter progressWriter.Post
-                    // 4. Enqueue streams with gaps if there is capacity (not overloading, to avoid redundant work)
-                    let mutable more = true 
-                    while more && readers.HasCapacity do
-                        match buffer.TryGap() with
-                        | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
-                        | None -> more <- false
-                    // 5. After that, [over] provision writers queue
-                    let mutable more = true
-                    while more && writers.HasCapacity do
-                        match buffer.TryReady(writers.IsStreamBusy) with
-                        | Some w -> queueWrite w
-                        | None -> (); more <- false
-                    // 6. Periodically emit status info
-                    tryDumpStats ()
-                    // 7. Sleep if
-                    do! Async.Sleep sleepIntervalMs
-                with e -> log.Fatal(e,"Loop exn")  }
+                incr cycles
+                // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
+                let mutable gotWork = false
+                let mutable remaining = 1000
+                while remaining > 0 do
+                    match work.TryTake() with
+                    | true, item -> handle item; gotWork <- true; remaining <- remaining - 1 
+                    | false, _ -> remaining <- 0
+                // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
+                let (_validatedPos, _pendingBatchCount) = tailSyncState.Validate buffer.TryGetStreamWritePos
+                pendingBatchCount <- _pendingBatchCount
+                validatedEpoch <- _validatedPos |> Option.map (fun x -> x.CommitPosition)
+                // 3. Feed latest position to store
+                validatedEpoch |> Option.iter progressWriter.Post
+                // 4. Enqueue streams with gaps if there is capacity (not overloading, to avoid redundant work)
+                let mutable more = true 
+                while more && readers.HasCapacity do
+                    match buffer.TryGap() with
+                    | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
+                    | None -> more <- false
+                // 5. After that, [over] provision writers queue
+                let mutable more = true
+                while more && writers.HasCapacity do
+                    match buffer.TryReady(writers.IsStreamBusy) with
+                    | Some w -> queueWrite w; gotWork <- true
+                    | None -> (); more <- false
+                // 6. Periodically emit status info
+                tryDumpStats ()
+                // 7. Sleep if
+                if not gotWork then
+                    do! Async.Sleep sleepIntervalMs }
 
         static member Run (log : Serilog.ILogger) (conn, spec, tryMapEvent) (maxWriters, cosmosContext, maxPendingBatches) resolveCheckpointStream = async {
             let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
