@@ -334,7 +334,7 @@ module EventStoreSource =
     type StartMode = Starting | Resuming | Overridding
     type Coordinator(log : Serilog.ILogger, readers : TailAndPrefixesReader, cosmosContext, maxWriters, progressWriter: Checkpoint.ProgressWriter, maxPendingBatches, ?interval) =
         let statsIntervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
-        let sleepIntervalMs = 100
+        let sleepIntervalMs = 10
         let work = new System.Collections.Concurrent.BlockingCollection<_>(System.Collections.Concurrent.ConcurrentQueue(), maxPendingBatches*4096)
         let addWork = work.Add
         let buffer = CosmosIngester.StreamStates()
@@ -430,33 +430,34 @@ module EventStoreSource =
                 bytesPended <- bytesPended + int64 (Array.sumBy CosmosIngester.cosmosPayloadBytes w.span.events)
                 writers.Enqueue w
             while not ct.IsCancellationRequested do
-                try  // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
-                    match work.TryTake() with
-                    | true, item ->
-                        handle item
-                    | false, _ ->
-                        // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
-                        let (_validatedPos, _pendingBatchCount) = tailSyncState.Validate buffer.TryGetStreamWritePos
-                        pendingBatchCount <- _pendingBatchCount
-                        validatedEpoch <- _validatedPos |> Option.map (fun x -> x.CommitPosition)
-                        // 3. Feed latest position to store
-                        validatedEpoch |> Option.iter progressWriter.Post
-                        // 4. Enqueue streams with gaps if there is capacity (not overloading, to avoid redundant work)
-                        let mutable more = true 
-                        while more && readers.HasCapacity do
-                            match buffer.TryGap() with
-                            | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
-                            | None -> more <- false
-                        // 5. After that, [over] provision writers queue
-                        let mutable more = true
-                        while more && writers.HasCapacity do
-                            match buffer.TryReady(writers.IsStreamBusy) with
-                            | Some w -> queueWrite w
-                            | None -> (); more <- false
-                        // 6. Periodically emit status info
-                        tryDumpStats ()
-                        // 7. Sleep if
-                        do! Async.Sleep sleepIntervalMs
+                try // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
+                    let mutable more = true
+                    while more do
+                        match work.TryTake() with
+                        | true, item -> handle item
+                        | false, _ -> more <- false
+                    // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
+                    let (_validatedPos, _pendingBatchCount) = tailSyncState.Validate buffer.TryGetStreamWritePos
+                    pendingBatchCount <- _pendingBatchCount
+                    validatedEpoch <- _validatedPos |> Option.map (fun x -> x.CommitPosition)
+                    // 3. Feed latest position to store
+                    validatedEpoch |> Option.iter progressWriter.Post
+                    // 4. Enqueue streams with gaps if there is capacity (not overloading, to avoid redundant work)
+                    let mutable more = true 
+                    while more && readers.HasCapacity do
+                        match buffer.TryGap() with
+                        | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
+                        | None -> more <- false
+                    // 5. After that, [over] provision writers queue
+                    let mutable more = true
+                    while more && writers.HasCapacity do
+                        match buffer.TryReady(writers.IsStreamBusy) with
+                        | Some w -> queueWrite w
+                        | None -> (); more <- false
+                    // 6. Periodically emit status info
+                    tryDumpStats ()
+                    // 7. Sleep if
+                    do! Async.Sleep sleepIntervalMs
                 with e -> log.Fatal(e,"Loop exn")  }
 
         static member Run (log : Serilog.ILogger) (conn, spec, tryMapEvent) (maxWriters, cosmosContext, maxPendingBatches) resolveCheckpointStream = async {
