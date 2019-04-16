@@ -459,12 +459,12 @@ module EventStoreSource =
                 if not gotWork then
                     let x = Stopwatch.StartNew()
                     let mutable more = true
-                    while more && x.ElapsedMilliseconds < int64 sleepIntervalMs do
+                    while more && not writers.HasCapacity && x.ElapsedMilliseconds < int64 sleepIntervalMs do
                         match input.TryTake() with
                         | true, item -> handle item
                         | false, _ -> more <- false
                     match sleepIntervalMs - int x.ElapsedMilliseconds with
-                    | d when d > 0 -> do! Async.Sleep d
+                    | d when d > 0 && not writers.HasCapacity -> do! Async.Sleep d
                     | _ -> ()
                 // 7. Periodically emit status info
                 tryDumpStats () }
