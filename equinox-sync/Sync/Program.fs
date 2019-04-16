@@ -789,7 +789,7 @@ let main argv =
             createSyncHandler
 #else
         let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
-        let esConnection = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.Master)
+        let esConnection = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave)
         let catFilter = args.Source.CategoryFilterFunction
         let spec = args.BuildFeedParams()
         let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
