@@ -74,15 +74,16 @@ type SliceStatsBuffer(?interval) =
     member __.DumpIfIntervalExpired(?force) =
         if accStart.ElapsedMilliseconds > intervalMs || defaultArg force false then
             lock recentCats <| fun () ->
-                let log kind xs =
+                let log kind limit xs =
                     let cats =
                         [| for KeyValue (s,(c,b)) in xs |> Seq.sortByDescending (fun (KeyValue (_,(_,b))) -> b) ->
                             mb (int64 b) |> round, s, c |]
                     if (not << Array.isEmpty) cats then
-                        let mb, events, top = Array.sumBy (fun (mb, _, _) -> mb) cats, Array.sumBy (fun (_, _, c) -> c) cats, Seq.truncate 100 cats
+                        let mb, events, top = Array.sumBy (fun (mb, _, _) -> mb) cats, Array.sumBy (fun (_, _, c) -> c) cats, Seq.truncate limit cats
                         Log.Information("Reader {kind} {mb:n1}MB {events} events categories: {@cats} (MB/cat/count)", kind, mb, events, top)
-                recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> log "payload"
-                recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> log "meta"
+                recentCats |> log "Total" 3
+                recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> log "payload" 100
+                recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> log "meta" 100
                 recentCats.Clear()
                 accStart.Restart()
 
