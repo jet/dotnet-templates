@@ -205,7 +205,7 @@ type StreamStates() =
                         bytesBudget <- bytesBudget - cosmosPayloadBytes y
                         count <- count + 1
                         // Reduce the item count when we don't yet know the write position
-                        count <= (if Option.isNone state.write then 10 else 100) && (bytesBudget >= 0 || count = 1)
+                        count <= (if Option.isNone state.write then 10 else 1000) && (bytesBudget >= 0 || count = 1)
                     Some { stream = stream; span = { index = h.index; events = h.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
         let res = aux ()
         for x in blocked do markDirty x
