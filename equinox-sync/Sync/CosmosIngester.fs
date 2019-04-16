@@ -276,7 +276,7 @@ type SemaphorePool(gen : unit -> SemaphoreSlim) =
     let locks = SemaphorePool(fun () -> new SemaphoreSlim 1)
     [<CLIEvent>] member __.Result = result.Publish
     member __.Enqueue item = work.Enqueue item
-    member __.HasCapacity = work.Count < maxDop * 2 && maxQueueLen |> Option.forall (fun max -> work.Count < max)
+    member __.HasCapacity = work.Count < maxDop && maxQueueLen |> Option.forall (fun max -> work.Count < max)
     member __.IsStreamBusy stream =
         let checkBusy (x : SemaphoreSlim) = x.CurrentCount = 0
         locks.Execute(stream,checkBusy)
