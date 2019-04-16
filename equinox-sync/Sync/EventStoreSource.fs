@@ -26,16 +26,6 @@ let tryToBatch (e : RecordedEvent) : CosmosIngester.Batch option =
         let event : Equinox.Codec.IEvent<_> = Equinox.Codec.Core.EventData.Create(e.EventType, data', meta', e.Timestamp) :> _
         Some { stream = e.EventStreamId; span = { index = e.EventNumber; events = [| event |]} }
 
-let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
-    match x.Event with
-    | e when not e.IsJson
-        || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
-        || e.EventStreamId.StartsWith("$") 
-        || e.EventStreamId.EndsWith("_checkpoints")
-        || e.EventStreamId.EndsWith("_checkpoint")
-        || not (catFilter e.EventStreamId) -> None
-    | e -> tryToBatch e
-    
 let private mb x = float x / 1024. / 1024.
 
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]

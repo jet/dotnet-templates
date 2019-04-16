@@ -304,6 +304,15 @@ let main argv =
             let destination = cosmos.Connect "SyncTemplate.Ingester" |> Async.RunSynchronously
             let colls = Equinox.Cosmos.CosmosCollections(cosmos.Database, cosmos.Collection)
             Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
+        let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
+            match x.Event with
+            | e when not e.IsJson
+                || e.EventStreamId.StartsWith("$") 
+                || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
+                || e.EventStreamId.EndsWith("_checkpoints")
+                || e.EventStreamId.EndsWith("_checkpoint")
+                || not (catFilter e.EventStreamId) -> None
+            | e -> EventStoreSource.tryToBatch e
         Coordinator.Run Log.Logger source.ReadConnection (readerSpec, tryMapEvent (fun _ -> true)) ctx (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

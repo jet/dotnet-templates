@@ -787,7 +787,16 @@ let main argv =
         let esConnection = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.Master)
         let catFilter = args.Source.CategoryFilterFunction
         let spec = args.BuildFeedParams()
-        EventStoreSource.Coordinator.Run log (esConnection.ReadConnection, spec, EventStoreSource.tryMapEvent catFilter) (16, target) resolveCheckpointStream
+        let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
+            match x.Event with
+            | e when not e.IsJson
+                || e.EventStreamId.StartsWith("$") 
+                || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
+                || e.EventStreamId.EndsWith("_checkpoints")
+                || e.EventStreamId.EndsWith("_checkpoint")
+                || not (catFilter e.EventStreamId) -> None
+            | e -> EventStoreSource.tryToBatch e
+        EventStoreSource.Coordinator.Run log (esConnection.ReadConnection, spec, tryMapEvent catFilter) (16, target) resolveCheckpointStream
 #endif
         |> Async.RunSynchronously
         0 
