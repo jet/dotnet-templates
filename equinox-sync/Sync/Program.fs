@@ -335,21 +335,21 @@ module EventStoreSource =
     type Coordinator(log : Serilog.ILogger, readers : TailAndPrefixesReader, cosmosContext, maxWriters, progressWriter: Checkpoint.ProgressWriter, maxPendingBatches, ?interval) =
         let statsIntervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
         let sleepIntervalMs = 10
-        let work = new System.Collections.Concurrent.BlockingCollection<_>(System.Collections.Concurrent.ConcurrentQueue(), maxPendingBatches*4096)
-        let addWork = work.Add
+        let input = new System.Collections.Concurrent.BlockingCollection<_>(System.Collections.Concurrent.ConcurrentQueue(), 65536)
+        let results = System.Collections.Concurrent.ConcurrentQueue()
         let buffer = CosmosIngester.StreamStates()
         let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log cosmosContext, maxWriters)
-        let tailSyncState = ProgressBatcher.State()
+        let tailSyncState = ProgressBatcher.State<EventStore.ClientAPI.Position>()
         // Yes, there is a race, but its constrained by the number of parallel readers and the fact that batches get ingested quickly here
         let mutable pendingBatchCount = 0
         let shouldThrottle () = pendingBatchCount > maxPendingBatches
         let mutable validatedEpoch, comittedEpoch : int64 option * int64 option = None, None
         let pumpReaders =
-            let postWrite = addWork << CoordinationWork.Unbatched
-            let postBatch pos xs = addWork (CoordinationWork.BatchWithTracking (pos,xs))
+            let postWrite = input.Add << CoordinationWork.Unbatched
+            let postBatch pos xs = input.Add (CoordinationWork.BatchWithTracking (pos,xs))
             readers.Pump(postWrite, not << shouldThrottle, postBatch)
-        let postWriteResult = addWork << CoordinationWork.Result
-        let postProgressResult = addWork << CoordinationWork.ProgressResult
+        let postWriteResult = results.Enqueue << CoordinationWork.Result
+        let postProgressResult = results.Enqueue << CoordinationWork.ProgressResult
         member __.Pump() = async {
             use _ = writers.Result.Subscribe postWriteResult
             use _ = progressWriter.Result.Subscribe postProgressResult
@@ -432,12 +432,11 @@ module EventStoreSource =
             while not ct.IsCancellationRequested do
                 incr cycles
                 // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
-                let mutable gotWork = false
-                let mutable remaining = 1000
-                while remaining > 0 do
-                    match work.TryTake() with
-                    | true, item -> handle item; gotWork <- true; remaining <- remaining - 1 
-                    | false, _ -> remaining <- 0
+                let mutable more, gotWork = true, false
+                while more do
+                    match results.TryDequeue() with
+                    | true, item -> handle item; gotWork <- true
+                    | false, _ -> more <- false
                 // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
                 let (_validatedPos, _pendingBatchCount) = tailSyncState.Validate buffer.TryGetStreamWritePos
                 pendingBatchCount <- _pendingBatchCount
@@ -456,9 +455,15 @@ module EventStoreSource =
                     match buffer.TryReady(writers.IsStreamBusy) with
                     | Some w -> queueWrite w; gotWork <- true
                     | None -> (); more <- false
-                // 6. Periodically emit status info
+                // 6. OK, we've stashed and cleaned work; now take some inputs
+                let mutable remaining = 8192
+                while remaining > 0 do
+                    match input.TryTake() with
+                    | true, item -> handle item; gotWork <- true; remaining <- remaining - 1
+                    | false, _ -> remaining <- 0
+                // 7. Periodically emit status info
                 tryDumpStats ()
-                // 7. Sleep if
+                // 8. Sleep if
                 if not gotWork then
                     do! Async.Sleep sleepIntervalMs }
 
