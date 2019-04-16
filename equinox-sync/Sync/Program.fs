@@ -335,7 +335,7 @@ module EventStoreSource =
     type Coordinator(log : Serilog.ILogger, readers : TailAndPrefixesReader, cosmosContext, maxWriters, progressWriter: Checkpoint.ProgressWriter, maxPendingBatches, ?interval) =
         let statsIntervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
         let sleepIntervalMs = 10
-        let input = new System.Collections.Concurrent.BlockingCollection<_>(System.Collections.Concurrent.ConcurrentQueue(), 65536)
+        let input = new System.Collections.Concurrent.BlockingCollection<_>(System.Collections.Concurrent.ConcurrentQueue(), maxPendingBatches)
         let results = System.Collections.Concurrent.ConcurrentQueue()
         let buffer = CosmosIngester.StreamStates()
         let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log cosmosContext, maxWriters)
@@ -345,7 +345,7 @@ module EventStoreSource =
         let shouldThrottle () = pendingBatchCount > maxPendingBatches
         let mutable validatedEpoch, comittedEpoch : int64 option * int64 option = None, None
         let pumpReaders =
-            let postWrite = input.Add << CoordinationWork.Unbatched
+            let postWrite = (*we want to prioritize processing of catchup stream reads*) results.Enqueue << CoordinationWork.Unbatched 
             let postBatch pos xs = input.Add (CoordinationWork.BatchWithTracking (pos,xs))
             readers.Pump(postWrite, not << shouldThrottle, postBatch)
         let postWriteResult = results.Enqueue << CoordinationWork.Result
@@ -456,16 +456,18 @@ module EventStoreSource =
                     | Some w -> queueWrite w; gotWork <- true
                     | None -> (); more <- false
                 // 6. OK, we've stashed and cleaned work; now take some inputs
-                let mutable remaining = 8192
-                while remaining > 0 do
-                    match input.TryTake() with
-                    | true, item -> handle item; gotWork <- true; remaining <- remaining - 1
-                    | false, _ -> remaining <- 0
-                // 7. Periodically emit status info
-                tryDumpStats ()
-                // 8. Sleep if
                 if not gotWork then
-                    do! Async.Sleep sleepIntervalMs }
+                    let x = Stopwatch.StartNew()
+                    let mutable more = true
+                    while more && x.ElapsedMilliseconds < int64 sleepIntervalMs do
+                        match input.TryTake() with
+                        | true, item -> handle item
+                        | false, _ -> more <- false
+                    match sleepIntervalMs - int x.ElapsedMilliseconds with
+                    | d when d > 0 -> do! Async.Sleep d
+                    | _ -> ()
+                // 7. Periodically emit status info
+                tryDumpStats () }
 
         static member Run (log : Serilog.ILogger) (conn, spec, tryMapEvent) (maxWriters, cosmosContext, maxPendingBatches) resolveCheckpointStream = async {
             let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
