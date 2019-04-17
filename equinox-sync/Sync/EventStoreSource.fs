@@ -146,7 +146,7 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
         let streams = batches |> Seq.groupBy (fun b -> b.stream) |> Array.ofSeq
         let usedStreams, usedCats = streams.Length, streams |> Seq.map fst |> Seq.distinct |> Seq.length
         postBatch currentSlice.NextPosition batches
-        Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:,4#0.0}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n0}ms",
+        Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n0}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n0}ms",
             range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
             batchEvents, usedCats, usedStreams, batches.Length, postSw.ElapsedMilliseconds)
         if not (range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream) then return currentSlice.IsEndOfStream else
