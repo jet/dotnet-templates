@@ -222,7 +222,7 @@ type StreamStates() =
                 malformedB <- malformedB + sz
             | sz when state.IsReady ->
                 readyCats.Ingest(category stream)
-                readyStreams.Ingest(sprintf "%s@%A" stream state.write, mb sz |> int64)
+                readyStreams.Ingest(sprintf "%s@%d" stream (defaultArg state.write 0L), mb sz |> int64)
                 ready <- ready + 1
                 readyB <- readyB + sz
             | sz ->
@@ -231,8 +231,8 @@ type StreamStates() =
                 waitingB <- waitingB + sz
         log.Information("Ready {ready}/{readyMb:n1}MB Dirty {dirty} Awaiting prefix {waiting}/{waitingMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB Synced {synced}",
             ready, mb readyB, dirty.Count, waiting, mb waitingB, malformed, mb malformedB, synced)
-        if readyCats.Any then log.Information("Ready Categories  {readyCats} (MB)", readyCats.StatsDescending)
-        if readyCats.Any then log.Information("Ready Streams(MB) {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
+        if readyCats.Any then log.Information("Ready Categories {readyCats} (Category, events)", readyCats.StatsDescending)
+        if readyCats.Any then log.Information("Ready Streams {readyStreams} (Name@Pos, MB)", Seq.truncate 5 readyStreams.StatsDescending)
         if waitCats.Any then log.Warning("Waiting {waitCats}", waitCats.StatsDescending)
 
 type RefCounted<'T> = { mutable refCount: int; value: 'T }
