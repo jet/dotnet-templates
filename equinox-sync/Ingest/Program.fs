@@ -143,7 +143,7 @@ module CmdParser =
     and Arguments(args : ParseResults<Parameters>) =
         member val EventStore =             EventStore.Arguments(args.GetResult Es)
         member __.Verbose =                 args.Contains Verbose
-        member __.ConsoleMinLevel =         if args.Contains VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
+        member __.VerboseConsole =          args.Contains VerboseConsole
         member __.MaybeSeqEndpoint =        if args.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.StartingBatchSize =       args.GetResult(BatchSize,4096)
         member __.MinBatchSize =            args.GetResult(MinBatchSize,512)
@@ -156,7 +156,7 @@ module CmdParser =
                 | _, _, Some p ->           Percentage p 
                 | None, None, None when args.GetResults Stream <> [] -> StreamList (args.GetResults Stream)
                 | None, None, None ->       Start
-            Log.Warning("Processing in batches of [{minBatchSize}..{batchSize}] with {stripes} stripes covering from {startPos}",
+            Log.Information("Processing in batches of [{minBatchSize}..{batchSize}] with {stripes} stripes covering from {startPos}",
                 x.MinBatchSize, x.StartingBatchSize, x.Stripes, startPos)
             { start = startPos; batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; stripes = x.Stripes }
 
@@ -173,7 +173,7 @@ type Readers(conn, spec : ReaderSpec, tryMapEvent, postBatch, max : EventStore.C
         posFromChunk nextChunk
     let mutable remainder =
         let startAt (startPos : EventStore.ClientAPI.Position) =
-            Log.Warning("Start Position {pos} (chunk {chunk}, {pct:p1})",
+            Log.Information("Start Position {pos} (chunk {chunk}, {pct:p1})",
                 startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float max.CommitPosition)
             let nextPos = posFromChunkAfter startPos
             work.AddTranche(startPos, nextPos, max)
@@ -229,6 +229,7 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
         let resultsHandled, ingestionsHandled, workPended, eventsPended = ref 0, ref 0, ref 0, ref 0
         let badCats = CosmosIngester.CatStats()
         let progressTimer = Stopwatch.StartNew()
+        let writerResultLog = log.ForContext<CosmosIngester.Writer.Result>()
         while not cancellationToken.IsCancellationRequested do
             let mutable moreResults, rateLimited, timedOut = true, 0, 0
             while moreResults do
@@ -240,7 +241,7 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
                     | (stream, _), CosmosIngester.Malformed -> CosmosIngester.category stream |> badCats.Ingest
                     | _, CosmosIngester.RateLimited -> rateLimited <- rateLimited + 1
                     | _, CosmosIngester.TimedOut -> timedOut <- timedOut + 1
-                    | _, CosmosIngester.Ok -> res.WriteTo log
+                    | _, CosmosIngester.Ok -> res.WriteTo writerResultLog
                 | false, _ -> moreResults <- false
             if rateLimited <> 0 || timedOut <> 0 then Log.Warning("Failures  {rateLimited} Rate-limited, {timedOut} Timed out", rateLimited, timedOut)
             let mutable t = Unchecked.defaultof<_>
@@ -260,7 +261,7 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
                     bytesPended <- bytesPended + int64 (Array.sumBy CosmosIngester.cosmosPayloadBytes w.span.events)
             if progressTimer.ElapsedMilliseconds > intervalMs then
                 progressTimer.Restart()
-                Log.Warning("Ingested {ingestions}; Sent {queued} req {events} events; Completed {completed} reqs; Egress {gb:n3}GB",
+                Log.Information("Ingested {ingestions}; Sent {queued} req {events} events; Completed {completed} reqs; Egress {gb:n3}GB",
                     !ingestionsHandled, !workPended, !eventsPended,!resultsHandled, mb bytesPended / 1024.)
                 if badCats.Any then Log.Error("Malformed {badCats}", badCats.StatsDescending); badCats.Clear()
                 ingestionsHandled := 0; workPended := 0; eventsPended := 0; resultsHandled := 0
@@ -281,23 +282,30 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
 module Logging =
-    let initialize verbose consoleMinLevel maybeSeqEndpoint =
+    let initialize verbose verboseConsole maybeSeqEndpoint =
         Log.Logger <-
+            let ingesterLevel = if verboseConsole then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Information
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
+            |> fun c -> c.MinimumLevel.Override(typeof<CosmosIngester.Writers>.FullName, ingesterLevel)
+            |> fun c -> let generalLevel = if verbose then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
+                        c.MinimumLevel.Override(typeof<CosmosIngester.Writer.Result>.FullName, generalLevel)
+                         .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, generalLevel)
+                         .MinimumLevel.Override(typeof<Equinox.Cosmos.Core.CosmosContext>.FullName, generalLevel)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Tranche} {Message:lj} {NewLine}{Exception}"
-                        c.WriteTo.Console(consoleMinLevel, theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+                        c.WriteTo.Console(ingesterLevel, theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Literate, outputTemplate=t)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
+        Log.ForContext<CosmosIngester.Writers>()
 
 open Equinox.EventStore
 
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
-        Logging.initialize args.Verbose args.ConsoleMinLevel args.MaybeSeqEndpoint
+        let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
         let source = args.EventStore.Connect(Log.Logger, Log.Logger, ConnectionStrategy.ClusterSingle NodePreference.Random) |> Async.RunSynchronously
         let readerSpec = args.BuildFeedParams()
         let writerCount, readerQueueLen = 64,4096*10*10
@@ -305,7 +313,7 @@ let main argv =
         let ctx =
             let destination = cosmos.Connect "SyncTemplate.Ingester" |> Async.RunSynchronously
             let colls = Equinox.Cosmos.CosmosCollections(cosmos.Database, cosmos.Collection)
-            Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.Logger)
+            Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Equinox.Cosmos.Core.CosmosContext>())
         let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson
@@ -318,7 +326,7 @@ let main argv =
                 || e.EventStreamId.EndsWith("_checkpoint")
                 || not (catFilter e.EventStreamId) -> None
             | e -> EventStoreSource.tryToBatch e
-        Coordinator.Run Log.Logger source.ReadConnection (readerSpec, tryMapEvent (fun _ -> true)) ctx (writerCount, readerQueueLen) |> Async.RunSynchronously
+        Coordinator.Run log source.ReadConnection (readerSpec, tryMapEvent (fun _ -> true)) ctx (writerCount, readerQueueLen) |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
