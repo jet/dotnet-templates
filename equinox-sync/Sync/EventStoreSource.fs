@@ -185,8 +185,8 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         | StreamPrefix (name,pos,len,batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
             Log.Warning("Reading stream prefix; pos {pos} len {len} batch size {bs}", pos, len, batchSize)
-            try do! pullStream (conn, batchSize) (name, pos, Some len) postItem
-                Log.Information("completed stream prefix")
+            try let! t,() = pullStream (conn, batchSize) (name, pos, Some len) postItem |> Stopwatch.Time
+                Log.Information("completed stream prefix in {ms:n3}s", let e = t.Elapsed in e.TotalSeconds)
             with e ->
                 let bs = adjust batchSize
                 Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
@@ -195,8 +195,8 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         | Stream (name,batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
             Log.Warning("Reading stream; batch size {bs}", batchSize)
-            try do! pullStream (conn, batchSize) (name,0L,None) postItem
-                Log.Information("completed stream")
+            try let! t,() = pullStream (conn, batchSize) (name,0L,None) postItem |> Stopwatch.Time
+                Log.Information("completed stream in {ms:n3}s", let e = t.Elapsed in e.TotalSeconds)
             with e ->
                 let bs = adjust batchSize
                 Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
@@ -205,14 +205,14 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         | Tranche (range, batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche",chunk range.Current)
             Log.Warning("Commencing tranche, batch size {bs}", batchSize)
-            let! res = pullAll (__.SlicesStats, __.OverallStats) (conn, batchSize) (range, false) tryMapEvent postBatch 
+            let! t,res = pullAll (__.SlicesStats, __.OverallStats) (conn, batchSize) (range, false) tryMapEvent postBatch |> Stopwatch.Time
             match res with
             | PullResult.EndOfTranche ->
-                Log.Warning("Completed tranche")
+                Log.Warning("completed tranche in {ms:n3}s", let e = t.Elapsed in e.TotalSeconds)
                 __.OverallStats.DumpIfIntervalExpired()
                 return false
             | PullResult.Eof ->
-                Log.Warning("REACHED THE END!")
+                Log.Warning("completed tranche AND REACHED THE END in {ms:n3}s", let e = t.Elapsed in e.TotalSeconds)
                 __.OverallStats.DumpIfIntervalExpired(true)
                 return true
             | PullResult.Exn e ->
