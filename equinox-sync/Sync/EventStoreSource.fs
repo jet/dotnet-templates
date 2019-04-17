@@ -90,9 +90,9 @@ type Range(start, sliceEnd : Position option, ?max : Position) =
         match max with
         | None -> Double.NaN
         | Some max ->
-            match float __.Current.CommitPosition/float max.CommitPosition with
-            | p when p > 100. -> Double.NaN
-            | x -> x
+            match __.Current.CommitPosition, max.CommitPosition with
+            | p,m when p > m -> Double.NaN
+            | p,m -> float p / float m
 
 // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
 let chunk (pos: Position) = uint64 pos.CommitPosition >>> 28
@@ -146,7 +146,7 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
         let streams = batches |> Seq.groupBy (fun b -> b.stream) |> Array.ofSeq
         let usedStreams, usedCats = streams.Length, streams |> Seq.map fst |> Seq.distinct |> Seq.length
         postBatch currentSlice.NextPosition batches
-        Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n0}ms",
+        Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:#0.000}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n0}ms",
             range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
             batchEvents, usedCats, usedStreams, batches.Length, postSw.ElapsedMilliseconds)
         if not (range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream) then return currentSlice.IsEndOfStream else
