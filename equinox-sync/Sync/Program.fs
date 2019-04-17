@@ -367,9 +367,11 @@ module EventStoreSource =
             let dumpStats () =
                 let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
                 bytesPendedAgg <- bytesPendedAgg + bytesPended
-                Log.Information("Cycles {cycles} Queued {queued} reqs {events} events {mb:n}MB ∑{gb:n3}GB Uncomitted {pendingBatches}/{maxPendingBatches}",
-                    !cycles, !workPended, !eventsPended, mb bytesPended, mb bytesPendedAgg / 1024., pendingBatchCount, maxPendingBatches)
+                Log.Information("Cycles {cycles} Queued {queued} reqs {events} events {mb:n}MB ∑{gb:n3}GB",
+                    !cycles, !workPended, !eventsPended, mb bytesPended, mb bytesPendedAgg / 1024.)
                 cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
+
+                buffer.Dump log
 
                 Log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns)",
                     results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn)
@@ -380,27 +382,21 @@ module EventStoreSource =
                     rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0 
                     if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
 
-                let pendingLevel = float pendingBatchCount / float maxPendingBatches |> function
-                    | x when x > 0.8 -> Events.LogEventLevel.Warning
-                    | x when x > 0.5 -> Events.LogEventLevel.Information
-                    | _ -> Events.LogEventLevel.Debug
-                Log.Write(pendingLevel, "Pending Batches {pendingBatches} of {maxPendingBatches}", pendingBatchCount, maxPendingBatches)
-
                 if !progCommitFails <> 0 || !progCommits <> 0 then
                     match comittedEpoch with
                     | None ->
-                        log.Error("Progress @ {validated}; writing failing: {failures} failures ({commits} successful commits)",
-                                Option.toNullable validatedEpoch, !progCommitFails, !progCommits)
+                        log.Error("Progress @ {validated}; writing failing: {failures} failures ({commits} successful commits) Uncomitted {pendingBatches}/{maxPendingBatches}",
+                                Option.toNullable validatedEpoch, !progCommitFails, !progCommits, pendingBatchCount, maxPendingBatches)
                     | Some committed when !progCommitFails <> 0 ->
-                        log.Warning("Progress @ {validated} (committed: {committed}, {commits} commits, {failures} failures)",
-                                Option.toNullable validatedEpoch, committed, !progCommits, !progCommitFails)
+                        log.Warning("Progress @ {validated} (committed: {committed}, {commits} commits, {failures} failures) Uncomitted {pendingBatches}/{maxPendingBatches}",
+                                Option.toNullable validatedEpoch, committed, !progCommits, !progCommitFails, pendingBatchCount, maxPendingBatches)
                     | Some committed ->
-                        log.Information("Progress @ {validated} (committed: {committed}, {commits} commits)",
-                                Option.toNullable validatedEpoch, committed, !progCommits)
+                        log.Information("Progress @ {validated} (committed: {committed}, {commits} commits) Uncomitted {pendingBatches}/{maxPendingBatches}",
+                                Option.toNullable validatedEpoch, committed, !progCommits, pendingBatchCount, maxPendingBatches)
                     progCommits := 0; progCommitFails := 0
                 else
-                    log.Information("Progress @ {validated} (committed: {committed})", Option.toNullable validatedEpoch, Option.toNullable comittedEpoch)
-                buffer.Dump log
+                    log.Information("Progress @ {validated} (committed: {committed}) Uncomitted {pendingBatches}/{maxPendingBatches}",
+                        Option.toNullable validatedEpoch, Option.toNullable comittedEpoch, pendingBatchCount, maxPendingBatches)
             let tryDumpStats = every statsIntervalMs dumpStats
             let handle = function
                 | CoordinationWork.Unbatched item ->
