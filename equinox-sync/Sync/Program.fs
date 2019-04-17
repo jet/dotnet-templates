@@ -367,12 +367,12 @@ module EventStoreSource =
             let dumpStats () =
                 let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
                 bytesPendedAgg <- bytesPendedAgg + bytesPended
-                Log.Information("Ingestion {cycles} cycles {queued} reqs {events} events {mb:n}MB; Pending {pendingBatches}/{maxPendingBatches}",
-                    !cycles, !workPended, !eventsPended, mb bytesPended, pendingBatchCount, maxPendingBatches)
+                Log.Information("Cycles {cycles} Queued {queued} reqs {events} events {mb:n}MB ∑{gb:n3}GB Uncomitted {pendingBatches}/{maxPendingBatches}",
+                    !cycles, !workPended, !eventsPended, mb bytesPended, mb bytesPendedAgg / 1024., pendingBatchCount, maxPendingBatches)
                 cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
 
-                Log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns); Egress {gb:n3}GB",
-                    results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn, mb bytesPendedAgg / 1024.)
+                Log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns)",
+                    results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn)
                 resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
                 if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
                     Log.Warning("Exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
