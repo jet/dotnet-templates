@@ -89,7 +89,10 @@ type Range(start, sliceEnd : Position option, ?max : Position) =
     member __.PositionAsRangePercentage =
         match max with
         | None -> Double.NaN
-        | Some max -> float __.Current.CommitPosition/float max.CommitPosition
+        | Some max ->
+            match float __.Current.CommitPosition/float max.CommitPosition with
+            | p when p > 100. -> Double.NaN
+            | x -> x
 
 // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
 let chunk (pos: Position) = uint64 pos.CommitPosition >>> 28
