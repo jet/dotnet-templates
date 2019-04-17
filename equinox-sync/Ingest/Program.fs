@@ -267,14 +267,15 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
                 states.Dump log
 
     static member Run log conn (spec : ReaderSpec, tryMapEvent) (ctx : Equinox.Cosmos.Core.CosmosContext) (writerCount, readerQueueLen) = async {
-        let! ct = Async.CancellationToken
-        let! max = establishMax conn 
-        let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log ctx, writerCount)
-        let readers = Readers(conn, spec, tryMapEvent, writers.Enqueue, max, ct)
-        let instance = Coordinator(log, writers, ct, readerQueueLen)
-        let! _ = Async.StartChild <| writers.Pump()
-        let! _ = Async.StartChild <| readers.Pump()
-        let! _ = Async.StartChild(async { instance.Pump() })
+        try let! ct = Async.CancellationToken
+            let! max = establishMax conn 
+            let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log ctx, writerCount)
+            let readers = Readers(conn, spec, tryMapEvent, writers.Enqueue, max, ct)
+            let instance = Coordinator(log, writers, ct, readerQueueLen)
+            let! _ = Async.StartChild <| writers.Pump()
+            let! _ = Async.StartChild <| readers.Pump()
+            let! _ = Async.StartChild(async { instance.Pump() }) in ()
+        with e -> Log.Error(e,"Exiting")
         do! Async.AwaitKeyboardInterrupt() }
 
 // Illustrates how to emit direct to the Console using Serilog
@@ -297,7 +298,7 @@ open Equinox.EventStore
 let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ConsoleMinLevel args.MaybeSeqEndpoint
-        let source = args.EventStore.Connect(Log.Logger, Log.Logger, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) |> Async.RunSynchronously
+        let source = args.EventStore.Connect(Log.Logger, Log.Logger, ConnectionStrategy.ClusterSingle NodePreference.Random) |> Async.RunSynchronously
         let readerSpec = args.BuildFeedParams()
         let writerCount, readerQueueLen = 64,4096*10*10
         let cosmos = args.EventStore.Cosmos // wierd nesting is due to me not finding a better way to express the semantics in Argu
