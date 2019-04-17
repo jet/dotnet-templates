@@ -236,6 +236,7 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
                 | true, res ->
                     incr resultsHandled
                     match states.HandleWriteResult res with
+                    | (stream, _), CosmosIngester.TooLarge -> CosmosIngester.category stream |> badCats.Ingest
                     | (stream, _), CosmosIngester.Malformed -> CosmosIngester.category stream |> badCats.Ingest
                     | _, CosmosIngester.RateLimited -> rateLimited <- rateLimited + 1
                     | _, CosmosIngester.TimedOut -> timedOut <- timedOut + 1
@@ -265,10 +266,10 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
                 ingestionsHandled := 0; workPended := 0; eventsPended := 0; resultsHandled := 0
                 states.Dump log
 
-    static member Run log conn (spec : ReaderSpec, tryMapEvent) (ctx : Equinox.Cosmos.Core.CosmosContext) (writerQueueLen, writerCount, readerQueueLen) = async {
+    static member Run log conn (spec : ReaderSpec, tryMapEvent) (ctx : Equinox.Cosmos.Core.CosmosContext) (writerCount, readerQueueLen) = async {
         let! ct = Async.CancellationToken
         let! max = establishMax conn 
-        let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log ctx, writerCount, writerQueueLen)
+        let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log ctx, writerCount)
         let readers = Readers(conn, spec, tryMapEvent, writers.Enqueue, max, ct)
         let instance = Coordinator(log, writers, ct, readerQueueLen)
         let! _ = Async.StartChild <| writers.Pump()
@@ -298,7 +299,7 @@ let main argv =
         Logging.initialize args.Verbose args.ConsoleMinLevel args.MaybeSeqEndpoint
         let source = args.EventStore.Connect(Log.Logger, Log.Logger, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) |> Async.RunSynchronously
         let readerSpec = args.BuildFeedParams()
-        let writerQueueLen, writerCount, readerQueueLen = 2048,64,4096*10*10
+        let writerCount, readerQueueLen = 64,4096*10*10
         let cosmos = args.EventStore.Cosmos // wierd nesting is due to me not finding a better way to express the semantics in Argu
         let ctx =
             let destination = cosmos.Connect "SyncTemplate.Ingester" |> Async.RunSynchronously
@@ -313,7 +314,7 @@ let main argv =
                 || e.EventStreamId.EndsWith("_checkpoint")
                 || not (catFilter e.EventStreamId) -> None
             | e -> EventStoreSource.tryToBatch e
-        Coordinator.Run Log.Logger source.ReadConnection (readerSpec, tryMapEvent (fun _ -> true)) ctx (writerQueueLen, writerCount, readerQueueLen) |> Async.RunSynchronously
+        Coordinator.Run Log.Logger source.ReadConnection (readerSpec, tryMapEvent (fun _ -> true)) ctx (writerCount, readerQueueLen) |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1

@@ -12,7 +12,7 @@ let private mb x = float x / 1024. / 1024.
 
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 
-let cosmosPayloadLimit = 2 * 1024 * 1024 - 1024 (*fudge*) - 4096
+let cosmosPayloadLimit = 2 * 1024 * 1024 - (*fudge*)2048
 let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 128
 
 type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
@@ -50,10 +50,11 @@ module Writer =
             log.Debug("Result: {res}",ress)
             return ress
         with e -> return Exn (e, batch) }
-    let (|TimedOutMessage|RateLimitedMessage|MalformedMessage|Other|) (e: exn) =
+    let (|TimedOutMessage|RateLimitedMessage|TooLargeMessage|MalformedMessage|Other|) (e: exn) =
         match string e with
         | m when m.Contains "Microsoft.Azure.Documents.RequestTimeoutException" -> TimedOutMessage
         | m when m.Contains "Microsoft.Azure.Documents.RequestRateTooLargeException" -> RateLimitedMessage
+        | m when m.Contains "Microsoft.Azure.Documents.RequestEntityTooLargeException" -> TooLargeMessage
         | m when m.Contains "SyntaxError: JSON.parse Error: Unexpected input at position"
              || m.Contains "SyntaxError: JSON.parse Error: Invalid character at position" -> MalformedMessage
         | _ -> Other
@@ -129,7 +130,7 @@ type CatStats() =
     member __.Clear() = cats.Clear()
     member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
 
-type ResultKind = TimedOut | RateLimited | Malformed | Ok
+type ResultKind = TimedOut | RateLimited | TooLarge | Malformed | Ok
 
 type StreamStates() =
     let states = Dictionary<string, StreamState>()
@@ -170,6 +171,7 @@ type StreamStates() =
                 match exn with
                 | Writer.RateLimitedMessage -> RateLimited, false
                 | Writer.TimedOutMessage -> TimedOut, false
+                | Writer.TooLargeMessage -> TooLarge, true
                 | Writer.MalformedMessage -> Malformed, true
                 | Writer.Other -> Ok, false
             __.Add(batch, malformed), r

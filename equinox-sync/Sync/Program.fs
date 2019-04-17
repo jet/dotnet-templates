@@ -360,15 +360,15 @@ module EventStoreSource =
             let writerResultLog = log.ForContext<CosmosIngester.Writer.Result>()
             let mutable bytesPended, bytesPendedAgg = 0L, 0L
             let workPended, eventsPended, cycles = ref 0, ref 0, ref 0
-            let rateLimited, timedOut, malformed = ref 0, ref 0, ref 0
+            let rateLimited, timedOut, tooLarge, malformed = ref 0, ref 0, ref 0, ref 0
             let resultOk, resultDup, resultPartialDup, resultPrefix, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0
             let progCommitFails, progCommits = ref 0, ref 0
             let badCats = CosmosIngester.CatStats()
             let dumpStats () =
-                if !rateLimited <> 0 || !timedOut <> 0 || !malformed <> 0 then
-                    Log.Warning("Writer exceptions {rateLimited} rate-limited, {timedOut} timed out, {malformed} malformed",
-                        !rateLimited, !timedOut, !malformed)
-                    rateLimited := 0; timedOut := 0; malformed := 0 
+                if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
+                    Log.Warning("Writer exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
+                        !rateLimited, !timedOut, !tooLarge, !malformed)
+                    rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0 
                     if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
                 let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
                 bytesPendedAgg <- bytesPendedAgg + bytesPended
@@ -417,6 +417,7 @@ module EventStoreSource =
                     match kind with
                     | CosmosIngester.Ok -> res.WriteTo writerResultLog
                     | CosmosIngester.RateLimited -> incr rateLimited
+                    | CosmosIngester.TooLarge -> category stream |> badCats.Ingest; incr tooLarge
                     | CosmosIngester.Malformed -> category stream |> badCats.Ingest; incr malformed
                     | CosmosIngester.TimedOut -> incr timedOut
                 | CoordinationWork.ProgressResult (Choice1Of2 epoch) ->
