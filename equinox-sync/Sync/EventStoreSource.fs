@@ -42,7 +42,7 @@ type OverallStats(?statsInterval) =
     member __.DumpIfIntervalExpired(?force) =
         if progressStart.ElapsedMilliseconds > intervalMs || force = Some true then
             let totalMb = mb totalBytes
-            Log.Information("Reader Throughput {events} events {gb:n1}GB {mbs:n2}MB/s",
+            Log.Information("Reader Throughput {events} events {gb:n1}GB {mb:n2}MB/s",
                 totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
             progressStart.Restart()
 
@@ -70,7 +70,7 @@ type SliceStatsBuffer(?interval) =
                             mb (int64 b) |> round, s, c |]
                     if (not << Array.isEmpty) cats then
                         let mb, events, top = Array.sumBy (fun (mb, _, _) -> mb) cats, Array.sumBy (fun (_, _, c) -> c) cats, Seq.truncate limit cats
-                        Log.Information("Reader {kind} {mb:n1}MB {events} events categories: {@cats} (MB/cat/count)", kind, mb, events, top)
+                        Log.Information("Reader {kind} {mb:n0}MB {events:n0} events categories: {@cats} (MB/cat/count)", kind, mb, events, top)
                 recentCats |> log "Total" 3
                 recentCats |> Seq.where (fun x -> x.Key.StartsWith "$" |> not) |> log "payload" 100
                 recentCats |> Seq.where (fun x -> x.Key.StartsWith "$") |> log "meta" 100

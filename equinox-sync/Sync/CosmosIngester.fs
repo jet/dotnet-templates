@@ -13,7 +13,7 @@ let private mb x = float x / 1024. / 1024.
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 
 let cosmosPayloadLimit = 2 * 1024 * 1024 - 1024 (*fudge*) - 2048
-let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 4 (* fudge*) + 128
+let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 16
 
 type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
 type [<NoComparison>] Batch = { stream: string; span: Span }
@@ -119,9 +119,9 @@ module StreamState =
 
 /// Gathers stats relating to how many items of a given category have been observed
 type CatStats() =
-    let cats = Dictionary<string,int>()
+    let cats = Dictionary<string,int64>()
     member __.Ingest(cat,?weight) = 
-        let weight = defaultArg weight 1
+        let weight = defaultArg weight 1L
         match cats.TryGetValue cat with
         | true, catCount -> cats.[cat] <- catCount + weight
         | false, _ -> cats.[cat] <- weight
@@ -223,7 +223,7 @@ type StreamStates() =
                 malformedB <- malformedB + sz
             | sz when state.IsReady ->
                 readyCats.Ingest(category stream)
-                readyStreams.Ingest(sprintf "%s@%A" stream state.write, int sz)
+                readyStreams.Ingest(sprintf "%s@%A" stream state.write, mb sz |> int64)
                 ready <- ready + 1
                 readyB <- readyB + sz
             | sz ->
@@ -233,7 +233,7 @@ type StreamStates() =
         log.Information("Synced {synced} Dirty {dirty} Ready {ready}/{readyMb:n1}MB Awaiting prefix {waiting}/{waitingMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
             synced, dirty.Count, ready, mb readyB, waiting, mb waitingB, malformed, mb malformedB)
         if waitCats.Any then log.Warning("Waiting {waitCats}", waitCats.StatsDescending)
-        if readyCats.Any then log.Information("Ready {readyCats} {readyStreams}", readyCats.StatsDescending, Seq.truncate 10 readyStreams.StatsDescending)
+        if readyCats.Any then log.Information("Ready {readyCats}\nTop Streams (MB) {readyStreams}", readyCats.StatsDescending, Seq.truncate 10 readyStreams.StatsDescending)
 
 type RefCounted<'T> = { mutable refCount: int; value: 'T }
 
