@@ -812,6 +812,7 @@ let main argv =
                 || e.EventStreamId.StartsWith("$") 
                 || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
                 || e.EventStreamId.EndsWith("_checkpoints")
+                || e.EventStreamId = "ReloadBatchId"
                 || e.EventStreamId.EndsWith("_checkpoint")
                 || not (catFilter e.EventStreamId) -> None
             | e -> EventStoreSource.tryToBatch e
