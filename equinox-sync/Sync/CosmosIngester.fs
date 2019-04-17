@@ -182,8 +182,8 @@ type StreamStates() =
             | Some stream ->
             
             match states.[stream].TryGap() with
-            | None -> aux ()
             | Some (pos,count) -> Some (stream,pos,int count)
+            | None -> aux ()
         aux ()
     member __.TryReady(isBusy) =
         let blocked = ResizeArray()
@@ -195,10 +195,7 @@ type StreamStates() =
             match states.[stream] with
             | s when not s.IsReady -> aux ()
             | state ->
-                if isBusy stream then 
-                    blocked.Add(stream) |> ignore
-                    aux ()
-                else
+                if (not << isBusy) stream then 
                     let h = state.queue |> Array.head
                 
                     let mutable bytesBudget = cosmosPayloadLimit
@@ -209,6 +206,9 @@ type StreamStates() =
                         // Reduce the item count when we don't yet know the write position
                         count <= (if Option.isNone state.write then 10 else 4096) && (bytesBudget >= 0 || count = 1)
                     Some { stream = stream; span = { index = h.index; events = h.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
+                else
+                    blocked.Add(stream) |> ignore
+                    aux ()
         let res = aux ()
         for x in blocked do markDirty x
         res

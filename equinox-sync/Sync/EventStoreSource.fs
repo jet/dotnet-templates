@@ -146,11 +146,9 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
         Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n0}ms",
             range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
             batchEvents, usedCats, usedStreams, batches.Length, postSw.ElapsedMilliseconds)
-        if range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream  then
-            sw.Restart() // restart the clock as we hand off back to the Reader
-            return! aux ()
-        else
-            return currentSlice.IsEndOfStream }
+        if not (range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream) then return currentSlice.IsEndOfStream else
+        sw.Restart() // restart the clock as we hand off back to the Reader
+        return! aux () }
     async {
         try let! eof = aux ()
             return if eof then Eof else EndOfTranche
