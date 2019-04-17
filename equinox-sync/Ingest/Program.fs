@@ -225,7 +225,7 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
     member __.Pump() =
         let _ = writers.Result.Subscribe __.HandleWriteResult // codependent, wont worry about unsubcribing
         let fiveMs = TimeSpan.FromMilliseconds 5.
-        let mutable bytesPended = 0L
+        let mutable bytesPended, bytesPendedAgg = 0L, 0L
         let resultsHandled, ingestionsHandled, workPended, eventsPended = ref 0, ref 0, ref 0, ref 0
         let badCats = CosmosIngester.CatStats()
         let progressTimer = Stopwatch.StartNew()
@@ -261,10 +261,12 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
                     bytesPended <- bytesPended + int64 (Array.sumBy CosmosIngester.cosmosPayloadBytes w.span.events)
             if progressTimer.ElapsedMilliseconds > intervalMs then
                 progressTimer.Restart()
-                Log.Information("Ingested {ingestions}; Sent {queued} req {events} events; Completed {completed} reqs; Egress {gb:n3}GB",
-                    !ingestionsHandled, !workPended, !eventsPended,!resultsHandled, mb bytesPended / 1024.)
+                Log.Information("Ingested {ingestions}", !ingestionsHandled)
+                bytesPendedAgg <- bytesPendedAgg + bytesPended
+                Log.Information("Writer Throughput {queued} reqs {events} events {mb:n}MB; Completed {completed} reqs; Egress {gb:n3}GB",
+                    !workPended, !eventsPended, mb bytesPended, !resultsHandled, mb bytesPendedAgg / 1024.)
                 if badCats.Any then Log.Error("Malformed {badCats}", badCats.StatsDescending); badCats.Clear()
-                ingestionsHandled := 0; workPended := 0; eventsPended := 0; resultsHandled := 0
+                ingestionsHandled := 0; workPended := 0; eventsPended := 0; resultsHandled := 0; bytesPended <- 0L
                 states.Dump log
 
     static member Run log conn (spec : ReaderSpec, tryMapEvent) (ctx : Equinox.Cosmos.Core.CosmosContext) (writerCount, readerQueueLen) = async {
@@ -308,7 +310,7 @@ let main argv =
         let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
         let source = args.EventStore.Connect(Log.Logger, Log.Logger, ConnectionStrategy.ClusterSingle NodePreference.Random) |> Async.RunSynchronously
         let readerSpec = args.BuildFeedParams()
-        let writerCount, readerQueueLen = 64,4096*10*10
+        let writerCount, readerQueueLen = 128,4096*10*10
         let cosmos = args.EventStore.Cosmos // wierd nesting is due to me not finding a better way to express the semantics in Argu
         let ctx =
             let destination = cosmos.Connect "SyncTemplate.Ingester" |> Async.RunSynchronously
