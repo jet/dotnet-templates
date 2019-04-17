@@ -270,13 +270,13 @@ type SemaphorePool(gen : unit -> SemaphoreSlim) =
         use _l = slotReleaseGuard k
         f x
         
- type Writers(write, maxDop, ?maxQueueLen) =
+ type Writers(write, maxDop) =
     let work = ConcurrentQueue()
     let result = Event<Writer.Result>()
     let locks = SemaphorePool(fun () -> new SemaphoreSlim 1)
     [<CLIEvent>] member __.Result = result.Publish
     member __.Enqueue item = work.Enqueue item
-    member __.HasCapacity = work.Count < maxDop && maxQueueLen |> Option.forall (fun max -> work.Count < max)
+    member __.HasCapacity = work.Count < maxDop
     member __.IsStreamBusy stream =
         let checkBusy (x : SemaphoreSlim) = x.CurrentCount = 0
         locks.Execute(stream,checkBusy)
