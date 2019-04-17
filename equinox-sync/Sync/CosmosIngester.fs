@@ -149,10 +149,7 @@ type StreamStates() =
             let updated = StreamState.combine current state
             states.[stream] <- updated
             if updated.IsReady then
-                //if (not << dirty.Contains) stream then Log.Information("Dirty {s} {w} {sz}", (stream : string), updated.write, updated.Size)
                 markDirty stream
-            //elif Option.isNone state.write then
-            //    Log.Information("None {s} {w} {sz}", stream, updated.write, updated.Size)
             stream, updated
     let updateWritePos stream pos isMalformed span =
         update stream { write = pos; queue = span; isMalformed = isMalformed }
@@ -232,10 +229,10 @@ type StreamStates() =
                 waitCats.Ingest(category stream)
                 waiting <- waiting + 1
                 waitingB <- waitingB + sz
-        log.Information("Synced {synced} Dirty {dirty} Ready {ready}/{readyMb:n1}MB Awaiting prefix {waiting}/{waitingMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
-            synced, dirty.Count, ready, mb readyB, waiting, mb waitingB, malformed, mb malformedB)
-        if readyCats.Any then log.Information("Categories Ready {readyCats} (MB)", readyCats.StatsDescending)
-        if readyCats.Any then log.Information("Streams Ready {readyStreams} (MB)", Seq.truncate 5 readyStreams.StatsDescending)
+        log.Information("Ready {ready}/{readyMb:n1}MB Dirty {dirty} Awaiting prefix {waiting}/{waitingMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB Synced {synced}",
+            ready, mb readyB, dirty.Count, waiting, mb waitingB, malformed, mb malformedB, synced)
+        if readyCats.Any then log.Information("Ready Categories  {readyCats} (MB)", readyCats.StatsDescending)
+        if readyCats.Any then log.Information("Ready Streams(MB) {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
         if waitCats.Any then log.Warning("Waiting {waitCats}", waitCats.StatsDescending)
 
 type RefCounted<'T> = { mutable refCount: int; value: 'T }

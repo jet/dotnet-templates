@@ -365,36 +365,41 @@ module EventStoreSource =
             let progCommitFails, progCommits = ref 0, ref 0
             let badCats = CosmosIngester.CatStats()
             let dumpStats () =
+                let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
+                bytesPendedAgg <- bytesPendedAgg + bytesPended
+                Log.Information("Ingestion {cycles} cycles {queued} reqs {events} events {mb:n}MB; Pending {pendingBatches}/{maxPendingBatches}",
+                    !cycles, !workPended, !eventsPended, mb bytesPended, pendingBatchCount, maxPendingBatches)
+                cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
+
+                Log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns); Egress {gb:n3}GB",
+                    results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn, mb bytesPendedAgg / 1024.)
+                resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
                 if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
-                    Log.Warning("Writer exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
+                    Log.Warning("Exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
                         !rateLimited, !timedOut, !tooLarge, !malformed)
                     rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0 
                     if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
-                let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
-                bytesPendedAgg <- bytesPendedAgg + bytesPended
-                Log.Information("Writer Throughput {cycles} cycles {queued} reqs {events} events {mb:n}MB; Completed {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns); Egress {gb:n3}GB",
-                    !cycles, !workPended, !eventsPended, mb bytesPended, results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn, mb bytesPendedAgg / 1024.)
-                cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
-                resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
 
-                let throttle = shouldThrottle ()
-                let level = if not throttle then Events.LogEventLevel.Debug else Events.LogEventLevel.Information
-                Log.Write(level, "Pending Batches {pb}", pendingBatchCount)
+                let pendingLevel = float pendingBatchCount / float maxPendingBatches |> function
+                    | x when x > 0.8 -> Events.LogEventLevel.Warning
+                    | x when x > 0.5 -> Events.LogEventLevel.Information
+                    | _ -> Events.LogEventLevel.Debug
+                Log.Write(pendingLevel, "Pending Batches {pendingBatches} of {maxPendingBatches}", pendingBatchCount, maxPendingBatches)
 
                 if !progCommitFails <> 0 || !progCommits <> 0 then
                     match comittedEpoch with
                     | None ->
-                        log.Error("Progress Epoch @ {validated}; writing failing: {failures} failures ({commits} successful commits)",
+                        log.Error("Progress @ {validated}; writing failing: {failures} failures ({commits} successful commits)",
                                 Option.toNullable validatedEpoch, !progCommitFails, !progCommits)
                     | Some committed when !progCommitFails <> 0 ->
-                        log.Warning("Progress Epoch @ {validated} (committed: {committed}, {commits} commits, {failures} failures)",
+                        log.Warning("Progress @ {validated} (committed: {committed}, {commits} commits, {failures} failures)",
                                 Option.toNullable validatedEpoch, committed, !progCommits, !progCommitFails)
                     | Some committed ->
-                        log.Information("Progress Epoch @ {validated} (committed: {committed}, {commits} commits)",
+                        log.Information("Progress @ {validated} (committed: {committed}, {commits} commits)",
                                 Option.toNullable validatedEpoch, committed, !progCommits)
                     progCommits := 0; progCommitFails := 0
                 else
-                    log.Information("Progress Epoch @ {validated} (committed: {committed})", Option.toNullable validatedEpoch, Option.toNullable comittedEpoch)
+                    log.Information("Progress @ {validated} (committed: {committed})", Option.toNullable validatedEpoch, Option.toNullable comittedEpoch)
                 buffer.Dump log
             let tryDumpStats = every statsIntervalMs dumpStats
             let handle = function
