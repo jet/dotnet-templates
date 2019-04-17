@@ -158,7 +158,7 @@ type [<NoComparison>] Work =
     | Stream of name: string * batchSize: int
     | StreamPrefix of name: string * pos: int64 * len: int * batchSize: int
     | Tranche of range: Range * batchSize : int
-    | Tail of pos: Position * interval: TimeSpan * batchSize : int
+    | Tail of pos: Position * max : Position * interval: TimeSpan * batchSize : int
 
 type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
     let work = System.Collections.Concurrent.ConcurrentQueue()
@@ -173,8 +173,8 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         work.Enqueue <| Work.Tranche (range, defaultArg batchSizeOverride batchSize)
     member __.AddTranche(pos, nextPos, max, ?batchSizeOverride) =
         __.AddTranche(Range (pos, Some nextPos, max), ?batchSizeOverride=batchSizeOverride)
-    member __.AddTail(pos, interval, ?batchSizeOverride) =
-        work.Enqueue <| Work.Tail (pos, interval, defaultArg batchSizeOverride batchSize)
+    member __.AddTail(pos, max, interval, ?batchSizeOverride) =
+        work.Enqueue <| Work.Tail (pos, max, interval, defaultArg batchSizeOverride batchSize)
     member __.TryDequeue () =
         work.TryDequeue()
     member __.Process(conn, tryMapEvent, postItem, shouldTail, postBatch, work) = async {
@@ -219,8 +219,8 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                 __.OverallStats.DumpIfIntervalExpired()
                 __.AddTranche(range, bs) 
                 return false
-        | Tail (pos, interval, batchSize) ->
-            let mutable count, pauses, batchSize, range = 0, 0, batchSize, Range(pos, None)
+        | Tail (pos, max, interval, batchSize) ->
+            let mutable count, pauses, batchSize, range = 0, 0, batchSize, Range(pos, None, max)
             let statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.)
             let progressIntervalMs, tailIntervalMs = int64 statsInterval.TotalMilliseconds, int64 interval.TotalMilliseconds
             let tailSw = Stopwatch.StartNew()

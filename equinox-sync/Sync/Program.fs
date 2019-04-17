@@ -312,7 +312,7 @@ module EventStoreSource =
         let dop = new SemaphoreSlim(maxDop)
         let work = EventStoreSource.ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
         member __.HasCapacity = work.QueueCount < dop.CurrentCount
-        member __.AddTail(startPos, interval) = work.AddTail(startPos, interval)
+        member __.AddTail(startPos, max, interval) = work.AddTail(startPos, max, interval)
         member __.AddStreamPrefix(stream, pos, len) = work.AddStreamPrefix(stream, pos, len)
         member __.Pump(postItem, shouldTail, postBatch) = async {
             let! ct = Async.CancellationToken
@@ -502,7 +502,7 @@ module EventStoreSource =
                     float startPos.CommitPosition/float max.CommitPosition, spec.tailInterval.TotalSeconds, checkpointFreq.TotalMinutes)
                 return startPos }
             let readers = TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.streamReaders + 1)
-            readers.AddTail(startPos, spec.tailInterval)
+            readers.AddTail(startPos, max, spec.tailInterval)
             let progress = Checkpoint.ProgressWriter(checkpoints.Commit)
             let coordinator = Coordinator(log, readers, cosmosContext, maxWriters, progress, maxPendingBatches=maxPendingBatches)
             do! coordinator.Pump() }
