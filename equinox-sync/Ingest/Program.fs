@@ -295,7 +295,7 @@ module Logging =
                          .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, generalLevel)
                          .MinimumLevel.Override(typeof<Equinox.Cosmos.Core.CosmosContext>.FullName, generalLevel)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Tranche} {Message:lj} {NewLine}{Exception}"
-                        c.WriteTo.Console(ingesterLevel, theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Literate, outputTemplate=t)
+                        c.WriteTo.Console(ingesterLevel, theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
         Log.ForContext<CosmosIngester.Writers>()
