@@ -193,8 +193,7 @@ type StreamStates() =
             | Some stream ->
 
             match states.[stream] with
-            | s when not s.IsReady -> aux ()
-            | state ->
+            | state when state.IsReady ->
                 if (not << isBusy) stream then 
                     let h = state.queue |> Array.head
                 
@@ -209,6 +208,7 @@ type StreamStates() =
                 else
                     blocked.Add(stream) |> ignore
                     aux ()
+            | _ -> aux ()
         let res = aux ()
         for x in blocked do markDirty x
         res

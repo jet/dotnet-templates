@@ -224,7 +224,6 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
     member __.HandleWriteResult = results.Enqueue
     member __.Pump() =
         let _ = writers.Result.Subscribe __.HandleWriteResult // codependent, wont worry about unsubcribing
-        let fiveMs = TimeSpan.FromMilliseconds 5.
         let mutable bytesPended, bytesPendedAgg = 0L, 0L
         let resultsHandled, ingestionsHandled, workPended, eventsPended = ref 0, ref 0, ref 0, ref 0
         let badCats = CosmosIngester.CatStats()
@@ -243,10 +242,10 @@ type Coordinator(log : Serilog.ILogger, writers : CosmosIngester.Writers, cancel
                     | _, CosmosIngester.TimedOut -> timedOut <- timedOut + 1
                     | _, CosmosIngester.Ok -> res.WriteTo writerResultLog
                 | false, _ -> moreResults <- false
-            if rateLimited <> 0 || timedOut <> 0 then Log.Warning("Failures  {rateLimited} Rate-limited, {timedOut} Timed out", rateLimited, timedOut)
+            if rateLimited <> 0 || timedOut <> 0 then Log.Warning("Failures {rateLimited} Rate-limited, {timedOut} Timed out", rateLimited, timedOut)
             let mutable t = Unchecked.defaultof<_>
-            let mutable toIngest = 4096 * 5
-            while work.TryTake(&t,fiveMs) && toIngest > 0 do
+            let mutable toIngest = 4096 * 2
+            while work.TryTake(&t) && toIngest > 0 do
                 incr ingestionsHandled
                 toIngest <- toIngest - 1
                 states.Add t |> ignore
