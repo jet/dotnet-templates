@@ -456,18 +456,17 @@ module EventStoreSource =
                     | Some w -> queueWrite w; gotWork <- true
                     | None -> (); more <- false
                 // 6. OK, we've stashed and cleaned work; now take some inputs
-                if not gotWork then
-                    let x = Stopwatch.StartNew()
-                    let mutable more = true
-                    while more && not writers.HasCapacity && x.ElapsedMilliseconds < int64 sleepIntervalMs do
-                        match input.TryTake() with
-                        | true, item -> handle item
-                        | false, _ -> more <- false
-                    match sleepIntervalMs - int x.ElapsedMilliseconds with
-                    | d when d > 0 ->
-                        if writers.HasCapacity then do! Async.Sleep 1
-                        else do! Async.Sleep d
-                    | _ -> ()
+                let x = Stopwatch.StartNew()
+                let mutable more = true
+                while more && x.ElapsedMilliseconds < int64 sleepIntervalMs do
+                    match input.TryTake() with
+                    | true, item -> handle item
+                    | false, _ -> more <- false
+                match sleepIntervalMs - int x.ElapsedMilliseconds with
+                | d when d > 0 ->
+                    if writers.HasCapacity then do! Async.Sleep 1
+                    else do! Async.Sleep d
+                | _ -> ()
                 // 7. Periodically emit status info
                 tryDumpStats () }
 
