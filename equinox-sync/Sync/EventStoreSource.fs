@@ -205,17 +205,14 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         | Tranche (range, batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche",chunk range.Current)
             Log.Warning("Commencing tranche, batch size {bs}", batchSize)
-            let sw = Stopwatch.StartNew()
-            let! res = pullAll (__.SlicesStats, __.OverallStats) (conn, batchSize) (range, false) tryMapEvent postBatch
-            let e = sw.Elapsed
-            //let! t,res = async { return! pullAll (__.SlicesStats, __.OverallStats) (conn, batchSize) (range, false) tryMapEvent postBatch } |> Stopwatch.Time
+            let! t, res = pullAll (__.SlicesStats, __.OverallStats) (conn, batchSize) (range, false) tryMapEvent postBatch |> Stopwatch.Time
             match res with
             | PullResult.EndOfTranche ->
-                Log.Warning("completed tranche in {ms:n3}s", e.TotalSeconds)
+                Log.Warning("completed tranche in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 __.OverallStats.DumpIfIntervalExpired()
                 return false
             | PullResult.Eof ->
-                Log.Warning("completed tranche AND REACHED THE END in {ms:n3}s", e.TotalSeconds)
+                Log.Warning("completed tranche AND REACHED THE END in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 __.OverallStats.DumpIfIntervalExpired(true)
                 return true
             | PullResult.Exn e ->
