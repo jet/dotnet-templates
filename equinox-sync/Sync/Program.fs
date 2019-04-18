@@ -865,6 +865,7 @@ module Logging =
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
+        let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
         let destination = args.Destination.Connect "SyncTemplate" |> Async.RunSynchronously
         let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
         let resolveCheckpointStream =
@@ -877,7 +878,6 @@ let main argv =
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.CosmosResolver(store, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
-        let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
         let target = Equinox.Cosmos.Core.CosmosContext(destination, colls, log.ForContext<Core.CosmosContext>())
 #if cosmos
         let log = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
