@@ -1,7 +1,6 @@
 ﻿module SyncTemplate.Program
 
 open Equinox.Cosmos
-open Equinox.Cosmos.Core
 //#if !eventStore
 open Equinox.Cosmos.Projection
 //#endif
@@ -299,6 +298,75 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
+module Metrics =
+    module RuCounters =
+        open Equinox.Cosmos.Store
+        open Serilog.Events
+
+        let inline (|Stats|) ({ interval = i; ru = ru }: Log.Measurement) = ru, let e = i.Elapsed in int64 e.TotalMilliseconds
+
+        let (|CosmosReadRc|CosmosWriteRc|CosmosResyncRc|CosmosResponseRc|) = function
+            | Log.Tip (Stats s)
+            | Log.TipNotFound (Stats s)
+            | Log.TipNotModified (Stats s)
+            | Log.Query (_,_, (Stats s)) -> CosmosReadRc s
+            // slices are rolled up into batches so be sure not to double-count
+            | Log.Response (_,(Stats s)) -> CosmosResponseRc s
+            | Log.SyncSuccess (Stats s)
+            | Log.SyncConflict (Stats s) -> CosmosWriteRc s
+            | Log.SyncResync (Stats s) -> CosmosResyncRc s
+        let (|SerilogScalar|_|) : LogEventPropertyValue -> obj option = function
+            | (:? ScalarValue as x) -> Some x.Value
+            | _ -> None
+        let (|CosmosMetric|_|) (logEvent : LogEvent) : Log.Event option =
+            match logEvent.Properties.TryGetValue("cosmosEvt") with
+            | true, SerilogScalar (:? Log.Event as e) -> Some e
+            | _ -> None
+        type RuCounter =
+            { mutable rux100: int64; mutable count: int64; mutable ms: int64 }
+            static member Create() = { rux100 = 0L; count = 0L; ms = 0L }
+            member __.Ingest (ru, ms) =
+                System.Threading.Interlocked.Increment(&__.count) |> ignore
+                System.Threading.Interlocked.Add(&__.rux100, int64 (ru*100.)) |> ignore
+                System.Threading.Interlocked.Add(&__.ms, ms) |> ignore
+        type RuCounterSink() =
+            static member val Read = RuCounter.Create() with get, set
+            static member val Write = RuCounter.Create() with get, set
+            static member val Resync = RuCounter.Create() with get, set
+            static member Reset() =
+                RuCounterSink.Read <- RuCounter.Create()
+                RuCounterSink.Write <- RuCounter.Create()
+                RuCounterSink.Resync <- RuCounter.Create()
+            interface Serilog.Core.ILogEventSink with
+                member __.Emit logEvent = logEvent |> function
+                    | CosmosMetric (CosmosReadRc stats) -> RuCounterSink.Read.Ingest stats
+                    | CosmosMetric (CosmosWriteRc stats) -> RuCounterSink.Write.Ingest stats
+                    | CosmosMetric (CosmosResyncRc stats) -> RuCounterSink.Resync.Ingest stats
+                    | _ -> ()
+
+    let dumpRuStats duration (log: Serilog.ILogger) =
+        let stats =
+          [ "Read", RuCounters.RuCounterSink.Read
+            "Write", RuCounters.RuCounterSink.Write
+            "Resync", RuCounters.RuCounterSink.Resync ]
+        let mutable totalCount, totalRc, totalMs = 0L, 0., 0L
+        let logActivity name count rc lat =
+            if count <> 0L then
+                log.Information("{name}: {count:n0} requests costing {ru:n0} RU (average: {avg:n2}); Average latency: {lat:n0}ms",
+                    name, count, rc, (if count = 0L then Double.NaN else rc/float count), (if count = 0L then Double.NaN else float lat/float count))
+        for name, stat in stats do
+            let ru = float stat.rux100 / 100.
+            totalCount <- totalCount + stat.count
+            totalRc <- totalRc + ru
+            totalMs <- totalMs + stat.ms
+            logActivity name stat.count ru stat.ms
+        logActivity "TOTAL" totalCount totalRc totalMs
+        // Yes, there's a minor race here!
+        RuCounters.RuCounterSink.Reset()
+        let measures : (string * (TimeSpan -> float)) list = [ "s", fun x -> x.TotalSeconds(*; "m", fun x -> x.TotalMinutes; "h", fun x -> x.TotalHours*) ]
+        let logPeriodicRate name count ru = log.Information("rp{name} {count:n0} = ~{ru:n0} RU", name, count, ru)
+        for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d)
+
 #if !cosmos 
 module EventStoreSource =
     type [<RequireQualifiedAccess; NoComparison>] CoordinationWork<'Pos> =
@@ -333,8 +401,9 @@ module EventStoreSource =
 
     type StartMode = Starting | Resuming | Overridding
     type Coordinator(log : Serilog.ILogger, readers : TailAndPrefixesReader, cosmosContext, maxWriters, progressWriter: Checkpoint.ProgressWriter, maxPendingBatches, ?interval) =
-        let statsIntervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 1.) in t.TotalMilliseconds |> int64
-        let sleepIntervalMs = 10
+        let statsInterval = defaultArg interval (TimeSpan.FromMinutes 1.)
+        let statsIntervalMs = int64 statsInterval.TotalMilliseconds
+        let sleepIntervalMs = 1
         let input = new System.Collections.Concurrent.BlockingCollection<_>(System.Collections.Concurrent.ConcurrentQueue(), maxPendingBatches)
         let results = System.Collections.Concurrent.ConcurrentQueue()
         let buffer = CosmosIngester.StreamStates()
@@ -381,6 +450,7 @@ module EventStoreSource =
                         !rateLimited, !timedOut, !tooLarge, !malformed)
                     rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0 
                     if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
+                Metrics.dumpRuStats statsInterval log
 
                 if !progCommitFails <> 0 || !progCommits <> 0 then
                     match comittedEpoch with
@@ -752,84 +822,8 @@ module CosmosSource =
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
 module Logging =
-    open Serilog.Configuration
     open Serilog.Events
-    open Serilog.Filters
-    module RuCounters =
-        open Equinox.Cosmos.Store
-
-        let inline (|Stats|) ({ interval = i; ru = ru }: Log.Measurement) = ru, let e = i.Elapsed in int64 e.TotalMilliseconds
-
-        let (|CosmosReadRc|CosmosWriteRc|CosmosResyncRc|CosmosResponseRc|) = function
-            | Log.Tip (Stats s)
-            | Log.TipNotFound (Stats s)
-            | Log.TipNotModified (Stats s)
-            | Log.Query (_,_, (Stats s)) -> CosmosReadRc s
-            // slices are rolled up into batches so be sure not to double-count
-            | Log.Response (_,(Stats s)) -> CosmosResponseRc s
-            | Log.SyncSuccess (Stats s)
-            | Log.SyncConflict (Stats s) -> CosmosWriteRc s
-            | Log.SyncResync (Stats s) -> CosmosResyncRc s
-        let (|SerilogScalar|_|) : LogEventPropertyValue -> obj option = function
-            | (:? ScalarValue as x) -> Some x.Value
-            | _ -> None
-        let (|CosmosMetric|_|) (logEvent : LogEvent) : Log.Event option =
-            match logEvent.Properties.TryGetValue("cosmosEvt") with
-            | true, SerilogScalar (:? Log.Event as e) -> Some e
-            | _ -> None
-        type RuCounter =
-            { mutable rux100: int64; mutable count: int64; mutable ms: int64 }
-            static member Create() = { rux100 = 0L; count = 0L; ms = 0L }
-            member __.Ingest (ru, ms) =
-                System.Threading.Interlocked.Increment(&__.count) |> ignore
-                System.Threading.Interlocked.Add(&__.rux100, int64 (ru*100.)) |> ignore
-                System.Threading.Interlocked.Add(&__.ms, ms) |> ignore
-        type RuCounterSink() =
-            static member val Read = RuCounter.Create() with get, set
-            static member val Write = RuCounter.Create() with get, set
-            static member val Resync = RuCounter.Create() with get, set
-            static member Reset() =
-                RuCounterSink.Read <- RuCounter.Create()
-                RuCounterSink.Write <- RuCounter.Create()
-                RuCounterSink.Resync <- RuCounter.Create()
-            interface Serilog.Core.ILogEventSink with
-                member __.Emit logEvent = logEvent |> function
-                    | CosmosMetric (CosmosReadRc stats) -> RuCounterSink.Read.Ingest stats
-                    | CosmosMetric (CosmosWriteRc stats) -> RuCounterSink.Write.Ingest stats
-                    | CosmosMetric (CosmosResyncRc stats) -> RuCounterSink.Resync.Ingest stats
-                    | _ -> ()
-
-        let dumpStats duration (log: Serilog.ILogger) =
-            let stats =
-              [ "Read", RuCounterSink.Read
-                "Write", RuCounterSink.Write
-                "Resync", RuCounterSink.Resync ]
-            let mutable totalCount, totalRc, totalMs = 0L, 0., 0L
-            let logActivity name count rc lat =
-                log.Information("{name}: {count:n0} requests costing {ru:n0} RU (average: {avg:n2}); Average latency: {lat:n0}ms",
-                    name, count, rc, (if count = 0L then Double.NaN else rc/float count), (if count = 0L then Double.NaN else float lat/float count))
-            for name, stat in stats do
-                let ru = float stat.rux100 / 100.
-                totalCount <- totalCount + stat.count
-                totalRc <- totalRc + ru
-                totalMs <- totalMs + stat.ms
-                logActivity name stat.count ru stat.ms
-            logActivity "TOTAL" totalCount totalRc totalMs
-            let measures : (string * (TimeSpan -> float)) list =
-              [ "s", fun x -> x.TotalSeconds
-                "m", fun x -> x.TotalMinutes
-                "h", fun x -> x.TotalHours ]
-            let logPeriodicRate name count ru = log.Information("rp{name} {count:n0} = ~{ru:n0} RU", name, count, ru)
-            for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d)
-        let startTaskToDumpStatsEvery (freq : TimeSpan) =
-            let rec aux () = async {
-                do! Async.Sleep freq
-                dumpStats freq Log.Logger
-                RuCounterSink.Reset()
-                return! aux () }
-            Async.Start(aux ())
     let initialize verbose verboseConsole maybeSeqEndpoint =
-        let rusSink = RuCounters.RuCounterSink()
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
@@ -844,19 +838,18 @@ module Logging =
                         c.MinimumLevel.Override(typeof<CosmosIngester.Writer.Result>.FullName, generalLevel)
                          .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, LogEventLevel.Information)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
-                        let configure (a : LoggerSinkConfiguration) : unit =
-                            a.Logger(fun l -> l.WriteTo.Sink(rusSink) |> ignore) |> ignore
+                        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                             a.Logger(fun l ->
-                                let isEqx = Matching.FromSource<Core.CosmosContext>().Invoke
-                                let isCheckpointing = Matching.FromSource<Checkpoint.CheckpointSeries>().Invoke
+                                l.WriteTo.Sink(Metrics.RuCounters.RuCounterSink()) |> ignore) |> ignore
+                            a.Logger(fun l ->
+                                let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
+                                let isCheckpointing = Filters.Matching.FromSource<Checkpoint.CheckpointSeries>().Invoke
                                 (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isCheckpointing x))
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-                                    |> ignore)
-                             |> ignore
+                                    |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
-        RuCounters.startTaskToDumpStatsEvery (TimeSpan.FromMinutes 1.)
         Log.ForContext<CosmosIngester.Writers>(), Log.ForContext<Core.CosmosContext>()
 
 [<EntryPoint>]
