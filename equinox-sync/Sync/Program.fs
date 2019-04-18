@@ -299,7 +299,7 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-#if !cosmos
+#if !cosmos 
 module EventStoreSource =
     type [<RequireQualifiedAccess; NoComparison>] CoordinationWork<'Pos> =
         | Result of CosmosIngester.Writer.Result
@@ -846,12 +846,12 @@ module Logging =
                         c.MinimumLevel.Override(typeof<CosmosIngester.Writer.Result>.FullName, generalLevel)
                          .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, generalLevel)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
-                        let isEqx = Matching.FromSource<Core.CosmosContext>()
                         let configure (a : LoggerSinkConfiguration) : unit =
                             a.Logger(fun l ->
                                 l.WriteTo.Sink(RuCounters.RuCounterSink()) |> ignore)
                                     |> ignore
                             a.Logger(fun l ->
+                                let isEqx = Matching.FromSource<Core.CosmosContext>()
                                 (if changeLogVerbose then l else l.Filter.ByExcluding isEqx)
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore)
@@ -860,12 +860,12 @@ module Logging =
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
         RuCounters.startTaskToDumpStatsEvery (TimeSpan.FromMinutes 1.)
-        Log.ForContext<CosmosIngester.Writers>()
+        Log.ForContext<CosmosIngester.Writers>(), Log.ForContext<Core.CosmosContext>()
 
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
-        let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
+        let log, storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
         let destination = args.Destination.Connect "SyncTemplate" |> Async.RunSynchronously
         let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
         let resolveCheckpointStream =
@@ -878,7 +878,7 @@ let main argv =
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.CosmosResolver(store, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
-        let target = Equinox.Cosmos.Core.CosmosContext(destination, colls, log.ForContext<Core.CosmosContext>())
+        let target = Equinox.Cosmos.Core.CosmosContext(destination, colls, storeLog)
 #if cosmos
         let log = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
