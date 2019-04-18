@@ -845,12 +845,11 @@ module Logging =
                          .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, LogEventLevel.Information)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
                         let configure (a : LoggerSinkConfiguration) : unit =
+                            a.Logger(fun l -> l.WriteTo.Sink(rusSink) |> ignore) |> ignore
                             a.Logger(fun l ->
-                                l.WriteTo.Sink(rusSink) |> ignore)
-                                    |> ignore
-                            a.Logger(fun l ->
-                                let isEqx = Matching.FromSource<Core.CosmosContext>()
-                                (if verboseConsole then l else l.Filter.ByExcluding isEqx)
+                                let isEqx = Matching.FromSource<Core.CosmosContext>().Invoke
+                                let isCheckpointing = Matching.FromSource<Checkpoint.CheckpointSeries>().Invoke
+                                (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isCheckpointing x))
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore)
                              |> ignore
