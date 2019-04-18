@@ -13,7 +13,7 @@ let private mb x = float x / 1024. / 1024.
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 
 let cosmosPayloadLimit = 2 * 1024 * 1024 - (*fudge*)4096
-let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 64
+let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 96
 
 type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
 type [<NoComparison>] Batch = { stream: string; span: Span }
