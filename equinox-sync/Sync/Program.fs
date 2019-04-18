@@ -439,19 +439,6 @@ module EventStoreSource =
                 Log.Information("Cycles {cycles} Queued {queued} reqs {events} events {mb:n}MB ∑{gb:n3}GB",
                     !cycles, !workPended, !eventsPended, mb bytesPended, mb bytesPendedAgg / 1024.)
                 cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
-
-                buffer.Dump log
-
-                Log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns)",
-                    results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn)
-                resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
-                if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
-                    Log.Warning("Exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
-                        !rateLimited, !timedOut, !tooLarge, !malformed)
-                    rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0 
-                    if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
-                Metrics.dumpRuStats statsInterval log
-
                 if !progCommitFails <> 0 || !progCommits <> 0 then
                     match comittedEpoch with
                     | None ->
@@ -467,6 +454,16 @@ module EventStoreSource =
                 else
                     log.Information("Progress @ {validated} (committed: {committed}) Uncomitted {pendingBatches}/{maxPendingBatches}",
                         Option.toNullable validatedEpoch, Option.toNullable comittedEpoch, pendingBatchCount, maxPendingBatches)
+                Log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns)",
+                    results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn)
+                resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
+                if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
+                    Log.Warning("Exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
+                        !rateLimited, !timedOut, !tooLarge, !malformed)
+                    rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0 
+                    if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
+                Metrics.dumpRuStats statsInterval log
+                buffer.Dump log
             let tryDumpStats = every statsIntervalMs dumpStats
             let handle = function
                 | CoordinationWork.Unbatched item ->
