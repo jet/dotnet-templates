@@ -752,9 +752,14 @@ module CosmosSource =
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
 module Logging =
+    open Serilog.Configuration
+    open Serilog.Events
+    open Serilog.Filters
     module RuCounters =
-        open Serilog.Events
         open Equinox.Cosmos.Store
+        //open Serilog.Configuration
+        //open Serilog.Events
+        //open Serilog.Filters
 
         let inline (|Stats|) ({ interval = i; ru = ru }: Log.Measurement) = ru, let e = i.Elapsed in int64 e.TotalMilliseconds
 
@@ -821,12 +826,14 @@ module Logging =
             for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d)
         let startTaskToDumpStatsEvery (freq : TimeSpan) =
             let rec aux () = async {
-                dumpStats freq Log.Logger
                 do! Async.Sleep (int freq.TotalMilliseconds)
+                dumpStats freq Log.Logger
+                RuCounterSink.Reset()
                 return! aux () }
             Async.Start(aux ())
     let initialize verbose changeLogVerbose maybeSeqEndpoint =
         Log.Logger <-
+            let isEqx = Matching.FromSource<Core.CosmosContext>()
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
@@ -839,12 +846,17 @@ module Logging =
             |> fun c -> let generalLevel = if verbose then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override(typeof<CosmosIngester.Writer.Result>.FullName, generalLevel)
                          .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, generalLevel)
-                         .MinimumLevel.Override(typeof<CosmosContext>.FullName, generalLevel)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
-                        c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-            |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
-            |> fun c -> c.WriteTo.Sink(RuCounters.RuCounterSink())
-            |> fun c -> c.CreateLogger()
+                        let configure (a : LoggerSinkConfiguration) : unit =
+                            a.Logger(fun l ->
+                                (if changeLogVerbose then l else l.Filter.ByExcluding isEqx)
+                                    .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+                                |> ignore)
+                             .WriteTo.Sink(RuCounters.RuCounterSink())
+                            |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
+                            |> ignore
+                        c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
+                         .CreateLogger()
         RuCounters.startTaskToDumpStatsEvery (TimeSpan.FromMinutes 1.)
         Log.ForContext<CosmosIngester.Writers>()
 

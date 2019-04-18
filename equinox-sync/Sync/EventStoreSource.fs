@@ -42,8 +42,9 @@ type OverallStats(?statsInterval) =
     member __.DumpIfIntervalExpired(?force) =
         if progressStart.ElapsedMilliseconds > intervalMs || force = Some true then
             let totalMb = mb totalBytes
-            Log.Information("Reader Throughput {events} events {gb:n1}GB {mb:n2}MB/s",
-                totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
+            if totalEvents <> 0L then
+                Log.Information("Reader Throughput {events} events {gb:n1}GB {mb:n2}MB/s",
+                    totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
             progressStart.Restart()
 
 type SliceStatsBuffer(?interval) =
