@@ -848,15 +848,17 @@ module Logging =
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
                         let isEqx = Matching.FromSource<Core.CosmosContext>()
                         let configure (a : LoggerSinkConfiguration) : unit =
-                            a.Sink(RuCounters.RuCounterSink())
-                             .WriteTo.Logger(fun l ->
+                            a.Logger(fun l ->
+                                l.WriteTo.Sink(RuCounters.RuCounterSink()) |> ignore)
+                                    |> ignore
+                            a.Logger(fun l ->
                                 (if changeLogVerbose then l else l.Filter.ByExcluding isEqx)
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-                                |> ignore)
-                             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
+                                    |> ignore)
                              |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
-                         .CreateLogger()
+            |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
+            |> fun c -> c.CreateLogger()
         RuCounters.startTaskToDumpStatsEvery (TimeSpan.FromMinutes 1.)
         Log.ForContext<CosmosIngester.Writers>()
 
