@@ -877,7 +877,8 @@ let main argv =
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.CosmosResolver(store, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
-        let target = Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
+        let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
+        let target = Equinox.Cosmos.Core.CosmosContext(destination, colls, log.ForContext<Core.CosmosContext>())
 #if cosmos
         let log = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
@@ -893,7 +894,6 @@ let main argv =
             (leaseId, startFromHere, batchSize, lagFrequency)
             createSyncHandler
 #else
-        let log = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
         let esConnection = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave)
         let catFilter = args.Source.CategoryFilterFunction
         let spec = args.BuildFeedParams()
