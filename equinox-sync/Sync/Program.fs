@@ -434,11 +434,6 @@ module EventStoreSource =
             let progCommitFails, progCommits = ref 0, ref 0
             let badCats = CosmosIngester.CatStats()
             let dumpStats () =
-                let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
-                bytesPendedAgg <- bytesPendedAgg + bytesPended
-                Log.Information("Cycles {cycles} Queued {queued} reqs {events} events {mb:n}MB ∑{gb:n3}GB",
-                    !cycles, !workPended, !eventsPended, mb bytesPended, mb bytesPendedAgg / 1024.)
-                cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
                 if !progCommitFails <> 0 || !progCommits <> 0 then
                     match comittedEpoch with
                     | None ->
@@ -454,6 +449,11 @@ module EventStoreSource =
                 else
                     log.Information("Progress @ {validated} (committed: {committed}) Uncomitted {pendingBatches}/{maxPendingBatches}",
                         Option.toNullable validatedEpoch, Option.toNullable comittedEpoch, pendingBatchCount, maxPendingBatches)
+                let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
+                bytesPendedAgg <- bytesPendedAgg + bytesPended
+                Log.Information("Cycles {cycles} Queued {queued} reqs {events} events {mb:n}MB ∑{gb:n3}GB",
+                    !cycles, !workPended, !eventsPended, mb bytesPended, mb bytesPendedAgg / 1024.)
+                cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
                 Log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns)",
                     results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn)
                 resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
