@@ -214,8 +214,8 @@ module CmdParser =
         member __.CategoryFilterFunction : string -> bool =
             match a.GetResults CategoryBlacklist, a.GetResults CategoryWhitelist with
             | [], [] ->     Log.Information("Not filtering by category"); fun _ -> true 
-            | bad, [] ->    let black = Set.ofList bad in Log.Information("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
-            | [], good ->   let white = Set.ofList good in Log.Information("Only copying categories: {cats}", white); fun x -> white.Contains x
+            | bad, [] ->    let black = Set.ofList bad in Log.Warning("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
+            | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
             | _, _ -> raise (InvalidArguments "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
 #if cosmos
         member __.Mode =                a.GetResult(SourceConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
@@ -826,14 +826,13 @@ module Logging =
             for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d)
         let startTaskToDumpStatsEvery (freq : TimeSpan) =
             let rec aux () = async {
-                do! Async.Sleep (int freq.TotalMilliseconds)
+                do! Async.Sleep freq
                 dumpStats freq Log.Logger
                 RuCounterSink.Reset()
                 return! aux () }
             Async.Start(aux ())
     let initialize verbose changeLogVerbose maybeSeqEndpoint =
         Log.Logger <-
-            let isEqx = Matching.FromSource<Core.CosmosContext>()
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
@@ -847,14 +846,15 @@ module Logging =
                         c.MinimumLevel.Override(typeof<CosmosIngester.Writer.Result>.FullName, generalLevel)
                          .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, generalLevel)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
+                        let isEqx = Matching.FromSource<Core.CosmosContext>()
                         let configure (a : LoggerSinkConfiguration) : unit =
-                            a.Logger(fun l ->
+                            a.Sink(RuCounters.RuCounterSink())
+                             .WriteTo.Logger(fun l ->
                                 (if changeLogVerbose then l else l.Filter.ByExcluding isEqx)
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                 |> ignore)
-                             .WriteTo.Sink(RuCounters.RuCounterSink())
-                            |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
-                            |> ignore
+                             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
+                             |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
                          .CreateLogger()
         RuCounters.startTaskToDumpStatsEvery (TimeSpan.FromMinutes 1.)
