@@ -757,9 +757,6 @@ module Logging =
     open Serilog.Filters
     module RuCounters =
         open Equinox.Cosmos.Store
-        //open Serilog.Configuration
-        //open Serilog.Events
-        //open Serilog.Filters
 
         let inline (|Stats|) ({ interval = i; ru = ru }: Log.Measurement) = ru, let e = i.Elapsed in int64 e.TotalMilliseconds
 
@@ -831,28 +828,29 @@ module Logging =
                 RuCounterSink.Reset()
                 return! aux () }
             Async.Start(aux ())
-    let initialize verbose changeLogVerbose maybeSeqEndpoint =
+    let initialize verbose verboseConsole maybeSeqEndpoint =
+        let rusSink = RuCounters.RuCounterSink()
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
-                        let cfpLevel = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
+                        let cfpLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
-            |> fun c -> let ingesterLevel = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Information
+            |> fun c -> let ingesterLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information
                         c.MinimumLevel.Override(typeof<CosmosIngester.Writers>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            |> fun c -> let generalLevel = if verbose then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
+            |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                         c.MinimumLevel.Override(typeof<CosmosIngester.Writer.Result>.FullName, generalLevel)
-                         .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, generalLevel)
+                         .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, LogEventLevel.Information)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
                         let configure (a : LoggerSinkConfiguration) : unit =
                             a.Logger(fun l ->
-                                l.WriteTo.Sink(RuCounters.RuCounterSink()) |> ignore)
+                                l.WriteTo.Sink(rusSink) |> ignore)
                                     |> ignore
                             a.Logger(fun l ->
                                 let isEqx = Matching.FromSource<Core.CosmosContext>()
-                                (if changeLogVerbose then l else l.Filter.ByExcluding isEqx)
+                                (if verboseConsole then l else l.Filter.ByExcluding isEqx)
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore)
                              |> ignore
