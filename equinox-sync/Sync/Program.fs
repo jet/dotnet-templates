@@ -845,7 +845,7 @@ module Logging =
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.WriteTo.Sink(RuCounters.RuCounterSink())
             |> fun c -> c.CreateLogger()
-        Logging.RuCounters.startTaskToDumpStatsEvery (TimeSpan.FromMinutes 1.)
+        RuCounters.startTaskToDumpStatsEvery (TimeSpan.FromMinutes 1.)
         Log.ForContext<CosmosIngester.Writers>()
 
 [<EntryPoint>]
