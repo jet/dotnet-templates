@@ -115,8 +115,8 @@ module CmdParser =
 
     [<NoEquality; NoComparison>]
     type Parameters =
-        | [<AltCommandLine "-m"; Unique>] BatchSize of int
-        | [<AltCommandLine "-b"; Unique>] MinBatchSize of int
+        | [<AltCommandLine "-mi"; Unique>] BatchSize of int
+        | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-v"; Unique>] Verbose
         | [<AltCommandLine "-vc"; Unique>] VerboseConsole
         | [<AltCommandLine "-S"; Unique>] LocalSeq

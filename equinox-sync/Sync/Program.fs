@@ -67,8 +67,8 @@ module CmdParser =
         | [<AltCommandLine "-l"; Unique>] LagFreqS of float
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
 #else
-        | [<AltCommandLine "-b"; Unique>] MinBatchSize of int
-        | [<AltCommandLine "-pre"; Unique>] MaxPending of int
+        | [<AltCommandLine "-mi"; Unique>] MinBatchSize of int
+        | [<AltCommandLine "-mb"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine "-p"; Unique>] Position of int64
         | [<AltCommandLine "-c"; Unique>] Chunk of int
@@ -98,7 +98,7 @@ module CmdParser =
                 | ForceRestart _ ->         "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
-                | MaxPending _ ->           "Maximum number of batches to let processing get ahead of completion. Default: 64"
+                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 64"
                 | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 64"
                 | Position _ ->             "EventStore $all Stream Position to commence from"
                 | Chunk _ ->                "EventStore $all Chunk to commence from"
@@ -122,7 +122,7 @@ module CmdParser =
         member __.VerboseConsole =      a.Contains VerboseConsole
         member __.ConsoleMinLevel =     if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
         member __.StartingBatchSize =   a.GetResult(BatchSize,4096)
-        member __.MaxPendingBatches =   a.GetResult(MaxPending,64)
+        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,64)
         member __.MaxWriters =          a.GetResult(MaxWriters,64)
         member __.MinBatchSize =        a.GetResult(MinBatchSize,512)
         member __.StreamReaders =       a.GetResult(StreamReaders,8)

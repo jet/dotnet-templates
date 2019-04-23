@@ -41,7 +41,7 @@ This project was generated using:
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
         # `defaultSync` defines the Projector Group identity ('LeaseId') - each id has separated state in the aux collection
-        # `-m 1000` sets the max batch size to 1000
+        # `-mi 1000` sets the change feed item count limit to 1000
         # `cosmos` specifies the destination (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         # `source -s connection -d database -c collection` specifies the input datasource
 

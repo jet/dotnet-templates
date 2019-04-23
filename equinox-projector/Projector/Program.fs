@@ -73,7 +73,7 @@ module CmdParser =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
         | [<AltCommandLine("-s"); Unique>] LeaseCollectionSuffix of string
         | [<AltCommandLine("-i"); Unique>] ForceStartFromHere
-        | [<AltCommandLine("-m"); Unique>] BatchSize of int
+        | [<AltCommandLine("-mi"); Unique>] BatchSize of int
         | [<AltCommandLine("-l"); Unique>] LagFreqS of float
         | [<AltCommandLine("-v"); Unique>] Verbose
         | [<AltCommandLine("-vc"); Unique>] ChangeFeedVerbose
