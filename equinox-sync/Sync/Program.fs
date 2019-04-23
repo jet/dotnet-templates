@@ -713,7 +713,7 @@ module CosmosSource =
         let mutable coordinator = Unchecked.defaultof<_>
         let init rangeLog =
             coordinator <- Coordinator.Start(rangeLog, ctx)
-        let ingest docs checkpoint : (*streams*)int * (*events*)int =
+        let ingest docs checkpoint : (*events*)int * (*streams*)int =
             let events = docs |> Seq.collect transform |> Array.ofSeq
             coordinator.Submit(checkpoint,events)
             events.Length, HashSet(seq { for x in events -> x.stream }).Count
