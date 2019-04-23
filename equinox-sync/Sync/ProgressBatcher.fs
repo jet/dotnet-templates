@@ -28,7 +28,6 @@ type State<'Pos>(?currentPos : 'Pos) =
             | false, _ -> ()
             | true, batch ->
                 for KeyValue (stream, requiredIndex) in Array.ofSeq batch.streamToRequiredIndex do
-                    //Log.Warning("VI {s} {ri}", stream, requiredIndex)
                     match tryGetStreamWritePos stream with
                     | Some index when requiredIndex <= index -> batch.streamToRequiredIndex.Remove stream |> ignore
                     | _ -> ()
