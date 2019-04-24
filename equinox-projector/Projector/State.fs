@@ -255,7 +255,7 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
                 batch <- batch + 1
                 for s in x.streamToRequiredIndex.Keys do
                     if streams.Add s then
-                        yield s,struct (batch,getStreamQueueLength s) }
+                        yield s,(batch,getStreamQueueLength s) }
         raw |> Seq.sortBy (fun (_s,(b,l)) -> b,-l) |> Seq.map fst
     member __.Validate tryGetStreamWritePos : 'Pos option * int =
         let rec aux () =
