@@ -167,8 +167,8 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_busyPause,_project) (broke
             let! _ = producer.ProduceBatch es
             do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect } |> Stopwatch.Time
 
-        log.Information("Read {token,8} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
-            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n0")),
+        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
+            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, int ctx.FeedResponse.RequestCharge,
             float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
@@ -191,8 +191,8 @@ let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, busyPause
             coordinator.Submit(epoch,checkpoint,events)
             events.Length, streams.Count
         let pt, (events,streams) = Stopwatch.Time (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> ingest) 
-        log.Information("Read {token,8} {count,4} docs {requestCharge,6}RU {l:n1}s Ingested {streams,5}s {events,5}e {p,2}ms",
-            epoch, docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n0")),
+        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Ingested {streams,5}s {events,5}e {p,2}ms",
+            epoch, docs.Count, int ctx.FeedResponse.RequestCharge,
             float sw.ElapsedMilliseconds / 1000., streams, events, (let e = pt.Elapsed in int e.TotalMilliseconds))
         let mutable first = true 
         while coordinator.IsFullyLoaded do // Only hand back control to the CFP iff backlog is under control
