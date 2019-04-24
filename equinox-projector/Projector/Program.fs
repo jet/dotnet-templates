@@ -94,7 +94,7 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LeaseCollectionSuffix _ -> "specify Collection Name suffix for Leases collection (default: `-aux`)."
                 | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
+                | BatchSize _ ->            "maximum item count to request from feed. Default: 1024"
                 | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 64"
                 | ProcessorDop _ ->         "Maximum number of streams to process concurrently. Default: 64"
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
@@ -114,14 +114,15 @@ module CmdParser =
         member __.Suffix =                  args.GetResult(LeaseCollectionSuffix,"-aux")
         member __.Verbose =                 args.Contains Verbose
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
-        member __.BatchSize =               args.GetResult(BatchSize,1000)
+        member __.BatchSize =               args.GetResult(BatchSize,1024)
         member __.MaxPendingBatches =       args.GetResult(MaxPendingBatches,64)
         member __.ProcessorDop =            args.GetResult(ProcessorDop,64)
         member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
         member __.StartFromHere =           args.Contains ForceStartFromHere
         member x.BuildChangeFeedParams() =
-            Log.Information("Processing {leaseId} in {auxCollName} in batches of {batchSize}", x.LeaseId, x.AuxCollectionName, x.BatchSize)
+            Log.Information("Processing {leaseId} in {auxCollName} in batches of {batchSize} (<= {maxPending} pending) using {dop} processors",
+                x.LeaseId, x.AuxCollectionName, x.BatchSize, x.MaxPendingBatches, x.ProcessorDop)
             if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.BatchSize, x.MaxPendingBatches, x.ProcessorDop, x.LagFrequency
@@ -166,8 +167,8 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_busyPause,_project) (broke
             let! _ = producer.ProduceBatch es
             do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect } |> Stopwatch.Time
 
-        log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
-            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")),
+        log.Information("Read {token,8} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
+            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n0")),
             float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
@@ -186,9 +187,9 @@ let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, busyPause
             coordinator.Submit(epoch,checkpoint,[| for x in events -> { stream = x.Stream; span = { index = x.Index; events = [| x |] } }|])
             events.Length, HashSet(seq { for x in events -> x.Stream }).Count
         let pt, (events,streams) = Stopwatch.Time (fun () -> ingest docs)
-        log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Ingested {streams,5}s {events,5}e s {p:n3}ms",
-            epoch, docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")),
-            float sw.ElapsedMilliseconds / 1000., streams, events, (let e = pt.Elapsed in e.TotalMilliseconds))
+        log.Information("Read {token,8} {count,4} docs {requestCharge,6}RU {l:n1}s Ingested {streams,5}s {events,5}e {p,2}ms",
+            epoch, docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n0")),
+            float sw.ElapsedMilliseconds / 1000., streams, events, (let e = pt.Elapsed in int e.TotalMilliseconds))
         let mutable first = true 
         while coordinator.IsFullyLoaded do // Only hand back control to the CFP iff backlog is under control
             if first then first <- false; log.Information("Pausing due to backlog of incomplete batches...")
@@ -221,10 +222,14 @@ let main argv =
         let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
         let aux, leaseId, startFromHere, batchSize, maxPendingBatches, processorDop, lagFrequency = args.BuildChangeFeedParams()
 //#if kafka
-        let targetParams = args.Target.BuildTargetParams()
-        let createRangeHandler log processingParams () = mkRangeProjector log processingParams targetParams
+        //let targetParams = args.Target.BuildTargetParams()
+        //let createRangeHandler log processingParams () = mkRangeProjector log processingParams targetParams
 //#endif
-        let project stream span = async { do () }
+        let project (batch : StreamBatch) = async {
+            let r = Random()
+            let ms = r.Next(1,batch.span.events.Length)
+            do! Async.Sleep ms
+            return batch.span.events.Length }
         run Log.Logger discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromHere, batchSize, lagFrequency)
             (createRangeHandler Log.Logger (maxPendingBatches, processorDop, TimeSpan.FromMilliseconds 100., project))
