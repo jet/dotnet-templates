@@ -75,7 +75,7 @@ type [<NoComparison>] StreamState = { isMalformed : bool; write: int64 option; q
             | _ -> false
     member __.Size =
         if __.queue = null then 0
-        else __.queue |> Seq.collect (fun x -> x.events) |> Seq.sumBy (fun x -> arrayBytes x.Data + arrayBytes x.Meta + x.EventType.Length*2 + 16)
+        else __.queue |> Seq.collect (fun x -> x.events) |> Seq.sumBy (fun x -> arrayBytes x.Data + arrayBytes x.Meta + x.EventType.Length + 16)
 
 module StreamState =
     let (|NNA|) xs = if xs = null then Array.empty else xs

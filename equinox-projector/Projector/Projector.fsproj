@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\..\equinox-sync\Sync\ProgressBatcher.fs" Link="ProgressBatcher.fs" />
     <Compile Include="Infrastructure.fs" />
+    <Compile Include="State.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
