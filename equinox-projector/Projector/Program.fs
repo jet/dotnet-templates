@@ -182,11 +182,15 @@ let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, busyPause
         // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
         let checkpoint = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect }
         let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
-        let ingest docs : (*events*)int * (*streams*)int =
-            let events = docs |> Seq.collect  DocumentParser.enumEvents |> Array.ofSeq
-            coordinator.Submit(epoch,checkpoint,[| for x in events -> { stream = x.Stream; span = { index = x.Index; events = [| x |] } }|])
-            events.Length, HashSet(seq { for x in events -> x.Stream }).Count
-        let pt, (events,streams) = Stopwatch.Time (fun () -> ingest docs)
+        let ingest (inputs : DocumentParser.IEvent seq) : (*events*)int * (*streams*)int =
+            let streams, events = HashSet(), ResizeArray()
+            for x in inputs do
+                streams.Add x.Stream |> ignore
+                events.Add { stream = x.Stream; span = { index = x.Index; events = Array.singleton (upcast x) } }
+            let events = events.ToArray()
+            coordinator.Submit(epoch,checkpoint,events)
+            events.Length, streams.Count
+        let pt, (events,streams) = Stopwatch.Time (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> ingest) 
         log.Information("Read {token,8} {count,4} docs {requestCharge,6}RU {l:n1}s Ingested {streams,5}s {events,5}e {p,2}ms",
             epoch, docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n0")),
             float sw.ElapsedMilliseconds / 1000., streams, events, (let e = pt.Elapsed in int e.TotalMilliseconds))

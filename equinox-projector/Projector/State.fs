@@ -249,8 +249,8 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
             validatedPos <- Some headBatch.pos
     member __.ScheduledOrder getStreamQueueLength =
         let raw = seq {
-            let mutable batch = 0
             let streams = HashSet()
+            let mutable batch = 0
             for x in pending do
                 batch <- batch + 1
                 for s in x.streamToRequiredIndex.Keys do
