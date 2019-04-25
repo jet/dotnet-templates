@@ -451,6 +451,8 @@ type Coordinator(log : ILogger, maxPendingBatches, processorDop, ?statsInterval)
         instance
     member __.Submit(epoch, markBatchCompleted, events) = async {
         let! _ = batches.Await()
-        Add (epoch, markBatchCompleted, events) |> work.Enqueue }
+        Add (epoch, markBatchCompleted, events) |> work.Enqueue
+        return maxPendingBatches-batches.CurrentCount,maxPendingBatches }
+
     member __.Stop() =
         cts.Cancel()
