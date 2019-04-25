@@ -101,6 +101,7 @@ let arrayBytes (x:byte[]) = if x = null then 0 else x.Length
 let private mb x = float x / 1024. / 1024.
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 
+type [<NoComparison>] StreamItem = { stream: string; index: int64; event: Equinox.Codec.IEvent<byte[]> }
 type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
 type [<NoComparison>] StreamBatch = { stream: string; span: Span }
 type [<NoComparison>] StreamState = { write: int64 option; queue: Span[] } with
@@ -111,7 +112,7 @@ type [<NoComparison>] StreamState = { write: int64 option; queue: Span[] } with
 module StreamState =
     let (|NNA|) xs = if xs = null then Array.empty else xs
     module Span =
-        let (|End|) x = x.index + if x.events = null then 0L else x.events.LongLength
+        let (|End|) (x : Span) = x.index + if x.events = null then 0L else x.events.LongLength
         let trim min = function
             | x when x.index >= min -> x // don't adjust if min not within
             | End n when n < min -> { index = min; events = [||] } // throw away if before min
@@ -174,7 +175,7 @@ type StreamStates() =
             stream, updated
     let updateWritePos stream pos span = update stream { write = pos; queue = span }
     let markCompleted stream index = updateWritePos stream (Some index) null |> ignore
-    let enqueue item = updateWritePos item.stream None [|item.span|]
+    let enqueue (item : StreamItem) = updateWritePos item.stream None [| { index = item.index; events = [| item.event |]}|]
 
     let busy = HashSet<string>()
     let schedule (requestedOrder : string seq) (capacity: int) =
@@ -190,7 +191,8 @@ type StreamStates() =
     let markNotBusy stream =
         busy.Remove stream |> ignore
 
-    member __.Add(item: StreamBatch) = enqueue item
+    //member __.Add(item: StreamBatch) = enqueue item
+    member __.Add(item: StreamItem) = enqueue item |> ignore
     member __.TryGetStreamWritePos stream =
         match states.TryGetValue stream with
         | true, value -> value.write
@@ -232,9 +234,8 @@ type [<NoComparison>] internal Chunk<'Pos> = { pos: 'Pos; streamToRequiredIndex 
 type ProgressState<'Pos>(?currentPos : 'Pos) =
     let pending = Queue<_>()
     let mutable validatedPos = currentPos
-    member __.AppendBatch(pos, streamWithRequiredIndices : (string * int64) seq) =
-        let byStream = streamWithRequiredIndices |> Seq.groupBy fst |> Seq.map (fun (s,xs) -> KeyValuePair(s,xs |> Seq.map snd |> Seq.max))
-        pending.Enqueue { pos = pos; streamToRequiredIndex = Dictionary byStream }
+    member __.AppendBatch(pos, reqs : Dictionary<string,int64>) =
+        pending.Enqueue { pos = pos; streamToRequiredIndex = reqs }
     member __.MarkStreamProgress(stream, index) =
         for x in pending do
             match x.streamToRequiredIndex.TryGetValue stream with
@@ -244,9 +245,12 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
             match pending.TryPeek() with
             | true, batch -> batch.streamToRequiredIndex.Count = 0
             | _ -> false
+        let mutable completed = 0
         while headIsComplete () do
+            completed <- completed + 1
             let headBatch = pending.Dequeue()
             validatedPos <- Some headBatch.pos
+        completed
     member __.ScheduledOrder getStreamQueueLength =
         let raw = seq {
             let streams = HashSet()
@@ -302,7 +306,9 @@ type ProgressWriter() =
 [<NoComparison; NoEquality>]
 type CoordinatorWork =
     /// Enqueue a batch of items with supplied tag and progress marking function
-    | Add of epoch: int64 * markCompleted: Async<unit> * items: StreamBatch[]
+    | Add of epoch: int64 * markCompleted: Async<unit> * items: StreamItem seq
+    /// Log stats about an ingested batch
+    | Added of streams: int * events: int
     /// Result of processing on stream - processed up to nominated `index` or threw `exn`
     | Result of stream: string * outcome: Choice<int64,exn>
     /// Result from updating of Progress to backing store - processed up to nominated `epoch` or threw `exn`
@@ -310,11 +316,10 @@ type CoordinatorWork =
     
 type CoordinatorStats(log : ILogger, maxPendingBatches, ?statsInterval) =
     let statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 1.)
-    let statsIntervalMs = int64 statsInterval.TotalMilliseconds
     let mutable pendingBatchCount, validatedEpoch, comittedEpoch : int * int64 option * int64 option = 0, None, None
     let progCommitFails, progCommits = ref 0, ref 0 
-    let cycles, workPended, eventsPended, resultOk, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0
-    let statsDue = expiredMs statsIntervalMs
+    let cycles, batchesPended, streamsPended, eventsPended, resultOk, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
+    let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
     let dumpStats (busy,capacity) (streams : StreamStates) =
         if !progCommitFails <> 0 || !progCommits <> 0 then
             match comittedEpoch with
@@ -331,32 +336,35 @@ type CoordinatorStats(log : ILogger, maxPendingBatches, ?statsInterval) =
         else
             log.Information("Progress @ {validated} (committed: {committed}) Uncommitted {pendingBatches}/{maxPendingBatches}",
                 Option.toNullable validatedEpoch, Option.toNullable comittedEpoch, pendingBatchCount, maxPendingBatches)
-        let results = !resultOk + !resultExn
-        log.Information("Cycles {cycles} Ingested {batches} ({events} events) Active {busy}/{processors} Completed {completed} ({ok} ok {exns} exn)",
-            !cycles, !workPended, !eventsPended, busy, capacity, results, !resultOk, !resultExn)
-        cycles := 0; workPended := 0; eventsPended := 0; resultOk := 0; resultExn:= 0
+        log.Information("Cycles {cycles} Ingested {batches} ({streams}s {events}e) Busy {busy}/{processors} Completed {completed} ({ok} ok {exns} exn)",
+            !cycles, !batchesPended, !streamsPended, !eventsPended, busy, capacity, !resultOk + !resultExn, !resultOk, !resultExn)
+        cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0; resultOk := 0; resultExn:= 0
         //Metrics.dumpRuStats statsInterval log
         streams.Dump log
     member __.Handle = function
+        | Add _ -> ()
+        | Added (streams, events) ->
+            incr batchesPended
+            eventsPended := !eventsPended + events
+            streamsPended := !streamsPended + streams
+        | Result (_stream, Choice1Of2 _) ->
+            incr resultOk
+        | Result (_stream, Choice2Of2 _) ->
+            incr resultExn
         | ProgressResult (Choice1Of2 epoch) ->
             incr progCommits
             comittedEpoch <- Some epoch
         | ProgressResult (Choice2Of2 (_exn : exn)) ->
             incr progCommitFails
-        | Add (_epoch, _markCompleted,items) ->
-            incr workPended
-            eventsPended := !eventsPended + (items |> Array.sumBy (fun x -> x.span.events.Length))
-        | Result (_stream, Choice1Of2 _) ->
-            incr resultOk
-        | Result (_stream, Choice2Of2 _) ->
-            incr resultExn
     member __.HandleValidated(epoch, pendingBatches) = 
         incr cycles
         pendingBatchCount <- pendingBatches
         validatedEpoch <- epoch
     member __.HandleCommitted epoch = 
         comittedEpoch <- epoch
-    member __.TryDump(busy,capacity,streams) = if statsDue () then dumpStats (busy,capacity) streams
+    member __.TryDump(busy,capacity,streams) =
+        if statsDue () then
+            dumpStats (busy,capacity) streams
 
 /// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
 type Dispatcher(maxDop) =
@@ -378,38 +386,43 @@ type Dispatcher(maxDop) =
             if got then
                 let mutable item = Unchecked.defaultof<Async<_>>
                 if work.TryTake(&item, cancellationCheckInterval) then let! _ = Async.StartChild(dispatch item) in ()
-                else dop.Release() |> ignore
-    }
+                else dop.Release() |> ignore }
 
 /// Single instance per ChangeFeedObserver, spun up as leases are won and allocated by the ChangeFeedProcessor hosting framework
 /// Coordinates a) ingestion of events b) execution of projection work c) writing of progress d) reporting of state
 type Coordinator(log : ILogger, maxPendingBatches, processorDop, ?statsInterval) =
     let sleepIntervalMs = 5
     let cts = new CancellationTokenSource()
+    let batches = new SemaphoreSlim(maxPendingBatches)
     let stats = CoordinatorStats(log, maxPendingBatches, ?statsInterval=statsInterval)
-    let mutable pendingBatches = 0
     let progressWriter = ProgressWriter()
     let progressState = ProgressState()
     let streams = StreamStates()
     let work = ConcurrentQueue<_>()
+    let handle = function
+        | Add (epoch, checkpoint,items) ->
+            let reqs = Dictionary()
+            let mutable count = 0
+            for item in items do
+                streams.Add item
+                count <- count + 1
+                reqs.[item.stream] <- item.index + 1L
+            progressState.AppendBatch((epoch,checkpoint),reqs)
+            work.Enqueue(Added (reqs.Count,count))
+        | Added _ -> ()
+        | Result (stream, Choice1Of2 index) ->
+            batches.Release(progressState.MarkStreamProgress(stream,index)) |> ignore
+            streams.MarkCompleted(stream,index)
+        | Result (stream, Choice2Of2 _) ->
+            streams.MarkFailed stream
+        | ProgressResult _ -> ()
+
     member private __.Pump(project : StreamBatch -> Async<int>) = async {
         let dispatcher = Dispatcher(processorDop)
         use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
         use _ = dispatcher.Result.Subscribe(Result >> work.Enqueue)
         Async.Start(progressWriter.Pump(), cts.Token)
         Async.Start(dispatcher.Pump(), cts.Token)
-        let handle = function
-            | ProgressResult (Choice1Of2 epoch) -> ()
-            | ProgressResult (Choice2Of2 (_exn : exn)) -> ()
-            | Add (epoch, checkpoint,items) ->
-                for item in items do
-                    streams.Add item |> ignore
-                progressState.AppendBatch((epoch,checkpoint), [|for x in items -> x.stream, x.span.index + int64 x.span.events.Length |])
-            | Result (stream, Choice1Of2 index) ->
-                progressState.MarkStreamProgress(stream,index)
-                streams.MarkCompleted(stream,index)
-            | Result (stream, Choice2Of2 _) ->
-                streams.MarkFailed stream
         while not cts.IsCancellationRequested do
             // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
             work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
@@ -418,8 +431,7 @@ type Coordinator(log : ILogger, maxPendingBatches, processorDop, ?statsInterval)
             stats.HandleValidated(Option.map fst validatedPos, batches)
             validatedPos |> Option.iter progressWriter.Post
             stats.HandleCommitted progressWriter.CommittedEpoch
-            pendingBatches <- batches
-            // 3. After that, [over] provision writers queue
+            // 3. After that, provision writers queue
             let capacity = dispatcher.Capacity
             if capacity <> 0 then
                 let work = streams.Schedule(progressState.ScheduledOrder streams.QueueLength, capacity)
@@ -428,17 +440,16 @@ type Coordinator(log : ILogger, maxPendingBatches, processorDop, ?statsInterval)
                         try let! count = project batch
                             return batch.stream, Choice1Of2 (batch.span.index + int64 count)
                         with e -> return batch.stream, Choice2Of2 e }
-            do! Async.Sleep sleepIntervalMs
             // 4. Periodically emit status info
             let busy = processorDop - dispatcher.Capacity
-            stats.TryDump(busy,processorDop,streams) }
+            stats.TryDump(busy,processorDop,streams)
+            do! Async.Sleep sleepIntervalMs }
     static member Start(rangeLog, maxPendingBatches, processorDop, project) =
         let instance = new Coordinator(rangeLog, maxPendingBatches, processorDop)
         Async.Start <| instance.Pump(project)
         instance
-    member __.Submit(epoch, markBatchCompleted, events) =
-        Add (epoch, markBatchCompleted, events) |> work.Enqueue
-    member __.IsFullyLoaded =
-        Volatile.Read(&pendingBatches) >= maxPendingBatches
+    member __.Submit(epoch, markBatchCompleted, events) = async {
+        let! _ = batches.Await()
+        Add (epoch, markBatchCompleted, events) |> work.Enqueue }
     member __.Stop() =
         cts.Cancel()

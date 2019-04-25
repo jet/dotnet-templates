@@ -174,30 +174,18 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_busyPause,_project) (broke
     }
     ChangeFeedObserver.Create(log, projectBatch, dispose = disposeProducer)
 //#else
-let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, busyPause : TimeSpan, project) () =
+let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) () =
     let mutable coordinator = Unchecked.defaultof<Coordinator>
     let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
     let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
+        let pt = Stopwatch.StartNew()
         // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
         let checkpoint = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect }
         let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
-        let ingest (inputs : DocumentParser.IEvent seq) : (*events*)int * (*streams*)int =
-            let streams, events = HashSet(), ResizeArray()
-            for x in inputs do
-                streams.Add x.Stream |> ignore
-                events.Add { stream = x.Stream; span = { index = x.Index; events = Array.singleton (upcast x) } }
-            let events = events.ToArray()
-            coordinator.Submit(epoch,checkpoint,events)
-            events.Length, streams.Count
-        let pt, (events,streams) = Stopwatch.Time (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> ingest) 
-        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Ingested {streams,5}s {events,5}e {p,2}ms",
-            epoch, docs.Count, int ctx.FeedResponse.RequestCharge,
-            float sw.ElapsedMilliseconds / 1000., streams, events, (let e = pt.Elapsed in int e.TotalMilliseconds))
-        let mutable first = true 
-        while coordinator.IsFullyLoaded do // Only hand back control to the CFP iff backlog is under control
-            if first then first <- false; log.Information("Pausing due to backlog of incomplete batches...")
-            do! Async.Sleep busyPause
+        do! coordinator.Submit(epoch,checkpoint,seq { for x in Seq.collect DocumentParser.enumEvents docs -> { stream = x.Stream; index = x.Index; event = x } })
+        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Ingest {p:n1}s",
+            epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000., (let e = pt.Elapsed in int e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
     let init rangeLog = coordinator <- Coordinator.Start(rangeLog, maxPendingBatches, processorDop, project)
@@ -229,14 +217,14 @@ let main argv =
         //let targetParams = args.Target.BuildTargetParams()
         //let createRangeHandler log processingParams () = mkRangeProjector log processingParams targetParams
 //#endif
-        let project (batch : StreamBatch) = async {
+        let project (batch : StreamBatch) = async { 
             let r = Random()
             let ms = r.Next(1,batch.span.events.Length)
             do! Async.Sleep ms
             return batch.span.events.Length }
         run Log.Logger discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromHere, batchSize, lagFrequency)
-            (createRangeHandler Log.Logger (maxPendingBatches, processorDop, TimeSpan.FromMilliseconds 100., project))
+            (createRangeHandler Log.Logger (maxPendingBatches, processorDop, project))
         |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
