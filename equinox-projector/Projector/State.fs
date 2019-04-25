@@ -385,7 +385,7 @@ type Dispatcher(maxDop) =
             let! got = dop.Await(cancellationCheckInterval)
             if got then
                 let mutable item = Unchecked.defaultof<Async<_>>
-                if work.TryTake(&item, cancellationCheckInterval) then let! _ = Async.StartChild(dispatch item) in ()
+                if work.TryTake(&item, cancellationCheckInterval) then Async.Start(dispatch item)
                 else dop.Release() |> ignore }
 
 /// Single instance per ChangeFeedObserver, spun up as leases are won and allocated by the ChangeFeedProcessor hosting framework
