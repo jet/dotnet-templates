@@ -185,7 +185,7 @@ let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) 
         let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
         do! coordinator.Submit(epoch,checkpoint,seq { for x in Seq.collect DocumentParser.enumEvents docs -> { stream = x.Stream; index = x.Index; event = x } })
         log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Ingest {p:n1}s",
-            epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000., (let e = pt.Elapsed in int e.TotalSeconds))
+            epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000., (let e = pt.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
     let init rangeLog = coordinator <- Coordinator.Start(rangeLog, maxPendingBatches, processorDop, project)
@@ -219,7 +219,7 @@ let main argv =
 //#endif
         let project (batch : StreamBatch) = async { 
             let r = Random()
-            let ms = r.Next(1,batch.span.events.Length * 10)
+            let ms = r.Next(1,batch.span.events.Length * 100)
             do! Async.Sleep ms
             return batch.span.events.Length }
         run Log.Logger discovery connector.ConnectionPolicy source
