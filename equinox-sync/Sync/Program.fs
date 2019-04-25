@@ -67,7 +67,7 @@ module CmdParser =
         | [<AltCommandLine "-l"; Unique>] LagFreqS of float
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
 #else
-        | [<AltCommandLine "-mi"; Unique>] MinBatchSize of int
+        | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-mb"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine "-p"; Unique>] Position of int64
@@ -78,7 +78,7 @@ module CmdParser =
         | [<AltCommandLine "-vc"; Unique>] VerboseConsole
 #endif
         | [<AltCommandLine "-f"; Unique>] ForceRestart
-        | [<AltCommandLine "-m"; Unique>] BatchSize of int
+        | [<AltCommandLine "-mi"; Unique>] BatchSize of int
         | [<AltCommandLine "-v"; Unique>] Verbose
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
         interface IArgParserTemplate with
