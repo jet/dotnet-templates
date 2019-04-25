@@ -220,7 +220,7 @@ let main argv =
 //#endif
         let project (batch : StreamBatch) = async { 
             let r = Random()
-            let ms = r.Next(1,batch.span.events.Length * 100)
+            let ms = r.Next(1,batch.span.events.Length * 10)
             do! Async.Sleep ms
             return batch.span.events.Length }
         run Log.Logger discovery connector.ConnectionPolicy source
