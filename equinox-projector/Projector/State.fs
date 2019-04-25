@@ -411,7 +411,8 @@ type Coordinator(log : ILogger, maxPendingBatches, processorDop, ?statsInterval)
             work.Enqueue(Added (reqs.Count,count))
         | Added _ -> ()
         | Result (stream, Choice1Of2 index) ->
-            batches.Release(progressState.MarkStreamProgress(stream,index)) |> ignore
+            let batchesCompleted = progressState.MarkStreamProgress(stream,index)
+            if batchesCompleted <> 0 then batches.Release(batchesCompleted) |> ignore
             streams.MarkCompleted(stream,index)
         | Result (stream, Choice2Of2 _) ->
             streams.MarkFailed stream
