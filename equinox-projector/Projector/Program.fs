@@ -211,6 +211,7 @@ module Logging =
 let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ChangeFeedVerbose
+        if not (System.Threading.ThreadPool.SetMaxThreads(1024,256)) then raise <| CmdParser.MissingArg "Cannot set MaxThreads to 1024"
         let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
         let aux, leaseId, startFromHere, batchSize, maxPendingBatches, processorDop, lagFrequency = args.BuildChangeFeedParams()
 //#if kafka
