@@ -40,7 +40,7 @@ type Stats<'R>(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
         else
             log.Information("Progress @ {validated} (committed: {committed}) Uncommitted {pendingBatches}/{maxPendingBatches}",
                 Option.toNullable validatedEpoch, Option.toNullable comittedEpoch, pendingBatchCount, maxPendingBatches)
-        log.Information("Cycles {cycles} Ingested {batches} ({streams}s {events}-{skipped}e) Busy {busy}/{processors} Completed {completed} ({passed} success {exns} exn)",
+        log.Information("Cycles {cycles} Ingested {batches}b {streams:n0}s {events:n0}-{skipped:n0}e Active {busy}/{processors} Completed {completed:n0} ({passed} success {exns} exn)",
             !cycles, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, busy, capacity, !resultCompleted + !resultExn, !resultCompleted, !resultExn)
         cycles := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
         streams.Dump log

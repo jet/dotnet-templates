@@ -73,33 +73,6 @@ module Writer =
     //        | Some (pos,count) -> Some (stream,pos,int count)
     //        | None -> aux ()
     //    aux ()
-    //member __.TryReady(isBusy) =
-    //    let blocked = ResizeArray()
-    //    let rec aux () =
-    //        match dirty |> Queue.tryDequeue with
-    //        | None -> None
-    //        | Some stream ->
-
-    //        match states.[stream] with
-    //        | state when state.IsReady ->
-    //            if (not << isBusy) stream then 
-    //                let h = state.queue |> Array.head
-                
-    //                let mutable bytesBudget = cosmosPayloadLimit
-    //                let mutable count = 0 
-    //                let max2MbMax100EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
-    //                    bytesBudget <- bytesBudget - cosmosPayloadBytes y
-    //                    count <- count + 1
-    //                    // Reduce the item count when we don't yet know the write position
-    //                    count <= (if Option.isNone state.write then 10 else 4096) && (bytesBudget >= 0 || count = 1)
-    //                Some { stream = stream; span = { index = h.index; events = h.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
-    //            else
-    //                blocked.Add(stream) |> ignore
-    //                aux ()
-    //        | _ -> aux ()
-    //    let res = aux ()
-    //    for x in blocked do markDirty x
-    //    res
 
 type CosmosStats (log : ILogger, maxPendingBatches, statsInterval) =
     inherit Stats<Writer.Result>(log, maxPendingBatches, statsInterval)
@@ -109,13 +82,13 @@ type CosmosStats (log : ILogger, maxPendingBatches, statsInterval) =
 
     override __.DumpExtraStats() =
         let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExnOther
-        log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} awaiting prefix {exns} exceptions)",
-            results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExnOther)
-        resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExnOther := 0;
+        log.Information("CosmosDb {completed:n0} ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} awaiting prefix)",
+            results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
+        resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
-            log.Warning("Exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
-                !rateLimited, !timedOut, !tooLarge, !malformed)
-            rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0 
+            log.Warning("Exceptions {rateLimited:n0} rate-limited, {timedOut:n0} timed out, {tooLarge} too large, {malformed} malformed, {other} other",
+                !rateLimited, !timedOut, !tooLarge, !malformed, !resultExnOther)
+            rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0; resultExnOther := 0;
             if badCats.Any then log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
         Metrics.dumpRuStats statsInterval log
 

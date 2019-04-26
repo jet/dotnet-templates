@@ -101,8 +101,8 @@ module CmdParser =
                 | ForceRestart _ ->         "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
-                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 64"
-                | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 64"
+                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 128"
+                | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 512"
                 | Position _ ->             "EventStore $all Stream Position to commence from"
                 | Chunk _ ->                "EventStore $all Chunk to commence from"
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
@@ -125,8 +125,8 @@ module CmdParser =
         member __.VerboseConsole =      a.Contains VerboseConsole
         member __.ConsoleMinLevel =     if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
         member __.StartingBatchSize =   a.GetResult(BatchSize,4096)
-        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,64)
-        member __.MaxWriters =          a.GetResult(MaxWriters,64)
+        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,128)
+        member __.MaxWriters =          a.GetResult(MaxWriters,512)
         member __.MinBatchSize =        a.GetResult(MinBatchSize,512)
         member __.StreamReaders =       a.GetResult(StreamReaders,8)
         member __.TailInterval =        a.GetResult(Tail,1.) |> TimeSpan.FromSeconds
