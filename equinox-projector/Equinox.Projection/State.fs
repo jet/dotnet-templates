@@ -117,13 +117,15 @@ type StreamStates() =
     let schedule (requestedOrder : string seq) (capacity: int) =
         let toSchedule = ResizeArray<_>(capacity)
         let xs = requestedOrder.GetEnumerator()
-        while xs.MoveNext() && toSchedule.Capacity <> 0 do
+        let mutable remaining = capacity
+        while xs.MoveNext() && remaining <> 0 do
             let x = xs.Current
             let state = states.[x]
             if not state.isMalformed && busy.Add x then
                 let q = state.queue
                 if q = null then Log.Warning("Attempt to request scheduling for completed {stream} that has no items queued", x)
                 toSchedule.Add(state.write, { stream = x; span = q.[0] })
+                remaining <- remaining - 1
         toSchedule.ToArray()
     let markNotBusy stream =
         busy.Remove stream |> ignore
