@@ -208,7 +208,7 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
         raw |> Seq.sortBy (fun (_s,(b,l)) -> b,-l) |> Seq.map fst
     member __.Validate tryGetStreamWritePos : int * 'Pos option * int =
         let rec aux completed =
-            if pending.Count = 0 then 0 else
+            if pending.Count = 0 then completed else
             let batch = pending.Peek()
             for KeyValue (stream, requiredIndex) in Array.ofSeq batch.streamToRequiredIndex do
                 match tryGetStreamWritePos stream with
@@ -216,12 +216,12 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
                     Log.Warning("Validation had to remove {stream} as required {req} has been met by {index}", stream, requiredIndex, index)
                     batch.streamToRequiredIndex.Remove stream |> ignore
                 | _ -> ()
-            if batch.streamToRequiredIndex.Count = 0 then
+            if batch.streamToRequiredIndex.Count <> 0 then
+                completed
+            else
                 let headBatch = pending.Dequeue()
                 validatedPos <- Some headBatch.pos
                 aux (completed + 1)
-            else
-                completed
         let completed = aux 0
         completed, validatedPos, pending.Count
 

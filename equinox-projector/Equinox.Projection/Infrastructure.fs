@@ -10,8 +10,8 @@ module ConcurrentQueue =
     let drain handle (xs : ConcurrentQueue<_>) = 
         let rec aux () =
             match xs.TryDequeue() with
-            | true, x -> handle x; aux ()
             | false, _ -> ()
+            | true, x -> handle x; aux ()
         aux ()
 
 type Async with

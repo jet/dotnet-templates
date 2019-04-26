@@ -131,8 +131,8 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
             // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
             work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
             // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
-            let completed, validatedPos, pendingBatches = progressState.Validate(streams.TryGetStreamWritePos)
-            if completed <> 0 then batches.Release(completed) |> ignore
+            let completedBatches, validatedPos, pendingBatches = progressState.Validate(streams.TryGetStreamWritePos)
+            if completedBatches > 0 then batches.Release(completedBatches) |> ignore
             stats.HandleValidated(Option.map fst validatedPos, pendingBatches)
             validatedPos |> Option.iter progressWriter.Post
             stats.HandleCommitted progressWriter.CommittedEpoch
@@ -167,11 +167,11 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
 
     member __.Submit(epoch, markBatchCompleted, events) = async {
         let! _ = batches.Await()
-        Add (epoch, markBatchCompleted, Array.ofSeq events) |> work.Enqueue
+        work.Enqueue <| Add (epoch, markBatchCompleted, Array.ofSeq events)
         return maxPendingBatches-batches.CurrentCount,maxPendingBatches }
 
     member __.Submit(streamSpan) =
-        AddStream streamSpan |> work.Enqueue
+        work.Enqueue <| AddStream streamSpan
 
     member __.Stop() =
         cts.Cancel()
