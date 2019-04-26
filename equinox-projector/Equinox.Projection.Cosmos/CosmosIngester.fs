@@ -103,15 +103,15 @@ module Writer =
 
 type CosmosStats (log : ILogger, maxPendingBatches, statsInterval) =
     inherit Stats<Writer.Result>(log, maxPendingBatches, statsInterval)
-    let resultOk, resultDup, resultPartialDup, resultPrefix, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0
+    let resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = ref 0, ref 0, ref 0, ref 0, ref 0
     let rateLimited, timedOut, tooLarge, malformed = ref 0, ref 0, ref 0, ref 0
     let badCats = CatStats()
 
     override __.DumpExtraStats() =
-        let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
-        log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns)",
-            results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn)
-        resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
+        let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExnOther
+        log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} awaiting prefix {exns} exceptions)",
+            results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExnOther)
+        resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExnOther := 0;
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
             log.Warning("Exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
                 !rateLimited, !timedOut, !tooLarge, !malformed)
@@ -130,7 +130,7 @@ type CosmosStats (log : ILogger, maxPendingBatches, statsInterval) =
             | Writer.Result.PrefixMissing _ -> incr resultPrefix
         | Result (stream, Choice2Of2 exn) ->
             match Writer.classify exn with
-            | ResultKind.Other -> ()
+            | ResultKind.Other -> incr resultExnOther
             | ResultKind.RateLimited -> incr rateLimited
             | ResultKind.TooLarge -> category stream |> badCats.Ingest; incr tooLarge
             | ResultKind.Malformed -> category stream |> badCats.Ingest; incr malformed
