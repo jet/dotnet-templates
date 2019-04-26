@@ -350,20 +350,19 @@ module EventStoreSource =
             let handleResult (streams: StreamStates, progressState : ProgressState<_>,  batches: SemaphoreSlim) res =
                 let applyResultToStreamState = function
                     | stream, (Choice1Of2 (Writer.Ok pos)) ->
-                        streams.InternalUpdate stream pos null, ResultKind.Ok
+                        streams.InternalUpdate stream pos null
                     | stream, (Choice1Of2 (Writer.Duplicate pos)) ->
-                        streams.InternalUpdate stream pos null, ResultKind.Ok
+                        streams.InternalUpdate stream pos null
                     | stream, (Choice1Of2 (Writer.PartialDuplicate overage)) ->
-                        streams.InternalUpdate stream overage.index [|overage|], ResultKind.Ok
+                        streams.InternalUpdate stream overage.index [|overage|]
                     | stream, (Choice1Of2 (Writer.PrefixMissing (overage,pos))) ->
-                        streams.InternalUpdate stream pos [|overage|], ResultKind.Ok
+                        streams.InternalUpdate stream pos [|overage|]
                     | stream, (Choice2Of2 exn) ->
-                        let kind, malformed = Writer.classify exn
-                        streams.SetMalformed(stream,malformed), kind
+                        let malformed = Writer.classify exn |> Writer.isMalformed
+                        streams.SetMalformed(stream,malformed)
                 match res with
                 | Message.Result (s,r) ->
-                    // TODO kind ?
-                    let (stream,updatedState), kind = applyResultToStreamState (s,r)
+                    let stream,updatedState = applyResultToStreamState (s,r)
                     match updatedState.write with
                     | Some wp ->
                         let closedBatches = progressState.MarkStreamProgress(stream, wp)

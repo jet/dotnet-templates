@@ -214,7 +214,7 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
             for KeyValue (stream, requiredIndex) in Array.ofSeq batch.streamToRequiredIndex do
                 match tryGetStreamWritePos stream with
                 | Some index when requiredIndex <= index ->
-                    Log.Warning("Validation had to remove {stream}", stream)
+                    Log.Warning("Validation had to remove {stream} as required {req} has been met by {index}", stream, requiredIndex, index)
                     batch.streamToRequiredIndex.Remove stream |> ignore
                 | _ -> ()
             if batch.streamToRequiredIndex.Count = 0 then

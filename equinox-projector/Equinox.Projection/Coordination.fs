@@ -89,21 +89,6 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
     let dispatcher = Dispatcher(processorDop)
     let progressState = ProgressState()
     let progressWriter = ProgressWriter<_>()
-    let handle = function
-        | Add (epoch, checkpoint,items) ->
-            let reqs = Dictionary()
-            let mutable count = 0
-            for item in items do
-                streams.Add item
-                count <- count + 1
-                reqs.[item.stream] <- item.index + 1L
-            progressState.AppendBatch((epoch,checkpoint),reqs)
-            work.Enqueue(Added (reqs.Count,count))
-        | AddStream streamSpan ->
-            streams.Add(streamSpan,false) |> ignore
-            work.Enqueue(Added (1,streamSpan.span.events.Length))
-        | Added _  | ProgressResult _ | Result _ ->
-            ()
 
     member private __.Pump(stats : Stats<'R>) = async {
         use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
@@ -111,12 +96,27 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
         Async.Start(progressWriter.Pump(), cts.Token)
         Async.Start(dispatcher.Pump(), cts.Token)
         let handle x =
-            handle x
-            match x with Result _ as r -> handleResult (streams, progressState, batches) r | _ -> ()
-            stats.Handle x
+            match x with
+            | Add (epoch, checkpoint, items) ->
+                let reqs = Dictionary()
+                let mutable count = 0
+                for item in items do
+                    streams.Add item
+                    count <- count + 1
+                    reqs.[item.stream] <- item.index + 1L
+                progressState.AppendBatch((epoch,checkpoint),reqs)
+                work.Enqueue(Added (reqs.Count,count))
+            | AddStream streamSpan ->
+                streams.Add(streamSpan,false) |> ignore
+                work.Enqueue(Added (1,streamSpan.span.events.Length))
+            | Added _  | ProgressResult _ ->
+                ()
+            | Result _ as r ->
+                handleResult (streams, progressState, batches) r
+            
         while not cts.IsCancellationRequested do
             // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
-            work |> ConcurrentQueue.drain handle
+            work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
             // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
             let validatedPos, batches = progressState.Validate(streams.TryGetStreamWritePos)
             stats.HandleValidated(Option.map fst validatedPos, batches)

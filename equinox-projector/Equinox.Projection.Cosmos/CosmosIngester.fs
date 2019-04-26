@@ -9,7 +9,7 @@ open Serilog
 let cosmosPayloadLimit = 2 * 1024 * 1024 - (*fudge*)4096
 let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 96
 
-type [<RequireQualifiedAccess>] ResultKind = TimedOut | RateLimited | TooLarge | Malformed | Other | Ok
+type [<RequireQualifiedAccess>] ResultKind = TimedOut | RateLimited | TooLarge | Malformed | Other
 
 module Writer =
     type [<NoComparison>] Result =
@@ -54,11 +54,14 @@ module Writer =
         | _ -> Other
 
     let classify = function
-        | RateLimitedMessage -> ResultKind.RateLimited, false
-        | TimedOutMessage -> ResultKind.TimedOut, false
-        | TooLargeMessage -> ResultKind.TooLarge, true
-        | MalformedMessage -> ResultKind.Malformed, true
-        | Other -> ResultKind.Other, false
+        | RateLimitedMessage -> ResultKind.RateLimited
+        | TimedOutMessage -> ResultKind.TimedOut
+        | TooLargeMessage -> ResultKind.TooLarge
+        | MalformedMessage -> ResultKind.Malformed
+        | Other -> ResultKind.Other
+    let isMalformed = function
+        | ResultKind.RateLimited | ResultKind.TimedOut | ResultKind.Other -> false
+        | ResultKind.TooLarge | ResultKind.Malformed -> true
 
     //member __.TryGap() : (string*int64*int) option =
     //    let rec aux () =
@@ -127,9 +130,9 @@ type CosmosStats (log : ILogger, maxPendingBatches, statsInterval) =
             | Writer.Result.PrefixMissing _ -> incr resultPrefix
         | Result (stream, Choice2Of2 exn) ->
             match Writer.classify exn with
-            | ResultKind.Ok, _ | ResultKind.Other, _ -> ()
-            | ResultKind.RateLimited, _ -> incr rateLimited
-            | ResultKind.TooLarge, _ -> category stream |> badCats.Ingest; incr tooLarge
-            | ResultKind.Malformed, _ -> category stream |> badCats.Ingest; incr malformed
-            | ResultKind.TimedOut, _ -> incr timedOut
+            | ResultKind.Other -> ()
+            | ResultKind.RateLimited -> incr rateLimited
+            | ResultKind.TooLarge -> category stream |> badCats.Ingest; incr tooLarge
+            | ResultKind.Malformed -> category stream |> badCats.Ingest; incr malformed
+            | ResultKind.TimedOut -> incr timedOut
         | Add _ | AddStream _ | Added _ | ProgressResult _ -> ()
