@@ -206,9 +206,9 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
                     if streams.Add s then
                         yield s,(batch,getStreamQueueLength s) }
         raw |> Seq.sortBy (fun (_s,(b,l)) -> b,-l) |> Seq.map fst
-    member __.Validate tryGetStreamWritePos : 'Pos option * int =
-        let rec aux () =
-            if pending.Count = 0 then () else
+    member __.Validate tryGetStreamWritePos : int * 'Pos option * int =
+        let rec aux completed =
+            if pending.Count = 0 then 0 else
             let batch = pending.Peek()
             for KeyValue (stream, requiredIndex) in Array.ofSeq batch.streamToRequiredIndex do
                 match tryGetStreamWritePos stream with
@@ -219,9 +219,11 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
             if batch.streamToRequiredIndex.Count = 0 then
                 let headBatch = pending.Dequeue()
                 validatedPos <- Some headBatch.pos
-                aux ()
-        aux ()
-        validatedPos, pending.Count
+                aux (completed + 1)
+            else
+                completed
+        let completed = aux 0
+        completed, validatedPos, pending.Count
 
 /// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
 type Dispatcher<'R>(maxDop) =

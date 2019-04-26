@@ -96,26 +96,31 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
         use _ = dispatcher.Result.Subscribe(Result >> work.Enqueue)
         Async.Start(progressWriter.Pump(), cts.Token)
         Async.Start(dispatcher.Pump(), cts.Token)
-        let canSkip (streamState : StreamState) (item : StreamItem) =
+        let validVsSkip (streamState : StreamState) (item : StreamItem) =
             match streamState.write, item.index + 1L with
-            | Some cw, required -> cw >= required
-            | _ -> false
-
+            | Some cw, required when cw >= required -> 0, 1
+            | _ -> 1, 0
+        //let validVsSkipSpan (streamState : StreamState) (batch : StreamSpan) =
+        //    match streamState.write, item.index + item.span.events.LongLength with
+        //    | Some cw, required when cw >= required -> 0, 1
+        //    | _ -> 1, 0
         let handle x =
             match x with
             | Add (epoch, checkpoint, items) ->
                 let reqs = Dictionary()
                 let mutable count, skipCount = 0, 0
                 for item in items do
-                    let _,streamState = streams.Add item
-                    if canSkip streamState item then skipCount <- skipCount + 1
-                    else
-                        count <- count + 1
+                    let _stream,streamState = streams.Add item
+                    match validVsSkip streamState item with
+                    | 0, skip ->
+                        skipCount <- skipCount + skip
+                    | required, _ ->
+                        count <- count + required
                         reqs.[item.stream] <- item.index+1L
                 progressState.AppendBatch((epoch,checkpoint),reqs)
                 work.Enqueue(Added (reqs.Count,skipCount,count))
-            | AddStream streamSpan ->
-                streams.Add(streamSpan,false) |> ignore
+            | AddStream streamSpan ->()
+                //let _stream,streamState = streams.Add(streamSpan,false)
                 //work.Enqueue(Added (1,streamSpan.span.events.Length))
             | Added _  | ProgressResult _ ->
                 ()
@@ -126,8 +131,9 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
             // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
             work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
             // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
-            let validatedPos, batches = progressState.Validate(streams.TryGetStreamWritePos)
-            stats.HandleValidated(Option.map fst validatedPos, batches)
+            let completed, validatedPos, pendingBatches = progressState.Validate(streams.TryGetStreamWritePos)
+            if completed <> 0 then batches.Release(completed) |> ignore
+            stats.HandleValidated(Option.map fst validatedPos, pendingBatches)
             validatedPos |> Option.iter progressWriter.Post
             stats.HandleCommitted progressWriter.CommittedEpoch
             // 3. After that, provision writers queue
