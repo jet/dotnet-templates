@@ -108,23 +108,3 @@ type CheckpointSeries(name, log, resolveStream) =
     member __.Start(freq, pos) = inner.Start(seriesId, freq, pos)
     member __.Override(freq, pos) = inner.Override(seriesId, freq, pos)
     member __.Commit(pos) = inner.Commit(seriesId, pos)
-
-/// Manages writing of progress
-/// - Each write attempt is of the newest token
-/// - retries until success or a new item is posted
-type ProgressWriter(sync, ?interval) =
-    let pumpSleepMs = let interval = defaultArg interval TimeSpan.FromSeconds 5. in interval.TotalMilliseconds |> int
-    let mutable latest = None
-    let result = Event<Choice<int64,exn>>()
-    [<CLIEvent>] member __.Result = result.Publish
-    member __.Post(value : int64) = latest <- Some value 
-    member __.Pump() = async {
-        let! ct = Async.CancellationToken
-        while not ct.IsCancellationRequested do
-            match latest with
-            | Some value ->
-                try do! sync value
-                    result.Trigger (Choice1Of2 value)
-                with e -> result.Trigger (Choice2Of2 e)
-            | _ -> ()
-            do! Async.Sleep pumpSleepMs } 

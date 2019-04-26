@@ -1,6 +1,8 @@
 ﻿module SyncTemplate.EventStoreSource
 
 open Equinox.Store // AwaitTaskCorrect
+open Equinox.Projection.Cosmos
+open Equinox.Projection.State
 open EventStore.ClientAPI
 open System
 open Serilog // NB Needs to shadow ILogger
@@ -11,10 +13,10 @@ open System.Collections.Generic
 type EventStore.ClientAPI.RecordedEvent with
     member __.Timestamp = System.DateTimeOffset.FromUnixTimeMilliseconds(__.CreatedEpoch)
 
-let inline recPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = CosmosIngester.arrayBytes x.Data + CosmosIngester.arrayBytes x.Metadata
+let inline recPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = arrayBytes x.Data + arrayBytes x.Metadata
 let inline payloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = recPayloadBytes x.Event + x.OriginalStreamId.Length * 2
 
-let tryToBatch (e : RecordedEvent) : CosmosIngester.Batch option =
+let tryToBatch (e : RecordedEvent) : StreamItem option =
     let eb = recPayloadBytes e
     if eb > CosmosIngester.cosmosPayloadLimit then
         Log.Error("ES Event Id {eventId} (#{index} in {stream}, type {type}) size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}",
@@ -24,7 +26,7 @@ let tryToBatch (e : RecordedEvent) : CosmosIngester.Batch option =
         let meta' = if e.Metadata <> null && e.Metadata.Length = 0 then null else e.Metadata
         let data' = if e.Data <> null && e.Data.Length = 0 then null else e.Data
         let event : Equinox.Codec.IEvent<_> = Equinox.Codec.Core.EventData.Create(e.EventType, data', meta', e.Timestamp) :> _
-        Some { stream = e.EventStreamId; span = { index = e.EventNumber; events = [| event |]} }
+        Some { stream = e.EventStreamId; index = e.EventNumber; event = event}
 
 let private mb x = float x / 1024. / 1024.
 
@@ -118,7 +120,7 @@ let establishMax (conn : IEventStoreConnection) = async {
             Log.Warning(e,"Could not establish max position")
             do! Async.Sleep 5000 
     return Option.get max }
-let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : CosmosIngester.Batch -> unit) =
+let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : StreamSpan -> unit) =
     let rec fetchFrom pos limit = async {
         let reqLen = match limit with Some limit -> min limit batchSize | None -> batchSize
         let! currentSlice = conn.ReadStreamEventsForwardAsync(stream, pos, reqLen, resolveLinkTos=true) |> Async.AwaitTaskCorrect
@@ -136,7 +138,7 @@ let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int
 
 type [<NoComparison>] PullResult = Exn of exn: exn | Eof | EndOfTranche
 let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn : IEventStoreConnection, batchSize)
-        (range:Range, once) (tryMapEvent : ResolvedEvent -> CosmosIngester.Batch option) (postBatch : Position -> CosmosIngester.Batch[] -> unit) =
+        (range:Range, once) (tryMapEvent : ResolvedEvent -> StreamItem option) (postBatch : Position -> StreamItem[] -> Async<int*int>) =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let rec aux () = async {
         let! currentSlice = conn.ReadAllEventsForwardAsync(range.Current, batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
@@ -146,10 +148,10 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
         let batches = currentSlice.Events |> Seq.choose tryMapEvent |> Array.ofSeq
         let streams = batches |> Seq.groupBy (fun b -> b.stream) |> Array.ofSeq
         let usedStreams, usedCats = streams.Length, streams |> Seq.map fst |> Seq.distinct |> Seq.length
-        postBatch currentSlice.NextPosition batches
-        Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n0}ms",
+        let! (cur,max) = postBatch currentSlice.NextPosition batches
+        Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n0}ms {cur}/{max}",
             range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
-            batchEvents, usedCats, usedStreams, batches.Length, postSw.ElapsedMilliseconds)
+            batchEvents, usedCats, usedStreams, batches.Length, postSw.ElapsedMilliseconds, cur, max)
         if not (range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream) then return currentSlice.IsEndOfStream else
         sw.Restart() // restart the clock as we hand off back to the Reader
         return! aux () }
@@ -181,7 +183,7 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         work.Enqueue <| Work.Tail (pos, max, interval, defaultArg batchSizeOverride batchSize)
     member __.TryDequeue () =
         work.TryDequeue()
-    member __.Process(conn, tryMapEvent, postItem, shouldTail, postBatch, work) = async {
+    member __.Process(conn, tryMapEvent, postItem, postBatch, work) = async {
         let adjust batchSize = if batchSize > minBatchSize then batchSize - 128 else batchSize
         match work with
         | StreamPrefix (name,pos,len,batchSize) ->
@@ -236,7 +238,6 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
             let slicesStats, stats = SliceStatsBuffer(), OverallStats()
             use _ = Serilog.Context.LogContext.PushProperty("Tranche", "Tail")
             let progressSw = Stopwatch.StartNew()
-            let mutable paused = false
             while true do
                 let currentPos = range.Current
                 if progressSw.ElapsedMilliseconds > progressIntervalMs then
@@ -244,19 +245,12 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                         count, pauses, currentPos.CommitPosition, chunk currentPos)
                     progressSw.Restart()
                 count <- count + 1
-                if shouldTail () then
-                    paused <- false
-                    let! res = pullAll (slicesStats,stats) (conn,batchSize) (range,true) tryMapEvent postBatch 
-                    do! awaitInterval
-                    match res with
-                    | PullResult.EndOfTranche | PullResult.Eof -> ()
-                    | PullResult.Exn e ->
-                        batchSize <- adjust batchSize
-                        Log.Warning(e, "Tail $all failed, adjusting batch size to {bs}", batchSize)
-                else
-                    if not paused then Log.Information("Pausing due to backlog of incomplete batches...")
-                    paused <- true
-                    pauses <- pauses + 1
-                    do! awaitInterval
+                let! res = pullAll (slicesStats,stats) (conn,batchSize) (range,true) tryMapEvent postBatch 
+                do! awaitInterval
+                match res with
+                | PullResult.EndOfTranche | PullResult.Eof -> ()
+                | PullResult.Exn e ->
+                    batchSize <- adjust batchSize
+                    Log.Warning(e, "Tail $all failed, adjusting batch size to {bs}", batchSize)
                 stats.DumpIfIntervalExpired()
             return true } 

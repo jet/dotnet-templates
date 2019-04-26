@@ -5,13 +5,14 @@ open Confluent.Kafka
 //#endif
 open Equinox.Cosmos
 open Equinox.Cosmos.Projection
+open Equinox.Projection.Coordination
 //#if kafka
 open Equinox.Projection.Codec
+open Equinox.Store
 open Jet.ConfluentKafka.FSharp
 //#else
-open ProjectorTemplate.Projector.State
+open Equinox.Projection.State
 //#endif
-open Equinox.Store
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
 //#if kafka
@@ -175,7 +176,7 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_busyPause,_project) (broke
     ChangeFeedObserver.Create(log, projectBatch, dispose = disposeProducer)
 //#else
 let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) () =
-    let mutable coordinator = Unchecked.defaultof<Coordinator>
+    let mutable coordinator = Unchecked.defaultof<Coordinator<_>>
     let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
     let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
@@ -188,7 +189,7 @@ let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) 
             epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000., index, max, (let e = pt.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
-    let init rangeLog = coordinator <- Coordinator.Start(rangeLog, maxPendingBatches, processorDop, project)
+    let init rangeLog = coordinator <- Coordinator<_>.Start(rangeLog, maxPendingBatches, processorDop, project, TimeSpan.FromMinutes 1.)
     let dispose () = coordinator.Stop()
     ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
  //#endif
@@ -218,7 +219,7 @@ let main argv =
         //let targetParams = args.Target.BuildTargetParams()
         //let createRangeHandler log processingParams () = mkRangeProjector log processingParams targetParams
 //#endif
-        let project (batch : StreamBatch) = async { 
+        let project (batch : StreamSpan) = async { 
             let r = Random()
             let ms = r.Next(1,batch.span.events.Length * 10)
             do! Async.Sleep ms

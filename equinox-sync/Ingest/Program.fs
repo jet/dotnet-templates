@@ -196,7 +196,7 @@ type Readers(conn, spec : ReaderSpec, tryMapEvent, postBatch, max : EventStore.C
             work.OverallStats.DumpIfIntervalExpired()
             let forkRunRelease task = async {
                 let! _ = Async.StartChild <| async {
-                    try let! eof = work.Process(conn, tryMapEvent, postBatch, (fun _ -> true), (fun _pos -> Seq.iter postBatch), task)
+                    try let! eof = work.Process(conn, tryMapEvent, postBatch, (fun _pos -> Seq.iter postBatch), task)
                         if eof then remainder <- None
                     finally dop.Release() |> ignore }
                 return () }

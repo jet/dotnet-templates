@@ -7,6 +7,9 @@ open Equinox.Cosmos.Projection
 //#if eventStore
 open Equinox.EventStore
 //#endif
+open Equinox.Projection.Coordination
+open Equinox.Projection.Cosmos
+open Equinox.Projection.State
 //#if !eventStore
 open Equinox.Store
 //#endif
@@ -298,98 +301,23 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-module Metrics =
-    module RuCounters =
-        open Equinox.Cosmos.Store
-        open Serilog.Events
-
-        let inline (|Stats|) ({ interval = i; ru = ru }: Log.Measurement) = ru, let e = i.Elapsed in int64 e.TotalMilliseconds
-
-        let (|CosmosReadRc|CosmosWriteRc|CosmosResyncRc|CosmosResponseRc|) = function
-            | Log.Tip (Stats s)
-            | Log.TipNotFound (Stats s)
-            | Log.TipNotModified (Stats s)
-            | Log.Query (_,_, (Stats s)) -> CosmosReadRc s
-            // slices are rolled up into batches so be sure not to double-count
-            | Log.Response (_,(Stats s)) -> CosmosResponseRc s
-            | Log.SyncSuccess (Stats s)
-            | Log.SyncConflict (Stats s) -> CosmosWriteRc s
-            | Log.SyncResync (Stats s) -> CosmosResyncRc s
-        let (|SerilogScalar|_|) : LogEventPropertyValue -> obj option = function
-            | (:? ScalarValue as x) -> Some x.Value
-            | _ -> None
-        let (|CosmosMetric|_|) (logEvent : LogEvent) : Log.Event option =
-            match logEvent.Properties.TryGetValue("cosmosEvt") with
-            | true, SerilogScalar (:? Log.Event as e) -> Some e
-            | _ -> None
-        type RuCounter =
-            { mutable rux100: int64; mutable count: int64; mutable ms: int64 }
-            static member Create() = { rux100 = 0L; count = 0L; ms = 0L }
-            member __.Ingest (ru, ms) =
-                System.Threading.Interlocked.Increment(&__.count) |> ignore
-                System.Threading.Interlocked.Add(&__.rux100, int64 (ru*100.)) |> ignore
-                System.Threading.Interlocked.Add(&__.ms, ms) |> ignore
-        type RuCounterSink() =
-            static member val Read = RuCounter.Create() with get, set
-            static member val Write = RuCounter.Create() with get, set
-            static member val Resync = RuCounter.Create() with get, set
-            static member Reset() =
-                RuCounterSink.Read <- RuCounter.Create()
-                RuCounterSink.Write <- RuCounter.Create()
-                RuCounterSink.Resync <- RuCounter.Create()
-            interface Serilog.Core.ILogEventSink with
-                member __.Emit logEvent = logEvent |> function
-                    | CosmosMetric (CosmosReadRc stats) -> RuCounterSink.Read.Ingest stats
-                    | CosmosMetric (CosmosWriteRc stats) -> RuCounterSink.Write.Ingest stats
-                    | CosmosMetric (CosmosResyncRc stats) -> RuCounterSink.Resync.Ingest stats
-                    | _ -> ()
-
-    let dumpRuStats duration (log: Serilog.ILogger) =
-        let stats =
-          [ "Read", RuCounters.RuCounterSink.Read
-            "Write", RuCounters.RuCounterSink.Write
-            "Resync", RuCounters.RuCounterSink.Resync ]
-        let mutable totalCount, totalRc, totalMs = 0L, 0., 0L
-        let logActivity name count rc lat =
-            if count <> 0L then
-                log.Information("{name}: {count:n0} requests costing {ru:n0} RU (average: {avg:n2}); Average latency: {lat:n0}ms",
-                    name, count, rc, (if count = 0L then Double.NaN else rc/float count), (if count = 0L then Double.NaN else float lat/float count))
-        for name, stat in stats do
-            let ru = float stat.rux100 / 100.
-            totalCount <- totalCount + stat.count
-            totalRc <- totalRc + ru
-            totalMs <- totalMs + stat.ms
-            logActivity name stat.count ru stat.ms
-        logActivity "TOTAL" totalCount totalRc totalMs
-        // Yes, there's a minor race here!
-        RuCounters.RuCounterSink.Reset()
-        let measures : (string * (TimeSpan -> float)) list = [ "s", fun x -> x.TotalSeconds(*; "m", fun x -> x.TotalMinutes; "h", fun x -> x.TotalHours*) ]
-        let logPeriodicRate name count ru = log.Information("rp{name} {count:n0} = ~{ru:n0} RU", name, count, ru)
-        for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d)
-
 #if !cosmos 
 module EventStoreSource =
-    type [<RequireQualifiedAccess; NoComparison>] CoordinationWork<'Pos> =
-        | Result of CosmosIngester.Writer.Result
-        | ProgressResult of Choice<int64,exn>
-        | Unbatched of CosmosIngester.Batch
-        | BatchWithTracking of 'Pos * CosmosIngester.Batch[]
-
-    type TailAndPrefixesReader(conn, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> CosmosIngester.Batch option, maxDop, ?statsInterval) = 
+    type TailAndPrefixesReader(conn, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop, ?statsInterval) = 
         let sleepIntervalMs = 100
         let dop = new SemaphoreSlim(maxDop)
         let work = EventStoreSource.ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
         member __.HasCapacity = work.QueueCount < dop.CurrentCount
         member __.AddTail(startPos, max, interval) = work.AddTail(startPos, max, interval)
         member __.AddStreamPrefix(stream, pos, len) = work.AddStreamPrefix(stream, pos, len)
-        member __.Pump(postItem, shouldTail, postBatch) = async {
+        member __.Pump(postItem, postBatch) = async {
             let! ct = Async.CancellationToken
             while not ct.IsCancellationRequested do
                 work.OverallStats.DumpIfIntervalExpired()
                 let! _ = dop.Await()
                 let forkRunRelease task = async {
                     let! _ = Async.StartChild <| async {
-                        try let! _ = work.Process(conn, tryMapEvent, postItem, shouldTail, postBatch, task) in ()
+                        try let! _ = work.Process(conn, tryMapEvent, postItem, postBatch, task) in ()
                         finally dop.Release() |> ignore }
                     return () }
                 match work.TryDequeue() with
@@ -399,146 +327,68 @@ module EventStoreSource =
                     dop.Release() |> ignore
                     do! Async.Sleep sleepIntervalMs } 
 
+    open CosmosIngester
     type StartMode = Starting | Resuming | Overridding
-    type Coordinator(log : Serilog.ILogger, readers : TailAndPrefixesReader, cosmosContext, maxWriters, progressWriter: Checkpoint.ProgressWriter, maxPendingBatches, ?interval) =
+    type Syncer(log : Serilog.ILogger, readers : TailAndPrefixesReader, cosmosContext, maxWriters, maxPendingBatches, commitProgress, ?interval) =
         let statsInterval = defaultArg interval (TimeSpan.FromMinutes 1.)
-        let statsIntervalMs = int64 statsInterval.TotalMilliseconds
-        let sleepIntervalMs = 1
-        let input = new System.Collections.Concurrent.BlockingCollection<_>(System.Collections.Concurrent.ConcurrentQueue(), maxPendingBatches)
-        let results = System.Collections.Concurrent.ConcurrentQueue()
-        let buffer = CosmosIngester.StreamStates()
-        let writers = CosmosIngester.Writers(CosmosIngester.Writer.write log cosmosContext, maxWriters)
-        let tailSyncState = ProgressBatcher.State<EventStore.ClientAPI.Position>()
-        // Yes, there is a race, but its constrained by the number of parallel readers and the fact that batches get ingested quickly here
-        let mutable pendingBatchCount = 0
-        let shouldThrottle () = pendingBatchCount > maxPendingBatches
-        let mutable validatedEpoch, comittedEpoch : int64 option * int64 option = None, None
-        let pumpReaders =
-            let postWrite = (*we want to prioritize processing of catchup stream reads*) results.Enqueue << CoordinationWork.Unbatched 
-            let postBatch pos xs = input.Add (CoordinationWork.BatchWithTracking (pos,xs))
-            readers.Pump(postWrite, not << shouldThrottle, postBatch)
-        let postWriteResult = results.Enqueue << CoordinationWork.Result
-        let postProgressResult = results.Enqueue << CoordinationWork.ProgressResult
         member __.Pump() = async {
-            use _ = writers.Result.Subscribe postWriteResult
-            use _ = progressWriter.Result.Subscribe postProgressResult
-            let! _ = Async.StartChild pumpReaders
-            let! _ = Async.StartChild <| writers.Pump()
-            let! _ = Async.StartChild <| progressWriter.Pump()
-            let! ct = Async.CancellationToken
             let writerResultLog = log.ForContext<CosmosIngester.Writer.Result>()
-            let mutable bytesPended, bytesPendedAgg = 0L, 0L
-            let workPended, eventsPended, cycles = ref 0, ref 0, ref 0
-            let rateLimited, timedOut, tooLarge, malformed = ref 0, ref 0, ref 0, ref 0
-            let resultOk, resultDup, resultPartialDup, resultPrefix, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0
-            let progCommitFails, progCommits = ref 0, ref 0
-            let badCats = CosmosIngester.CatStats()
-            let dumpStats () =
-                if !progCommitFails <> 0 || !progCommits <> 0 then
-                    match comittedEpoch with
+            let trim (writePos : int64 option, batch : StreamSpan) =
+                let mutable bytesBudget = cosmosPayloadLimit
+                let mutable count = 0
+                let max2MbMax100EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
+                    bytesBudget <- bytesBudget - cosmosPayloadBytes y
+                    count <- count + 1
+                    // Reduce the item count when we don't yet know the write position
+                    count <= (if Option.isNone writePos then 10 else 4096) && (bytesBudget >= 0 || count = 1)
+                { stream = batch.stream; span = { index = batch.span.index; events = batch.span.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
+            let project batch = async {
+                let trimmed = trim batch
+                try let! res = Writer.write log cosmosContext trimmed
+                    return trimmed.stream, Choice1Of2 res
+                with e -> return trimmed.stream, Choice2Of2 e }
+            let handleResult (streams: StreamStates, progressState : ProgressState<_>,  batches: SemaphoreSlim) res =
+                let applyResultToStreamState = function
+                    | stream, (Choice1Of2 (Writer.Ok pos)) ->
+                        streams.InternalUpdate stream pos null, ResultKind.Ok
+                    | stream, (Choice1Of2 (Writer.Duplicate pos)) ->
+                        streams.InternalUpdate stream pos null, ResultKind.Ok
+                    | stream, (Choice1Of2 (Writer.PartialDuplicate overage)) ->
+                        streams.InternalUpdate stream overage.index [|overage|], ResultKind.Ok
+                    | stream, (Choice1Of2 (Writer.PrefixMissing (overage,pos))) ->
+                        streams.InternalUpdate stream pos [|overage|], ResultKind.Ok
+                    | stream, (Choice2Of2 exn) ->
+                        let kind, malformed = Writer.classify exn
+                        streams.SetMalformed(stream,malformed), kind
+                match res with
+                | Message.Result (s,r) ->
+                    // TODO kind ?
+                    let (stream,updatedState), kind = applyResultToStreamState (s,r)
+                    match updatedState.write with
+                    | Some wp ->
+                        let closedBatches = progressState.MarkStreamProgress(stream, wp)
+                        if closedBatches > 0 then
+                            batches.Release(closedBatches) |> ignore
+                        streams.MarkCompleted(stream,wp)
                     | None ->
-                        log.Error("Progress @ {validated}; writing failing: {failures} failures ({commits} successful commits) Uncomitted {pendingBatches}/{maxPendingBatches}",
-                                Option.toNullable validatedEpoch, !progCommitFails, !progCommits, pendingBatchCount, maxPendingBatches)
-                    | Some committed when !progCommitFails <> 0 ->
-                        log.Warning("Progress @ {validated} (committed: {committed}, {commits} commits, {failures} failures) Uncomitted {pendingBatches}/{maxPendingBatches}",
-                                Option.toNullable validatedEpoch, committed, !progCommits, !progCommitFails, pendingBatchCount, maxPendingBatches)
-                    | Some committed ->
-                        log.Information("Progress @ {validated} (committed: {committed}, {commits} commits) Uncomitted {pendingBatches}/{maxPendingBatches}",
-                                Option.toNullable validatedEpoch, committed, !progCommits, pendingBatchCount, maxPendingBatches)
-                    progCommits := 0; progCommitFails := 0
-                else
-                    log.Information("Progress @ {validated} (committed: {committed}) Uncomitted {pendingBatches}/{maxPendingBatches}",
-                        Option.toNullable validatedEpoch, Option.toNullable comittedEpoch, pendingBatchCount, maxPendingBatches)
-                let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExn
-                bytesPendedAgg <- bytesPendedAgg + bytesPended
-                Log.Information("Cycles {cycles} Queued {queued} reqs {events} events {mb:n}MB ∑{gb:n3}GB",
-                    !cycles, !workPended, !eventsPended, mb bytesPended, mb bytesPendedAgg / 1024.)
-                cycles := 0; workPended := 0; eventsPended := 0; bytesPended <- 0L
-                Log.Information("Wrote {completed} ({ok} ok {dup} redundant {partial} partial {prefix} Missing {exns} Exns)",
-                    results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix, !resultExn)
-                resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; resultExn := 0;
-                if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
-                    Log.Warning("Exceptions {rateLimited} rate-limited, {timedOut} timed out, {tooLarge} too large, {malformed} malformed",
-                        !rateLimited, !timedOut, !tooLarge, !malformed)
-                    rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0 
-                    if badCats.Any then Log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
-                Metrics.dumpRuStats statsInterval log
-                buffer.Dump log
-            let tryDumpStats = every statsIntervalMs dumpStats
-            let handle = function
-                | CoordinationWork.Unbatched item ->
-                    buffer.Add item |> ignore
-                | CoordinationWork.BatchWithTracking(pos, items) ->
-                    for item in items do
-                        buffer.Add item |> ignore
-                    tailSyncState.AppendBatch(pos, [|for x in items -> x.stream, x.span.index + int64 x.span.events.Length |])
-                | CoordinationWork.Result res ->
-                    match res with
-                    | CosmosIngester.Writer.Result.Ok _ -> incr resultOk
-                    | CosmosIngester.Writer.Result.Duplicate _ -> incr resultDup
-                    | CosmosIngester.Writer.Result.PartialDuplicate _ -> incr resultPartialDup
-                    | CosmosIngester.Writer.Result.PrefixMissing _ -> incr resultPrefix
-                    | CosmosIngester.Writer.Result.Exn _ -> incr resultExn
-
-                    let (stream, updatedState), kind = buffer.HandleWriteResult res
-                    match updatedState.write with None -> () | Some wp -> tailSyncState.MarkStreamProgress(stream, wp)
-                    match kind with
-                    | CosmosIngester.Ok -> res.WriteTo writerResultLog
-                    | CosmosIngester.RateLimited -> incr rateLimited
-                    | CosmosIngester.TooLarge -> category stream |> badCats.Ingest; incr tooLarge
-                    | CosmosIngester.Malformed -> category stream |> badCats.Ingest; incr malformed
-                    | CosmosIngester.TimedOut -> incr timedOut
-                | CoordinationWork.ProgressResult (Choice1Of2 epoch) ->
-                    incr progCommits
-                    comittedEpoch <- Some epoch
-                | CoordinationWork.ProgressResult (Choice2Of2 (_exn : exn)) ->
-                    incr progCommitFails
-            let queueWrite (w : CosmosIngester.Batch) =
-                incr workPended
-                eventsPended := !eventsPended + w.span.events.Length
-                bytesPended <- bytesPended + int64 (Array.sumBy CosmosIngester.cosmosPayloadBytes w.span.events)
-                writers.Enqueue w
-            while not ct.IsCancellationRequested do
-                incr cycles
-                // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
-                let mutable more, gotWork = true, false
-                while more do
-                    match results.TryDequeue() with
-                    | true, item -> handle item; gotWork <- true
-                    | false, _ -> more <- false
-                // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
-                let (_validatedPos, _pendingBatchCount) = tailSyncState.Validate buffer.TryGetStreamWritePos
-                pendingBatchCount <- _pendingBatchCount
-                validatedEpoch <- _validatedPos |> Option.map (fun x -> x.CommitPosition)
-                // 3. Feed latest position to store
-                validatedEpoch |> Option.iter progressWriter.Post
-                // 4. Enqueue streams with gaps if there is capacity (not overloading, to avoid redundant work)
-                let mutable more = true 
-                while more && readers.HasCapacity do
-                    match buffer.TryGap() with
-                    | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
-                    | None -> more <- false
-                // 5. After that, [over] provision writers queue
-                let mutable more = true
-                while more && writers.HasCapacity do
-                    match buffer.TryReady(writers.IsStreamBusy) with
-                    | Some w -> queueWrite w; gotWork <- true
-                    | None -> (); more <- false
-                // 6. OK, we've stashed and cleaned work; now take some inputs
-                let x = Stopwatch.StartNew()
-                let mutable more = true
-                while more && x.ElapsedMilliseconds < int64 sleepIntervalMs do
-                    match input.TryTake() with
-                    | true, item -> handle item
-                    | false, _ -> more <- false
-                match sleepIntervalMs - int x.ElapsedMilliseconds with
-                | d when d > 0 ->
-                    if writers.HasCapacity || gotWork then do! Async.Sleep 1
-                    else do! Async.Sleep d
+                        streams.MarkFailed stream
+                    Writer.logTo writerResultLog (s,r)
                 | _ -> ()
-                // 7. Periodically emit status info
-                tryDumpStats () }
-
+            let coordinator = Coordinator<Writer.Result>.Start(log, maxPendingBatches, maxWriters, project, handleResult, statsInterval)
+            let pumpReaders =
+                let postStreamSpan : StreamSpan -> unit = coordinator.Submit
+                let postBatch (pos : EventStore.ClientAPI.Position) xs =
+                    let cp = pos.CommitPosition
+                    coordinator.Submit(cp, commitProgress cp, Seq.ofArray xs)
+                readers.Pump(postStreamSpan, postBatch)
+            do! pumpReaders }
+            
+            //// 4. Enqueue streams with gaps if there is capacity (not overloading, to avoid redundant work)
+            //let mutable more = true 
+            //while more && readers.HasCapacity do
+            //    match buffer.TryGap() with
+            //    | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
+            //    | None -> more <- false
         static member Run (log : Serilog.ILogger) (conn, spec, tryMapEvent) (maxWriters, cosmosContext, maxPendingBatches) resolveCheckpointStream = async {
             let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
             let! maxInParallel = Async.StartChild <| EventStoreSource.establishMax conn 
@@ -564,14 +414,13 @@ module EventStoreSource =
                         do! checkpoints.Override(spec.checkpointInterval, r.CommitPosition)
                         return Overridding, r, spec.checkpointInterval
                 }
-                Log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) tailing every {interval}s, checkpointing every {checkpointFreq}m",
+                log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) tailing every {interval}s, checkpointing every {checkpointFreq}m",
                     startMode, spec.groupName, startPos.CommitPosition, EventStoreSource.chunk startPos,
                     float startPos.CommitPosition/float max.CommitPosition, spec.tailInterval.TotalSeconds, checkpointFreq.TotalMinutes)
                 return startPos }
             let readers = TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.streamReaders + 1)
             readers.AddTail(startPos, max, spec.tailInterval)
-            let progress = Checkpoint.ProgressWriter(checkpoints.Commit)
-            let coordinator = Coordinator(log, readers, cosmosContext, maxWriters, progress, maxPendingBatches=maxPendingBatches)
+            let coordinator = Syncer(log, readers, cosmosContext, maxWriters, maxPendingBatches, checkpoints.Commit)
             do! coordinator.Pump() }
 #else
 module CosmosSource =
@@ -829,7 +678,7 @@ module Logging =
                         let cfpLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
             |> fun c -> let ingesterLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<CosmosIngester.Writers>.FullName, ingesterLevel)
+                        c.MinimumLevel.Override(typeof<StreamStates>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                         c.MinimumLevel.Override(typeof<CosmosIngester.Writer.Result>.FullName, generalLevel)
@@ -847,7 +696,7 @@ module Logging =
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
-        Log.ForContext<CosmosIngester.Writers>(), Log.ForContext<Core.CosmosContext>()
+        Log.ForContext<StreamStates>(), Log.ForContext<Core.CosmosContext>()
 
 [<EntryPoint>]
 let main argv =
@@ -896,7 +745,7 @@ let main argv =
                 || e.EventStreamId.EndsWith("_checkpoint")
                 || not (catFilter e.EventStreamId) -> None
             | e -> EventStoreSource.tryToBatch e
-        EventStoreSource.Coordinator.Run log (esConnection.ReadConnection, spec, tryMapEvent catFilter) (args.MaxWriters, target, args.MaxPendingBatches) resolveCheckpointStream
+        EventStoreSource.Syncer.Run log (esConnection.ReadConnection, spec, tryMapEvent catFilter) (args.MaxWriters, target, args.MaxPendingBatches) resolveCheckpointStream
 #endif
         |> Async.RunSynchronously
         0 
