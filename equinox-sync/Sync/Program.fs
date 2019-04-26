@@ -689,8 +689,9 @@ module Logging =
                                 l.WriteTo.Sink(Metrics.RuCounters.RuCounterSink()) |> ignore) |> ignore
                             a.Logger(fun l ->
                                 let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
+                                let isWriter = Filters.Matching.FromSource<CosmosIngester.Writer.Result>().Invoke
                                 let isCheckpointing = Filters.Matching.FromSource<Checkpoint.CheckpointSeries>().Invoke
-                                (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isCheckpointing x))
+                                (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isCheckpointing x || isWriter x))
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
