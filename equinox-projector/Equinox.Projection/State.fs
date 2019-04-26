@@ -171,7 +171,7 @@ type StreamStates() =
                 ready <- ready + 1
                 readyB <- readyB + sz
         log.Information("Busy {busy}/{busyMb:n1}MB Ready {ready}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB Synced {synced}",
-            busyCount, mb busyB, ready, mb readyB, malformed, mb, malformedB, synced)
+            busyCount, mb busyB, ready, mb readyB, malformed, mb malformedB, synced)
         if busyCats.Any then log.Information("Busy Categories, events {busyCats}", busyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Categories, events {readyCats}", readyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Streams, MB {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
