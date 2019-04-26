@@ -111,7 +111,6 @@ type StreamStates() =
             stream, updated
     let updateWritePos stream isMalformed pos span = update stream { isMalformed = isMalformed; write = pos; queue = span }
     let markCompleted stream index = updateWritePos stream false (Some index) null |> ignore
-    let enqueue isMalformed (item : StreamItem) = updateWritePos item.stream isMalformed None [| { index = item.index; events = [| item.event |] } |] |> ignore
 
     let busy = HashSet<string>()
     let schedule (requestedOrder : string seq) (capacity: int) =
@@ -132,7 +131,7 @@ type StreamStates() =
 
     member __.InternalUpdate stream pos queue = update stream { isMalformed = false; write = Some pos; queue = queue }
     member __.Add(item: StreamItem, ?isMalformed) =
-        enqueue (defaultArg isMalformed false) item
+        updateWritePos item.stream (defaultArg isMalformed false) None [| { index = item.index; events = [| item.event |] } |]
     member __.Add(batch: StreamSpan, isMalformed) =
         updateWritePos batch.stream isMalformed None [| { index = batch.span.index; events = batch.span.events } |]
     member __.SetMalformed(stream,isMalformed) =
