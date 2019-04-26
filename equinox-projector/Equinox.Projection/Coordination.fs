@@ -107,7 +107,7 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
                 let reqs = Dictionary()
                 let mutable count, skipCount = 0, 0
                 for item in items do
-                    let streamState = streams.Add item
+                    let _,streamState = streams.Add item
                     if canSkip streamState item then skipCount <- skipCount + 1
                     else
                         count <- count + 1
@@ -116,7 +116,7 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
                 work.Enqueue(Added (reqs.Count,skipCount,count))
             | AddStream streamSpan ->
                 streams.Add(streamSpan,false) |> ignore
-                work.Enqueue(Added (1,streamSpan.span.events.Length))
+                //work.Enqueue(Added (1,streamSpan.span.events.Length))
             | Added _  | ProgressResult _ ->
                 ()
             | Result _ as r ->
