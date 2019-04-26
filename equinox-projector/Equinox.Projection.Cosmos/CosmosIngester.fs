@@ -98,7 +98,7 @@ module Writer =
     //    for x in blocked do markDirty x
     //    res
 
-type CosmosStats private (log : ILogger, writerResultLog, maxPendingBatches, statsInterval) =
+type CosmosStats (log : ILogger, maxPendingBatches, statsInterval) =
     inherit Stats<Writer.Result>(log, maxPendingBatches, statsInterval)
     let resultOk, resultDup, resultPartialDup, resultPrefix, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0
     let rateLimited, timedOut, tooLarge, malformed = ref 0, ref 0, ref 0, ref 0

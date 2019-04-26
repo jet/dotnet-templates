@@ -80,7 +80,7 @@ type Stats<'R>(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
 /// c) writing of progress
 /// d) reporting of state
 /// The key bit that's managed externally is the reading/accepting of incoming data
-type Coordinator<'R>(log : ILogger, maxPendingBatches, processorDop, project : int64 option * StreamSpan -> Async<string * Choice<'R,exn>>, handleResult, statsInterval) =
+type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * StreamSpan -> Async<string * Choice<'R,exn>>, handleResult) =
     let sleepIntervalMs = 5
     let cts = new CancellationTokenSource()
     let batches = new SemaphoreSlim(maxPendingBatches)
@@ -89,7 +89,6 @@ type Coordinator<'R>(log : ILogger, maxPendingBatches, processorDop, project : i
     let dispatcher = Dispatcher(processorDop)
     let progressState = ProgressState()
     let progressWriter = ProgressWriter<_>()
-    let stats = Stats(log, maxPendingBatches, statsInterval)
     let handle = function
         | Add (epoch, checkpoint,items) ->
             let reqs = Dictionary()
@@ -106,7 +105,7 @@ type Coordinator<'R>(log : ILogger, maxPendingBatches, processorDop, project : i
         | Added _  | ProgressResult _ | Result _ ->
             ()
 
-    member private __.Pump() = async {
+    member private __.Pump(stats : Stats<'R>) = async {
         use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
         use _ = dispatcher.Result.Subscribe(Result >> work.Enqueue)
         Async.Start(progressWriter.Pump(), cts.Token)
@@ -133,11 +132,11 @@ type Coordinator<'R>(log : ILogger, maxPendingBatches, processorDop, project : i
             let busy = processorDop - dispatcher.Capacity
             stats.TryDump(busy,processorDop,streams)
             do! Async.Sleep sleepIntervalMs }
-    static member Start<'R>(rangeLog, maxPendingBatches, processorDop, project, handleResult, statsInterval) =
-        let instance = new Coordinator<'R>(rangeLog, maxPendingBatches, processorDop, project, handleResult, statsInterval)
-        Async.Start <| instance.Pump()
+    static member Start<'R>(stats, maxPendingBatches, processorDop, project, handleResult) =
+        let instance = new Coordinator<'R>(maxPendingBatches, processorDop, project, handleResult)
+        Async.Start <| instance.Pump(stats)
         instance
-    static member Start(rangeLog, maxPendingBatches, processorDop, project : StreamSpan -> Async<int>, statsInterval) =
+    static member Start(log, maxPendingBatches, processorDop, project : StreamSpan -> Async<int>, statsInterval) =
         let project (_maybeWritePos, batch) = async {
             try let! count = project batch
                 return batch.stream, Choice1Of2 (batch.span.index + int64 count)
@@ -149,7 +148,8 @@ type Coordinator<'R>(log : ILogger, maxPendingBatches, processorDop, project : i
             | Result (stream, Choice2Of2 _) ->
                 streams.MarkFailed stream
             | _ -> ()
-        Coordinator<int64>.Start(rangeLog, maxPendingBatches, processorDop, project, handleResult, statsInterval)
+        let stats = Stats(log, maxPendingBatches, statsInterval)
+        Coordinator<int64>.Start(stats, maxPendingBatches, processorDop, project, handleResult)
 
     member __.Submit(epoch, markBatchCompleted, events) = async {
         let! _ = batches.Await()

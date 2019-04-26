@@ -374,7 +374,8 @@ module EventStoreSource =
                         streams.MarkFailed stream
                     Writer.logTo writerResultLog (s,r)
                 | _ -> ()
-            let coordinator = Coordinator<Writer.Result>.Start(log, maxPendingBatches, maxWriters, project, handleResult, statsInterval)
+            let stats = CosmosStats(log, maxPendingBatches, statsInterval)
+            let coordinator = Coordinator<Writer.Result>.Start(stats, maxPendingBatches, maxWriters, project, handleResult)
             let pumpReaders =
                 let postStreamSpan : StreamSpan -> unit = coordinator.Submit
                 let postBatch (pos : EventStore.ClientAPI.Position) xs =
