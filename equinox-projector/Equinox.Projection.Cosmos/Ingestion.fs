@@ -2,7 +2,7 @@
 
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Store
-open Equinox.Projection.Coordination
+open Equinox.Projection.Engine
 open Equinox.Projection.State
 open Serilog
 open System
@@ -85,7 +85,7 @@ type CosmosStats(log : ILogger, maxPendingBatches, statsInterval) =
 
     override __.DumpExtraStats() =
         let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix
-        log.Information("Streams {completed:n0} {events:n0}e {mb:n0}MB ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
+        log.Information("Requests {completed:n0} {events:n0}e {mb:n0}MB ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
             results, events, mb bytes, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
         resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then

@@ -7,8 +7,8 @@ open Equinox.Cosmos.Projection
 //#else
 open Equinox.EventStore
 //#endif
-open Equinox.Projection.Coordination
 open Equinox.Projection.Cosmos
+open Equinox.Projection.Engine
 open Equinox.Projection.State
 //#if !eventStore
 open Equinox.Store

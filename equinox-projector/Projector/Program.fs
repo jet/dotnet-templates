@@ -5,7 +5,7 @@ open Confluent.Kafka
 //#endif
 open Equinox.Cosmos
 open Equinox.Cosmos.Projection
-open Equinox.Projection.Coordination
+open Equinox.Projection.Engine
 //#if kafka
 open Equinox.Projection.Codec
 open Equinox.Store

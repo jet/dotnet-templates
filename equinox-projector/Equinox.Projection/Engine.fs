@@ -1,4 +1,4 @@
-﻿module Equinox.Projection.Coordination
+﻿module Equinox.Projection.Engine
 
 open Equinox.Projection.State
 open Serilog
@@ -43,7 +43,6 @@ type Stats<'R>(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
         log.Information("Cycles {cycles} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
             !cycles, busy, capacity, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
         cycles := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
-        streams.Dump log
     abstract member Handle : Message<'R> -> unit
     default __.Handle res =
         match res with
@@ -72,6 +71,7 @@ type Stats<'R>(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
         if statsDue () then
             dumpStats (busy,capacity) streams
             __.DumpExtraStats()
+        streams.Dump log
     abstract DumpExtraStats : unit -> unit
     default __.DumpExtraStats () = ()
 
