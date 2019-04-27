@@ -172,9 +172,9 @@ type StreamStates() =
                 readyStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.Length, (sz + 512L) / 1024L)
                 ready <- ready + 1
                 readyB <- readyB + sz
-        log.Information("Synced {synced:n0} In-flight {busy:n0}/{busyMb:n1}MB Queued {ready:n0}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
+        log.Information("Synced {synced:n0} Active {busy:n0}/{busyMb:n1}MB Ready {ready:n0}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
             synced, busyCount, mb busyB, ready, mb readyB, malformed, mb malformedB)
-        if busyCats.Any then log.Information("In-flight Categories, events {busyCats}", Seq.truncate 5 busyCats.StatsDescending)
+        if busyCats.Any then log.Information("Active Categories, events {busyCats}", Seq.truncate 5 busyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Categories, events {readyCats}", Seq.truncate 5 readyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Streams, KB {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
         if malformedStreams.Any then log.Information("Malformed Streams, MB {malformedStreams}", malformedStreams.StatsDescending)

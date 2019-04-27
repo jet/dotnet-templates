@@ -85,8 +85,8 @@ type CosmosStats(log : ILogger, maxPendingBatches, statsInterval) =
 
     override __.DumpExtraStats() =
         let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix
-        log.Information("Reqs {completed:n0} {mb:n3}GB {events:n0}e ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
-            results, mb bytes/1024., events, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
+        log.Information("Streams {completed:n0} {events:n0}e {mb:n0}MB ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
+            results, events, mb bytes, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
         resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
             log.Warning("Exceptions {rateLimited:n0} rate-limited, {timedOut:n0} timed out, {tooLarge} too large, {malformed} malformed, {other} other",
