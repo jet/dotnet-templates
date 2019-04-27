@@ -59,6 +59,7 @@ module CmdParser =
         | [<AltCommandLine "-l"; Unique>] LagFreqS of float
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
 #else
+        | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-f"; Unique>] ForceRestart
         | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-mb"; Unique>] MaxPendingBatches of int
@@ -70,7 +71,6 @@ module CmdParser =
         | [<AltCommandLine "-t"; Unique>] Tail of intervalS: float
         | [<AltCommandLine "-vc"; Unique>] VerboseConsole
 #endif
-        | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-mi"; Unique>] BatchSize of int
         | [<AltCommandLine "-v"; Unique>] Verbose
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
@@ -88,6 +88,7 @@ module CmdParser =
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | Source _ ->               "CosmosDb input parameters."
 #else
+                | FromTail _ ->             "Start the processing from the Tail"
                 | ForceRestart _ ->         "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
@@ -143,11 +144,12 @@ module CmdParser =
 #else
         member x.BuildFeedParams() : ReaderSpec =
             let startPos =
-                match a.TryGetResult Position, a.TryGetResult Chunk, a.TryGetResult Percent with
-                | Some p, _, _ ->   Absolute p
-                | _, Some c, _ ->   StartPos.Chunk c
-                | _, _, Some p ->   Percentage p 
-                | None, None, None -> StartPos.TailOrCheckpoint
+                match a.TryGetResult Position, a.TryGetResult Chunk, a.TryGetResult Percent, a.Contains FromTail with
+                | Some p, _, _, _ ->   Absolute p
+                | _, Some c, _, _ ->   StartPos.Chunk c
+                | _, _, Some p, _ ->   Percentage p 
+                | None, None, None, true -> StartPos.TailOrCheckpoint
+                | None, None, None, _ -> Absolute 0L
             Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Collection {coll}",
                 x.ConsumerGroupName, startPos, x.ForceRestart, x.Destination.Database, x.Destination.Collection)
             Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}] with {stripes} stream readers",
