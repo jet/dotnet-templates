@@ -25,7 +25,7 @@ type Stats<'R>(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
     let cycles, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
     let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
     let dumpStats (busy,capacity) (streams : StreamStates) =
-        log.Information("Cycles {cycles} Ingested {batches}b {streams:n0}s {events:n0}-{skipped:n0}e Active {busy}/{processors} Completed {completed:n0} ({passed} success {exns} exn)",
+        log.Information("Cycles {cycles} Batches {batches} {streams:n0}s {events:n0}-{skipped:n0}e Active {busy}/{processors} Completed {completed:n0} ({passed} success {exns} exn)",
             !cycles, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, busy, capacity, !resultCompleted + !resultExn, !resultCompleted, !resultExn)
         cycles := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
         if !progCommitFails <> 0 || !progCommits <> 0 then
