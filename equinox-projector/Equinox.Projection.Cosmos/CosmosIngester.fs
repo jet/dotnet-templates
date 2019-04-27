@@ -17,15 +17,15 @@ module Writer =
         | Duplicate of updatedPos: int64
         | PartialDuplicate of overage: Span
         | PrefixMissing of batch: Span * writePos: int64
-    let logTo (log: ILogger) (res : string * Choice<Result,exn>) =
+    let logTo (log: ILogger) (res : string * Choice<(int*int)*Result,exn>) =
         match res with
-        | stream, (Choice1Of2 (Ok pos)) ->
+        | stream, (Choice1Of2 (_, Ok pos)) ->
             log.Information("Wrote     {stream} up to {pos}", stream, pos)
-        | stream, (Choice1Of2 (Duplicate updatedPos)) ->
+        | stream, (Choice1Of2 (_, Duplicate updatedPos)) ->
             log.Information("Ignored   {stream} (synced up to {pos})", stream, updatedPos)
-        | stream, (Choice1Of2 (PartialDuplicate overage)) ->
+        | stream, (Choice1Of2 (_, PartialDuplicate overage)) ->
             log.Information("Requeing  {stream} {pos} ({count} events)", stream, overage.index, overage.events.Length)
-        | stream, (Choice1Of2 (PrefixMissing (batch,pos))) ->
+        | stream, (Choice1Of2 (_, PrefixMissing (batch,pos))) ->
             log.Information("Waiting   {stream} missing {gap} events ({count} events @ {pos})", stream, batch.index-pos, batch.events.Length, batch.index)
         | stream, Choice2Of2 exn ->
             log.Warning(exn,"Writing   {stream} failed, retrying", stream)
@@ -74,16 +74,17 @@ module Writer =
     //        | None -> aux ()
     //    aux ()
 
-type CosmosStats (log : ILogger, maxPendingBatches, statsInterval) =
-    inherit Stats<Writer.Result>(log, maxPendingBatches, statsInterval)
+type CosmosStats(log : ILogger, maxPendingBatches, statsInterval) =
+    inherit Stats<(int*int)*Writer.Result>(log, maxPendingBatches, statsInterval)
     let resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = ref 0, ref 0, ref 0, ref 0, ref 0
     let rateLimited, timedOut, tooLarge, malformed = ref 0, ref 0, ref 0, ref 0
+    let mutable events, bytes = 0, 0L
     let badCats = CatStats()
 
     override __.DumpExtraStats() =
         let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExnOther
-        log.Information("CosmosDb {completed:n0} ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} awaiting prefix)",
-            results, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
+        log.Information("Requests {completed:n0} {events}e {mb}MB ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} awaiting prefix)",
+            results, events, mb bytes, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
         resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
             log.Warning("Exceptions {rateLimited:n0} rate-limited, {timedOut:n0} timed out, {tooLarge} too large, {malformed} malformed, {other} other",
@@ -95,7 +96,9 @@ type CosmosStats (log : ILogger, maxPendingBatches, statsInterval) =
     override __.Handle message =
         base.Handle message
         match message with
-        | Message.Result (_stream, Choice1Of2 r) ->
+        | Message.Result (_stream, Choice1Of2 ((es,bs),r)) ->
+            events <- events + es
+            bytes <- bytes + int64 bs
             match r with
             | Writer.Result.Ok _ -> incr resultOk
             | Writer.Result.Duplicate _ -> incr resultDup

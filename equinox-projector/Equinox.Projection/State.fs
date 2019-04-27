@@ -21,7 +21,7 @@ let expiredMs ms =
         due
 
 let arrayBytes (x:byte[]) = if x = null then 0 else x.Length
-let private mb x = float x / 1024. / 1024.
+let mb x = float x / 1024. / 1024.
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 
 type [<NoComparison>] StreamItem = { stream: string; index: int64; event: Equinox.Codec.IEvent<byte[]> }
@@ -154,12 +154,13 @@ type StreamStates() =
         schedule requestedOrder capacity
     member __.Dump(log : ILogger) =
         let mutable busyCount, busyB, ready, readyB, malformed, malformedB, synced = 0, 0L, 0, 0L, 0, 0L, 0
-        let busyCats, readyCats, readyStreams = CatStats(), CatStats(), CatStats()
+        let busyCats, readyCats, readyStreams, malformedStreams = CatStats(), CatStats(), CatStats(), CatStats()
         for KeyValue (stream,state) in states do
             match int64 state.Size with
             | 0L ->
                 synced <- synced + 1
             | sz when state.isMalformed ->
+                malformedStreams.Ingest(stream, mb sz |> int64)
                 malformed <- malformed + 1
                 malformedB <- malformedB + sz
             | sz when busy.Contains stream ->
@@ -171,11 +172,12 @@ type StreamStates() =
                 readyStreams.Ingest(sprintf "%s@%d" stream (defaultArg state.write 0L), mb sz |> int64)
                 ready <- ready + 1
                 readyB <- readyB + sz
-        log.Information("Synced {synced:n0} In flight {busy:n0}/{busyMb:n1}MB Queued {ready:n0}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
+        log.Information("Synced {synced:n0} In-flight {busy:n0}/{busyMb:n1}MB Queued {ready:n0}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
             synced, busyCount, mb busyB, ready, mb readyB, malformed, mb malformedB)
         if busyCats.Any then log.Information("Active Categories, events {busyCats}", Seq.truncate 5 busyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Categories, events {readyCats}", Seq.truncate 5 readyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Streams, MB {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
+        if malformedStreams.Any then log.Information("Malformed Streams, MB {malformedStreams}", malformedStreams.StatsDescending)
 
 type [<NoComparison>] internal Chunk<'Pos> = { pos: 'Pos; streamToRequiredIndex : Dictionary<string,int64> }
 

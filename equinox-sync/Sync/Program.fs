@@ -269,7 +269,7 @@ module CmdParser =
                 | Database _ ->             "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
                 | Collection _ ->           "specify a collection name for Cosmos account (default: envvar:EQUINOX_COSMOS_COLLECTION)."
                 | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
-                | Retries _ ->              "specify operation retries (default: 1)."
+                | Retries _ ->              "specify operation retries (default: 0)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                 | ConnectionMode _ ->       "override the connection mode (default: DirectTcp)."
     and DestinationArguments(a : ParseResults<DestinationParameters>) =
@@ -280,7 +280,7 @@ module CmdParser =
         member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
 
         member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =             a.GetResult(Retries, 1)
+        member __.Retries =             a.GetResult(Retries, 0)
         member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
 
         /// Connect with the provided parameters and/or environment variables
@@ -345,24 +345,26 @@ module EventStoreSource =
             let project batch = async {
                 let trimmed = trim batch
                 try let! res = Writer.write log cosmosContext trimmed
-                    return trimmed.stream, Choice1Of2 res
+                    let ctx = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
+                    return trimmed.stream, Choice1Of2 (ctx,res)
                 with e -> return trimmed.stream, Choice2Of2 e }
+            let stats = CosmosStats(log, maxPendingBatches, statsInterval)
             let handleResult (streams: StreamStates, progressState : ProgressState<_>,  batches: SemaphoreSlim) res =
                 let applyResultToStreamState = function
-                    | stream, (Choice1Of2 (Writer.Ok pos)) ->
-                        streams.InternalUpdate stream pos null
-                    | stream, (Choice1Of2 (Writer.Duplicate pos)) ->
-                        streams.InternalUpdate stream pos null
-                    | stream, (Choice1Of2 (Writer.PartialDuplicate overage)) ->
-                        streams.InternalUpdate stream overage.index [|overage|]
-                    | stream, (Choice1Of2 (Writer.PrefixMissing (overage,pos))) ->
-                        streams.InternalUpdate stream pos [|overage|]
+                    | stream, (Choice1Of2 (ctx, Writer.Ok pos)) ->
+                        Some ctx,streams.InternalUpdate stream pos null
+                    | stream, (Choice1Of2 (ctx, Writer.Duplicate pos)) ->
+                        Some ctx,streams.InternalUpdate stream pos null
+                    | stream, (Choice1Of2 (ctx, Writer.PartialDuplicate overage)) ->
+                        Some ctx,streams.InternalUpdate stream overage.index [|overage|]
+                    | stream, (Choice1Of2 (ctx, Writer.PrefixMissing (overage,pos))) ->
+                        Some ctx,streams.InternalUpdate stream pos [|overage|]
                     | stream, (Choice2Of2 exn) ->
                         let malformed = Writer.classify exn |> Writer.isMalformed
-                        streams.SetMalformed(stream,malformed)
+                        None,streams.SetMalformed(stream,malformed)
                 match res with
                 | Message.Result (s,r) ->
-                    let stream,updatedState = applyResultToStreamState (s,r)
+                    let ctx,(stream,updatedState) = applyResultToStreamState (s,r)
                     match updatedState.write with
                     | Some wp ->
                         let closedBatches = progressState.MarkStreamProgress(stream, wp)
@@ -373,8 +375,7 @@ module EventStoreSource =
                         streams.MarkFailed stream
                     Writer.logTo writerResultLog (s,r)
                 | _ -> ()
-            let stats = CosmosStats(log, maxPendingBatches, statsInterval)
-            let coordinator = Coordinator<Writer.Result>.Start(stats, maxPendingBatches, maxWriters, project, handleResult)
+            let coordinator = Coordinator<(int*int)*Writer.Result>.Start(stats, maxPendingBatches, maxWriters, project, handleResult)
             let pumpReaders =
                 let postStreamSpan : StreamSpan -> unit = coordinator.Submit
                 let postBatch (pos : EventStore.ClientAPI.Position) xs =
