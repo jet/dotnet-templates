@@ -226,7 +226,7 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                 __.AddTranche(range, bs) 
                 return false
         | Tail (pos, max, interval, batchSize) ->
-            let mutable count, pauses, batchSize, range = 0, 0, batchSize, Range(pos, None, max)
+            let mutable count, batchSize, range = 0, batchSize, Range(pos, None, max)
             let statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.)
             let progressIntervalMs, tailIntervalMs = int64 statsInterval.TotalMilliseconds, int64 interval.TotalMilliseconds
             let tailSw = Stopwatch.StartNew()
@@ -241,8 +241,8 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
             while true do
                 let currentPos = range.Current
                 if progressSw.ElapsedMilliseconds > progressIntervalMs then
-                    Log.Information("Tailed {count} times ({pauses} waits) @ {pos} (chunk {chunk})",
-                        count, pauses, currentPos.CommitPosition, chunk currentPos)
+                    Log.Information("Tailed {count} times @ {pos} (chunk {chunk})",
+                        count, currentPos.CommitPosition, chunk currentPos)
                     progressSw.Restart()
                 count <- count + 1
                 let! res = pullAll (slicesStats,stats) (conn,batchSize) (range,true) tryMapEvent postBatch 
