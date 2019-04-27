@@ -71,7 +71,7 @@ type Stats<'R>(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
         if statsDue () then
             dumpStats (busy,capacity) streams
             __.DumpExtraStats()
-        streams.Dump log
+            streams.Dump log
     abstract DumpExtraStats : unit -> unit
     default __.DumpExtraStats () = ()
 
