@@ -100,10 +100,6 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
             match streamState.write, item.index + 1L with
             | Some cw, required when cw >= required -> 0, 1
             | _ -> 1, 0
-        //let validVsSkipSpan (streamState : StreamState) (batch : StreamSpan) =
-        //    match streamState.write, item.index + item.span.events.LongLength with
-        //    | Some cw, required when cw >= required -> 0, 1
-        //    | _ -> 1, 0
         let handle x =
             match x with
             | Add (epoch, checkpoint, items) ->
@@ -119,9 +115,9 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
                         reqs.[item.stream] <- item.index+1L
                 progressState.AppendBatch((epoch,checkpoint),reqs)
                 work.Enqueue(Added (reqs.Count,skipCount,count))
-            | AddStream streamSpan ->()
-                //let _stream,streamState = streams.Add(streamSpan,false)
-                //work.Enqueue(Added (1,streamSpan.span.events.Length))
+            | AddStream streamSpan ->
+                let _stream,_streamState = streams.Add(streamSpan,false)
+                work.Enqueue(Added (1,0,streamSpan.span.events.Length)) // Yes, need to compute skip
             | Added _  | ProgressResult _ ->
                 ()
             | Result _ as r ->

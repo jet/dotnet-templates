@@ -3,8 +3,7 @@
 open Equinox.Cosmos
 //#if !eventStore
 open Equinox.Cosmos.Projection
-//#endif
-//#if eventStore
+//#else
 open Equinox.EventStore
 //#endif
 open Equinox.Projection.Coordination
@@ -18,17 +17,7 @@ open System
 //#if !eventStore
 open System.Collections.Generic
 //#endif
-open System.Diagnostics
 open System.Threading
-
-let mb x = float x / 1024. / 1024.
-let category (streamName : string) = streamName.Split([|'-'|],2).[0]
-let every ms f =
-    let timer = Stopwatch.StartNew()
-    fun () ->
-        if timer.ElapsedMilliseconds > ms then
-            f ()
-            timer.Restart()
 
 //#if eventStore
 type StartPos = Absolute of int64 | Chunk of int | Percentage of float | TailOrCheckpoint
@@ -70,6 +59,7 @@ module CmdParser =
         | [<AltCommandLine "-l"; Unique>] LagFreqS of float
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
 #else
+        | [<AltCommandLine "-f"; Unique>] ForceRestart
         | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-mb"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
@@ -80,7 +70,7 @@ module CmdParser =
         | [<AltCommandLine "-t"; Unique>] Tail of intervalS: float
         | [<AltCommandLine "-vc"; Unique>] VerboseConsole
 #endif
-        | [<AltCommandLine "-f"; Unique>] ForceRestart
+        | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-mi"; Unique>] BatchSize of int
         | [<AltCommandLine "-v"; Unique>] Verbose
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
@@ -90,7 +80,7 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
 #if cosmos
-                | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
                 | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
                 | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
@@ -117,7 +107,7 @@ module CmdParser =
 #if cosmos
         member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.BatchSize =           a.GetResult(BatchSize,1000)
-        member __.StartFromHere =       a.Contains ForceStartFromHere
+        member __.StartFromHere =       a.Contains FromTail
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
 #else
@@ -390,6 +380,7 @@ module EventStoreSource =
             //    match buffer.TryGap() with
             //    | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
             //    | None -> more <- false
+
         static member Run (log : Serilog.ILogger) (conn, spec, tryMapEvent) (maxWriters, cosmosContext, maxPendingBatches) resolveCheckpointStream = async {
             let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
             let! maxInParallel = Async.StartChild <| EventStoreSource.establishMax conn 
