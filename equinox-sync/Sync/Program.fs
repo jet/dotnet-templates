@@ -20,7 +20,7 @@ open System.Collections.Generic
 open System.Threading
 
 //#if eventStore
-type StartPos = Absolute of int64 | Chunk of int | Percentage of float | TailOrCheckpoint
+type StartPos = Absolute of int64 | Chunk of int | Percentage of float | TailOrCheckpoint | StartOrCheckpoint
 
 type ReaderSpec =
     {   /// Identifier for this projection and it's state
@@ -149,7 +149,7 @@ module CmdParser =
                 | _, Some c, _, _ ->   StartPos.Chunk c
                 | _, _, Some p, _ ->   Percentage p 
                 | None, None, None, true -> StartPos.TailOrCheckpoint
-                | None, None, None, _ -> Absolute 0L
+                | None, None, None, _ -> StartPos.StartOrCheckpoint
             Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Collection {coll}",
                 x.ConsumerGroupName, startPos, x.ForceRestart, x.Destination.Database, x.Destination.Collection)
             Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}] with {stripes} stream readers",
@@ -396,6 +396,7 @@ module EventStoreSource =
                     | Chunk c -> EventStoreSource.posFromChunk c
                     | Percentage pct -> EventStoreSource.posFromPercentage (pct, max)
                     | TailOrCheckpoint -> max
+                    | StartOrCheckpoint -> EventStore.ClientAPI.Position.Start
                 let! startMode, startPos, checkpointFreq = async {
                     match initialCheckpointState, requestedStartPos with
                     | Checkpoint.Folds.NotStarted, r ->
