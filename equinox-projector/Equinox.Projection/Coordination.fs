@@ -31,18 +31,18 @@ type Stats<'R>(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
         if !progCommitFails <> 0 || !progCommits <> 0 then
             match comittedEpoch with
             | None ->
-                log.Error("Progress @ {validated}; writing failing: {failures} failures ({commits} successful commits) Uncommitted {pendingBatches}/{maxPendingBatches}",
-                        Option.toNullable validatedEpoch, !progCommitFails, !progCommits, pendingBatchCount, maxPendingBatches)
+                log.Error("Uncommitted {pendingBatches}/{maxPendingBatches} @ {validated}; writing failing: {failures} failures ({commits} successful commits)",
+                        pendingBatchCount, maxPendingBatches, Option.toNullable validatedEpoch, !progCommitFails, !progCommits)
             | Some committed when !progCommitFails <> 0 ->
-                log.Warning("Progress @ {validated} (committed: {committed}, {commits} commits, {failures} failures) Uncommitted {pendingBatches}/{maxPendingBatches}",
-                        Option.toNullable validatedEpoch, committed, !progCommits, !progCommitFails, pendingBatchCount, maxPendingBatches)
+                log.Warning("Uncommitted {pendingBatches}/{maxPendingBatches} @ {validated} (committed: {committed}, {commits} commits, {failures} failures)",
+                        pendingBatchCount, maxPendingBatches, Option.toNullable validatedEpoch, committed, !progCommits, !progCommitFails)
             | Some committed ->
-                log.Information("Progress @ {validated} (committed: {committed}, {commits} commits) Uncommitted {pendingBatches}/{maxPendingBatches}",
-                        Option.toNullable validatedEpoch, committed, !progCommits, pendingBatchCount, maxPendingBatches)
+                log.Information("Uncommitted {pendingBatches}/{maxPendingBatches} @ {validated} (committed: {committed}, {commits} commits)",
+                        pendingBatchCount, maxPendingBatches, Option.toNullable validatedEpoch, committed, !progCommits)
             progCommits := 0; progCommitFails := 0
         else
-            log.Information("Progress @ {validated} (committed: {committed}) Uncommitted {pendingBatches}/{maxPendingBatches}",
-                Option.toNullable validatedEpoch, Option.toNullable comittedEpoch, pendingBatchCount, maxPendingBatches)
+            log.Information("Uncommitted {pendingBatches}/{maxPendingBatches} @ {validated} (committed: {committed})",
+                    pendingBatchCount, maxPendingBatches, Option.toNullable validatedEpoch, Option.toNullable comittedEpoch)
         streams.Dump log
     abstract member Handle : Message<'R> -> unit
     default __.Handle res =
@@ -82,7 +82,7 @@ type Stats<'R>(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
 /// d) reporting of state
 /// The key bit that's managed externally is the reading/accepting of incoming data
 type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * StreamSpan -> Async<string * Choice<'R,exn>>, handleResult) =
-    let sleepIntervalMs = 5
+    let sleepIntervalMs = 1
     let cts = new CancellationTokenSource()
     let batches = new SemaphoreSlim(maxPendingBatches)
     let work = ConcurrentQueue<Message<'R>>()
