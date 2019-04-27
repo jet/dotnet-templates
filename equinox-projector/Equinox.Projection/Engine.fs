@@ -106,13 +106,13 @@ type Coordinator<'R>(maxPendingBatches, processorDop, project : int64 option * S
                 let reqs = Dictionary()
                 let mutable count, skipCount = 0, 0
                 for item in items do
-                    let _stream,streamState = streams.Add item
+                    let stream,streamState = streams.Add item
                     match validVsSkip streamState item with
                     | 0, skip ->
                         skipCount <- skipCount + skip
                     | required, _ ->
                         count <- count + required
-                        reqs.[item.stream] <- item.index+1L
+                        reqs.[stream] <- item.index+1L
                 progressState.AppendBatch((epoch,checkpoint),reqs)
                 work.Enqueue(Added (reqs.Count,skipCount,count))
             | AddStream streamSpan ->
