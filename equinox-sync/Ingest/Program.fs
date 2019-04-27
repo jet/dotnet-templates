@@ -11,7 +11,6 @@ open EventStoreSource
 
 type StartPos = Position of int64 | Chunk of int | Percentage of float | StreamList of string list | Start
 type ReaderSpec = { start: StartPos; stripes: int; batchSize: int; minBatchSize: int }
-let mb x = float x / 1024. / 1024.
 
 module CmdParser =
     open Argu

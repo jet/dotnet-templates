@@ -1,5 +1,7 @@
 ﻿module Equinox.Projection.Cosmos.Metrics
 
+// TODO move into equinox.cosmos
+
 open System
 
 module RuCounters =

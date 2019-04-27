@@ -1,10 +1,12 @@
-﻿module Equinox.Projection.Cosmos.CosmosIngester
+﻿module Equinox.Projection.Cosmos.Ingestion
 
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Store
 open Equinox.Projection.Coordination
 open Equinox.Projection.State
 open Serilog
+open System
+open System.Threading
 
 let cosmosPayloadLimit = 2 * 1024 * 1024 - (*fudge*)4096
 let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 96
@@ -82,14 +84,14 @@ type CosmosStats(log : ILogger, maxPendingBatches, statsInterval) =
     let badCats = CatStats()
 
     override __.DumpExtraStats() =
-        let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix + !resultExnOther
-        log.Information("Reqs {completed:n0} {mb:n1}MB {events:n0}e ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
-            results, mb bytes, events, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
+        let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix
+        log.Information("Reqs {completed:n0} {mb:n3}GB {events:n0}e ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
+            results, mb bytes/1024., events, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
         resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
             log.Warning("Exceptions {rateLimited:n0} rate-limited, {timedOut:n0} timed out, {tooLarge} too large, {malformed} malformed, {other} other",
                 !rateLimited, !timedOut, !tooLarge, !malformed, !resultExnOther)
-            rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0; resultExnOther := 0;
+            rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0; resultExnOther := 0; events <- 0; bytes <- 0L
             if badCats.Any then log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
         Metrics.dumpRuStats statsInterval log
 
@@ -112,3 +114,50 @@ type CosmosStats(log : ILogger, maxPendingBatches, statsInterval) =
             | ResultKind.Malformed -> category stream |> badCats.Ingest; incr malformed
             | ResultKind.TimedOut -> incr timedOut
         | Add _ | AddStream _ | Added _ | ProgressResult _ -> ()
+
+module CosmosIngestionCoordinator =
+    let create (log : Serilog.ILogger, cosmosContext, maxWriters, maxPendingBatches, statsInterval) =
+        let writerResultLog = log.ForContext<Writer.Result>()
+        let trim (writePos : int64 option, batch : StreamSpan) =
+            let mutable bytesBudget = cosmosPayloadLimit
+            let mutable count = 0
+            let max2MbMax100EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
+                bytesBudget <- bytesBudget - cosmosPayloadBytes y
+                count <- count + 1
+                // Reduce the item count when we don't yet know the write position
+                count <= (if Option.isNone writePos then 100 else 4096) && (bytesBudget >= 0 || count = 1)
+            { stream = batch.stream; span = { index = batch.span.index; events = batch.span.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
+        let project batch = async {
+            let trimmed = trim batch
+            try let! res = Writer.write log cosmosContext trimmed
+                let ctx = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
+                return trimmed.stream, Choice1Of2 (ctx,res)
+            with e -> return trimmed.stream, Choice2Of2 e }
+        let handleResult (streams: StreamStates, progressState : ProgressState<_>,  batches: SemaphoreSlim) res =
+            let applyResultToStreamState = function
+                | stream, (Choice1Of2 (ctx, Writer.Ok pos)) ->
+                    Some ctx,streams.InternalUpdate stream pos null
+                | stream, (Choice1Of2 (ctx, Writer.Duplicate pos)) ->
+                    Some ctx,streams.InternalUpdate stream pos null
+                | stream, (Choice1Of2 (ctx, Writer.PartialDuplicate overage)) ->
+                    Some ctx,streams.InternalUpdate stream overage.index [|overage|]
+                | stream, (Choice1Of2 (ctx, Writer.PrefixMissing (overage,pos))) ->
+                    Some ctx,streams.InternalUpdate stream pos [|overage|]
+                | stream, (Choice2Of2 exn) ->
+                    let malformed = Writer.classify exn |> Writer.isMalformed
+                    None,streams.SetMalformed(stream,malformed)
+            match res with
+            | Message.Result (s,r) ->
+                let _ctx,(stream,updatedState) = applyResultToStreamState (s,r)
+                match updatedState.write with
+                | Some wp ->
+                    let closedBatches = progressState.MarkStreamProgress(stream, wp)
+                    if closedBatches > 0 then
+                        batches.Release(closedBatches) |> ignore
+                    streams.MarkCompleted(stream,wp)
+                | None ->
+                    streams.MarkFailed stream
+                Writer.logTo writerResultLog (s,r)
+            | _ -> ()
+        let stats = CosmosStats(log, maxPendingBatches, statsInterval)
+        Coordinator<(int*int)*Writer.Result>.Start(stats, maxPendingBatches, maxWriters, project, handleResult)

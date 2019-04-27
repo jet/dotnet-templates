@@ -29,7 +29,6 @@ type Async with
                 else ek(Exception "invalid Task state!"))
             |> ignore
 
-
 type SemaphoreSlim with
     /// F# friendly semaphore await function
     member semaphore.Await(?timeout : TimeSpan) = async {
@@ -39,9 +38,9 @@ type SemaphoreSlim with
         return! Async.AwaitTaskCorrect task
     }
 
-    /// Throttling wrapper which waits asynchronously until the semaphore has available capacity
-    member semaphore.Throttle(workflow : Async<'T>) : Async<'T> = async {
-        let! _ = semaphore.Await()
-        try return! workflow
-        finally semaphore.Release() |> ignore
-    }
+    ///// Throttling wrapper that waits asynchronously until the semaphore has available capacity
+    //member semaphore.Throttle(workflow : Async<'T>) : Async<'T> = async {
+    //    let! _ = semaphore.Await()
+    //    try return! workflow
+    //    finally semaphore.Release() |> ignore
+    //}

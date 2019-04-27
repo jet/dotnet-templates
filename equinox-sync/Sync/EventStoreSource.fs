@@ -2,6 +2,7 @@
 
 open Equinox.Store // AwaitTaskCorrect
 open Equinox.Projection.Cosmos
+open Equinox.Projection.Cosmos.Ingestion
 open Equinox.Projection.State
 open EventStore.ClientAPI
 open System
@@ -18,9 +19,9 @@ let inline payloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = recPayloadByte
 
 let tryToBatch (e : RecordedEvent) : StreamItem option =
     let eb = recPayloadBytes e
-    if eb > CosmosIngester.cosmosPayloadLimit then
+    if eb > cosmosPayloadLimit then
         Log.Error("ES Event Id {eventId} (#{index} in {stream}, type {type}) size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}",
-            e.EventId, e.EventNumber, e.EventStreamId, e.EventType, eb, CosmosIngester.cosmosPayloadLimit)
+            e.EventId, e.EventNumber, e.EventStreamId, e.EventType, eb, cosmosPayloadLimit)
         None
     else 
         let meta' = if e.Metadata <> null && e.Metadata.Length = 0 then null else e.Metadata
