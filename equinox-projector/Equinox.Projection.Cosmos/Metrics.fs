@@ -1,4 +1,4 @@
-﻿module Equinox.Projection.Cosmos.Metrics
+﻿module Equinox.Cosmos.Metrics
 
 // TODO move into equinox.cosmos
 

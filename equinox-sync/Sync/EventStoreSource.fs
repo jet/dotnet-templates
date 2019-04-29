@@ -1,9 +1,7 @@
 ﻿module SyncTemplate.EventStoreSource
 
 open Equinox.Store // AwaitTaskCorrect
-open Equinox.Projection.Cosmos
-open Equinox.Projection.Cosmos.Ingestion
-open Equinox.Projection.State
+open Equinox.Projection
 open EventStore.ClientAPI
 open System
 open Serilog // NB Needs to shadow ILogger
@@ -14,20 +12,14 @@ open System.Collections.Generic
 type EventStore.ClientAPI.RecordedEvent with
     member __.Timestamp = System.DateTimeOffset.FromUnixTimeMilliseconds(__.CreatedEpoch)
 
-let inline recPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = arrayBytes x.Data + arrayBytes x.Metadata
+let inline recPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = State.arrayBytes x.Data + State.arrayBytes x.Metadata
 let inline payloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = recPayloadBytes x.Event + x.OriginalStreamId.Length * 2
 
-let tryToBatch (e : RecordedEvent) : StreamItem option =
-    let eb = recPayloadBytes e
-    if eb > cosmosPayloadLimit then
-        Log.Error("ES Event Id {eventId} (#{index} in {stream}, type {type}) size {eventSize} exceeds Cosmos ingestion limit {maxCosmosBytes}",
-            e.EventId, e.EventNumber, e.EventStreamId, e.EventType, eb, cosmosPayloadLimit)
-        None
-    else 
-        let meta' = if e.Metadata <> null && e.Metadata.Length = 0 then null else e.Metadata
-        let data' = if e.Data <> null && e.Data.Length = 0 then null else e.Data
-        let event : Equinox.Codec.IEvent<_> = Equinox.Codec.Core.EventData.Create(e.EventType, data', meta', e.Timestamp) :> _
-        Some { stream = e.EventStreamId; index = e.EventNumber; event = event}
+let toIngestionItem (e : RecordedEvent) : Engine.StreamItem =
+    let meta' = if e.Metadata <> null && e.Metadata.Length = 0 then null else e.Metadata
+    let data' = if e.Data <> null && e.Data.Length = 0 then null else e.Data
+    let event : Equinox.Codec.IEvent<_> = Equinox.Codec.Core.EventData.Create(e.EventType, data', meta', e.Timestamp) :> _
+    { stream = e.EventStreamId; index = e.EventNumber; event = event}
 
 let private mb x = float x / 1024. / 1024.
 
@@ -121,7 +113,7 @@ let establishMax (conn : IEventStoreConnection) = async {
             Log.Warning(e,"Could not establish max position")
             do! Async.Sleep 5000 
     return Option.get max }
-let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : StreamSpan -> unit) =
+let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : State.StreamSpan -> unit) =
     let rec fetchFrom pos limit = async {
         let reqLen = match limit with Some limit -> min limit batchSize | None -> batchSize
         let! currentSlice = conn.ReadStreamEventsForwardAsync(stream, pos, reqLen, resolveLinkTos=true) |> Async.AwaitTaskCorrect
@@ -139,7 +131,7 @@ let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int
 
 type [<NoComparison>] PullResult = Exn of exn: exn | Eof | EndOfTranche
 let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn : IEventStoreConnection, batchSize)
-        (range:Range, once) (tryMapEvent : ResolvedEvent -> StreamItem option) (postBatch : Position -> StreamItem[] -> Async<int*int>) =
+        (range:Range, once) (tryMapEvent : ResolvedEvent -> Engine.StreamItem option) (postBatch : Position -> Engine.StreamItem[] -> Async<int*int>) =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let rec aux () = async {
         let! currentSlice = conn.ReadAllEventsForwardAsync(range.Current, batchSize, resolveLinkTos = false) |> Async.AwaitTaskCorrect
@@ -150,9 +142,9 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
         let streams = batches |> Seq.groupBy (fun b -> b.stream) |> Array.ofSeq
         let usedStreams, usedCats = streams.Length, streams |> Seq.map fst |> Seq.distinct |> Seq.length
         let! (cur,max) = postBatch currentSlice.NextPosition batches
-        Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n0}ms {cur}/{max}",
+        Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n3}s {cur}/{max}",
             range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
-            batchEvents, usedCats, usedStreams, batches.Length, postSw.ElapsedMilliseconds, cur, max)
+            batchEvents, usedCats, usedStreams, batches.Length, let e = postSw.Elapsed in e.TotalSeconds, cur, max)
         if not (range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream) then return currentSlice.IsEndOfStream else
         sw.Restart() // restart the clock as we hand off back to the Reader
         return! aux () }

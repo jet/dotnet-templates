@@ -22,7 +22,7 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Ingest", "..\equinox-sync\I
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Equinox.Projection.Codec", "Equinox.Projection.Codec\Equinox.Projection.Codec.fsproj", "{AA48D9FA-EBFA-4BE5-800B-0F364AF1295F}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Equinox.Projection.Cosmos", "Equinox.Projection.Cosmos\Equinox.Projection.Cosmos.fsproj", "{2071A2C9-B5C8-4143-B437-6833666D0ACA}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Equinox.Cosmos.ProjectionEx", "Equinox.Projection.Cosmos\Equinox.Cosmos.ProjectionEx.fsproj", "{2071A2C9-B5C8-4143-B437-6833666D0ACA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

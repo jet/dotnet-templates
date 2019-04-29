@@ -320,10 +320,11 @@ let main argv =
                 || e.EventStreamId.StartsWith("$") 
                 || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
                 || e.EventStreamId.EndsWith("_checkpoints")
+                || e.EventStreamId.EndsWith("_checkpoint")
+                || e.EventStreamId.StartsWith("marvel_bookmark_")
                 || e.EventStreamId.StartsWith("InventoryLog") // 5GB, causes lopsided partitions, unused
                 || e.EventStreamId = "ReloadBatchId" // does not start at 0
                 || e.EventStreamId = "PurchaseOrder-5791" // Too large
-                || e.EventStreamId.EndsWith("_checkpoint")
                 || not (catFilter e.EventStreamId) -> None
             | e -> EventStoreSource.tryToBatch e
         Coordinator.Run log source.ReadConnection (readerSpec, tryMapEvent (fun _ -> true)) ctx (writerCount, readerQueueLen) |> Async.RunSynchronously

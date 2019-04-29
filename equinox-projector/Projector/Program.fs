@@ -5,13 +5,13 @@ open Confluent.Kafka
 //#endif
 open Equinox.Cosmos
 open Equinox.Cosmos.Projection
-open Equinox.Projection.Engine
+open Equinox.Projection.State
 //#if kafka
 open Equinox.Projection.Codec
 open Equinox.Store
 open Jet.ConfluentKafka.FSharp
 //#else
-open Equinox.Projection.State
+open Equinox.Projection.Engine
 //#endif
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
@@ -154,7 +154,7 @@ let run (log : ILogger) discovery connectionPolicy source
     do! Async.AwaitKeyboardInterrupt() }
 
 //#if kafka
-let mkRangeProjector log (_maxPendingBatches,_maxDop,_busyPause,_project) (broker, topic) =
+let mkRangeProjector log (_maxPendingBatches,_maxDop,_project) (broker, topic) =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = CompressionType.Lz4)
     let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
@@ -175,23 +175,29 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_busyPause,_project) (broke
     }
     ChangeFeedObserver.Create(log, projectBatch, dispose = disposeProducer)
 //#else
-let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) () =
-    let mutable coordinator = Unchecked.defaultof<Coordinator<_>>
-    let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
-    let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
-        sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let pt = Stopwatch.StartNew()
-        // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
-        let checkpoint = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect }
-        let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
-        let! index,max = coordinator.Submit(epoch,checkpoint,seq { for x in Seq.collect DocumentParser.enumEvents docs -> { stream = x.Stream; index = x.Index; event = x } })
-        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Ingest {index}/{max} {p:n1}s",
-            epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000., index, max, (let e = pt.Elapsed in e.TotalSeconds))
-        sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
-    }
-    let init rangeLog = coordinator <- Coordinator<_>.Start(rangeLog, maxPendingBatches, processorDop, project, TimeSpan.FromMinutes 1.)
-    let dispose () = coordinator.Stop()
-    ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
+let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) =
+    let projectionEngine = startProjectionEngine (log, maxPendingBatches, processorDop, project, TimeSpan.FromMinutes 1.)
+    fun () ->
+        let mutable trancheEngine = Unchecked.defaultof<TrancheEngine<_>>
+        let init rangeLog = trancheEngine <- TrancheEngine.Start (rangeLog, projectionEngine, maxPendingBatches, processorDop, TimeSpan.FromMinutes 1.)
+        let ingest epoch checkpoint docs =
+            let events = Seq.collect DocumentParser.enumEvents docs
+            let items = seq { for x in events -> { stream = x.Stream; index = x.Index; event = x } }
+            trancheEngine.Submit(epoch, checkpoint, items)
+        let dispose () = trancheEngine.Stop()
+        let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
+        let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+            sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
+            let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
+            // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
+            let checkpoint = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect }
+            let! pt, (cur,max) = ingest epoch checkpoint docs |> Stopwatch.Time
+            log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Post {pt:n3}s {cur}/{max}",
+                epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000.,
+                let e = pt.Elapsed in e.TotalSeconds, cur, max)
+            sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
+        }
+        ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
  //#endif
  
 // Illustrates how to emit direct to the Console using Serilog

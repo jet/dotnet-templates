@@ -4,7 +4,6 @@ open Serilog
 open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
-open System
 open System.Collections.Concurrent
 
 let every ms f =
@@ -24,7 +23,6 @@ let arrayBytes (x:byte[]) = if x = null then 0 else x.Length
 let mb x = float x / 1024. / 1024.
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 
-type [<NoComparison>] StreamItem = { stream: string; index: int64; event: Equinox.Codec.IEvent<byte[]> }
 type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
 type [<NoComparison>] StreamSpan = { stream: string; span: Span }
 type [<NoComparison>] StreamState = { isMalformed: bool; write: int64 option; queue: Span[] } with
@@ -99,11 +97,13 @@ type CatStats() =
     member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
 
 type StreamStates() =
+    let mutable streams = Set.empty 
     let states = Dictionary<string, StreamState>()
     let update stream (state : StreamState) =
         match states.TryGetValue stream with
         | false, _ ->
             states.Add(stream, state)
+            streams <- streams.Add stream
             stream, state
         | true, current ->
             let updated = StreamState.combine current state
@@ -129,9 +129,10 @@ type StreamStates() =
     let markNotBusy stream =
         busy.Remove stream |> ignore
 
+    member __.All = streams
     member __.InternalUpdate stream pos queue = update stream { isMalformed = false; write = Some pos; queue = queue }
-    member __.Add(item: StreamItem, ?isMalformed) =
-        updateWritePos item.stream (defaultArg isMalformed false) None [| { index = item.index; events = [| item.event |] } |]
+    member __.Add(stream, index, event, ?isMalformed) =
+        updateWritePos stream (defaultArg isMalformed false) None [| { index = index; events = [| event |] } |]
     member __.Add(batch: StreamSpan, isMalformed) =
         updateWritePos batch.stream isMalformed None [| { index = batch.span.index; events = batch.span.events } |]
     member __.SetMalformed(stream,isMalformed) =
@@ -172,20 +173,30 @@ type StreamStates() =
                 readyStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.Length, (sz + 512L) / 1024L)
                 ready <- ready + 1
                 readyB <- readyB + sz
+        log.Information("Streams Synced {synced:n0} Active {busy:n0}/{busyMb:n1}MB Ready {ready:n0}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
+            synced, busyCount, mb busyB, ready, mb readyB, malformed, mb malformedB)
         if busyCats.Any then log.Information("Active Categories, events {busyCats}", Seq.truncate 5 busyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Categories, events {readyCats}", Seq.truncate 5 readyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Streams, KB {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
         if malformedStreams.Any then log.Information("Malformed Streams, MB {malformedStreams}", malformedStreams.StatsDescending)
-        log.Information("Streams Synced {synced:n0} Active {busy:n0}/{busyMb:n1}MB Ready {ready:n0}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
-            synced, busyCount, mb busyB, ready, mb readyB, malformed, mb malformedB)
 
-type [<NoComparison>] internal Chunk<'Pos> = { pos: 'Pos; streamToRequiredIndex : Dictionary<string,int64> }
+    //member __.TryGap() : (string*int64*int) option =
+    //    let rec aux () =
+    //        match gap |> Queue.tryDequeue with
+    //        | None -> None
+    //        | Some stream ->
+            
+    //        match states.[stream].TryGap() with
+    //        | Some (pos,count) -> Some (stream,pos,int count)
+    //        | None -> aux ()
+    //    aux ()
 
-type ProgressState<'Pos>(?currentPos : 'Pos) =
+type [<NoComparison; NoEquality>] internal BatchState = { markCompleted: unit -> unit; streamToRequiredIndex : Dictionary<string,int64> }
+
+type ProgressState<'Pos>() =
     let pending = Queue<_>()
-    let mutable validatedPos = currentPos
-    member __.AppendBatch(pos, reqs : Dictionary<string,int64>) =
-        pending.Enqueue { pos = pos; streamToRequiredIndex = reqs }
+    member __.AppendBatch(markCompleted, reqs : Dictionary<string,int64>) =
+        pending.Enqueue { markCompleted = markCompleted; streamToRequiredIndex = reqs }
     member __.MarkStreamProgress(stream, index) =
         for x in pending do
             match x.streamToRequiredIndex.TryGetValue stream with
@@ -194,9 +205,8 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
         let headIsComplete () = pending.Count <> 0 && pending.Peek().streamToRequiredIndex.Count = 0
         let mutable completed = 0
         while headIsComplete () do
+            let item = pending.Dequeue() in item.markCompleted()
             completed <- completed + 1
-            let headBatch = pending.Dequeue()
-            validatedPos <- Some headBatch.pos
         completed
     member __.ScheduledOrder getStreamQueueLength =
         let raw = seq {
@@ -208,7 +218,7 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
                     if streams.Add s then
                         yield s,(batch,getStreamQueueLength s) }
         raw |> Seq.sortBy (fun (_s,(b,l)) -> b,-l) |> Seq.map fst
-    member __.Validate tryGetStreamWritePos : int * 'Pos option * int =
+    member __.Validate tryGetStreamWritePos =
         let rec aux completed =
             if pending.Count = 0 then completed else
             let batch = pending.Peek()
@@ -221,15 +231,12 @@ type ProgressState<'Pos>(?currentPos : 'Pos) =
             if batch.streamToRequiredIndex.Count <> 0 then
                 completed
             else
-                let headBatch = pending.Dequeue()
-                validatedPos <- Some headBatch.pos
+                let item = pending.Dequeue() in item.markCompleted()
                 aux (completed + 1)
-        let completed = aux 0
-        completed, validatedPos, pending.Count
+        aux 0
 
 /// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
 type Dispatcher<'R>(maxDop) =
-    let cancellationCheckInterval = TimeSpan.FromMilliseconds 5.
     let work = new BlockingCollection<_>(ConcurrentQueue<_>())
     let result = Event<'R>()
     let dop = new SemaphoreSlim(maxDop)
@@ -238,37 +245,15 @@ type Dispatcher<'R>(maxDop) =
         result.Trigger res
         dop.Release() |> ignore } 
     [<CLIEvent>] member __.Result = result.Publish
-    member __.Capacity = dop.CurrentCount
-    member __.Enqueue item = work.Add item
+    member __.AvailableCapacity =
+        let available = dop.CurrentCount + 1
+        available,maxDop
+    member __.TryAdd(item,?timeout) = async {
+        let! got = dop.Await(?timeout=timeout)
+        if got then
+            work.Add(item)
+        return got}
     member __.Pump () = async {
         let! ct = Async.CancellationToken
-        while not ct.IsCancellationRequested do
-            let! got = dop.Await(cancellationCheckInterval)
-            if got then
-                let mutable item = Unchecked.defaultof<Async<_>>
-                if work.TryTake(&item, cancellationCheckInterval) then Async.Start(dispatch item)
-                else dop.Release() |> ignore }
-
-/// Manages writing of progress
-/// - Each write attempt is always of the newest token (each update is assumed to also count for all preceding ones)
-/// - retries until success or a new item is posted
-type ProgressWriter<'Res when 'Res: equality>() =
-    let pumpSleepMs = 100
-    let due = expiredMs 5000L
-    let mutable committedEpoch = None
-    let mutable validatedPos = None
-    let result = Event<Choice<'Res,exn>>()
-    [<CLIEvent>] member __.Result = result.Publish
-    member __.Post(version,f) =
-        Volatile.Write(&validatedPos,Some (version,f))
-    member __.CommittedEpoch = Volatile.Read(&committedEpoch)
-    member __.Pump() = async {
-        let! ct = Async.CancellationToken
-        while not ct.IsCancellationRequested do
-            match Volatile.Read &validatedPos with
-            | Some (v,f) when Volatile.Read(&committedEpoch) <> Some v && due () ->
-                try do! f
-                    Volatile.Write(&committedEpoch, Some v)
-                    result.Trigger (Choice1Of2 v)
-                with e -> result.Trigger (Choice2Of2 e)
-            | _ -> do! Async.Sleep pumpSleepMs }
+        for item in work.GetConsumingEnumerable ct do
+            Async.Start(dispatch item) }
