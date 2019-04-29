@@ -175,11 +175,10 @@ type TrancheStreamBuffer() =
         for item in items do
             merge item.stream { isMalformed = false; write = None; queue = [| { index = item.index; events = Array.singleton item.event } |] }
 
-    member __.Take(processingContains) = Array.ofSeq <| seq {
-        for x in states do
-            if processingContains x.Key then
-                states.Remove x.Key |> ignore
-                yield x }
+    member __.Take(processingContains) =
+        let forward = [| for x in states do if processingContains x.Key then yield x |]
+        for x in forward do states.Remove x.Key |> ignore
+        forward
 
     member __.Dump(log : ILogger) =
         let mutable waiting, waitingB = 0, 0L
