@@ -130,6 +130,7 @@ type StreamStates() =
         busy.Remove stream |> ignore
 
     member __.All = streams
+    member __.InternalMerge(stream, state) = update stream state |> ignore
     member __.InternalUpdate stream pos queue = update stream { isMalformed = false; write = Some pos; queue = queue }
     member __.Add(stream, index, event, ?isMalformed) =
         updateWritePos stream (defaultArg isMalformed false) None [| { index = index; events = [| event |] } |]

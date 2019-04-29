@@ -14,6 +14,7 @@ type Message<'R> =
     /// Enqueue a batch of items with supplied progress marking function
     | Add of markCompleted: (unit -> unit) * items: StreamItem[]
     | AddStream of StreamSpan
+    | AddActive of KeyValuePair<string,StreamState>[]
     /// Feed stats about an ingested batch to relevant listeners
     | Added of streams: int * skip: int * events: int
     /// Result of processing on stream - result (with basic stats) or the `exn` encountered
@@ -29,7 +30,7 @@ type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
     abstract member Handle : Message<'R> -> unit
     default __.Handle res =
         match res with
-        | Add _ | AddStream _ -> ()
+        | Add _ | AddStream _ | AddActive _ -> ()
         | Added (streams, skipped, events) ->
             incr batchesPended
             streamsPended := !streamsPended + streams
@@ -81,6 +82,9 @@ type ProjectionEngine<'R>(maxPendingBatches, dispatcher : Dispatcher<_>, project
                         reqs.[stream] <- item.index+1L
                 progressState.AppendBatch(checkpoint,reqs)
                 work.Enqueue(Added (reqs.Count,skipCount,count))
+            | AddActive events ->
+                for e in events do
+                    streams.InternalMerge(e.Key,e.Value)
             | AddStream streamSpan ->
                 let _stream,_streamState = streams.Add(streamSpan,false)
                 work.Enqueue(Added (1,0,streamSpan.span.events.Length)) // Yes, need to compute skip
@@ -125,6 +129,9 @@ type ProjectionEngine<'R>(maxPendingBatches, dispatcher : Dispatcher<_>, project
 
     member __.AllStreams = streams.All
 
+    member __.AddActiveStreams(events) =
+        work.Enqueue <| AddActive events
+
     member __.Submit(streamSpan) =
         work.Enqueue <| AddStream streamSpan
 
@@ -168,9 +175,9 @@ type TrancheStreamBuffer() =
         for item in items do
             merge item.stream { isMalformed = false; write = None; queue = [| { index = item.index; events = Array.singleton item.event } |] }
 
-    member __.Take(set : ISet<_>) = seq {
+    member __.Take(processingContains) = Array.ofSeq <| seq {
         for x in states do
-            if set.Contains x.Key then
+            if processingContains x.Key then
                 states.Remove x.Key |> ignore
                 yield x }
 
@@ -221,9 +228,12 @@ type SeriesMessage =
 type TrancheStats(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
     let mutable pendingBatchCount, validatedEpoch, comittedEpoch : int * int64 option * int64 option = 0, None, None
     let progCommitFails, progCommits = ref 0, ref 0 
-    let cycles, batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0, ref 0
+    let cycles, batchesPended, streamsPended, eventsPended = ref 0, ref 0, ref 0, ref 0
     let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
     let dumpStats (available,maxDop) =
+        log.Information("Tranche Cycles {cycles} Active {active}/{writers} Batches {batches} ({streams:n0}s {events:n0}e)",
+            !cycles, maxDop-available, maxDop, !batchesPended, !streamsPended, !eventsPended)
+        cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0;
         if !progCommitFails <> 0 || !progCommits <> 0 then
             match comittedEpoch with
             | None ->
@@ -239,9 +249,6 @@ type TrancheStats(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
         else
             log.Information("Uncommitted {pendingBatches}/{maxPendingBatches} @ {validated} (committed: {committed})",
                     pendingBatchCount, maxPendingBatches, Option.toNullable validatedEpoch, Option.toNullable comittedEpoch)
-        log.Information("Ingest Cycles {cycles} Batches {batches} ({streams:n0}s {events:n0})",
-            !cycles, maxDop-available, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped)
-        cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0;
     member __.Handle : SeriesMessage -> unit = function
         | Add _ -> () // Enqueuing of an event is not interesting - we assume it'll get processed and mapped to an `Added` in the same cycle
         | ProgressResult (Choice1Of2 epoch) ->
@@ -299,8 +306,8 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
             // 1. Submit to ingester until read queue, tranche limit or ingester limit exhausted
             while pending.Count <> 0 && write.HasCapacity && ingesterAccepting do
                 let markCompleted, events = pending.Peek()
-                let! sumbitted = ingester.TrySubmit(markCompleted, events)
-                if sumbitted then
+                let! submitted = ingester.TrySubmit(markCompleted, events)
+                if submitted then
                     pending.Dequeue() |> ignore
                     // mark off a write as being in progress
                     do! write.Await()
@@ -310,6 +317,9 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
             stats.HandleValidated(Option.map fst validatedPos, fst write.State)
             validatedPos |> Option.iter progressWriter.Post
             stats.HandleCommitted progressWriter.CommittedEpoch
+            // 3. Forward content for any active streams into processor immediately
+            let relevantBufferedStreams = streams.Take(ingester.AllStreams.Contains)
+            ingester.AddActiveStreams(relevantBufferedStreams)
             // 4. Periodically emit status info
             stats.TryDump(write.State,streams)
             do! Async.Sleep pumpDelayMs }
