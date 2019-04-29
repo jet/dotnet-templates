@@ -88,6 +88,7 @@ type CosmosStats(log : ILogger, statsInterval) =
         match message with
         | Message.Add (_,_)
         | Message.AddStream _
+        | Message.AddActive _
         | Message.Added _ -> ()
         | Result (_stream, Choice1Of2 ((es,bs),r)) ->
             events <- events + es
