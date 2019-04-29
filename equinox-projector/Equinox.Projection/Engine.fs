@@ -291,6 +291,7 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
                 streams.Merge items
                 let markCompleted () =
                     write.Release()
+                    read.Release()
                     validatedPos <- Some (epoch,checkpoint)
                 let streams = HashSet()
                 for x in items do streams.Add x.stream |> ignore
