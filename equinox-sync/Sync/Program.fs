@@ -368,7 +368,7 @@ module EventStoreSource =
         readers.AddTail(startPos, max, spec.tailInterval)
         let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
         let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
-        let postStreamSpan : StreamSpan -> unit = failwith "TODO" // coordinator.Submit
+        let postStreamSpan : StreamSpan -> unit = fun _ -> failwith "TODO" // coordinator.Submit
         let postBatch (pos : EventStore.ClientAPI.Position) xs =
             let cp = pos.CommitPosition
             trancheEngine.Submit(cp, checkpoints.Commit cp, xs)
