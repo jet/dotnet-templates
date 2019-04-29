@@ -144,7 +144,7 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
         let! (cur,max) = postBatch currentSlice.NextPosition batches
         Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n3}s {cur}/{max}",
             range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
-            batchEvents, usedCats, usedStreams, batches.Length, let e = postSw.Elapsed in e.TotalSeconds, cur, max)
+            batchEvents, usedCats, usedStreams, batches.Length, (let e = postSw.Elapsed in e.TotalSeconds), cur, max)
         if not (range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream) then return currentSlice.IsEndOfStream else
         sw.Restart() // restart the clock as we hand off back to the Reader
         return! aux () }

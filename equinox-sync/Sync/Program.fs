@@ -160,6 +160,8 @@ module CmdParser =
                 x.ConsumerGroupName, startPos, x.ForceRestart, x.Destination.Database, x.Destination.Collection)
             Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}] with {stripes} stream readers",
                 x.MinBatchSize, x.StartingBatchSize, x.StreamReaders)
+            Log.Information("Max read-ahead for ingester: {maxPendingBatches} batches, max batches to process concurrently: {maxProcessing}",
+                x.MaxPendingBatches, x.MaxProcessing)
             {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = x.CheckpointInterval; tailInterval = x.TailInterval; forceRestart = x.ForceRestart
                 batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; streamReaders = x.StreamReaders }
 #endif
