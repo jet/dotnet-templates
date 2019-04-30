@@ -171,7 +171,7 @@ type StreamStates() =
                 busyB <- busyB + sz
             | sz ->
                 readyCats.Ingest(category stream)
-                readyStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.Length, (sz + 512L) / 1024L)
+                readyStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.[0].events.Length, (sz + 512L) / 1024L)
                 ready <- ready + 1
                 readyB <- readyB + sz
         log.Information("Streams Synced {synced:n0} Active {busy:n0}/{busyMb:n1}MB Ready {ready:n0}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
