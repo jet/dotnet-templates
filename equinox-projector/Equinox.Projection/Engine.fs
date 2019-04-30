@@ -299,7 +299,7 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
         use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
         Async.Start(progressWriter.Pump(), cts.Token)
         while not cts.IsCancellationRequested do
-            work |> ConcurrentQueue.drain handle
+            work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
             let mutable ingesterAccepting = true
             // 1. Submit to ingester until read queue, tranche limit or ingester limit exhausted
             while pending.Count <> 0 && write.HasCapacity && ingesterAccepting do
