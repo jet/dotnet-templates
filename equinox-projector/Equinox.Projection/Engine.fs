@@ -24,7 +24,7 @@ type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
     let cycles, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
     let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
     let dumpStats (available,maxDop) =
-        log.Information("Cycles {cycles} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
+        log.Information("Projection Cycles {cycles} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
             !cycles, maxDop-available, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
         cycles := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
     abstract member Handle : Message<'R> -> unit
@@ -41,6 +41,7 @@ type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
         | Result (_stream, Choice2Of2 _) ->
             incr resultExn
     member __.TryDump((available,maxDop),streams : StreamStates) =
+        incr cycles
         if statsDue () then
             dumpStats (available,maxDop)
             __.DumpExtraStats()
@@ -189,7 +190,7 @@ type TrancheStreamBuffer() =
             waitingStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.Length, (sz + 512L) / 1024L)
             waiting <- waiting + 1
             waitingB <- waitingB + sz
-        log.Information("Waiting {busy:n0}/{busyMb:n1}MB ", waiting, mb waitingB)
+        log.Information("Streams Waiting {busy:n0}/{busyMb:n1}MB ", waiting, mb waitingB)
         if waitingCats.Any then log.Information("Waiting Categories, events {readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
         if waitingCats.Any then log.Information("Waiting Streams, KB {readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
 
@@ -231,8 +232,8 @@ type TrancheStats(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
     let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
     let dumpStats (available,maxDop) =
         log.Information("Tranche Cycles {cycles} Active {active}/{writers} Batches {batches} ({streams:n0}s {events:n0}e)",
-            !cycles, maxDop-available, maxDop, !batchesPended, !streamsPended, !eventsPended)
-        cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0;
+            !cycles, available, maxDop, !batchesPended, !streamsPended, !eventsPended)
+        cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0
         if !progCommitFails <> 0 || !progCommits <> 0 then
             match comittedEpoch with
             | None ->
@@ -260,12 +261,12 @@ type TrancheStats(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
             streamsPended := !streamsPended + streams
             eventsPended := !eventsPended + events
     member __.HandleValidated(epoch, pendingBatches) = 
-        incr cycles
-        pendingBatchCount <- pendingBatches
         validatedEpoch <- epoch
+        pendingBatchCount <- pendingBatches
     member __.HandleCommitted epoch = 
         comittedEpoch <- epoch
     member __.TryDump((available,maxDop),streams : TrancheStreamBuffer) =
+        incr cycles
         if statsDue () then
             dumpStats (available,maxDop)
             streams.Dump log
@@ -284,8 +285,7 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
     let pumpDelayMs = defaultArg pumpDelayMs 5
 
     member private __.Pump() = async {
-        let handle x =
-            match x with
+        let handle = function
             | Add (epoch, checkpoint, items) ->
                 let items = Array.ofSeq items
                 streams.Merge items
@@ -293,9 +293,7 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
                     write.Release()
                     read.Release()
                     validatedPos <- Some (epoch,checkpoint)
-                let streams = HashSet()
-                for x in items do streams.Add x.stream |> ignore
-                work.Enqueue(Added (streams.Count,items.Length))
+                work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
                 pending.Enqueue((markCompleted,items))
             | Added _ | ProgressResult _ -> ()
         use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
@@ -314,7 +312,7 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
                 else
                     ingesterAccepting <- false 
             // 2. Update any progress into the stats
-            stats.HandleValidated(Option.map fst validatedPos, fst write.State)
+            stats.HandleValidated(Option.map fst validatedPos, fst read.State)
             validatedPos |> Option.iter progressWriter.Post
             stats.HandleCommitted progressWriter.CommittedEpoch
             // 3. Forward content for any active streams into processor immediately
