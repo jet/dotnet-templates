@@ -7,19 +7,22 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Threading
 
+/// Item from a reader as supplied to the projector/ingestor loop for aggregation
 type [<NoComparison>] StreamItem = { stream: string; index: int64; event: Equinox.Codec.IEvent<byte[]> }
 
+/// Messages used internally by projector, including synthetic ones for the purposes of the `Stats` listeners
 [<NoComparison; NoEquality>]
-type Message<'R> =
+type ProjectionMessage<'R> =
     /// Enqueue a batch of items with supplied progress marking function
     | Add of markCompleted: (unit -> unit) * items: StreamItem[]
-    | AddStream of StreamSpan
-    | AddActive of KeyValuePair<string,StreamState>[]
-    /// Feed stats about an ingested batch to relevant listeners
+    /// Stats per submitted batch for stats listeners to aggregate
     | Added of streams: int * skip: int * events: int
+    /// Submit new data pertaining to a stream that has commenced processing
+    | AddActive of KeyValuePair<string,StreamState>[]
     /// Result of processing on stream - result (with basic stats) or the `exn` encountered
     | Result of stream: string * outcome: Choice<'R,exn>
-    
+   
+/// Gathers stats pertaining to the core projection/ingestion activity
 type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
     let cycles, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
     let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
@@ -27,10 +30,9 @@ type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
         log.Information("Projection Cycles {cycles} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
             !cycles, maxDop-available, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
         cycles := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
-    abstract member Handle : Message<'R> -> unit
-    default __.Handle res =
-        match res with
-        | Add _ | AddStream _ | AddActive _ -> ()
+    abstract member Handle : ProjectionMessage<'R> -> unit
+    default __.Handle msg = msg |> function
+        | Add _ | AddActive _ -> ()
         | Added (streams, skipped, events) ->
             incr batchesPended
             streamsPended := !streamsPended + streams
@@ -46,18 +48,20 @@ type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
             dumpStats (available,maxDop)
             __.DumpExtraStats()
             streams.Dump log
+    /// Allows an ingester or projector to wire in custom stats (typically based on data gathered in a `Handle` override)
     abstract DumpExtraStats : unit -> unit
     default __.DumpExtraStats () = ()
 
-/// Consolidates ingested events into streams; coordinates dispatching of these in priority dictated by the needs of the checkpointing approach in force
-/// a) does not itself perform any readin activities
-/// b) manages writing of progress
-/// x) periodically reports state (with hooks for ingestion engines to report same)
+/// Consolidates ingested events into streams; coordinates dispatching of these to projector/ingester in the order implied by the submission order
+/// a) does not itself perform any reading activities
+/// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
+/// c) submits work to the supplied Dispatcher (which it triggers pumping of)
+/// d) periodically reports state (with hooks for ingestion engines to report same)
 type ProjectionEngine<'R>(maxPendingBatches, dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<string * Choice<'R,exn>>, handleResult) =
     let sleepIntervalMs = 1
     let cts = new CancellationTokenSource()
     let batches = new SemaphoreSlim(maxPendingBatches)
-    let work = ConcurrentQueue<Message<'R>>()
+    let work = ConcurrentQueue<ProjectionMessage<'R>>()
     let streams = StreamStates()
     let progressState = ProgressState()
 
@@ -86,9 +90,6 @@ type ProjectionEngine<'R>(maxPendingBatches, dispatcher : Dispatcher<_>, project
             | AddActive events ->
                 for e in events do
                     streams.InternalMerge(e.Key,e.Value)
-            | AddStream streamSpan ->
-                let _stream,_streamState = streams.Add(streamSpan,false)
-                work.Enqueue(Added (1,0,streamSpan.span.events.Length)) // Yes, need to compute skip
             | Added _  ->
                 ()
             | Result _ as r ->
@@ -100,17 +101,18 @@ type ProjectionEngine<'R>(maxPendingBatches, dispatcher : Dispatcher<_>, project
             // 2. Mark off any progress achieved (releasing memory and/or or unblocking reading of batches)
             let completedBatches = progressState.Validate(streams.TryGetStreamWritePos)
             if completedBatches > 0 then batches.Release(completedBatches) |> ignore
-            // 3. After that, provision writers queue
+            // 3. After that, top up provisioning of writers queue
             let capacity,_ = dispatcher.AvailableCapacity
             if capacity <> 0 then
                 let work = streams.Schedule(progressState.ScheduledOrder streams.QueueLength, capacity)
                 let xs = (Seq.ofArray work).GetEnumerator()
-                let mutable ok = true
-                while xs.MoveNext() && ok do
+                let mutable addsBeingAccepted = true
+                while xs.MoveNext() && addsBeingAccepted do
                     let! succeeded = dispatcher.TryAdd(project xs.Current)
-                    ok <- succeeded
+                    addsBeingAccepted <- succeeded
             // 4. Periodically emit status info
             stats.TryDump(dispatcher.AvailableCapacity,streams)
+            // 5. Do a minimal sleep so we don't run completely hot when emprt
             do! Async.Sleep sleepIntervalMs }
     static member Start<'R>(stats, maxPendingBatches, processorDop, project, handleResult) =
         let dispatcher = Dispatcher(processorDop)
@@ -118,23 +120,17 @@ type ProjectionEngine<'R>(maxPendingBatches, dispatcher : Dispatcher<_>, project
         Async.Start <| instance.Pump(stats)
         instance
 
+    /// Attempt to feed in a batch (subject to there being capacity to do so)
     member __.TrySubmit(markCompleted, events) = async {
         let! got = batches.Await(TimeSpan.Zero)
-        if got then work.Enqueue <| Add (markCompleted, events); return true
-        else return false }
+        if got then
+            work.Enqueue <| Add (markCompleted, events)
+        return got }
 
-    member __.Submit(markCompleted, events) = async {
-        let! _ = batches.Await()
-        work.Enqueue <| Add (markCompleted, Array.ofSeq events)
-        return maxPendingBatches-batches.CurrentCount,maxPendingBatches }
-
-    member __.AllStreams = streams.All
-
-    member __.AddActiveStreams(events) =
+    member __.AddOpenStreamData(events) =
         work.Enqueue <| AddActive events
 
-    member __.Submit(streamSpan) =
-        work.Enqueue <| AddStream streamSpan
+    member __.AllStreams = streams.All
 
     member __.Stop() =
         cts.Cancel()
@@ -317,7 +313,7 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
             stats.HandleCommitted progressWriter.CommittedEpoch
             // 3. Forward content for any active streams into processor immediately
             let relevantBufferedStreams = streams.Take(ingester.AllStreams.Contains)
-            ingester.AddActiveStreams(relevantBufferedStreams)
+            ingester.AddOpenStreamData(relevantBufferedStreams)
             // 4. Periodically emit status info
             stats.TryDump(write.State,streams)
             do! Async.Sleep pumpDelayMs }

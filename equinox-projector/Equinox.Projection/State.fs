@@ -181,6 +181,7 @@ type StreamStates() =
         if readyCats.Any then log.Information("Ready Streams, KB {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
         if malformedStreams.Any then log.Information("Malformed Streams, MB {malformedStreams}", malformedStreams.StatsDescending)
 
+    // Used to trigger catch-up reading of streams which have events missing prior to the observed write position
     //member __.TryGap() : (string*int64*int) option =
     //    let rec aux () =
     //        match gap |> Queue.tryDequeue with
@@ -247,13 +248,13 @@ type Dispatcher<'R>(maxDop) =
         dop.Release() |> ignore } 
     [<CLIEvent>] member __.Result = result.Publish
     member __.AvailableCapacity =
-        let available = dop.CurrentCount + 1
+        let available = dop.CurrentCount
         available,maxDop
     member __.TryAdd(item,?timeout) = async {
         let! got = dop.Await(?timeout=timeout)
         if got then
             work.Add(item)
-        return got}
+        return got }
     member __.Pump () = async {
         let! ct = Async.CancellationToken
         for item in work.GetConsumingEnumerable ct do

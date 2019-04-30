@@ -86,10 +86,9 @@ type CosmosStats(log : ILogger, statsInterval) =
     override __.Handle message =
         base.Handle message
         match message with
-        | Message.Add (_,_)
-        | Message.AddStream _
-        | Message.AddActive _
-        | Message.Added _ -> ()
+        | ProjectionMessage.Add (_,_)
+        | ProjectionMessage.AddActive _
+        | ProjectionMessage.Added _ -> ()
         | Result (_stream, Choice1Of2 ((es,bs),r)) ->
             events <- events + es
             bytes <- bytes + int64 bs
@@ -114,7 +113,7 @@ let startIngestionEngine (log : Serilog.ILogger, maxPendingBatches, cosmosContex
         let max2MbMax100EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
             bytesBudget <- bytesBudget - cosmosPayloadBytes y
             count <- count + 1
-            // Reduce the item count when we don't yet know the write position
+            // Reduce the item count when we don't yet know the write position in order to efficiently discover the redundancy where data is already present
             count <= (if Option.isNone writePos then 100 else 4096) && (bytesBudget >= 0 || count = 1)
         { stream = batch.stream; span = { index = batch.span.index; events = batch.span.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
     let project batch = async {
@@ -137,7 +136,7 @@ let startIngestionEngine (log : Serilog.ILogger, maxPendingBatches, cosmosContex
                 let malformed = Writer.classify exn |> Writer.isMalformed
                 None,streams.SetMalformed(stream,malformed)
         match res with
-        | Message.Result (s,r) ->
+        | ProjectionMessage.Result (s,r) ->
             let _ctx,(stream,updatedState) = applyResultToStreamState (s,r)
             match updatedState.write with
             | Some wp ->
