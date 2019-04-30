@@ -95,6 +95,9 @@ let chunk (pos: Position) = uint64 pos.CommitPosition >>> 28
 let posFromChunk (chunk: int) =
     let chunkBase = int64 chunk * 1024L * 1024L * 256L
     Position(chunkBase,0L)
+let posFromChunkAfter (pos: EventStore.ClientAPI.Position) =
+    let nextChunk = 1 + int (chunk pos)
+    posFromChunk nextChunk
 let posFromPercentage (pct,max : Position) =
     let rawPos = Position(float max.CommitPosition * pct / 100. |> int64, 0L)
     let chunk = int (chunk rawPos) in posFromChunk chunk // &&& 0xFFFFFFFFE0000000L // rawPos / 256L / 1024L / 1024L * 1024L * 1024L * 256L

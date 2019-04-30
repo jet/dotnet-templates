@@ -36,8 +36,9 @@ type ReaderSpec =
         checkpointInterval: TimeSpan
         /// Delay when reading yields an empty batch
         tailInterval: TimeSpan
-        /// Maximum number of stream readers to permit
-        streamReaders: int
+        gorge: bool
+        /// Maximum number of striped readers to permit
+        stripes: int
         /// Initial batch size to use when commencing reading
         batchSize: int
         /// Smallest batch size to degrade to in the presence of failures
@@ -75,7 +76,8 @@ module CmdParser =
         | [<AltCommandLine "-p"; Unique>] Position of int64
         | [<AltCommandLine "-c"; Unique>] Chunk of int
         | [<AltCommandLine "-P"; Unique>] Percent of float
-        | [<AltCommandLine "-i"; Unique>] StreamReaders of int
+        | [<AltCommandLine "-g"; Unique>] Gorge
+        | [<AltCommandLine "-i"; Unique>] Stripes of int
         | [<AltCommandLine "-t"; Unique>] Tail of intervalS: float
 #endif
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
@@ -105,7 +107,8 @@ module CmdParser =
                 | Position _ ->             "EventStore $all Stream Position to commence from"
                 | Chunk _ ->                "EventStore $all Chunk to commence from"
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
-                | StreamReaders _ ->        "number of concurrent readers. Default: 8"
+                | Gorge ->                  "Parallel readers (instead of reading by stream)"
+                | Stripes _ ->              "number of concurrent readers to run one chunk (256MB) apart. Default: 1"
                 | Tail _ ->                 "attempt to read from tail at specified interval in Seconds. Default: 1"
                 | Source _ ->               "EventStore input parameters."
 #endif
@@ -127,7 +130,8 @@ module CmdParser =
         member __.ConsoleMinLevel =     if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
         member __.StartingBatchSize =   a.GetResult(BatchSize,4096)
         member __.MinBatchSize =        a.GetResult(MinBatchSize,512)
-        member __.StreamReaders =       a.GetResult(StreamReaders,8)
+        member __.Gorge =               a.Contains(Gorge)
+        member __.Stripes =             a.GetResult(Stripes,1)
         member __.TailInterval =        a.GetResult(Tail,1.) |> TimeSpan.FromSeconds
         member __.CheckpointInterval =  TimeSpan.FromHours 1.
         member __.ForceRestart =        a.Contains ForceRestart
@@ -158,12 +162,12 @@ module CmdParser =
                 | None, None, None, _ -> StartPos.StartOrCheckpoint
             Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Collection {coll}",
                 x.ConsumerGroupName, startPos, x.ForceRestart, x.Destination.Database, x.Destination.Collection)
-            Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}] with {stripes} stream readers",
-                x.MinBatchSize, x.StartingBatchSize, x.StreamReaders)
-            Log.Information("Max read-ahead for ingester: {maxPendingBatches} batches, max batches to process concurrently: {maxProcessing}",
-                x.MaxPendingBatches, x.MaxProcessing)
+            Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}] with {stripes} concurrent readers reading up to {maxPendingBatches} uncommitted batches ahead",
+                x.MinBatchSize, x.StartingBatchSize, x.Stripes, x.MaxPendingBatches)
+            Log.Information("Max batches to process concurrently: {maxProcessing}",
+                x.MaxProcessing)
             {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = x.CheckpointInterval; tailInterval = x.TailInterval; forceRestart = x.ForceRestart
-                batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; streamReaders = x.StreamReaders }
+                batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; gorge = x.Gorge; stripes = x.Stripes }
 #endif
     and [<NoEquality; NoComparison>] SourceParameters =
 #if cosmos
@@ -327,6 +331,37 @@ module EventStoreSource =
                     dop.Release() |> ignore
                     do! Async.Sleep sleepIntervalMs } 
 
+    type StripedReader(conn, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop, ?statsInterval) = 
+        let dop = new SemaphoreSlim(maxDop)
+        let work = EventStoreSource.ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
+
+        member __.Pump(postBatch, startPos, max) = async {
+            let! ct = Async.CancellationToken
+            let mutable remainder =
+                let nextPos = EventStoreSource.posFromChunkAfter startPos
+                work.AddTranche(startPos, nextPos, max)
+                Some nextPos
+            let mutable finished = false
+            while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
+                work.OverallStats.DumpIfIntervalExpired()
+                let! _ = dop.Await()
+                let forkRunRelease task = async {
+                    let! _ = Async.StartChild <| async {
+                        let postItem : StreamSpan -> unit = fun _ -> failwith "NA"
+                        try let! eof = work.Process(conn, tryMapEvent, postItem, postBatch, task) in ()
+                            if eof then remainder <- None
+                        finally dop.Release() |> ignore }
+                    return () }
+                match remainder with
+                | Some pos -> 
+                    let nextPos = EventStoreSource.posFromChunkAfter pos
+                    remainder <- Some nextPos
+                    do! forkRunRelease <| EventStoreSource.Work.Tranche (EventStoreSource.Range(pos, Some nextPos, max), batchSize)
+                | None ->
+                    if finished then do! Async.Sleep 1000 
+                    else Log.Error("No further ingestion work to commence")
+                    finished <- true }
+
     type StartMode = Starting | Resuming | Overridding
             
     //// 4. Enqueue streams with gaps if there is capacity (not overloading, to avoid redundant work)
@@ -366,15 +401,19 @@ module EventStoreSource =
                 startMode, spec.groupName, startPos.CommitPosition, EventStoreSource.chunk startPos,
                 float startPos.CommitPosition/float max.CommitPosition, spec.tailInterval.TotalSeconds, checkpointFreq.TotalMinutes)
             return startPos }
-        let readers = TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.streamReaders + 1)
-        readers.AddTail(startPos, max, spec.tailInterval)
         let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
         let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
-        let postStreamSpan : StreamSpan -> unit = fun _ -> failwith "TODO" // coordinator.Submit
         let postBatch (pos : EventStore.ClientAPI.Position) xs =
             let cp = pos.CommitPosition
             trancheEngine.Submit(cp, checkpoints.Commit cp, xs)
-        do! readers.Pump(postStreamSpan, postBatch) }
+        if spec.gorge then
+            let readers = StripedReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes + 1)
+            do! readers.Pump(postBatch, startPos, max)
+        else
+            let postStreamSpan : StreamSpan -> unit = fun _ -> failwith "TODO" // coordinator.Submit // TODO StreeamReaders config
+            let readers = TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes + 1)
+            readers.AddTail(startPos, max, spec.tailInterval)
+            do! readers.Pump(postStreamSpan, postBatch) }
 #else
 module CosmosSource =
     open Microsoft.Azure.Documents
@@ -557,6 +596,7 @@ let main argv =
                 || e.EventStreamId.StartsWith("InventoryLog") // 5GB, causes lopsided partitions, unused
                 || e.EventStreamId = "ReloadBatchId" // does not start at 0
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
+                || e.EventStreamId = "SkuFileUpload-99682b9cdbba4b09881d1d87dfdc1ded"
                 || e.EventStreamId = "Inventory-FC000" // Too long
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
