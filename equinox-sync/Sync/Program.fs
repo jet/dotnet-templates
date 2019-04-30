@@ -112,7 +112,7 @@ module CmdParser =
     and Arguments(a : ParseResults<Parameters>) =
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.Verbose =             a.Contains Verbose
-        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
+        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,5000)
         member __.MaxProcessing =       a.GetResult(MaxProcessing,128)
         member __.MaxWriters =          a.GetResult(MaxWriters,512)
 #if cosmos
