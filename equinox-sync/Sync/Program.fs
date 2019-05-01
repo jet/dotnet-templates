@@ -402,7 +402,7 @@ module EventStoreSource =
         let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
         let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
         if spec.gorge then
-            let readers = StripedReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes + 1)
+            let readers = StripedReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
             let post = function
                 | EventStoreSource.ReadItem.Batch (pos, xs) ->
                     let cp = pos.CommitPosition
