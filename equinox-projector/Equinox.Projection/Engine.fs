@@ -305,7 +305,7 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
             work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
             markCompleted, items
         let tryRemove key (dict: Dictionary<_,_>) =
-            match ready.TryGetValue key with
+            match dict.TryGetValue key with
             | true, value ->
                 dict.Remove key |> ignore
                 Some value
