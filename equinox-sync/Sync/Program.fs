@@ -352,16 +352,16 @@ module EventStoreSource =
                             if eof then remainder <- None
                         finally dop.Release() |> ignore }
                     return () }
+                let currentCount = dop.CurrentCount
+                let jitter = match currentCount with 0 -> 200 | x -> r.Next(1000, 2000)
+                Log.Warning("Waiting {jitter}ms jitter to offset reader stripes, {currentCount} slots open", jitter, currentCount)
+                do! Async.Sleep jitter
                 match work.TryDequeue() with
                 | true, task ->
                     do! forkRunRelease task
                 | false, _ ->
                     match remainder with
                     | Some pos -> 
-                        let currentCount = dop.CurrentCount
-                        let jitter = match currentCount with 0 -> 200 | x -> r.Next(1000, 2000)
-                        Log.Warning("Waiting {jitter}ms jitter to offset reader stripes, {currentCount} slots open", jitter, currentCount)
-                        do! Async.Sleep jitter
                         let nextPos = EventStoreSource.posFromChunkAfter pos
                         remainder <- Some nextPos
                         let chunkNumber = EventStoreSource.chunk pos |> int
