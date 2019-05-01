@@ -351,16 +351,20 @@ module EventStoreSource =
                             if eof then remainder <- None
                         finally dop.Release() |> ignore }
                     return () }
-                match remainder with
-                | Some pos -> 
-                    let nextPos = EventStoreSource.posFromChunkAfter pos
-                    remainder <- Some nextPos
-                    let chunkNumber = EventStoreSource.chunk pos |> int
-                    do! forkRunRelease <| EventStoreSource.Work.Tranche (chunkNumber, EventStoreSource.Range(pos, Some nextPos, max), batchSize)
-                | None ->
-                    if finished then do! Async.Sleep 1000 
-                    else Log.Error("No further ingestion work to commence")
-                    finished <- true }
+                match work.TryDequeue() with
+                | true, task ->
+                    do! forkRunRelease task
+                | false, _ ->
+                    match remainder with
+                    | Some pos -> 
+                        let nextPos = EventStoreSource.posFromChunkAfter pos
+                        remainder <- Some nextPos
+                        let chunkNumber = EventStoreSource.chunk pos |> int
+                        do! forkRunRelease <| EventStoreSource.Work.Tranche (chunkNumber, EventStoreSource.Range(pos, Some nextPos, max), batchSize)
+                    | None ->
+                        if finished then do! Async.Sleep 1000 
+                        else Log.Error("No further ingestion work to commence")
+                        finished <- true }
 
     type StartMode = Starting | Resuming | Overridding
             
