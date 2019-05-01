@@ -3,10 +3,10 @@
 open Equinox.Cosmos
 //#if !eventStore
 open Equinox.Cosmos.Projection
-open Equinox.Cosmos.Projection.Ingestion
 //#else
 open Equinox.EventStore
 //#endif
+open Equinox.Cosmos.Projection.Ingestion
 open Equinox.Projection.Engine
 open Equinox.Projection.State
 //#if !eventStore
@@ -16,7 +16,6 @@ open Serilog
 open System
 //#if !eventStore
 open System.Collections.Generic
-//#else
 open System.Diagnostics
 open System.Threading
 //#endif
@@ -305,84 +304,7 @@ module CmdParser =
 
 #if !cosmos 
 module EventStoreSource =
-    type TailAndPrefixesReader(conn, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop, ?statsInterval) = 
-        let sleepIntervalMs = 100
-        let dop = new SemaphoreSlim(maxDop)
-        let work = EventStoreSource.ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
-        member __.HasCapacity = work.QueueCount < dop.CurrentCount
-        // TODO stuff
-        member __.AddStreamPrefix(stream, pos, len) = work.AddStreamPrefix(stream, pos, len)
-        member __.Pump(post, startPos, max, tailInterval) = async {
-            let! ct = Async.CancellationToken
-            work.AddTail(startPos, max, tailInterval)
-            while not ct.IsCancellationRequested do
-                work.OverallStats.DumpIfIntervalExpired()
-                let! _ = dop.Await()
-                let forkRunRelease task = async {
-                    let! _ = Async.StartChild <| async {
-                        try let! _ = work.Process(conn, tryMapEvent, post, task) in ()
-                        finally dop.Release() |> ignore }
-                    return () }
-                match work.TryDequeue() with
-                | true, task ->
-                    do! forkRunRelease task
-                | false, _ ->
-                    dop.Release() |> ignore
-                    do! Async.Sleep sleepIntervalMs } 
-
-    type StripedReader(conns : _ array, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop, ?statsInterval) = 
-        let dop = new SemaphoreSlim(maxDop)
-        let work = EventStoreSource.ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
-
-        member __.Pump(post, startPos, max) = async {
-            let! ct = Async.CancellationToken
-            let mutable remainder =
-                let nextPos = EventStoreSource.posFromChunkAfter startPos
-                let startChunk = EventStoreSource.chunk startPos |> int
-                work.AddTranche(startChunk, startPos, nextPos, max)
-                Some nextPos
-            let mutable finished = false
-            let r = new Random()
-            let mutable robin = 0
-            while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
-                work.OverallStats.DumpIfIntervalExpired()
-                let! _ = dop.Await()
-                let forkRunRelease task = async {
-                    let! _ = Async.StartChild <| async {
-                        try let connIndex = Interlocked.Increment(&robin) % conns.Length
-                            let conn = conns.[connIndex]
-                            let! eof = work.Process(conn, tryMapEvent, post, task) in ()
-                            if eof then remainder <- None
-                        finally dop.Release() |> ignore }
-                    return () }
-                let currentCount = dop.CurrentCount
-                let jitter = match currentCount with 0 -> 200 | x -> r.Next(1000, 2000)
-                Log.Warning("Waiting {jitter}ms to jitter reader stripes, {currentCount} slots open", jitter, currentCount)
-                do! Async.Sleep jitter
-                match work.TryDequeue() with
-                | true, task ->
-                    do! forkRunRelease task
-                | false, _ ->
-                    match remainder with
-                    | Some pos -> 
-                        let nextPos = EventStoreSource.posFromChunkAfter pos
-                        remainder <- Some nextPos
-                        let chunkNumber = EventStoreSource.chunk pos |> int
-                        do! forkRunRelease <| EventStoreSource.Work.Tranche (chunkNumber, EventStoreSource.Range(pos, Some nextPos, max), batchSize)
-                    | None ->
-                        if finished then do! Async.Sleep 1000 
-                        else Log.Error("No further ingestion work to commence")
-                        finished <- true }
-
     type StartMode = Starting | Resuming | Overridding
-            
-    //// 4. Enqueue streams with gaps if there is capacity (not overloading, to avoid redundant work)
-    //let mutable more = true 
-    //while more && readers.HasCapacity do
-    //    match buffer.TryGap() with
-    //    | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
-    //    | None -> more <- false
-
     let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxProcessing (cosmosContext, maxWriters) resolveCheckpointStream = async {
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let conn = connect ()
@@ -418,15 +340,15 @@ module EventStoreSource =
         let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
         if spec.gorge then
             let conns = [| yield conn; yield! Seq.init (spec.stripes-1) (ignore >> connect) |]
-            let readers = StripedReader(conns, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
+            let readers = EventStoreSource.StripedReader(conns, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
             let post = function
-                | EventStoreSource.ReadItem.ChunkBatch (chunk, pos, xs) ->
+                | EventStoreSource.ReadResult.ChunkBatch (chunk, pos, xs) ->
                     let cp = pos.CommitPosition
                     trancheEngine.Submit <| Push.ChunkBatch(chunk, cp, checkpoints.Commit cp, xs)
-                | EventStoreSource.ReadItem.EndOfChunk chunk ->
+                | EventStoreSource.ReadResult.EndOfChunk chunk ->
                     trancheEngine.Submit <| Push.EndOfChunk chunk
-                | EventStoreSource.ReadItem.Batch _
-                | EventStoreSource.ReadItem.StreamSpan _ as x ->
+                | EventStoreSource.ReadResult.Batch _
+                | EventStoreSource.ReadResult.StreamSpan _ as x ->
                     failwithf "%A not supported when gorging" x
             let startChunk = EventStoreSource.chunk startPos |> int
             let! _ = trancheEngine.Submit (Push.SetActiveChunk startChunk)
@@ -434,15 +356,15 @@ module EventStoreSource =
             do! readers.Pump(post, startPos, max)
         else
             let post = function
-                | EventStoreSource.ReadItem.Batch (pos, xs) ->
+                | EventStoreSource.ReadResult.Batch (pos, xs) ->
                     let cp = pos.CommitPosition
                     trancheEngine.Submit(cp, checkpoints.Commit cp, xs)
-                | EventStoreSource.ReadItem.StreamSpan span ->
+                | EventStoreSource.ReadResult.StreamSpan span ->
                     trancheEngine.Submit <| Push.Stream span
-                | EventStoreSource.ReadItem.ChunkBatch _
-                | EventStoreSource.ReadItem.EndOfChunk _ as x ->
+                | EventStoreSource.ReadResult.ChunkBatch _
+                | EventStoreSource.ReadResult.EndOfChunk _ as x ->
                     failwithf "%A not supported when tailing" x
-            let readers = TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes + 1)
+            let readers = EventStoreSource.TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
             log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
             do! readers.Pump(post, startPos, max, spec.tailInterval) }
 #else

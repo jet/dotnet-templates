@@ -18,8 +18,6 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Equinox.Projection.Tests", 
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Sync", "..\equinox-sync\Sync\Sync.fsproj", "{C4C70AAA-1978-4886-B3FF-EF14EBCA9DE2}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Ingest", "..\equinox-sync\Ingest\Ingest.fsproj", "{260FCBA4-C948-4D4E-92E1-B679075F6890}"
-EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Equinox.Projection.Codec", "Equinox.Projection.Codec\Equinox.Projection.Codec.fsproj", "{AA48D9FA-EBFA-4BE5-800B-0F364AF1295F}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Equinox.Cosmos.ProjectionEx", "Equinox.Projection.Cosmos\Equinox.Cosmos.ProjectionEx.fsproj", "{2071A2C9-B5C8-4143-B437-6833666D0ACA}"
@@ -50,10 +48,6 @@ Global
 		{C4C70AAA-1978-4886-B3FF-EF14EBCA9DE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C4C70AAA-1978-4886-B3FF-EF14EBCA9DE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C4C70AAA-1978-4886-B3FF-EF14EBCA9DE2}.Release|Any CPU.Build.0 = Release|Any CPU
-		{260FCBA4-C948-4D4E-92E1-B679075F6890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{260FCBA4-C948-4D4E-92E1-B679075F6890}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{260FCBA4-C948-4D4E-92E1-B679075F6890}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{260FCBA4-C948-4D4E-92E1-B679075F6890}.Release|Any CPU.Build.0 = Release|Any CPU
 		{AA48D9FA-EBFA-4BE5-800B-0F364AF1295F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{AA48D9FA-EBFA-4BE5-800B-0F364AF1295F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AA48D9FA-EBFA-4BE5-800B-0F364AF1295F}.Release|Any CPU.ActiveCfg = Release|Any CPU

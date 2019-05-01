@@ -4,17 +4,18 @@ open Equinox.Store // AwaitTaskCorrect
 open Equinox.Projection
 open Equinox.Projection.Engine
 open EventStore.ClientAPI
-open System
 open Serilog // NB Needs to shadow ILogger
+open System
+open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
-open System.Collections.Generic
 
 type EventStore.ClientAPI.RecordedEvent with
     member __.Timestamp = System.DateTimeOffset.FromUnixTimeMilliseconds(__.CreatedEpoch)
 
 let inline recPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = State.arrayBytes x.Data + State.arrayBytes x.Metadata
 let inline payloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = recPayloadBytes x.Event + x.OriginalStreamId.Length * 2
+let private mb x = float x / 1024. / 1024.
 
 let toIngestionItem (e : RecordedEvent) : Engine.StreamItem =
     let meta' = if e.Metadata <> null && e.Metadata.Length = 0 then null else e.Metadata
@@ -22,10 +23,9 @@ let toIngestionItem (e : RecordedEvent) : Engine.StreamItem =
     let event : Equinox.Codec.IEvent<_> = Equinox.Codec.Core.EventData.Create(e.EventType, data', meta', e.Timestamp) :> _
     { stream = e.EventStreamId; index = e.EventNumber; event = event}
 
-let private mb x = float x / 1024. / 1024.
-
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 
+/// Maintains ingestion stats (thread safe via lock free data structures so it can be used across multiple overlapping readers)
 type OverallStats(?statsInterval) =
     let intervalMs = let t = defaultArg statsInterval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
     let overallStart, progressStart = Stopwatch.StartNew(), Stopwatch.StartNew()
@@ -43,6 +43,7 @@ type OverallStats(?statsInterval) =
                     totalEvents, totalMb/1024., totalMb*1000./float overallStart.ElapsedMilliseconds)
             progressStart.Restart()
 
+/// Maintains stats for traversals of $all; Threadsafe [via naive locks] so can be used by multiple stripes reading concurrently
 type SliceStatsBuffer(?interval) =
     let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
     let recentCats, accStart = Dictionary<string,int*int>(), Stopwatch.StartNew()
@@ -74,6 +75,7 @@ type SliceStatsBuffer(?interval) =
                 recentCats.Clear()
                 accStart.Restart()
 
+/// Defines a tranche of a traversal of a stream (or the store as a whole)
 type Range(start, sliceEnd : Position option, ?max : Position) =
     member val Current = start with get, set
     member __.TryNext(pos: Position) =
@@ -91,6 +93,9 @@ type Range(start, sliceEnd : Position option, ?max : Position) =
             | p,m when p > m -> Double.NaN
             | p,m -> float p / float m
 
+(* Logic for computation of chunk offsets; ES writes chunks whose index starts at a multiple of 256MB
+   to be able to address an arbitrary position as a percentage, we need to consider this aspect as only a valid Position can be supplied to the read call *)
+
 // @scarvel8: event_global_position = 256 x 1024 x 1024 x chunk_number + chunk_header_size (128) + event_position_offset_in_chunk
 let chunk (pos: Position) = uint64 pos.CommitPosition >>> 28
 let posFromChunk (chunk: int) =
@@ -103,11 +108,13 @@ let posFromPercentage (pct,max : Position) =
     let rawPos = Position(float max.CommitPosition * pct / 100. |> int64, 0L)
     let chunk = int (chunk rawPos) in posFromChunk chunk // &&& 0xFFFFFFFFE0000000L // rawPos / 256L / 1024L / 1024L * 1024L * 1024L * 256L
 
+/// Read the current tail position; used to be able to compute and log progress of ingestion
 let fetchMax (conn : IEventStoreConnection) = async {
     let! lastItemBatch = conn.ReadAllEventsBackwardAsync(Position.End, 1, resolveLinkTos = false) |> Async.AwaitTaskCorrect
     let max = lastItemBatch.FromPosition
     Log.Information("EventStore Tail Position: @ {pos} ({chunks} chunks, ~{gb:n1}GB)", max.CommitPosition, chunk max, mb max.CommitPosition/1024.)
     return max }
+/// `fetchMax` wrapped in a retry loop; Sync process is entirely reliant on establishing the max so we have a crude retry loop
 let establishMax (conn : IEventStoreConnection) = async {
     let mutable max = None
     while Option.isNone max do
@@ -117,6 +124,9 @@ let establishMax (conn : IEventStoreConnection) = async {
             Log.Warning(e,"Could not establish max position")
             do! Async.Sleep 5000 
     return Option.get max }
+
+/// Walks a stream within the specified constraints; used to grab data when writing to a stream for which a prefix is missing
+/// Can throw (in which case the caller is in charge of retrying, possibly with a smaller batch size)
 let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : State.StreamSpan -> Async<unit>) =
     let rec fetchFrom pos limit = async {
         let reqLen = match limit with Some limit -> min limit batchSize | None -> batchSize
@@ -133,6 +143,8 @@ let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int
         | Some limit -> return! fetchFrom currentSlice.NextEventNumber (Some (limit - events.Length)) }
     fetchFrom pos limit
 
+/// Walks the $all stream, yielding batches together with the associated Position info for the purposes of checkpointing
+/// Can throw (in which case the caller is in charge of retrying, possibly with a smaller batch size)
 type [<NoComparison>] PullResult = Exn of exn: exn | Eof | EndOfTranche
 let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn : IEventStoreConnection, batchSize)
         (range:Range, once) (tryMapEvent : ResolvedEvent -> Engine.StreamItem option) (postBatch : Position -> Engine.StreamItem[] -> Async<int*int>) =
@@ -159,39 +171,53 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
             return if eof then Eof else EndOfTranche
         with e -> return Exn e }
 
-type [<NoComparison>] Work =
-    | Stream of name: string * batchSize: int
-    | StreamPrefix of name: string * pos: int64 * len: int * batchSize: int
-    | Tranche of chunk: int * range: Range * batchSize : int
+/// Specification for work to be performed by a reader thread
+[<NoComparison>]
+type ReadRequest =
+    /// Tail from a given start position, at intervals of the specified timespan (no waiting if catching up)
     | Tail of pos: Position * max : Position * interval: TimeSpan * batchSize : int
+    /// Read a given segment of a stream (used when a stream needs to be rolled forward to lay down an event for which the preceding events are missing)
+    | StreamPrefix of name: string * pos: int64 * len: int * batchSize: int
+    /// Read the entirity of a stream in blocks of the specified batchSize (TODO wire to commandline request)
+    | Stream of name: string * batchSize: int
+    /// Read a specific chunk (min-max range), posting batches tagged with that chunk number
+    | Chunk of chunk: int * range: Range * batchSize : int
 
+/// Data with context resulting from a reader thread
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type ReadItem =
-    | Batch of pos: Position * items: StreamItem seq
+type ReadResult =
+    /// A batch read from a Chunk
     | ChunkBatch of chunk: int * pos: Position * items: StreamItem seq
+    /// Ingestion buffer requires an explicit end of chunk message before next chunk can commence processing
     | EndOfChunk of chunk: int
+    /// A Batch read from a Stream or StreamPrefix
     | StreamSpan of span: State.StreamSpan
+    /// A batch read by `Tail`
+    | Batch of pos: Position * items: StreamItem seq
 
-type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
+/// Holds work queue, together with stats relating to the amount and/or categories of data being traversed
+/// Processing is driven by external callers running multiple concurrent invocations of `Process`
+type private ReadQueue(batchSize, minBatchSize, ?statsInterval) =
     let work = System.Collections.Concurrent.ConcurrentQueue()
     member val OverallStats = OverallStats(?statsInterval=statsInterval)
     member val SlicesStats = SliceStatsBuffer()
     member __.QueueCount = work.Count
     member __.AddStream(name, ?batchSizeOverride) =
-        work.Enqueue <| Work.Stream (name, defaultArg batchSizeOverride batchSize)
+        work.Enqueue <| ReadRequest.Stream (name, defaultArg batchSizeOverride batchSize)
     member __.AddStreamPrefix(name, pos, len, ?batchSizeOverride) =
-        work.Enqueue <| Work.StreamPrefix (name, pos, len, defaultArg batchSizeOverride batchSize)
-    member __.AddTranche(chunk, range, ?batchSizeOverride) =
-        work.Enqueue <| Work.Tranche (chunk, range, defaultArg batchSizeOverride batchSize)
+        work.Enqueue <| ReadRequest.StreamPrefix (name, pos, len, defaultArg batchSizeOverride batchSize)
+    member private __.AddTranche(chunk, range, ?batchSizeOverride) =
+        work.Enqueue <| ReadRequest.Chunk (chunk, range, defaultArg batchSizeOverride batchSize)
     member __.AddTranche(chunk, pos, nextPos, max, ?batchSizeOverride) =
         __.AddTranche(chunk, Range (pos, Some nextPos, max), ?batchSizeOverride=batchSizeOverride)
     member __.AddTail(pos, max, interval, ?batchSizeOverride) =
-        work.Enqueue <| Work.Tail (pos, max, interval, defaultArg batchSizeOverride batchSize)
+        work.Enqueue <| ReadRequest.Tail (pos, max, interval, defaultArg batchSizeOverride batchSize)
     member __.TryDequeue () =
         work.TryDequeue()
-    member __.Process(conn, tryMapEvent, post : ReadItem -> Async<int*int>, work) = async {
+    /// Invoked by Dispatcher to process a tranche of work; can have parallel invocations
+    member __.Process(conn, tryMapEvent, post : ReadResult -> Async<int*int>, work) = async {
         let adjust batchSize = if batchSize > minBatchSize then batchSize - 128 else batchSize
-        let postSpan = ReadItem.StreamSpan >> post >> Async.Ignore
+        let postSpan = ReadResult.StreamSpan >> post >> Async.Ignore
         match work with
         | StreamPrefix (name,pos,len,batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
@@ -213,21 +239,21 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                 Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
                 __.AddStream(name, bs)
             return false
-        | Tranche (chunk, range, batchSize) ->
+        | Chunk (chunk, range, batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche", chunk)
             Log.Warning("Commencing tranche, batch size {bs}", batchSize)
-            let postBatch pos items = post (ReadItem.ChunkBatch (chunk, pos, items))
+            let postBatch pos items = post (ReadResult.ChunkBatch (chunk, pos, items))
             let! t, res = pullAll (__.SlicesStats, __.OverallStats) (conn, batchSize) (range, false) tryMapEvent postBatch |> Stopwatch.Time
             match res with
             | PullResult.EndOfTranche ->
                 Log.Warning("completed tranche in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 __.OverallStats.DumpIfIntervalExpired()
-                let! _ = post (ReadItem.EndOfChunk chunk)
+                let! _ = post (ReadResult.EndOfChunk chunk)
                 return false
             | PullResult.Eof ->
                 Log.Warning("completed tranche AND REACHED THE END in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 __.OverallStats.DumpIfIntervalExpired(true)
-                let! _ = post (ReadItem.EndOfChunk chunk)
+                let! _ = post (ReadResult.EndOfChunk chunk)
                 return true
             | PullResult.Exn e ->
                 let bs = adjust batchSize
@@ -248,7 +274,7 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
             let slicesStats, stats = SliceStatsBuffer(), OverallStats()
             use _ = Serilog.Context.LogContext.PushProperty("Tranche", "Tail")
             let progressSw = Stopwatch.StartNew()
-            let postBatch pos items = post (ReadItem.Batch (pos, items))
+            let postBatch pos items = post (ReadResult.Batch (pos, items))
             while true do
                 let currentPos = range.Current
                 if progressSw.ElapsedMilliseconds > progressIntervalMs then
@@ -265,3 +291,81 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                     Log.Warning(e, "Tail $all failed, adjusting batch size to {bs}", batchSize)
                 stats.DumpIfIntervalExpired()
             return true } 
+
+/// Handles Tailing mode - a single reader thread together with a (limited) set of concurrent of stream-catchup readers
+type TailAndPrefixesReader(conn, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxCatchupReaders, ?statsInterval) = 
+    // to avoid busy waiting in main message pummp loop
+    let sleepIntervalMs = 100
+    let dop = new SemaphoreSlim(1 + maxCatchupReaders)
+    let work = ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
+    member __.HasCapacity = work.QueueCount < dop.CurrentCount
+    // TODO reinstate usage
+    member __.AddStreamPrefix(stream, pos, len) = work.AddStreamPrefix(stream, pos, len)
+
+    /// Single invcation will run until Cancelled, spawning child threads as necessary
+    member __.Pump(post, startPos, max, tailInterval) = async {
+        let! ct = Async.CancellationToken
+        work.AddTail(startPos, max, tailInterval)
+        while not ct.IsCancellationRequested do
+            work.OverallStats.DumpIfIntervalExpired()
+            let! _ = dop.Await()
+            let forkRunRelease task = async {
+                let! _ = Async.StartChild <| async {
+                    try let! _ = work.Process(conn, tryMapEvent, post, task) in ()
+                    finally dop.Release() |> ignore }
+                return () }
+            match work.TryDequeue() with
+            | true, task ->
+                do! forkRunRelease task
+            | false, _ ->
+                dop.Release() |> ignore
+                do! Async.Sleep sleepIntervalMs } 
+
+/// Handles bulk ingestion - a specified number of concurrent reader threads round-robin over a supplied set of connections, taking the next available 256MB
+/// chunk from the tail upon completion of the specified `Range` delimiting the chunk
+type StripedReader(conns : _ array, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop, ?statsInterval) = 
+    let dop = new SemaphoreSlim(maxDop)
+    let work = ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
+
+    /// Single invocation; spawns child threads within defined limits; exits when End of Store has been reached
+    member __.Pump(post, startPos, max) = async {
+        let! ct = Async.CancellationToken
+        let mutable remainder =
+            let nextPos = posFromChunkAfter startPos
+            let startChunk = chunk startPos |> int
+            work.AddTranche(startChunk, startPos, nextPos, max)
+            Some nextPos
+        let mutable finished = false
+        let r = new Random()
+        let mutable robin = 0
+        while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
+            work.OverallStats.DumpIfIntervalExpired()
+            let! _ = dop.Await()
+            let forkRunRelease task = async {
+                let! _ = Async.StartChild <| async {
+                    try let connIndex = Interlocked.Increment(&robin) % conns.Length
+                        let conn = conns.[connIndex]
+                        let! eof = work.Process(conn, tryMapEvent, post, task) in ()
+                        if eof then remainder <- None
+                    finally dop.Release() |> ignore }
+                return () }
+            let currentCount = dop.CurrentCount
+            // Jitter is most relevant when processing commences - any commencement of a chunk can trigger significant page faults on server
+            // which we want to attempt to limit the effects of
+            let jitter = match currentCount with 0 -> 200 | x -> r.Next(1000, 2000)
+            Log.Warning("Waiting {jitter}ms to jitter reader stripes, {currentCount} further reader stripes awaiting start", jitter, currentCount)
+            do! Async.Sleep jitter
+            match work.TryDequeue() with
+            | true, task ->
+                do! forkRunRelease task
+            | false, _ ->
+                match remainder with
+                | Some pos -> 
+                    let nextPos = posFromChunkAfter pos
+                    remainder <- Some nextPos
+                    let chunkNumber = chunk pos |> int
+                    do! forkRunRelease <| ReadRequest.Chunk (chunkNumber, Range(pos, Some nextPos, max), batchSize)
+                | None ->
+                    if finished then do! Async.Sleep 1000 
+                    else Log.Error("No further ingestion work to commence")
+                    finished <- true }
