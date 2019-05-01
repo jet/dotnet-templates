@@ -334,7 +334,8 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
                         match readingAhead |> tryRemove newActiveChunk with
                         | Some batchesReadToDate -> batchesReadToDate |> Seq.iter pending.Enqueue; batchesReadToDate.Count
                         | None -> 0
-                log.Information("Moving to chunk {activeChunk}, releasing {buffered} buffered items", newActiveChunk, buffered)
+                log.Information("Moving to chunk {activeChunk}, releasing {buffered} buffered items, {ready} others ready, {ahead} reading ahead, ",
+                    newActiveChunk, buffered, ready.Count, readingAhead.Count)
             | EndOfChunk chunk ->
                 match activeChunk with
                 | Some ac when ac = chunk ->
