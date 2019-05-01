@@ -5,6 +5,7 @@ open Serilog
 open System
 open System.Collections.Concurrent
 open System.Collections.Generic
+open System.Diagnostics
 open System.Threading
 
 /// Item from a reader as supplied to the projector/ingestor loop for aggregation
@@ -22,6 +23,13 @@ type ProjectionMessage<'R> =
     /// Result of processing on stream - result (with basic stats) or the `exn` encountered
     | Result of stream: string * outcome: Choice<'R,exn>
    
+let expiredMs ms =
+    let timer = Stopwatch.StartNew()
+    fun () ->
+        let due = timer.ElapsedMilliseconds > ms
+        if due then timer.Restart()
+        due
+
 /// Gathers stats pertaining to the core projection/ingestion activity
 type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
     let cycles, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
@@ -52,6 +60,29 @@ type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
     abstract DumpExtraStats : unit -> unit
     default __.DumpExtraStats () = ()
 
+/// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
+type Dispatcher<'R>(maxDop) =
+    let work = new BlockingCollection<_>(ConcurrentQueue<_>())
+    let result = Event<'R>()
+    let dop = new SemaphoreSlim(maxDop)
+    let dispatch work = async {
+        let! res = work
+        result.Trigger res
+        dop.Release() |> ignore } 
+    [<CLIEvent>] member __.Result = result.Publish
+    member __.AvailableCapacity =
+        let available = dop.CurrentCount
+        available,maxDop
+    member __.TryAdd(item,?timeout) = async {
+        let! got = dop.Await(?timeout=timeout)
+        if got then
+            work.Add(item)
+        return got }
+    member __.Pump () = async {
+        let! ct = Async.CancellationToken
+        for item in work.GetConsumingEnumerable ct do
+            Async.Start(dispatch item) }
+            
 /// Consolidates ingested events into streams; coordinates dispatching of these to projector/ingester in the order implied by the submission order
 /// a) does not itself perform any reading activities
 /// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
@@ -190,6 +221,12 @@ type TrancheStreamBuffer() =
         if waitingCats.Any then log.Information("Waiting Categories, events {readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
         if waitingCats.Any then log.Information("Waiting Streams, KB {readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
 
+let every ms f =
+    let timer = Stopwatch.StartNew()
+    fun () ->
+        if timer.ElapsedMilliseconds > ms then
+            f ()
+            timer.Restart()
 /// Manages writing of progress
 /// - Each write attempt is always of the newest token (each update is assumed to also count for all preceding ones)
 /// - retries until success or a new item is posted
