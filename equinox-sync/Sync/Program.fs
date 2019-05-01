@@ -19,8 +19,6 @@ open System.Collections.Generic
 //#else
 open System.Diagnostics
 open System.Threading
-open Equinox.Cosmos.Projection.Ingestion
-
 //#endif
 
 //#if eventStore
@@ -597,6 +595,7 @@ let main argv =
                 || e.EventStreamId = "ReloadBatchId" // does not start at 0
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
                 || e.EventStreamId = "SkuFileUpload-99682b9cdbba4b09881d1d87dfdc1ded"
+                || e.EventStreamId = "SkuFileUpload-1e0626cc418548bc8eb82808426430e2"
                 || e.EventStreamId = "Inventory-FC000" // Too long
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
