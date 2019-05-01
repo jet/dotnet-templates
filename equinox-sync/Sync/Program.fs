@@ -160,8 +160,8 @@ module CmdParser =
                 | None, None, None, _ -> StartPos.StartOrCheckpoint
             Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Collection {coll}",
                 x.ConsumerGroupName, startPos, x.ForceRestart, x.Destination.Database, x.Destination.Collection)
-            Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}] with {stripes} concurrent readers reading up to {maxPendingBatches} uncommitted batches ahead",
-                x.MinBatchSize, x.StartingBatchSize, x.Stripes, x.MaxPendingBatches)
+            Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxPendingBatches} uncommitted batches ahead",
+                x.MinBatchSize, x.StartingBatchSize, x.MaxPendingBatches)
             Log.Information("Max batches to process concurrently: {maxProcessing}",
                 x.MaxProcessing)
             {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = x.CheckpointInterval; tailInterval = x.TailInterval; forceRestart = x.ForceRestart
@@ -401,9 +401,9 @@ module EventStoreSource =
                     do! checkpoints.Override(spec.checkpointInterval, r.CommitPosition)
                     return Overridding, r, spec.checkpointInterval
             }
-            log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) tailing every {interval}s, checkpointing every {checkpointFreq}m gorge: {gorge}",
-                startMode, spec.groupName, startPos.CommitPosition, EventStoreSource.chunk startPos,
-                float startPos.CommitPosition/float max.CommitPosition, spec.tailInterval.TotalSeconds, checkpointFreq.TotalMinutes, spec.gorge)
+            log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) checkpointing every {checkpointFreq:n1}m",
+                startMode, spec.groupName, startPos.CommitPosition, EventStoreSource.chunk startPos, float startPos.CommitPosition/float max.CommitPosition,
+                checkpointFreq.TotalMinutes)
             return startPos }
         let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
         let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
@@ -420,6 +420,7 @@ module EventStoreSource =
                     failwithf "%A not supported when gorging" x
             let startChunk = EventStoreSource.chunk startPos |> int
             let! _ = trancheEngine.Submit (Push.SetActiveChunk startChunk)
+            log.Information("Gorging with {stripes} $all reader stripes covering a 256MB chunk each", spec.stripes)
             do! readers.Pump(post, startPos, max)
         else
             let post = function
@@ -431,6 +432,7 @@ module EventStoreSource =
                 | EventStoreSource.ReadItem.EndOfTranche _ as x ->
                     failwithf "%A not supported" x
             let readers = TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes + 1)
+            log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
             do! readers.Pump(post, startPos, max, spec.tailInterval) }
 #else
 module CosmosSource =
