@@ -162,7 +162,7 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
 type [<NoComparison>] Work =
     | Stream of name: string * batchSize: int
     | StreamPrefix of name: string * pos: int64 * len: int * batchSize: int
-    | Tranche of range: Range * batchSize : int
+    | Tranche of chunk: int * range: Range * batchSize : int
     | Tail of pos: Position * max : Position * interval: TimeSpan * batchSize : int
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
@@ -180,10 +180,10 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         work.Enqueue <| Work.Stream (name, defaultArg batchSizeOverride batchSize)
     member __.AddStreamPrefix(name, pos, len, ?batchSizeOverride) =
         work.Enqueue <| Work.StreamPrefix (name, pos, len, defaultArg batchSizeOverride batchSize)
-    member __.AddTranche(range, ?batchSizeOverride) =
-        work.Enqueue <| Work.Tranche (range, defaultArg batchSizeOverride batchSize)
-    member __.AddTranche(pos, nextPos, max, ?batchSizeOverride) =
-        __.AddTranche(Range (pos, Some nextPos, max), ?batchSizeOverride=batchSizeOverride)
+    member __.AddTranche(chunk, range, ?batchSizeOverride) =
+        work.Enqueue <| Work.Tranche (chunk, range, defaultArg batchSizeOverride batchSize)
+    member __.AddTranche(chunk, pos, nextPos, max, ?batchSizeOverride) =
+        __.AddTranche(chunk, Range (pos, Some nextPos, max), ?batchSizeOverride=batchSizeOverride)
     member __.AddTail(pos, max, interval, ?batchSizeOverride) =
         work.Enqueue <| Work.Tail (pos, max, interval, defaultArg batchSizeOverride batchSize)
     member __.TryDequeue () =
@@ -212,8 +212,7 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                 Log.Warning(e,"Could not read stream, retrying with batch size {bs}", bs)
                 __.AddStream(name, bs)
             return false
-        | Tranche (range, batchSize) ->
-            let chunk = chunk range.Current |> int
+        | Tranche (chunk, range, batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche", chunk)
             Log.Warning("Commencing tranche, batch size {bs}", batchSize)
             let postBatch pos items = post (ReadItem.Batch (pos, items))
@@ -233,7 +232,7 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                 let bs = adjust batchSize
                 Log.Warning(e, "Could not read All, retrying with batch size {bs}", bs)
                 __.OverallStats.DumpIfIntervalExpired()
-                __.AddTranche(range, bs) 
+                __.AddTranche(chunk, range, bs) 
                 return false
         | Tail (pos, max, interval, batchSize) ->
             let mutable count, batchSize, range = 0, batchSize, Range(pos, None, max)

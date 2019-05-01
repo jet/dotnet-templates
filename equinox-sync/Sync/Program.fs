@@ -338,7 +338,8 @@ module EventStoreSource =
             let! ct = Async.CancellationToken
             let mutable remainder =
                 let nextPos = EventStoreSource.posFromChunkAfter startPos
-                work.AddTranche(startPos, nextPos, max)
+                let startChunk = EventStoreSource.chunk startPos |> int
+                work.AddTranche(startChunk, startPos, nextPos, max)
                 Some nextPos
             let mutable finished = false
             while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
@@ -354,7 +355,8 @@ module EventStoreSource =
                 | Some pos -> 
                     let nextPos = EventStoreSource.posFromChunkAfter pos
                     remainder <- Some nextPos
-                    do! forkRunRelease <| EventStoreSource.Work.Tranche (EventStoreSource.Range(pos, Some nextPos, max), batchSize)
+                    let chunkNumber = EventStoreSource.chunk pos |> int
+                    do! forkRunRelease <| EventStoreSource.Work.Tranche (chunkNumber, EventStoreSource.Range(pos, Some nextPos, max), batchSize)
                 | None ->
                     if finished then do! Async.Sleep 1000 
                     else Log.Error("No further ingestion work to commence")
