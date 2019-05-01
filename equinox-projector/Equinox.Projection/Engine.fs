@@ -287,7 +287,7 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
     let write = new Sem(maxSubmissions)
     let streams = TrancheStreamBuffer()
     let pending = Queue<_>()
-    let readAhead = ResizeArray<_>()
+    let readingAhead, ready = Dictionary<int,ResizeArray<_>>(), Dictionary<int,ResizeArray<_>>()
     let mutable validatedPos = None
     let progressWriter = ProgressWriter<_>()
     let stats = TrancheStats(log, maxQueued, statsInterval)
@@ -304,23 +304,50 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
                 validatedPos <- Some (epoch,checkpoint)
             work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
             markCompleted, items
+        let tryRemove key (dict: Dictionary<_,_>) =
+            match ready.TryGetValue key with
+            | true, value ->
+                dict.Remove key |> ignore
+                Some value
+            | false, _ -> None
         let handle = function
             | Add (epoch, checkpoint, items) ->
                 let markCompleted,items = ingestItems epoch checkpoint items
                 pending.Enqueue((markCompleted,items))
             | AddStriped (chunk, epoch, checkpoint, items) ->
-                let markCompleted,items = ingestItems epoch checkpoint items
+                let batchInfo = ingestItems epoch checkpoint items
                 match activeChunk with
-                | Some c when c = chunk -> pending.Enqueue((markCompleted,items))
-                | _ -> readAhead.Add((chunk,(markCompleted,items)))
+                | Some c when c = chunk -> pending.Enqueue batchInfo
+                | _ ->
+                    match readingAhead.TryGetValue chunk with
+                    | false, _ -> readingAhead.[chunk] <- ResizeArray(Seq.singleton batchInfo)
+                    | true,current -> current.Add(batchInfo)
             | MoveToChunk newActiveChunk ->
                 activeChunk <- Some newActiveChunk
-                let isForActiveChunk (chunk,_) = activeChunk = Some chunk
-                readAhead |> Seq.where isForActiveChunk |> Seq.iter (snd >> pending.Enqueue)
-                readAhead.RemoveAll(fun (chunk,item) -> isForActiveChunk (chunk, item)) |> ignore
+                let buffered =
+                    match ready |> tryRemove newActiveChunk with
+                    | Some completedChunkBatches ->
+                        completedChunkBatches |> Seq.iter pending.Enqueue
+                        work.Enqueue <| MoveToChunk (newActiveChunk + 1)
+                        completedChunkBatches.Count
+                    | None ->
+                        match readingAhead |> tryRemove newActiveChunk with
+                        | Some batchesReadToDate -> batchesReadToDate |> Seq.iter pending.Enqueue; batchesReadToDate.Count
+                        | None -> 0
+                log.Information("Moving to chunk {activeChunk}, releasing {buffered} buffered items", newActiveChunk, buffered)
             | EndOfChunk chunk ->
-                if activeChunk = Some chunk then
-                    work.Enqueue <| MoveToChunk (chunk + 1)
+                match activeChunk with
+                | Some ac when ac = chunk ->
+                    log.Information("Completed reading active chunk {activeChunk}, moving to next", ac)
+                    work.Enqueue <| MoveToChunk (ac + 1)
+                | _ -> 
+                    match readingAhead |> tryRemove chunk with
+                    | Some batchesRead ->
+                        ready.[chunk] <- batchesRead
+                        log.Information("Completed reading {chunkNo}, marking {buffered} buffered items ready", chunk, batchesRead.Count)
+                    | None ->
+                        ready.[chunk] <- ResizeArray()
+                        log.Information("Completed reading {chunkNo}, leaving empty batch", chunk)
             // These events are for stats purposes
             | Added _ | ProgressResult _ -> ()
         use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
