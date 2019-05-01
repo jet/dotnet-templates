@@ -1,9 +1,11 @@
 ﻿module SyncTemplate.Program
 
 open Equinox.Cosmos
-//#if !eventStore
+#if cosmos
 open Equinox.Cosmos.Projection
-//##endif
+#else
+open Equinox.EventStore
+#endif
 open Equinox.Cosmos.Projection.Ingestion
 open Equinox.Projection.State
 open Serilog

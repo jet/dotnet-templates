@@ -227,6 +227,7 @@ let every ms f =
         if timer.ElapsedMilliseconds > ms then
             f ()
             timer.Restart()
+
 /// Manages writing of progress
 /// - Each write attempt is always of the newest token (each update is assumed to also count for all preceding ones)
 /// - retries until success or a new item is posted
