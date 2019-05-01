@@ -395,9 +395,9 @@ module EventStoreSource =
                     do! checkpoints.Override(spec.checkpointInterval, r.CommitPosition)
                     return Overridding, r, spec.checkpointInterval
             }
-            log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) tailing every {interval}s, checkpointing every {checkpointFreq}m",
+            log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) tailing every {interval}s, checkpointing every {checkpointFreq}m gorge: {gorge}",
                 startMode, spec.groupName, startPos.CommitPosition, EventStoreSource.chunk startPos,
-                float startPos.CommitPosition/float max.CommitPosition, spec.tailInterval.TotalSeconds, checkpointFreq.TotalMinutes)
+                float startPos.CommitPosition/float max.CommitPosition, spec.tailInterval.TotalSeconds, checkpointFreq.TotalMinutes, spec.gorge)
             return startPos }
         let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
         let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
