@@ -310,16 +310,17 @@ module EventStoreSource =
         let dop = new SemaphoreSlim(maxDop)
         let work = EventStoreSource.ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
         member __.HasCapacity = work.QueueCount < dop.CurrentCount
-        member __.AddTail(startPos, max, interval) = work.AddTail(startPos, max, interval)
+        // TODO stuff
         member __.AddStreamPrefix(stream, pos, len) = work.AddStreamPrefix(stream, pos, len)
-        member __.Pump(postItem, postBatch) = async {
+        member __.Pump(post, startPos, max, tailInterval) = async {
             let! ct = Async.CancellationToken
+            work.AddTail(startPos, max, tailInterval)
             while not ct.IsCancellationRequested do
                 work.OverallStats.DumpIfIntervalExpired()
                 let! _ = dop.Await()
                 let forkRunRelease task = async {
                     let! _ = Async.StartChild <| async {
-                        try let! _ = work.Process(conn, tryMapEvent, postItem, postBatch, task) in ()
+                        try let! _ = work.Process(conn, tryMapEvent, post, task) in ()
                         finally dop.Release() |> ignore }
                     return () }
                 match work.TryDequeue() with
@@ -333,7 +334,7 @@ module EventStoreSource =
         let dop = new SemaphoreSlim(maxDop)
         let work = EventStoreSource.ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
 
-        member __.Pump(postBatch, startPos, max) = async {
+        member __.Pump(post, startPos, max) = async {
             let! ct = Async.CancellationToken
             let mutable remainder =
                 let nextPos = EventStoreSource.posFromChunkAfter startPos
@@ -345,8 +346,7 @@ module EventStoreSource =
                 let! _ = dop.Await()
                 let forkRunRelease task = async {
                     let! _ = Async.StartChild <| async {
-                        let postItem : StreamSpan -> unit = fun _ -> failwith "NA"
-                        try let! eof = work.Process(conn, tryMapEvent, postItem, postBatch, task) in ()
+                        try let! eof = work.Process(conn, tryMapEvent, post, task) in ()
                             if eof then remainder <- None
                         finally dop.Release() |> ignore }
                     return () }
@@ -401,17 +401,31 @@ module EventStoreSource =
             return startPos }
         let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
         let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
-        let postBatch (pos : EventStore.ClientAPI.Position) xs =
-            let cp = pos.CommitPosition
-            trancheEngine.Submit(cp, checkpoints.Commit cp, xs)
         if spec.gorge then
             let readers = StripedReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes + 1)
-            do! readers.Pump(postBatch, startPos, max)
+            let post = function
+                | EventStoreSource.ReadItem.Batch (pos, xs) ->
+                    let cp = pos.CommitPosition
+                    let chunk = EventStoreSource.chunk pos
+                    trancheEngine.Submit <| Push.ChunkBatch(int chunk, cp, checkpoints.Commit cp, xs)
+                | EventStoreSource.ReadItem.EndOfTranche chunk ->
+                    trancheEngine.Submit <| Push.EndOfChunk chunk
+                | EventStoreSource.ReadItem.StreamSpan _ as x ->
+                    failwithf "%A not supported when gorging" x
+            let startChunk = EventStoreSource.chunk startPos |> int
+            let! _ = trancheEngine.Submit (Push.SetActiveChunk startChunk)
+            do! readers.Pump(post, startPos, max)
         else
-            let postStreamSpan : StreamSpan -> unit = fun _ -> failwith "TODO" // coordinator.Submit // TODO StreeamReaders config
+            let post = function
+                | EventStoreSource.ReadItem.Batch (pos, xs) ->
+                    let cp = pos.CommitPosition
+                    trancheEngine.Submit(cp, checkpoints.Commit cp, xs)
+                | EventStoreSource.ReadItem.StreamSpan span ->
+                    trancheEngine.Submit <| Push.Stream span
+                | EventStoreSource.ReadItem.EndOfTranche _ as x ->
+                    failwithf "%A not supported" x
             let readers = TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes + 1)
-            readers.AddTail(startPos, max, spec.tailInterval)
-            do! readers.Pump(postStreamSpan, postBatch) }
+            do! readers.Pump(post, startPos, max, spec.tailInterval) }
 #else
 module CosmosSource =
     open Microsoft.Azure.Documents
@@ -596,6 +610,10 @@ let main argv =
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
                 || e.EventStreamId = "SkuFileUpload-99682b9cdbba4b09881d1d87dfdc1ded"
                 || e.EventStreamId = "SkuFileUpload-1e0626cc418548bc8eb82808426430e2"
+                || e.EventStreamId = "SkuFileUpload-6b4f566d90194263a2700c0ad1bc54dd"
+                || e.EventStreamId = "SkuFileUpload-5926b2d7512c4f859540f7f20e35242b"
+                || e.EventStreamId = "SkuFileUpload-9ac536b61fed4b44853a1f5e2c127d50"
+                || e.EventStreamId = "SkuFileUpload-b501837ce7e6416db80ca0c48a4b3f7a"
                 || e.EventStreamId = "Inventory-FC000" // Too long
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some

@@ -2,6 +2,7 @@
 
 open Equinox.Store // AwaitTaskCorrect
 open Equinox.Projection
+open Equinox.Projection.Engine
 open EventStore.ClientAPI
 open System
 open Serilog // NB Needs to shadow ILogger
@@ -116,7 +117,7 @@ let establishMax (conn : IEventStoreConnection) = async {
             Log.Warning(e,"Could not establish max position")
             do! Async.Sleep 5000 
     return Option.get max }
-let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : State.StreamSpan -> unit) =
+let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : State.StreamSpan -> Async<unit>) =
     let rec fetchFrom pos limit = async {
         let reqLen = match limit with Some limit -> min limit batchSize | None -> batchSize
         let! currentSlice = conn.ReadStreamEventsForwardAsync(stream, pos, reqLen, resolveLinkTos=true) |> Async.AwaitTaskCorrect
@@ -124,7 +125,7 @@ let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int
             [| for x in currentSlice.Events ->
                 let e = x.Event
                 Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Metadata, e.Timestamp) :> Equinox.Codec.IEvent<byte[]> |]
-        postBatch { stream = stream; span = { index = currentSlice.FromEventNumber; events = events } }
+        do! postBatch { stream = stream; span = { index = currentSlice.FromEventNumber; events = events } }
         match limit with
         | None when currentSlice.IsEndOfStream -> return ()
         | None -> return! fetchFrom currentSlice.NextEventNumber None
@@ -148,9 +149,11 @@ let pullAll (slicesStats : SliceStatsBuffer, overallStats : OverallStats) (conn 
         Log.Information("Read {pos,10} {pct:p1} {ft:n3}s {mb:n1}MB {count,4} {categories,4}c {streams,4}s {events,4}e Post {pt:n3}s {cur}/{max}",
             range.Current.CommitPosition, range.PositionAsRangePercentage, (let e = sw.Elapsed in e.TotalSeconds), mb batchBytes,
             batchEvents, usedCats, usedStreams, batches.Length, (let e = postSw.Elapsed in e.TotalSeconds), cur, max)
-        if not (range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream) then return currentSlice.IsEndOfStream else
-        sw.Restart() // restart the clock as we hand off back to the Reader
-        return! aux () }
+        if not (range.TryNext currentSlice.NextPosition && not once && not currentSlice.IsEndOfStream) then
+            return currentSlice.IsEndOfStream
+        else
+            sw.Restart() // restart the clock as we hand off back to the Reader
+            return! aux () }
     async {
         try let! eof = aux ()
             return if eof then Eof else EndOfTranche
@@ -161,6 +164,12 @@ type [<NoComparison>] Work =
     | StreamPrefix of name: string * pos: int64 * len: int * batchSize: int
     | Tranche of range: Range * batchSize : int
     | Tail of pos: Position * max : Position * interval: TimeSpan * batchSize : int
+
+[<NoComparison; NoEquality; RequireQualifiedAccess>]
+type ReadItem =
+    | Batch of pos: Position * items: StreamItem seq
+    | EndOfTranche of chunk: int
+    | StreamSpan of span: State.StreamSpan
 
 type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
     let work = System.Collections.Concurrent.ConcurrentQueue()
@@ -179,13 +188,14 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         work.Enqueue <| Work.Tail (pos, max, interval, defaultArg batchSizeOverride batchSize)
     member __.TryDequeue () =
         work.TryDequeue()
-    member __.Process(conn, tryMapEvent, postItem, postBatch, work) = async {
+    member __.Process(conn, tryMapEvent, post : ReadItem -> Async<int*int>, work) = async {
         let adjust batchSize = if batchSize > minBatchSize then batchSize - 128 else batchSize
+        let postSpan = ReadItem.StreamSpan >> post >> Async.Ignore
         match work with
         | StreamPrefix (name,pos,len,batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
             Log.Warning("Reading stream prefix; pos {pos} len {len} batch size {bs}", pos, len, batchSize)
-            try let! t,() = pullStream (conn, batchSize) (name, pos, Some len) postItem |> Stopwatch.Time
+            try let! t,() = pullStream (conn, batchSize) (name, pos, Some len) postSpan |> Stopwatch.Time
                 Log.Information("completed stream prefix in {ms:n3}s", let e = t.Elapsed in e.TotalSeconds)
             with e ->
                 let bs = adjust batchSize
@@ -195,7 +205,7 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         | Stream (name,batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche",name)
             Log.Warning("Reading stream; batch size {bs}", batchSize)
-            try let! t,() = pullStream (conn, batchSize) (name,0L,None) postItem |> Stopwatch.Time
+            try let! t,() = pullStream (conn, batchSize) (name,0L,None) postSpan |> Stopwatch.Time
                 Log.Information("completed stream in {ms:n3}s", let e = t.Elapsed in e.TotalSeconds)
             with e ->
                 let bs = adjust batchSize
@@ -203,17 +213,21 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                 __.AddStream(name, bs)
             return false
         | Tranche (range, batchSize) ->
-            use _ = Serilog.Context.LogContext.PushProperty("Tranche",chunk range.Current)
+            let chunk = chunk range.Current |> int
+            use _ = Serilog.Context.LogContext.PushProperty("Tranche", chunk)
             Log.Warning("Commencing tranche, batch size {bs}", batchSize)
+            let postBatch pos items = post (ReadItem.Batch (pos, items))
             let! t, res = pullAll (__.SlicesStats, __.OverallStats) (conn, batchSize) (range, false) tryMapEvent postBatch |> Stopwatch.Time
             match res with
             | PullResult.EndOfTranche ->
                 Log.Warning("completed tranche in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 __.OverallStats.DumpIfIntervalExpired()
+                let! _ = post (ReadItem.EndOfTranche chunk)
                 return false
             | PullResult.Eof ->
                 Log.Warning("completed tranche AND REACHED THE END in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 __.OverallStats.DumpIfIntervalExpired(true)
+                let! _ = post (ReadItem.EndOfTranche chunk)
                 return true
             | PullResult.Exn e ->
                 let bs = adjust batchSize
@@ -234,6 +248,7 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
             let slicesStats, stats = SliceStatsBuffer(), OverallStats()
             use _ = Serilog.Context.LogContext.PushProperty("Tranche", "Tail")
             let progressSw = Stopwatch.StartNew()
+            let postBatch pos items = post (ReadItem.Batch (pos, items))
             while true do
                 let currentPos = range.Current
                 if progressSw.ElapsedMilliseconds > progressIntervalMs then
@@ -241,7 +256,7 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                         count, currentPos.CommitPosition, chunk currentPos)
                     progressSw.Restart()
                 count <- count + 1
-                let! res = pullAll (slicesStats,stats) (conn,batchSize) (range,true) tryMapEvent postBatch 
+                let! res = pullAll (slicesStats,stats) (conn,batchSize) (range,true) tryMapEvent postBatch
                 do! awaitInterval
                 match res with
                 | PullResult.EndOfTranche | PullResult.Eof -> ()

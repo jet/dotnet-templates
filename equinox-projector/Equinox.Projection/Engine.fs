@@ -217,6 +217,9 @@ type ProgressWriter<'Res when 'Res: equality>() =
 [<NoComparison; NoEquality>]
 type SeriesMessage =
     | Add of epoch: int64 * markCompleted: Async<unit> * items: StreamItem seq
+    | MoveToChunk of chunk: int
+    | AddStriped of chunk: int * epoch: int64 * markCompleted: Async<unit> * items: StreamItem seq
+    | EndOfChunk of chunk: int
     | Added of streams: int * events: int
     /// Result from updating of Progress to backing store - processed up to nominated `epoch` or threw `exn`
     | ProgressResult of Choice<int64,exn>
@@ -246,7 +249,8 @@ type TrancheStats(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
             log.Information("Uncommitted {pendingBatches}/{maxPendingBatches} @ {validated} (committed: {committed})",
                     pendingBatchCount, maxPendingBatches, Option.toNullable validatedEpoch, Option.toNullable comittedEpoch)
     member __.Handle : SeriesMessage -> unit = function
-        | Add _ -> () // Enqueuing of an event is not interesting - we assume it'll get processed and mapped to an `Added` in the same cycle
+        | Add _ | AddStriped _ | EndOfChunk _ | MoveToChunk _ ->
+            () // Enqueuing of an event is not interesting - we assume it'll get processed and mapped to an `Added` in the same cycle
         | ProgressResult (Choice1Of2 epoch) ->
             incr progCommits
             comittedEpoch <- Some epoch
@@ -267,6 +271,14 @@ type TrancheStats(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
             dumpStats (available,maxDop)
             streams.Dump log
 
+[<NoComparison; NoEquality; RequireQualifiedAccess>]
+type Push =
+    | Batch of epoch: int64 * markCompleted: Async<unit> * items: StreamItem seq
+    | Stream of span: StreamSpan
+    | SetActiveChunk of chunk: int
+    | ChunkBatch of chunk: int * epoch: int64 * markCompleted: Async<unit> * items: StreamItem seq
+    | EndOfChunk of chunk: int
+
 /// Holds batches away from Core processing to limit in-flight processsing
 type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued, maxSubmissions, statsInterval : TimeSpan, ?pumpDelayMs) =
     let cts = new CancellationTokenSource()
@@ -275,22 +287,41 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
     let write = new Sem(maxSubmissions)
     let streams = TrancheStreamBuffer()
     let pending = Queue<_>()
+    let readAhead = ResizeArray<_>()
     let mutable validatedPos = None
     let progressWriter = ProgressWriter<_>()
     let stats = TrancheStats(log, maxQueued, statsInterval)
     let pumpDelayMs = defaultArg pumpDelayMs 5
 
     member private __.Pump() = async {
+        let mutable activeChunk = None
+        let ingestItems epoch checkpoint items =
+            let items = Array.ofSeq items
+            streams.Merge items
+            let markCompleted () =
+                write.Release()
+                read.Release()
+                validatedPos <- Some (epoch,checkpoint)
+            work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
+            markCompleted, items
         let handle = function
             | Add (epoch, checkpoint, items) ->
-                let items = Array.ofSeq items
-                streams.Merge items
-                let markCompleted () =
-                    write.Release()
-                    read.Release()
-                    validatedPos <- Some (epoch,checkpoint)
-                work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
+                let markCompleted,items = ingestItems epoch checkpoint items
                 pending.Enqueue((markCompleted,items))
+            | AddStriped (chunk, epoch, checkpoint, items) ->
+                let markCompleted,items = ingestItems epoch checkpoint items
+                match activeChunk with
+                | Some c when c = chunk -> pending.Enqueue((markCompleted,items))
+                | _ -> readAhead.Add((chunk,(markCompleted,items)))
+            | MoveToChunk newActiveChunk ->
+                activeChunk <- Some newActiveChunk
+                let isForActiveChunk (chunk,_) = activeChunk = Some chunk
+                readAhead |> Seq.where isForActiveChunk |> Seq.iter (snd >> pending.Enqueue)
+                readAhead.RemoveAll(fun (chunk,item) -> isForActiveChunk (chunk, item)) |> ignore
+            | EndOfChunk chunk ->
+                if activeChunk = Some chunk then
+                    work.Enqueue <| MoveToChunk (chunk + 1)
+            // These events are for stats purposes
             | Added _ | ProgressResult _ -> ()
         use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
         Async.Start(progressWriter.Pump(), cts.Token)
@@ -319,9 +350,17 @@ type TrancheEngine<'R>(log : ILogger, ingester: ProjectionEngine<'R>, maxQueued,
             do! Async.Sleep pumpDelayMs }
 
     /// Awaits space in `read` to limit reading ahead - yields present state of Read and Write phases
-    member __.Submit(epoch, markBatchCompleted, events) = async {
+    member __.Submit(epoch, markBatchCompleted, events) = __.Submit <| Push.Batch (epoch, markBatchCompleted, events)
+
+    /// Awaits space in `read` to limit reading ahead - yields present state of Read and Write phases
+    member __.Submit(content) = async {
         do! read.Await()
-        work.Enqueue <| Add (epoch, markBatchCompleted, events)
+        match content with
+        | Push.Batch (epoch, markBatchCompleted, events) -> work.Enqueue <| Add (epoch, markBatchCompleted, events)
+        | Push.Stream _items -> failwith "TODO"
+        | Push.ChunkBatch (chunk, epoch, markBatchCompleted, events) -> work.Enqueue <| AddStriped (chunk, epoch, markBatchCompleted, events)
+        | Push.SetActiveChunk chunk -> work.Enqueue <| MoveToChunk chunk
+        | Push.EndOfChunk chunk -> work.Enqueue <| EndOfChunk chunk
         return read.State }
 
     static member Start<'R>(log, ingester, maxRead, maxWrite, statsInterval) =
