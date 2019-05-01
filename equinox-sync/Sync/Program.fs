@@ -358,11 +358,10 @@ module EventStoreSource =
                 | false, _ ->
                     match remainder with
                     | Some pos -> 
-                        // Start the readers interleaved
-                        if dop.CurrentCount <> 0 then
-                            let jitter = r.Next(1000, 2000)
-                            Log.Warning("Waiting {jitter}ms jitter to offset reader stripes", jitter)
-                            do! Async.Sleep jitter 
+                        let currentCount = dop.CurrentCount
+                        let jitter = match currentCount with 0 -> 200 | x -> r.Next(1000, 2000)
+                        Log.Warning("Waiting {jitter}ms jitter to offset reader stripes, {currentCount} slots open", jitter, currentCount)
+                        do! Async.Sleep jitter
                         let nextPos = EventStoreSource.posFromChunkAfter pos
                         remainder <- Some nextPos
                         let chunkNumber = EventStoreSource.chunk pos |> int
