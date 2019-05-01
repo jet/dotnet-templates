@@ -359,7 +359,7 @@ module EventStoreSource =
                     match remainder with
                     | Some pos -> 
                         // Start the readers interleaved
-                        if dop.CurrentCount > 1 then
+                        if dop.CurrentCount <> 0 then
                             let jitter = r.Next(1000, 2000)
                             Log.Warning("Waiting {jitter}ms jitter to offset reader stripes", jitter)
                             do! Async.Sleep jitter 
