@@ -634,6 +634,7 @@ let main argv =
                 || e.EventStreamId = "SkuFileUpload-9ac536b61fed4b44853a1f5e2c127d50"
                 || e.EventStreamId = "SkuFileUpload-b501837ce7e6416db80ca0c48a4b3f7a"
                 || e.EventStreamId.StartsWith "Inventory-" // Too long
+                || e.EventStreamId.StartsWith "InventoryCount-" // No Longer used
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
         EventStoreSource.run log (connect, spec, tryMapEvent catFilter) args.MaxPendingBatches args.MaxProcessing (target, args.MaxWriters) resolveCheckpointStream
