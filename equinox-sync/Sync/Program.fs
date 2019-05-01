@@ -330,7 +330,7 @@ module EventStoreSource =
                     dop.Release() |> ignore
                     do! Async.Sleep sleepIntervalMs } 
 
-    type StripedReader(conn, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop, ?statsInterval) = 
+    type StripedReader(conns : _ array, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop, ?statsInterval) = 
         let dop = new SemaphoreSlim(maxDop)
         let work = EventStoreSource.ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
 
@@ -343,18 +343,21 @@ module EventStoreSource =
                 Some nextPos
             let mutable finished = false
             let r = new Random()
+            let mutable robin = 0
             while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
                 work.OverallStats.DumpIfIntervalExpired()
                 let! _ = dop.Await()
                 let forkRunRelease task = async {
                     let! _ = Async.StartChild <| async {
-                        try let! eof = work.Process(conn, tryMapEvent, post, task) in ()
+                        try let connIndex = Interlocked.Increment(&robin) % conns.Length
+                            let conn = conns.[connIndex]
+                            let! eof = work.Process(conn, tryMapEvent, post, task) in ()
                             if eof then remainder <- None
                         finally dop.Release() |> ignore }
                     return () }
                 let currentCount = dop.CurrentCount
                 let jitter = match currentCount with 0 -> 200 | x -> r.Next(1000, 2000)
-                Log.Warning("Waiting {jitter}ms jitter to offset reader stripes, {currentCount} slots open", jitter, currentCount)
+                Log.Warning("Waiting {jitter}ms to jitter reader stripes, {currentCount} slots open", jitter, currentCount)
                 do! Async.Sleep jitter
                 match work.TryDequeue() with
                 | true, task ->
@@ -380,9 +383,10 @@ module EventStoreSource =
     //    | Some (stream,pos,len) -> readers.AddStreamPrefix(stream,pos,len)
     //    | None -> more <- false
 
-    let run (log : Serilog.ILogger) (conn, spec, tryMapEvent) maxReadAhead maxProcessing (cosmosContext, maxWriters) resolveCheckpointStream = async {
+    let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxProcessing (cosmosContext, maxWriters) resolveCheckpointStream = async {
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
-        let! maxInParallel = Async.StartChild <| EventStoreSource.establishMax conn 
+        let conn = connect ()
+        let! maxInParallel = Async.StartChild <| EventStoreSource.establishMax conn
         let! initialCheckpointState = checkpoints.Read
         let! max = maxInParallel
         let! startPos = async {
@@ -413,7 +417,8 @@ module EventStoreSource =
         let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
         let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
         if spec.gorge then
-            let readers = StripedReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
+            let conns = [| yield conn; yield! Seq.init (spec.stripes-1) (ignore >> connect) |]
+            let readers = StripedReader(conns, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
             let post = function
                 | EventStoreSource.ReadItem.ChunkBatch (chunk, pos, xs) ->
                     let cp = pos.CommitPosition
@@ -608,7 +613,7 @@ let main argv =
             (leaseId, startFromHere, batchSize, lagFrequency)
             createSyncHandler
 #else
-        let esConnection = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave)
+        let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 
         let catFilter = args.Source.CategoryFilterFunction
         let spec = args.BuildFeedParams()
         let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
@@ -631,7 +636,7 @@ let main argv =
                 || e.EventStreamId = "Inventory-FC000" // Too long
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
-        EventStoreSource.run log (esConnection.ReadConnection, spec, tryMapEvent catFilter) args.MaxPendingBatches args.MaxProcessing (target, args.MaxWriters) resolveCheckpointStream
+        EventStoreSource.run log (connect, spec, tryMapEvent catFilter) args.MaxPendingBatches args.MaxProcessing (target, args.MaxWriters) resolveCheckpointStream
 #endif
         |> Async.RunSynchronously
         0 
