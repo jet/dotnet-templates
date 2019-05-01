@@ -20,28 +20,6 @@ open System.Diagnostics
 open System.Threading
 //#endif
 
-//#if eventStore
-type StartPos = Absolute of int64 | Chunk of int | Percentage of float | TailOrCheckpoint | StartOrCheckpoint
-
-type ReaderSpec =
-    {   /// Identifier for this projection and it's state
-        groupName: string
-        /// Indicates user has specified that they wish to restart from the indicated position as opposed to resuming from the checkpoint position
-        forceRestart: bool
-        /// Start position from which forward reading is to commence // Assuming no stored position
-        start: StartPos
-        checkpointInterval: TimeSpan
-        /// Delay when reading yields an empty batch
-        tailInterval: TimeSpan
-        gorge: bool
-        /// Maximum number of striped readers to permit
-        stripes: int
-        /// Initial batch size to use when commencing reading
-        batchSize: int
-        /// Smallest batch size to degrade to in the presence of failures
-        minBatchSize: int }
-//#endif
-
 module CmdParser =
     open Argu
 
@@ -149,14 +127,14 @@ module CmdParser =
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             disco, db, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
 #else
-        member x.BuildFeedParams() : ReaderSpec =
+        member x.BuildFeedParams() : EventStoreSource.ReaderSpec =
             let startPos =
                 match a.TryGetResult Position, a.TryGetResult Chunk, a.TryGetResult Percent, a.Contains FromTail with
-                | Some p, _, _, _ ->   Absolute p
-                | _, Some c, _, _ ->   StartPos.Chunk c
-                | _, _, Some p, _ ->   Percentage p 
-                | None, None, None, true -> StartPos.TailOrCheckpoint
-                | None, None, None, _ -> StartPos.StartOrCheckpoint
+                | Some p, _, _, _ ->   EventStoreSource.Absolute p
+                | _, Some c, _, _ ->   EventStoreSource.StartPos.Chunk c
+                | _, _, Some p, _ ->   EventStoreSource.Percentage p 
+                | None, None, None, true -> EventStoreSource.StartPos.TailOrCheckpoint
+                | None, None, None, _ -> EventStoreSource.StartPos.StartOrCheckpoint
             Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Collection {coll}",
                 x.ConsumerGroupName, startPos, x.ForceRestart, x.Destination.Database, x.Destination.Collection)
             Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxPendingBatches} uncommitted batches ahead",
@@ -302,72 +280,7 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-#if !cosmos 
-module EventStoreSource =
-    type StartMode = Starting | Resuming | Overridding
-    let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxProcessing (cosmosContext, maxWriters) resolveCheckpointStream = async {
-        let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
-        let conn = connect ()
-        let! maxInParallel = Async.StartChild <| EventStoreSource.establishMax conn
-        let! initialCheckpointState = checkpoints.Read
-        let! max = maxInParallel
-        let! startPos = async {
-            let mkPos x = EventStore.ClientAPI.Position(x, 0L)
-            let requestedStartPos =
-                match spec.start with
-                | Absolute p -> mkPos p
-                | Chunk c -> EventStoreSource.posFromChunk c
-                | Percentage pct -> EventStoreSource.posFromPercentage (pct, max)
-                | TailOrCheckpoint -> max
-                | StartOrCheckpoint -> EventStore.ClientAPI.Position.Start
-            let! startMode, startPos, checkpointFreq = async {
-                match initialCheckpointState, requestedStartPos with
-                | Checkpoint.Folds.NotStarted, r ->
-                    if spec.forceRestart then raise <| CmdParser.InvalidArguments ("Cannot specify --forceRestart when no progress yet committed")
-                    do! checkpoints.Start(spec.checkpointInterval, r.CommitPosition)
-                    return Starting, r, spec.checkpointInterval
-                | Checkpoint.Folds.Running s, _ when not spec.forceRestart ->
-                    return Resuming, mkPos s.state.pos, TimeSpan.FromSeconds(float s.config.checkpointFreqS)
-                | Checkpoint.Folds.Running _, r ->
-                    do! checkpoints.Override(spec.checkpointInterval, r.CommitPosition)
-                    return Overridding, r, spec.checkpointInterval
-            }
-            log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) checkpointing every {checkpointFreq:n1}m",
-                startMode, spec.groupName, startPos.CommitPosition, EventStoreSource.chunk startPos, float startPos.CommitPosition/float max.CommitPosition,
-                checkpointFreq.TotalMinutes)
-            return startPos }
-        let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
-        let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
-        if spec.gorge then
-            let conns = [| yield conn; yield! Seq.init (spec.stripes-1) (ignore >> connect) |]
-            let readers = EventStoreSource.StripedReader(conns, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
-            let post = function
-                | EventStoreSource.ReadResult.ChunkBatch (chunk, pos, xs) ->
-                    let cp = pos.CommitPosition
-                    trancheEngine.Submit <| Push.ChunkBatch(chunk, cp, checkpoints.Commit cp, xs)
-                | EventStoreSource.ReadResult.EndOfChunk chunk ->
-                    trancheEngine.Submit <| Push.EndOfChunk chunk
-                | EventStoreSource.ReadResult.Batch _
-                | EventStoreSource.ReadResult.StreamSpan _ as x ->
-                    failwithf "%A not supported when gorging" x
-            let startChunk = EventStoreSource.chunk startPos |> int
-            let! _ = trancheEngine.Submit (Push.SetActiveChunk startChunk)
-            log.Information("Gorging with {stripes} $all reader stripes covering a 256MB chunk each", spec.stripes)
-            do! readers.Pump(post, startPos, max)
-        else
-            let post = function
-                | EventStoreSource.ReadResult.Batch (pos, xs) ->
-                    let cp = pos.CommitPosition
-                    trancheEngine.Submit(cp, checkpoints.Commit cp, xs)
-                | EventStoreSource.ReadResult.StreamSpan span ->
-                    trancheEngine.Submit <| Push.Stream span
-                | EventStoreSource.ReadResult.ChunkBatch _
-                | EventStoreSource.ReadResult.EndOfChunk _ as x ->
-                    failwithf "%A not supported when tailing" x
-            let readers = EventStoreSource.TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
-            log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
-            do! readers.Pump(post, startPos, max, spec.tailInterval) }
-#else
+#if cosmos 
 module CosmosSource =
     open Microsoft.Azure.Documents
     open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing

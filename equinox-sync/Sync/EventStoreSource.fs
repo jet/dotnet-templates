@@ -1,5 +1,6 @@
 ﻿module SyncTemplate.EventStoreSource
 
+open Equinox.Cosmos.Projection.Ingestion
 open Equinox.Store // AwaitTaskCorrect
 open Equinox.Projection
 open Equinox.Projection.Engine
@@ -197,10 +198,11 @@ type ReadResult =
 
 /// Holds work queue, together with stats relating to the amount and/or categories of data being traversed
 /// Processing is driven by external callers running multiple concurrent invocations of `Process`
-type private ReadQueue(batchSize, minBatchSize, ?statsInterval) =
+type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
     let work = System.Collections.Concurrent.ConcurrentQueue()
     member val OverallStats = OverallStats(?statsInterval=statsInterval)
     member val SlicesStats = SliceStatsBuffer()
+    member __.DefaultBatchSize = batchSize
     member __.QueueCount = work.Count
     member __.AddStream(name, ?batchSizeOverride) =
         work.Enqueue <| ReadRequest.Stream (name, defaultArg batchSizeOverride batchSize)
@@ -292,40 +294,10 @@ type private ReadQueue(batchSize, minBatchSize, ?statsInterval) =
                 stats.DumpIfIntervalExpired()
             return true } 
 
-/// Handles Tailing mode - a single reader thread together with a (limited) set of concurrent of stream-catchup readers
-type TailAndPrefixesReader(conn, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxCatchupReaders, ?statsInterval) = 
-    // to avoid busy waiting in main message pummp loop
-    let sleepIntervalMs = 100
-    let dop = new SemaphoreSlim(1 + maxCatchupReaders)
-    let work = ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
-    member __.HasCapacity = work.QueueCount < dop.CurrentCount
-    // TODO reinstate usage
-    member __.AddStreamPrefix(stream, pos, len) = work.AddStreamPrefix(stream, pos, len)
-
-    /// Single invcation will run until Cancelled, spawning child threads as necessary
-    member __.Pump(post, startPos, max, tailInterval) = async {
-        let! ct = Async.CancellationToken
-        work.AddTail(startPos, max, tailInterval)
-        while not ct.IsCancellationRequested do
-            work.OverallStats.DumpIfIntervalExpired()
-            let! _ = dop.Await()
-            let forkRunRelease task = async {
-                let! _ = Async.StartChild <| async {
-                    try let! _ = work.Process(conn, tryMapEvent, post, task) in ()
-                    finally dop.Release() |> ignore }
-                return () }
-            match work.TryDequeue() with
-            | true, task ->
-                do! forkRunRelease task
-            | false, _ ->
-                dop.Release() |> ignore
-                do! Async.Sleep sleepIntervalMs } 
-
 /// Handles bulk ingestion - a specified number of concurrent reader threads round-robin over a supplied set of connections, taking the next available 256MB
 /// chunk from the tail upon completion of the specified `Range` delimiting the chunk
-type StripedReader(conns : _ array, batchSize, minBatchSize, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop, ?statsInterval) = 
+type StripedReader(conns : _ array, work: ReadQueue, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxDop) = 
     let dop = new SemaphoreSlim(maxDop)
-    let work = ReadQueue(batchSize, minBatchSize, ?statsInterval=statsInterval)
 
     /// Single invocation; spawns child threads within defined limits; exits when End of Store has been reached
     member __.Pump(post, startPos, max) = async {
@@ -364,8 +336,123 @@ type StripedReader(conns : _ array, batchSize, minBatchSize, tryMapEvent: EventS
                     let nextPos = posFromChunkAfter pos
                     remainder <- Some nextPos
                     let chunkNumber = chunk pos |> int
-                    do! forkRunRelease <| ReadRequest.Chunk (chunkNumber, Range(pos, Some nextPos, max), batchSize)
+                    do! forkRunRelease <| ReadRequest.Chunk (chunkNumber, Range(pos, Some nextPos, max), work.DefaultBatchSize)
                 | None ->
-                    if finished then do! Async.Sleep 1000 
-                    else Log.Error("No further ingestion work to commence")
+                    Log.Warning("No further ingestion work to commence, transitioning to tailing...")
                     finished <- true }
+
+/// Handles Tailing mode - a single reader thread together with a (limited) set of concurrent of stream-catchup readers
+type TailAndPrefixesReader(conn, work: ReadQueue, tryMapEvent: EventStore.ClientAPI.ResolvedEvent -> StreamItem option, maxCatchupReaders) = 
+    // to avoid busy waiting in main message pummp loop
+    let sleepIntervalMs = 100
+    let dop = new SemaphoreSlim(1 + maxCatchupReaders)
+    member __.HasCapacity = work.QueueCount < dop.CurrentCount
+    // TODO reinstate usage
+    member __.AddStreamPrefix(stream, pos, len) = work.AddStreamPrefix(stream, pos, len)
+
+    /// Single invcation will run until Cancelled, spawning child threads as necessary
+    member __.Pump(post, startPos, max, tailInterval) = async {
+        let! ct = Async.CancellationToken
+        work.AddTail(startPos, max, tailInterval)
+        while not ct.IsCancellationRequested do
+            work.OverallStats.DumpIfIntervalExpired()
+            let! _ = dop.Await()
+            let forkRunRelease task = async {
+                let! _ = Async.StartChild <| async {
+                    try let! _ = work.Process(conn, tryMapEvent, post, task) in ()
+                    finally dop.Release() |> ignore }
+                return () }
+            match work.TryDequeue() with
+            | true, task ->
+                do! forkRunRelease task
+            | false, _ ->
+                dop.Release() |> ignore
+                do! Async.Sleep sleepIntervalMs }
+
+type StartPos = Absolute of int64 | Chunk of int | Percentage of float | TailOrCheckpoint | StartOrCheckpoint
+
+type ReaderSpec =
+    {   /// Identifier for this projection and it's state
+        groupName: string
+        /// Indicates user has specified that they wish to restart from the indicated position as opposed to resuming from the checkpoint position
+        forceRestart: bool
+        /// Start position from which forward reading is to commence // Assuming no stored position
+        start: StartPos
+        checkpointInterval: TimeSpan
+        /// Delay when reading yields an empty batch
+        tailInterval: TimeSpan
+        gorge: bool
+        /// Maximum number of striped readers to permit
+        stripes: int
+        /// Initial batch size to use when commencing reading
+        batchSize: int
+        /// Smallest batch size to degrade to in the presence of failures
+        minBatchSize: int }
+
+type StartMode = Starting | Resuming | Overridding
+
+let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxProcessing (cosmosContext, maxWriters) resolveCheckpointStream = async {
+    let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
+    let conn = connect ()
+    let! maxInParallel = Async.StartChild <| establishMax conn
+    let! initialCheckpointState = checkpoints.Read
+    let! max = maxInParallel
+    let! startPos = async {
+        let mkPos x = EventStore.ClientAPI.Position(x, 0L)
+        let requestedStartPos =
+            match spec.start with
+            | Absolute p -> mkPos p
+            | Chunk c -> posFromChunk c
+            | Percentage pct -> posFromPercentage (pct, max)
+            | TailOrCheckpoint -> max
+            | StartOrCheckpoint -> EventStore.ClientAPI.Position.Start
+        let! startMode, startPos, checkpointFreq = async {
+            match initialCheckpointState, requestedStartPos with
+            | Checkpoint.Folds.NotStarted, r ->
+                if spec.forceRestart then invalidOp "Cannot specify --forceRestart when no progress yet committed"
+                do! checkpoints.Start(spec.checkpointInterval, r.CommitPosition)
+                return Starting, r, spec.checkpointInterval
+            | Checkpoint.Folds.Running s, _ when not spec.forceRestart ->
+                return Resuming, mkPos s.state.pos, TimeSpan.FromSeconds(float s.config.checkpointFreqS)
+            | Checkpoint.Folds.Running _, r ->
+                do! checkpoints.Override(spec.checkpointInterval, r.CommitPosition)
+                return Overridding, r, spec.checkpointInterval
+        }
+        log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) checkpointing every {checkpointFreq:n1}m",
+            startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float max.CommitPosition,
+            checkpointFreq.TotalMinutes)
+        return startPos }
+    let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
+    let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
+    let queue = ReadQueue(spec.batchSize, spec.minBatchSize)
+    if spec.gorge then
+        let extraConns = Seq.init (spec.stripes-1) (ignore >> connect)
+        let conns = [| yield conn; yield! extraConns |]
+        let post = function
+            | ReadResult.ChunkBatch (chunk, pos, xs) ->
+                let cp = pos.CommitPosition
+                trancheEngine.Submit <| Push.ChunkBatch(chunk, cp, checkpoints.Commit cp, xs)
+            | ReadResult.EndOfChunk chunk ->
+                trancheEngine.Submit <| Push.EndOfChunk chunk
+            | ReadResult.Batch _
+            | ReadResult.StreamSpan _ as x ->
+                failwithf "%A not supported when gorging" x
+        let startChunk = chunk startPos |> int
+        let! _ = trancheEngine.Submit (Push.SetActiveChunk startChunk)
+        log.Information("Gorging with {stripes} $all reader stripes covering a 256MB chunk each", spec.stripes)
+        let gorgingReader = StripedReader(conns, queue, tryMapEvent, spec.stripes)
+        do! gorgingReader.Pump(post, startPos, max)
+        for x in extraConns do x.Close()
+    // After doing the gorging, we switch to normal tailing (which avoids the app exiting too)
+    let post = function
+        | ReadResult.Batch (pos, xs) ->
+            let cp = pos.CommitPosition
+            trancheEngine.Submit(cp, checkpoints.Commit cp, xs)
+        | ReadResult.StreamSpan span ->
+            trancheEngine.Submit <| Push.Stream span
+        | ReadResult.ChunkBatch _
+        | ReadResult.EndOfChunk _ as x ->
+            failwithf "%A not supported when tailing" x
+    let readers = TailAndPrefixesReader(conn, queue, tryMapEvent, spec.stripes)
+    log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
+    do! readers.Pump(post, startPos, max, spec.tailInterval) }
