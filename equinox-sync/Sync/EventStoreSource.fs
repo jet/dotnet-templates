@@ -424,7 +424,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxPro
         return startPos }
     let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
-    let queue = ReadQueue(spec.batchSize, spec.minBatchSize)
+    let readerQueue = ReadQueue(spec.batchSize, spec.minBatchSize)
     if spec.gorge then
         let extraConns = Seq.init (spec.stripes-1) (ignore >> connect)
         let conns = [| yield conn; yield! extraConns |]
@@ -440,7 +440,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxPro
         let startChunk = chunk startPos |> int
         let! _ = trancheEngine.Submit (Push.SetActiveChunk startChunk)
         log.Information("Gorging with {stripes} $all reader stripes covering a 256MB chunk each", spec.stripes)
-        let gorgingReader = StripedReader(conns, queue, tryMapEvent, spec.stripes)
+        let gorgingReader = StripedReader(conns, readerQueue, tryMapEvent, spec.stripes)
         do! gorgingReader.Pump(post, startPos, max)
         for x in extraConns do x.Close()
     // After doing the gorging, we switch to normal tailing (which avoids the app exiting too)
@@ -453,6 +453,6 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxPro
         | ReadResult.ChunkBatch _
         | ReadResult.EndOfChunk _ as x ->
             failwithf "%A not supported when tailing" x
-    let readers = TailAndPrefixesReader(conn, queue, tryMapEvent, spec.stripes)
+    let tailAndCatchupReaders = TailAndPrefixesReader(conn, readerQueue, tryMapEvent, spec.stripes)
     log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
-    do! readers.Pump(post, startPos, max, spec.tailInterval) }
+    do! tailAndCatchupReaders.Pump(post, startPos, max, spec.tailInterval) }
