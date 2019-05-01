@@ -168,7 +168,8 @@ type [<NoComparison>] Work =
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type ReadItem =
     | Batch of pos: Position * items: StreamItem seq
-    | EndOfTranche of chunk: int
+    | ChunkBatch of chunk: int * pos: Position * items: StreamItem seq
+    | EndOfChunk of chunk: int
     | StreamSpan of span: State.StreamSpan
 
 type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
@@ -215,18 +216,18 @@ type ReadQueue(batchSize, minBatchSize, ?statsInterval) =
         | Tranche (chunk, range, batchSize) ->
             use _ = Serilog.Context.LogContext.PushProperty("Tranche", chunk)
             Log.Warning("Commencing tranche, batch size {bs}", batchSize)
-            let postBatch pos items = post (ReadItem.Batch (pos, items))
+            let postBatch pos items = post (ReadItem.ChunkBatch (chunk, pos, items))
             let! t, res = pullAll (__.SlicesStats, __.OverallStats) (conn, batchSize) (range, false) tryMapEvent postBatch |> Stopwatch.Time
             match res with
             | PullResult.EndOfTranche ->
                 Log.Warning("completed tranche in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 __.OverallStats.DumpIfIntervalExpired()
-                let! _ = post (ReadItem.EndOfTranche chunk)
+                let! _ = post (ReadItem.EndOfChunk chunk)
                 return false
             | PullResult.Eof ->
                 Log.Warning("completed tranche AND REACHED THE END in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 __.OverallStats.DumpIfIntervalExpired(true)
-                let! _ = post (ReadItem.EndOfTranche chunk)
+                let! _ = post (ReadItem.EndOfChunk chunk)
                 return true
             | PullResult.Exn e ->
                 let bs = adjust batchSize

@@ -410,12 +410,12 @@ module EventStoreSource =
         if spec.gorge then
             let readers = StripedReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes)
             let post = function
-                | EventStoreSource.ReadItem.Batch (pos, xs) ->
+                | EventStoreSource.ReadItem.ChunkBatch (chunk, pos, xs) ->
                     let cp = pos.CommitPosition
-                    let chunk = EventStoreSource.chunk pos
-                    trancheEngine.Submit <| Push.ChunkBatch(int chunk, cp, checkpoints.Commit cp, xs)
-                | EventStoreSource.ReadItem.EndOfTranche chunk ->
+                    trancheEngine.Submit <| Push.ChunkBatch(chunk, cp, checkpoints.Commit cp, xs)
+                | EventStoreSource.ReadItem.EndOfChunk chunk ->
                     trancheEngine.Submit <| Push.EndOfChunk chunk
+                | EventStoreSource.ReadItem.Batch _
                 | EventStoreSource.ReadItem.StreamSpan _ as x ->
                     failwithf "%A not supported when gorging" x
             let startChunk = EventStoreSource.chunk startPos |> int
@@ -429,8 +429,9 @@ module EventStoreSource =
                     trancheEngine.Submit(cp, checkpoints.Commit cp, xs)
                 | EventStoreSource.ReadItem.StreamSpan span ->
                     trancheEngine.Submit <| Push.Stream span
-                | EventStoreSource.ReadItem.EndOfTranche _ as x ->
-                    failwithf "%A not supported" x
+                | EventStoreSource.ReadItem.ChunkBatch _
+                | EventStoreSource.ReadItem.EndOfChunk _ as x ->
+                    failwithf "%A not supported when tailing" x
             let readers = TailAndPrefixesReader(conn, spec.batchSize, spec.minBatchSize, tryMapEvent, spec.stripes + 1)
             log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
             do! readers.Pump(post, startPos, max, spec.tailInterval) }
