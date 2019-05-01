@@ -342,6 +342,7 @@ module EventStoreSource =
                 work.AddTranche(startChunk, startPos, nextPos, max)
                 Some nextPos
             let mutable finished = false
+            let r = new Random()
             while not ct.IsCancellationRequested && not (finished && dop.CurrentCount <> maxDop) do
                 work.OverallStats.DumpIfIntervalExpired()
                 let! _ = dop.Await()
@@ -357,6 +358,11 @@ module EventStoreSource =
                 | false, _ ->
                     match remainder with
                     | Some pos -> 
+                        // Start the readers interleaved
+                        if dop.CurrentCount > 1 then
+                            let jitter = r.Next(1000, 2000)
+                            Log.Warning("Waiting {jitter}ms jitter to offset reader stripes", jitter)
+                            do! Async.Sleep jitter 
                         let nextPos = EventStoreSource.posFromChunkAfter pos
                         remainder <- Some nextPos
                         let chunkNumber = EventStoreSource.chunk pos |> int
