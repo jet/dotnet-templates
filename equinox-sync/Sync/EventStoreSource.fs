@@ -422,8 +422,8 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxPro
             startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float max.CommitPosition,
             checkpointFreq.TotalMinutes)
         return startPos }
-    let ingestionEngine = startIngestionEngine (log, maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
-    let trancheEngine = TrancheEngine.Start (log, ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
+    let ingestionEngine = startIngestionEngine (log.ForContext("Tranche","Cosmos"), maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
+    let trancheEngine = TrancheEngine.Start (log.ForContext("Tranche","Tranches"), ingestionEngine, maxReadAhead, maxProcessing, TimeSpan.FromMinutes 1.)
     let readerQueue = ReadQueue(spec.batchSize, spec.minBatchSize)
     if spec.gorge then
         let extraConns = Seq.init (spec.stripes-1) (ignore >> connect)
