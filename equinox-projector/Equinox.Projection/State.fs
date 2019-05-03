@@ -121,8 +121,6 @@ type StreamStates() =
         updateWritePos stream isMalformed None [| { index = 0L; events = null } |]
     member __.QueueLength(stream) =
         states.[stream].queue.[0].events.Length
-    member __.QueueLength(stream) =
-        states.[stream].queue.[0].events.Length
     member __.MarkCompleted(stream, index) =
         markNotBusy stream
         markCompleted stream index
