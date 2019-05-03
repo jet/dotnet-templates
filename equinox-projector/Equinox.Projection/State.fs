@@ -92,19 +92,13 @@ type StreamStates() =
     let markCompleted stream index = updateWritePos stream false (Some index) null |> ignore
 
     let busy = HashSet<string>()
-    let schedule (requestedOrder : string seq) (capacity: int) =
-        let toSchedule = ResizeArray<_>(capacity)
-        let xs = requestedOrder.GetEnumerator()
-        let mutable remaining = capacity
-        while xs.MoveNext() && remaining <> 0 do
-            let x = xs.Current
+    let pending (requestedOrder : string seq) = seq {
+        for x in requestedOrder do
             let state = states.[x]
-            if state.IsReady && busy.Add x then
-                toSchedule.Add(state.write, { stream = x; span = state.queue.[0] })
-                remaining <- remaining - 1
-        toSchedule.ToArray()
-    let markNotBusy stream =
-        busy.Remove stream |> ignore
+            if state.IsReady then
+                yield state.write, { stream = x; span = state.queue.[0] } }
+    let markBusy stream = busy.Add stream |> ignore
+    let markNotBusy stream = busy.Remove stream |> ignore
 
     // Result is intentionally a thread-safe persisent data structure
     // This enables the (potentially multiple) Ingesters to determine streams (for which they potentially have successor events) that are in play
@@ -119,15 +113,17 @@ type StreamStates() =
         updateWritePos batch.stream isMalformed None [| { index = batch.span.index; events = batch.span.events } |]
     member __.SetMalformed(stream,isMalformed) =
         updateWritePos stream isMalformed None [| { index = 0L; events = null } |]
-    member __.QueueLength(stream) =
-        states.[stream].queue.[0].events.Length
+    member __.QueueWeight(stream) =
+        states.[stream].queue.[0].events |> Seq.sumBy eventSize
+    member __.MarkBusy stream =
+        markBusy stream
     member __.MarkCompleted(stream, index) =
         markNotBusy stream
         markCompleted stream index
     member __.MarkFailed stream =
         markNotBusy stream
-    member __.Schedule(requestedOrder : string seq, capacity: int) : (int64 option * StreamSpan)[] =
-        schedule requestedOrder capacity
+    member __.Pending(byQueuedPriority : string seq) : (int64 option * StreamSpan) seq =
+        pending byQueuedPriority
     member __.Dump(log : ILogger) =
         let mutable busyCount, busyB, ready, readyB, unprefixed, unprefixedB, malformed, malformedB, synced = 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0
         let busyCats, readyCats, readyStreams, unprefixedStreams, malformedStreams = CatStats(), CatStats(), CatStats(), CatStats(), CatStats()

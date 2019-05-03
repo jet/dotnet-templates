@@ -54,7 +54,7 @@ module Progress =
             while pending.Count <> 0 && pending.Peek().streamToRequiredIndex.Count = 0 do
                 let batch = pending.Dequeue()
                 batch.markCompleted()
-        member __.InScheduledOrder getStreamQueueLength =
+        member __.InScheduledOrder getStreamWeight =
             let raw = seq {
                 let streams = HashSet()
                 let mutable batch = 0
@@ -62,7 +62,7 @@ module Progress =
                     batch <- batch + 1
                     for s in x.streamToRequiredIndex.Keys do
                         if streams.Add s then
-                            yield s,(batch,getStreamQueueLength s) }
+                            yield s,(batch,getStreamWeight s) }
             raw |> Seq.sortBy (fun (_s,(b,l)) -> b,-l) |> Seq.map fst
 
     /// Manages writing of progress
@@ -217,12 +217,13 @@ module Scheduling =
                 // 2. top up provisioning of writers queue
                 let capacity = dispatcher.CurrentCapacity
                 if capacity <> 0 then
-                    let work = streams.Schedule(progressState.InScheduledOrder streams.QueueLength, capacity)
-                    let xs = (Seq.ofArray work).GetEnumerator()
+                    let potential = streams.Pending(progressState.InScheduledOrder streams.QueueWeight, capacity)
+                    let xs = potential.GetEnumerator()
                     let mutable addsBeingAccepted = true
                     while xs.MoveNext() && addsBeingAccepted do
                         let (_,{stream = s} : StreamSpan) as item = xs.Current
                         let! succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
+                        if succeeded then streams.MarkBusy stream
                         idle <- idle && not succeeded // any add makes it not idle
                         addsBeingAccepted <- succeeded
                 // 3. Periodically emit status info
