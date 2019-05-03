@@ -379,51 +379,54 @@ module Ingestion =
         let mutable activeSeries = initialSeriesIndex
         let mutable validatedPos = None
 
+        let handle = function
+            | Batch (seriesId, epoch, checkpoint, items) ->
+                let batchInfo =
+                    let items = Array.ofSeq items
+                    streams.Merge items
+                    let markCompleted () =
+                        Log.Error("MC")
+                        submissionsMax.Release()
+                        readMax.Release()
+                        validatedPos <- Some (epoch,checkpoint)
+                    work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
+                    markCompleted, items
+                if activeSeries = seriesId then pending.Enqueue batchInfo
+                else
+                    match readingAhead.TryGetValue seriesId with
+                    | false, _ -> readingAhead.[seriesId] <- ResizeArray(Seq.singleton batchInfo)
+                    | true,current -> current.Add(batchInfo)
+            | ActivateSeries newActiveSeries ->
+                activeSeries <- newActiveSeries
+                let buffered =
+                    match ready |> tryRemove newActiveSeries with
+                    | Some completedChunkBatches ->
+                        completedChunkBatches |> Seq.iter pending.Enqueue
+                        work.Enqueue <| ActivateSeries (newActiveSeries + 1)
+                        completedChunkBatches.Count
+                    | None ->
+                        match readingAhead |> tryRemove newActiveSeries with
+                        | Some batchesReadToDate -> batchesReadToDate |> Seq.iter pending.Enqueue; batchesReadToDate.Count
+                        | None -> 0
+                log.Information("Moving to series {activeChunk}, releasing {buffered} buffered batches, {ready} others ready, {ahead} reading ahead",
+                    newActiveSeries, buffered, ready.Count, readingAhead.Count)
+            | CloseSeries seriesIndex ->
+                if activeSeries = seriesIndex then
+                    log.Information("Completed reading active series {activeSeries}; moving to next", activeSeries)
+                    work.Enqueue <| ActivateSeries (activeSeries + 1)
+                else
+                    match readingAhead |> tryRemove seriesIndex with
+                    | Some batchesRead ->
+                        ready.[seriesIndex] <- batchesRead
+                        log.Information("Completed reading {series}, marking {buffered} buffered items ready", seriesIndex, batchesRead.Count)
+                    | None ->
+                        ready.[seriesIndex] <- ResizeArray()
+                        log.Information("Completed reading {series}, leaving empty batch list", seriesIndex)
+            // These events are for stats purposes
+            | Added _
+            | ProgressResult _ -> ()
+
         member private __.Pump() = async {
-            let handle = function
-                | Batch (seriesId, epoch, checkpoint, items) ->
-                    let batchInfo =
-                        let items = Array.ofSeq items
-                        streams.Merge items
-                        let markCompleted () =
-                            submissionsMax.Release()
-                            readMax.Release()
-                            validatedPos <- Some (epoch,checkpoint)
-                        work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
-                        markCompleted, items
-                    if activeSeries = seriesId then pending.Enqueue batchInfo
-                    else
-                        match readingAhead.TryGetValue seriesId with
-                        | false, _ -> readingAhead.[seriesId] <- ResizeArray(Seq.singleton batchInfo)
-                        | true,current -> current.Add(batchInfo)
-                | ActivateSeries newActiveSeries ->
-                    activeSeries <- newActiveSeries
-                    let buffered =
-                        match ready |> tryRemove newActiveSeries with
-                        | Some completedChunkBatches ->
-                            completedChunkBatches |> Seq.iter pending.Enqueue
-                            work.Enqueue <| ActivateSeries (newActiveSeries + 1)
-                            completedChunkBatches.Count
-                        | None ->
-                            match readingAhead |> tryRemove newActiveSeries with
-                            | Some batchesReadToDate -> batchesReadToDate |> Seq.iter pending.Enqueue; batchesReadToDate.Count
-                            | None -> 0
-                    log.Information("Moving to series {activeChunk}, releasing {buffered} buffered batches, {ready} others ready, {ahead} reading ahead",
-                        newActiveSeries, buffered, ready.Count, readingAhead.Count)
-                | CloseSeries seriesIndex ->
-                    if activeSeries = seriesIndex then
-                        log.Information("Completed reading active series {activeSeries}; moving to next", activeSeries)
-                        work.Enqueue <| ActivateSeries (activeSeries + 1)
-                    else
-                        match readingAhead |> tryRemove seriesIndex with
-                        | Some batchesRead ->
-                            ready.[seriesIndex] <- batchesRead
-                            log.Information("Completed reading {series}, marking {buffered} buffered items ready", seriesIndex, batchesRead.Count)
-                        | None ->
-                            ready.[seriesIndex] <- ResizeArray()
-                            log.Information("Completed reading {series}, leaving empty batch list", seriesIndex)
-                // These events are for stats purposes
-                | Added _ | ProgressResult _ -> ()
             use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
             Async.Start(progressWriter.Pump(), cts.Token)
             while not cts.IsCancellationRequested do
