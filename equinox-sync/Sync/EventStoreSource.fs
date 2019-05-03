@@ -324,7 +324,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, tryMapEvent, post : Re
                 dop.Release() |> ignore
                 do! Async.Sleep sleepIntervalMs }
     member __.Start initialPos max = async {
-        let _ = Async.StartChild (pump initialPos max) in () }
+        let! _ = Async.StartChild (pump initialPos max) in () }
 
 type StartPos = Absolute of int64 | Chunk of int | Percentage of float | TailOrCheckpoint | StartOrCheckpoint
 
