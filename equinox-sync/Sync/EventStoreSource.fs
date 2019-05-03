@@ -316,7 +316,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, tryMapEvent, post : Re
                 let nextPos = posFromChunkAfter nextChunk
                 remainder <- Some nextPos
                 do! forkRunRelease <| Req.Chunk (seriesId, Range(nextChunk, Some nextPos, max), defaultBatchSize)
-            | (false, _), x ->
+            | (false, _), Some _ ->
                 dop.Release() |> ignore
                 Log.Warning("No further ingestion work to commence, transitioning to tailing...")
                 remainder <- None
