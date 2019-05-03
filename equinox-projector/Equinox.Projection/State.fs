@@ -13,12 +13,6 @@ type [<NoComparison>] StreamState = { isMalformed: bool; write: int64 option; qu
     member __.Size =
         if __.queue = null then 0
         else __.queue |> Seq.collect (fun x -> x.events) |> Seq.sumBy (fun x -> arrayBytes x.Data + arrayBytes x.Meta + x.EventType.Length + 16)
-    member __.TryGap() =
-        if __.queue = null then None
-        else
-            match __.write, Array.tryHead __.queue with
-            | Some w, Some { index = i } when i > w -> Some (w, i-w)
-            | _ -> None
     member __.IsReady =
         if __.queue = null || __.isMalformed then false
         else
@@ -105,14 +99,16 @@ type StreamStates() =
             let x = xs.Current
             let state = states.[x]
             if not state.isMalformed && busy.Add x then
-                let q = state.queue
-                if q = null then Log.Warning("Attempt to request scheduling for completed {stream} that has no items queued", x)
-                toSchedule.Add(state.write, { stream = x; span = q.[0] })
+                toSchedule.Add(state.write, { stream = x; span = state.queue.[0] })
                 remaining <- remaining - 1
         toSchedule.ToArray()
     let markNotBusy stream =
         busy.Remove stream |> ignore
 
+    // Result is intentionally a thread-safe persisent data structure
+    // This enables the (potentially multiple) Ingesters to determine streams (for which they potentially have successor events) that are in play
+    // Ingesters then supply these 'preview events' in advance of the processing being scheduled
+    // This enables the projection logic to roll future work into the current work in the interests of medium term throughput
     member __.All = streams
     member __.InternalMerge(stream, state) = update stream state |> ignore
     member __.InternalUpdate stream pos queue = update stream { isMalformed = false; write = Some pos; queue = queue }
@@ -122,15 +118,8 @@ type StreamStates() =
         updateWritePos batch.stream isMalformed None [| { index = batch.span.index; events = batch.span.events } |]
     member __.SetMalformed(stream,isMalformed) =
         updateWritePos stream isMalformed None [| { index = 0L; events = null } |]
-    // DEPRECATED - will be removed
-    member __.TryGetStreamWritePos stream =
-        match states.TryGetValue stream with
-        | true, value -> value.write
-        | false, _ -> None
     member __.QueueLength(stream) =
-        let q = states.[stream].queue
-        if q = null then Log.Warning("Attempt to request scheduling for completed {stream} that has no items queued", stream)
-        q.[0].events.Length
+        states.[stream].queue.[0].events.Length
     member __.MarkCompleted(stream, index) =
         markNotBusy stream
         markCompleted stream index
@@ -164,59 +153,3 @@ type StreamStates() =
         if readyCats.Any then log.Information("Ready Categories, events {readyCats}", Seq.truncate 5 readyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Streams, KB {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
         if malformedStreams.Any then log.Information("Malformed Streams, MB {malformedStreams}", malformedStreams.StatsDescending)
-
-    // Used to trigger catch-up reading of streams which have events missing prior to the observed write position
-    //member __.TryGap() : (string*int64*int) option =
-    //    let rec aux () =
-    //        match gap |> Queue.tryDequeue with
-    //        | None -> None
-    //        | Some stream ->
-            
-    //        match states.[stream].TryGap() with
-    //        | Some (pos,count) -> Some (stream,pos,int count)
-    //        | None -> aux ()
-    //    aux ()
-
-type [<NoComparison; NoEquality>] internal BatchState = { markCompleted: unit -> unit; streamToRequiredIndex : Dictionary<string,int64> }
-
-type ProgressState<'Pos>() =
-    let pending = Queue<_>()
-    member __.AppendBatch(markCompleted, reqs : Dictionary<string,int64>) =
-        pending.Enqueue { markCompleted = markCompleted; streamToRequiredIndex = reqs }
-    member __.MarkStreamProgress(stream, index) =
-        for x in pending do
-            match x.streamToRequiredIndex.TryGetValue stream with
-            | true, requiredIndex when requiredIndex <= index -> x.streamToRequiredIndex.Remove stream |> ignore
-            | _, _ -> ()
-        let headIsComplete () = pending.Count <> 0 && pending.Peek().streamToRequiredIndex.Count = 0
-        let mutable completed = 0
-        while headIsComplete () do
-            let item = pending.Dequeue() in item.markCompleted()
-            completed <- completed + 1
-        completed
-    member __.ScheduledOrder getStreamQueueLength =
-        let raw = seq {
-            let streams = HashSet()
-            let mutable batch = 0
-            for x in pending do
-                batch <- batch + 1
-                for s in x.streamToRequiredIndex.Keys do
-                    if streams.Add s then
-                        yield s,(batch,getStreamQueueLength s) }
-        raw |> Seq.sortBy (fun (_s,(b,l)) -> b,-l) |> Seq.map fst
-    member __.Validate tryGetStreamWritePos =
-        let rec aux completed =
-            if pending.Count = 0 then completed else
-            let batch = pending.Peek()
-            for KeyValue (stream, requiredIndex) in Array.ofSeq batch.streamToRequiredIndex do
-                match tryGetStreamWritePos stream with
-                | Some index when requiredIndex <= index ->
-                    Log.Warning("Validation had to remove {stream} as required {req} has been met by {index}", stream, requiredIndex, index)
-                    batch.streamToRequiredIndex.Remove stream |> ignore
-                | _ -> ()
-            if batch.streamToRequiredIndex.Count <> 0 then
-                completed
-            else
-                let item = pending.Dequeue() in item.markCompleted()
-                aux (completed + 1)
-        aux 0

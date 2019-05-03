@@ -1,6 +1,6 @@
 ﻿module ProgressTests
 
-open Equinox.Projection.State
+open Equinox.Projection
 open Swensen.Unquote
 open System.Collections.Generic
 open Xunit
@@ -8,36 +8,32 @@ open Xunit
 let mkDictionary xs = Dictionary<string,int64>(dict xs)
 
 let [<Fact>] ``Empty has zero streams pending or progress to write`` () =
-    let sut = ProgressState<_>()
-    let completed = sut.Validate(fun _ -> None)
-    0 =! completed
+    let sut = Progress.State<_>()
+    let queue = sut.InScheduledOrder(fun _ -> 0)
+    test <@ Seq.isEmpty queue @>
 
-let [<Fact>] ``Can add multiple batches`` () =
-    let sut = ProgressState<_>()
+let [<Fact>] ``Can add multiple batches with overlapping streams`` () =
+    let sut = Progress.State<_>()
     let noBatchesComplete () = failwith "No bathes should complete"
     sut.AppendBatch(noBatchesComplete, mkDictionary ["a",1L; "b",2L])
     sut.AppendBatch(noBatchesComplete, mkDictionary ["b",2L; "c",3L])
-    let completed = sut.Validate(fun _ -> None)
-    0 =! completed
 
-let [<Fact>] ``Marking Progress Removes batches and updates progress`` () =
-    let sut = ProgressState<_>()
-    let callbacks = ref 0
-    let complete () = incr callbacks
+let [<Fact>] ``Marking Progress removes batches and triggers the callbacks`` () =
+    let sut = Progress.State<_>()
+    let mutable callbacks = 0
+    let complete () = callbacks <- callbacks + 1
     sut.AppendBatch(complete, mkDictionary ["a",1L; "b",2L])
     sut.MarkStreamProgress("a",1L) |> ignore
     sut.MarkStreamProgress("b",1L) |> ignore
-    let completed = sut.Validate(fun _ -> None)
-    0 =! completed
-    1 =! !callbacks
+    1 =! callbacks
 
 let [<Fact>] ``Marking progress is not persistent`` () =
-    let sut = ProgressState<_>()
-    let callbacks = ref 0
-    let complete () = incr callbacks
+    let sut = Progress.State<_>()
+    let mutable callbacks = 0
+    let complete () = callbacks <- callbacks + 1
     sut.AppendBatch(complete, mkDictionary ["a",1L])
     sut.MarkStreamProgress("a",2L) |> ignore
     sut.AppendBatch(complete, mkDictionary ["a",1L; "b",2L])
-    let completed = sut.Validate(fun _ -> None)
-    0 =! completed
-    1 =! !callbacks
+    1 =! callbacks
+
+// TODO: lots more coverage of newer functionality - the above were written very early into the exercise

@@ -12,7 +12,7 @@
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
     <Compile Include="State.fs" />
-    <Compile Include="Engine.fs" />
+    <Compile Include="Projection.fs" />
     <Compile Include="FeedValidator.fs" />
   </ItemGroup>
 

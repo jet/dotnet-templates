@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <Compile Include="Metrics.fs" />
-    <Compile Include="Ingestion.fs" />
+    <Compile Include="CosmosIngester.fs" />
   </ItemGroup>
 
   <ItemGroup>

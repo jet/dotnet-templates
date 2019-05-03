@@ -11,7 +11,7 @@ open Equinox.Projection.Codec
 open Equinox.Store
 open Jet.ConfluentKafka.FSharp
 //#else
-open Equinox.Projection.Engine
+open Equinox.Projection
 //#endif
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
@@ -176,15 +176,15 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_project) (broker, topic) =
     ChangeFeedObserver.Create(log, projectBatch, dispose = disposeProducer)
 //#else
 let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) =
-    let projectionEngine = startProjectionEngine (log, maxPendingBatches, processorDop, project, TimeSpan.FromMinutes 1.)
+    let projectionEngine = Projector.Start (log, maxPendingBatches, processorDop, project, TimeSpan.FromMinutes 1.)
     fun () ->
-        let mutable trancheEngine = Unchecked.defaultof<TrancheEngine<_>>
-        let init rangeLog = trancheEngine <- TrancheEngine.Start (rangeLog, projectionEngine, maxPendingBatches, processorDop, TimeSpan.FromMinutes 1.)
+        let mutable rangeIngester = Unchecked.defaultof<IIngester>
+        let init rangeLog = rangeIngester <- Ingester.Start (rangeLog, projectionEngine, maxPendingBatches, processorDop, TimeSpan.FromMinutes 1.)
         let ingest epoch checkpoint docs =
             let events = Seq.collect DocumentParser.enumEvents docs
             let items = seq { for x in events -> { stream = x.Stream; index = x.Index; event = x } }
-            trancheEngine.Submit(epoch, checkpoint, items)
-        let dispose () = trancheEngine.Stop()
+            rangeIngester.Submit(epoch, checkpoint, items)
+        let dispose () = rangeIngester.Stop()
         let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
         let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
             sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us

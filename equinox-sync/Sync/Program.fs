@@ -6,8 +6,6 @@ open Equinox.Cosmos.Projection
 #else
 open Equinox.EventStore
 #endif
-open Equinox.Cosmos.Projection.Ingestion
-open Equinox.Projection.State
 open Serilog
 open System
 
@@ -284,10 +282,10 @@ module Logging =
                         let cfpLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
             |> fun c -> let ingesterLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<StreamStates>.FullName, ingesterLevel)
+                        c.MinimumLevel.Override(typeof<Equinox.Projection.State.StreamStates>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
-                        c.MinimumLevel.Override(typeof<Writer.Result>.FullName, generalLevel)
+                        c.MinimumLevel.Override(typeof<Equinox.Cosmos.Projection.CosmosIngester.Writer.Result>.FullName, generalLevel)
                          .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, LogEventLevel.Information)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
                         let configure (a : Configuration.LoggerSinkConfiguration) : unit =
@@ -295,7 +293,7 @@ module Logging =
                                 l.WriteTo.Sink(Metrics.RuCounters.RuCounterSink()) |> ignore) |> ignore
                             a.Logger(fun l ->
                                 let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
-                                let isWriter = Filters.Matching.FromSource<Writer.Result>().Invoke
+                                let isWriter = Filters.Matching.FromSource<Equinox.Cosmos.Projection.CosmosIngester.Writer.Result>().Invoke
                                 let isCheckpointing = Filters.Matching.FromSource<Checkpoint.CheckpointSeries>().Invoke
                                 (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isCheckpointing x || isWriter x))
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
@@ -303,7 +301,7 @@ module Logging =
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
-        Log.ForContext<StreamStates>(), Log.ForContext<Core.CosmosContext>()
+        Log.ForContext<Equinox.Projection.State.StreamStates>(), Log.ForContext<Core.CosmosContext>()
 
 [<EntryPoint>]
 let main argv =
@@ -355,7 +353,7 @@ let main argv =
                 || e.EventStreamId.StartsWith "InventoryCount-" // No Longer used
                 || e.EventStreamId.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
                 //|| e.EventStreamId = "ReloadBatchId" // does not start at 0
-                //|| e.EventStreamId = "PurchaseOrder-5791" // item too large
+                || e.EventStreamId = "PurchaseOrder-5791" // item too large
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
         EventStoreSource.run log (connect, spec, tryMapEvent catFilter) args.MaxPendingBatches args.MaxProcessing (target, args.MaxWriters) resolveCheckpointStream

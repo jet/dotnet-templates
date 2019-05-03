@@ -1,18 +1,15 @@
-﻿module Equinox.Cosmos.Projection.Ingestion
+﻿module Equinox.Cosmos.Projection.CosmosIngester
 
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Store
-open Equinox.Projection.Engine
+open Equinox.Projection.Scheduling
 open Equinox.Projection.State
 open Serilog
-open System.Threading
 
-let cosmosPayloadLimit = 2 * 1024 * 1024 - (*fudge*)4096
-let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 96
-
-type [<RequireQualifiedAccess>] ResultKind = TimedOut | RateLimited | TooLarge | Malformed | Other
-
+[<AutoOpen>]
 module Writer =
+    type [<RequireQualifiedAccess>] ResultKind = TimedOut | RateLimited | TooLarge | Malformed | Other
+
     type [<NoComparison>] Result =
         | Ok of updatedPos: int64
         | Duplicate of updatedPos: int64
@@ -64,7 +61,7 @@ module Writer =
         | ResultKind.RateLimited | ResultKind.TimedOut | ResultKind.Other -> false
         | ResultKind.TooLarge | ResultKind.Malformed -> true
 
-type CosmosStats(log : ILogger, statsInterval) =
+type Stats(log : ILogger, statsInterval) =
     inherit Stats<(int*int)*Writer.Result>(log, statsInterval)
     let resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = ref 0, ref 0, ref 0, ref 0, ref 0
     let rateLimited, timedOut, tooLarge, malformed = ref 0, ref 0, ref 0, ref 0
@@ -86,9 +83,9 @@ type CosmosStats(log : ILogger, statsInterval) =
     override __.Handle message =
         base.Handle message
         match message with
-        | ProjectionMessage.Add (_,_)
-        | ProjectionMessage.AddActive _
-        | ProjectionMessage.Added _ -> ()
+        | Add (_,_)
+        | AddActive _
+        | Added _ -> ()
         | Result (_stream, Choice1Of2 ((es,bs),r)) ->
             events <- events + es
             bytes <- bytes + int64 bs
@@ -105,7 +102,9 @@ type CosmosStats(log : ILogger, statsInterval) =
             | ResultKind.Malformed -> category stream |> badCats.Ingest; incr malformed
             | ResultKind.TimedOut -> incr timedOut
 
-let startIngestionEngine (log : Serilog.ILogger, maxPendingBatches, cosmosContext, maxWriters, statsInterval) =
+let start (log : Serilog.ILogger, maxPendingBatches, cosmosContext, maxWriters, statsInterval) =
+    let cosmosPayloadLimit = 2 * 1024 * 1024 - (*fudge*)4096
+    let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + 96
     let writerResultLog = log.ForContext<Writer.Result>()
     let trim (writePos : int64 option, batch : StreamSpan) =
         let mutable bytesBudget = cosmosPayloadLimit
@@ -114,39 +113,25 @@ let startIngestionEngine (log : Serilog.ILogger, maxPendingBatches, cosmosContex
             bytesBudget <- bytesBudget - cosmosPayloadBytes y
             count <- count + 1
             // Reduce the item count when we don't yet know the write position in order to efficiently discover the redundancy where data is already present
-            count <= (if Option.isNone writePos then 100 else 4096) && (bytesBudget >= 0 || count = 1)
+            count <= (if Option.isNone writePos then 100 else 4096) && (bytesBudget >= 0 || count = 1) // always send at least one event in order to surface the problem and have the stream mark malformed
         { stream = batch.stream; span = { index = batch.span.index; events = batch.span.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
     let project batch = async {
         let trimmed = trim batch
         try let! res = Writer.write log cosmosContext trimmed
-            let ctx = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
-            return trimmed.stream, Choice1Of2 (ctx,res)
-        with e -> return trimmed.stream, Choice2Of2 e }
-    let handleResult (streams: StreamStates, progressState : ProgressState<_>,  batches: SemaphoreSlim) res =
+            let stats = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
+            return Choice1Of2 (stats,res)
+        with e -> return Choice2Of2 e }
+    let interpretProgress (streams: StreamStates) stream res =
         let applyResultToStreamState = function
-            | stream, (Choice1Of2 (ctx, Writer.Ok pos)) ->
-                Some ctx,streams.InternalUpdate stream pos null
-            | stream, (Choice1Of2 (ctx, Writer.Duplicate pos)) ->
-                Some ctx,streams.InternalUpdate stream pos null
-            | stream, (Choice1Of2 (ctx, Writer.PartialDuplicate overage)) ->
-                Some ctx,streams.InternalUpdate stream overage.index [|overage|]
-            | stream, (Choice1Of2 (ctx, Writer.PrefixMissing (overage,pos))) ->
-                Some ctx,streams.InternalUpdate stream pos [|overage|]
-            | stream, (Choice2Of2 exn) ->
+            | Choice1Of2 (_stats, Writer.Ok pos) ->                       streams.InternalUpdate stream pos null
+            | Choice1Of2 (_stats, Writer.Duplicate pos) ->                streams.InternalUpdate stream pos null
+            | Choice1Of2 (_stats, Writer.PartialDuplicate overage) ->     streams.InternalUpdate stream overage.index [|overage|]
+            | Choice1Of2 (_stats, Writer.PrefixMissing (overage,pos)) ->  streams.InternalUpdate stream pos [|overage|]
+            | Choice2Of2 exn ->
                 let malformed = Writer.classify exn |> Writer.isMalformed
-                None,streams.SetMalformed(stream,malformed)
-        match res with
-        | ProjectionMessage.Result (s,r) ->
-            let _ctx,(stream,updatedState) = applyResultToStreamState (s,r)
-            match updatedState.write with
-            | Some wp ->
-                let closedBatches = progressState.MarkStreamProgress(stream, wp)
-                if closedBatches > 0 then
-                    batches.Release(closedBatches) |> ignore
-                streams.MarkCompleted(stream,wp)
-            | None ->
-                streams.MarkFailed stream
-            Writer.logTo writerResultLog (s,r)
-        | _ -> ()
-    let ingesterStats = CosmosStats(log, statsInterval)
-    ProjectionEngine<(int*int)*Writer.Result>.Start(ingesterStats, maxPendingBatches, maxWriters, project, handleResult)
+                streams.SetMalformed(stream,malformed)
+        let _stream, { write = wp } = applyResultToStreamState res
+        Writer.logTo writerResultLog (stream,res)
+        wp
+    let projectionAndCosmosStats = Stats(log, statsInterval)
+    Engine<(int*int)*Writer.Result>.Start(projectionAndCosmosStats, maxPendingBatches, maxWriters, project, interpretProgress)
