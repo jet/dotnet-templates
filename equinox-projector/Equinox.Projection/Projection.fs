@@ -453,8 +453,12 @@ module Ingestion =
         member __.Submit(content : Message) = async {
             do! readMax.Await()
             match content with
-            | Message.Batch (seriesId, epoch, markBatchCompleted, events) -> work.Enqueue <| Batch (seriesId, epoch, markBatchCompleted, events)
-            | Message.EndOfSeries seriesId -> work.Enqueue <| CloseSeries seriesId
+            | Message.Batch (seriesId, epoch, markBatchCompleted, events) ->
+                work.Enqueue <| Batch (seriesId, epoch, markBatchCompleted, events)
+                // NB readMax.Release() is effected in the Batch handler's MarkCompleted()
+            | Message.EndOfSeries seriesId ->
+                work.Enqueue <| CloseSeries seriesId
+                readMax.Release()
             return readMax.State }
 
         /// As range assignments get revoked, a user is expected to `Stop `the active processing thread for the Ingester before releasing references to it
