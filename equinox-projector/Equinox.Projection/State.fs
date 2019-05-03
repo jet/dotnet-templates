@@ -4,6 +4,7 @@ open Serilog
 open System.Collections.Generic
 
 let arrayBytes (x:byte[]) = if x = null then 0 else x.Length
+let inline eventSize (x : Equinox.Codec.IEvent<_>) = arrayBytes x.Data + arrayBytes x.Meta + x.EventType.Length + 16
 let mb x = float x / 1024. / 1024.
 let category (streamName : string) = streamName.Split([|'-'|],2).[0]
 
@@ -12,7 +13,7 @@ type [<NoComparison>] StreamSpan = { stream: string; span: Span }
 type [<NoComparison>] StreamState = { isMalformed: bool; write: int64 option; queue: Span[] } with
     member __.Size =
         if __.queue = null then 0
-        else __.queue |> Seq.collect (fun x -> x.events) |> Seq.sumBy (fun x -> arrayBytes x.Data + arrayBytes x.Meta + x.EventType.Length + 16)
+        else __.queue |> Seq.collect (fun x -> x.events) |> Seq.sumBy eventSize
     member __.IsReady =
         if __.queue = null || __.isMalformed then false
         else
@@ -98,7 +99,7 @@ type StreamStates() =
         while xs.MoveNext() && remaining <> 0 do
             let x = xs.Current
             let state = states.[x]
-            if not state.isMalformed && busy.Add x then
+            if state.IsReady && busy.Add x then
                 toSchedule.Add(state.write, { stream = x; span = state.queue.[0] })
                 remaining <- remaining - 1
         toSchedule.ToArray()
@@ -120,6 +121,8 @@ type StreamStates() =
         updateWritePos stream isMalformed None [| { index = 0L; events = null } |]
     member __.QueueLength(stream) =
         states.[stream].queue.[0].events.Length
+    member __.QueueLength(stream) =
+        states.[stream].queue.[0].events.Length
     member __.MarkCompleted(stream, index) =
         markNotBusy stream
         markCompleted stream index
@@ -128,28 +131,34 @@ type StreamStates() =
     member __.Schedule(requestedOrder : string seq, capacity: int) : (int64 option * StreamSpan)[] =
         schedule requestedOrder capacity
     member __.Dump(log : ILogger) =
-        let mutable busyCount, busyB, ready, readyB, malformed, malformedB, synced = 0, 0L, 0, 0L, 0, 0L, 0
-        let busyCats, readyCats, readyStreams, malformedStreams = CatStats(), CatStats(), CatStats(), CatStats()
+        let mutable busyCount, busyB, ready, readyB, unprefixed, unprefixedB, malformed, malformedB, synced = 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0
+        let busyCats, readyCats, readyStreams, unprefixedStreams, malformedStreams = CatStats(), CatStats(), CatStats(), CatStats(), CatStats()
+        let kb sz = (sz + 512L) / 1024L
         for KeyValue (stream,state) in states do
             match int64 state.Size with
             | 0L ->
                 synced <- synced + 1
-            | sz when state.isMalformed ->
-                malformedStreams.Ingest(stream, mb sz |> int64)
-                malformed <- malformed + 1
-                malformedB <- malformedB + sz
             | sz when busy.Contains stream ->
                 busyCats.Ingest(category stream)
                 busyCount <- busyCount + 1
                 busyB <- busyB + sz
+            | sz when state.isMalformed ->
+                malformedStreams.Ingest(stream, mb sz |> int64)
+                malformed <- malformed + 1
+                malformedB <- malformedB + sz
+            | sz when not state.IsReady ->
+                unprefixedStreams.Ingest(stream, mb sz |> int64)
+                unprefixed <- unprefixed + 1
+                unprefixedB <- unprefixedB + sz
             | sz ->
                 readyCats.Ingest(category stream)
-                readyStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.[0].events.Length, (sz + 512L) / 1024L)
+                readyStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.[0].events.Length, kb sz)
                 ready <- ready + 1
                 readyB <- readyB + sz
-        log.Information("Streams Synced {synced:n0} Active {busy:n0}/{busyMb:n1}MB Ready {ready:n0}/{readyMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
-            synced, busyCount, mb busyB, ready, mb readyB, malformed, mb malformedB)
+        log.Information("Streams Synced {synced:n0} Active {busy:n0}/{busyMb:n1}MB Ready {ready:n0}/{readyMb:n1}MB Missing {waiting}/{waitingMb}MB Malformed {malformed}/{malformedMb:n1}MB",
+            synced, busyCount, mb busyB, ready, mb readyB, unprefixed, mb unprefixedB, malformed, mb malformedB)
         if busyCats.Any then log.Information("Active Categories, events {busyCats}", Seq.truncate 5 busyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Categories, events {readyCats}", Seq.truncate 5 readyCats.StatsDescending)
         if readyCats.Any then log.Information("Ready Streams, KB {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
+        if unprefixedStreams.Any then log.Information("Missing Streams, KB {missingStreams}", Seq.truncate 5 unprefixedStreams.StatsDescending)
         if malformedStreams.Any then log.Information("Malformed Streams, MB {malformedStreams}", malformedStreams.StatsDescending)

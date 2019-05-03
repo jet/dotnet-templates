@@ -385,7 +385,6 @@ module Ingestion =
                     let items = Array.ofSeq items
                     streams.Merge items
                     let markCompleted () =
-                        Log.Error("MC")
                         submissionsMax.Release()
                         readMax.Release()
                         validatedPos <- Some (epoch,checkpoint)
