@@ -32,8 +32,12 @@ module private Helpers =
         let inner = new SemaphoreSlim(max)
         member __.Release(?count) = match defaultArg count 1 with 0 -> () | x -> inner.Release x |> ignore
         member __.State = max-inner.CurrentCount,max 
+        /// Wait infinitely to get the semaphore
         member __.Await() = inner.Await() |> Async.Ignore
+        /// Wait for the specified timeout to acquire (or return false instantly)
+        member __.TryAwait(?timeout) = inner.Await(defaultArg timeout TimeSpan.Zero)
         member __.HasCapacity = inner.CurrentCount > 0
+        member __.CurrentCapacity = inner.CurrentCount
 
 module Progress =
     type [<NoComparison; NoEquality>] internal BatchState = { markCompleted: unit -> unit; streamToRequiredIndex : Dictionary<string,int64> }
@@ -48,8 +52,8 @@ module Progress =
                 | true, requiredIndex when requiredIndex <= index -> x.streamToRequiredIndex.Remove stream |> ignore
                 | _, _ -> ()
             while pending.Count <> 0 && pending.Peek().streamToRequiredIndex.Count = 0 do
-                let item = pending.Dequeue()
-                item.markCompleted()
+                let batch = pending.Dequeue()
+                batch.markCompleted()
         member __.InScheduledOrder getStreamQueueLength =
             let raw = seq {
                 let streams = HashSet()
@@ -103,9 +107,9 @@ module Scheduling =
     type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
         let cycles, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
         let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
-        let dumpStats (available,maxDop) =
-            log.Information("Projection Cycles {cycles} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
-                !cycles, maxDop-available, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
+        let dumpStats capacity (used,maxDop) =
+            log.Information("Projection Cycles {cycles} Capacity {capacity} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
+                !cycles, capacity, used, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
             cycles := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
         abstract member Handle : InternalMessage<'R> -> unit
         default __.Handle msg = msg |> function
@@ -119,10 +123,10 @@ module Scheduling =
                 incr resultCompleted
             | Result (_stream, Choice2Of2 _) ->
                 incr resultExn
-        member __.TryDump((available,maxDop),streams : StreamStates) =
+        member __.TryDump(capacity,(used,max),streams : StreamStates) =
             incr cycles
             if statsDue () then
-                dumpStats (available,maxDop)
+                dumpStats capacity (used,max)
                 __.DumpExtraStats()
                 streams.Dump log
         /// Allows an ingester or projector to wire in custom stats (typically based on data gathered in a `Handle` override)
@@ -133,17 +137,17 @@ module Scheduling =
     type Dispatcher<'R>(maxDop) =
         let work = new BlockingCollection<_>(ConcurrentQueue<_>())
         let result = Event<'R>()
-        let dop = new SemaphoreSlim(maxDop)
+        let dop = new Sem(maxDop)
         let dispatch work = async {
             let! res = work
             result.Trigger res
-            dop.Release() |> ignore } 
+            dop.Release() } 
         [<CLIEvent>] member __.Result = result.Publish
-        member __.AvailableCapacity =
-            let available = dop.CurrentCount
-            available,maxDop
+        member __.HasCapacity = dop.HasCapacity
+        member __.CurrentCapacity = dop.CurrentCapacity
+        member __.State = dop.State
         member __.TryAdd(item,?timeout) = async {
-            let! got = dop.Await(?timeout=timeout)
+            let! got = dop.TryAwait(?timeout=timeout)
             if got then
                 work.Add(item)
             return got }
@@ -160,7 +164,7 @@ module Scheduling =
     type Engine<'R>(maxPendingBatches, dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress) =
         let sleepIntervalMs = 1
         let cts = new CancellationTokenSource()
-        let batches = new SemaphoreSlim(maxPendingBatches)
+        let batches = Sem maxPendingBatches
         let work = ConcurrentQueue<InternalMessage<'R>>()
         let streams = StreamStates()
         let progressState = Progress.State()
@@ -174,7 +178,7 @@ module Scheduling =
                 | _ -> 1, 0
             let handle x =
                 match x with
-                | Add (checkpoint, items) ->
+                | Add (releaseRead, items) ->
                     let reqs = Dictionary()
                     let mutable count, skipCount = 0, 0
                     for item in items do
@@ -185,7 +189,10 @@ module Scheduling =
                         | required, _ ->
                             count <- count + required
                             reqs.[stream] <- item.index+1L
-                    progressState.AppendBatch(checkpoint,reqs)
+                    let markCompleted () =
+                        releaseRead()
+                        batches.Release()
+                    progressState.AppendBatch(markCompleted,reqs)
                     work.Enqueue(Added (reqs.Count,skipCount,count))
                 | AddActive events ->
                     for e in events do
@@ -208,18 +215,18 @@ module Scheduling =
                     stats.Handle x
                     idle <- false)
                 // 2. top up provisioning of writers queue
-                let capacity,_ = dispatcher.AvailableCapacity
+                let capacity = dispatcher.CurrentCapacity
                 if capacity <> 0 then
-                    idle <- false
                     let work = streams.Schedule(progressState.InScheduledOrder streams.QueueLength, capacity)
                     let xs = (Seq.ofArray work).GetEnumerator()
                     let mutable addsBeingAccepted = true
                     while xs.MoveNext() && addsBeingAccepted do
                         let (_,{stream = s} : StreamSpan) as item = xs.Current
                         let! succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
+                        idle <- idle && not succeeded // any add makes it not idle
                         addsBeingAccepted <- succeeded
                 // 3. Periodically emit status info
-                stats.TryDump(dispatcher.AvailableCapacity,streams)
+                stats.TryDump(capacity,dispatcher.State,streams)
                 // 4. Do a minimal sleep so we don't run completely hot when empty
                 if idle then do! Async.Sleep sleepIntervalMs }
         static member Start<'R>(stats, maxPendingBatches, processorDop, project, interpretProgress) =
@@ -230,7 +237,7 @@ module Scheduling =
 
         /// Attempt to feed in a batch (subject to there being capacity to do so)
         member __.TrySubmit(markCompleted, events) = async {
-            let! got = batches.Await(TimeSpan.Zero)
+            let! got = batches.TryAwait()
             if got then
                 work.Enqueue <| Add (markCompleted, events)
             return got }
@@ -421,17 +428,17 @@ module Ingestion =
             Async.Start(progressWriter.Pump(), cts.Token)
             while not cts.IsCancellationRequested do
                 work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
-                let mutable ingesterAccepting = true
+                let mutable schedulerAccepting = true
                 // 1. Submit to ingester until read queue, tranche limit or ingester limit exhausted
-                while pending.Count <> 0 && submissionsMax.HasCapacity && ingesterAccepting do
+                while pending.Count <> 0 && submissionsMax.HasCapacity && schedulerAccepting do
                     let markCompleted, events = pending.Peek()
                     let! submitted = scheduler.TrySubmit(markCompleted, events)
                     if submitted then
                         pending.Dequeue() |> ignore
-                        // mark off a write as being in progress
+                        // mark off a write as being in progress (there is a race if there are multiple Ingesters, but thats good)
                         do! submissionsMax.Await()
                     else
-                        ingesterAccepting <- false 
+                        schedulerAccepting <- false 
                 // 2. Update any progress into the stats
                 stats.HandleValidated(Option.map fst validatedPos, fst readMax.State)
                 validatedPos |> Option.iter progressWriter.Post
