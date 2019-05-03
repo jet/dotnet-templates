@@ -217,13 +217,13 @@ module Scheduling =
                 // 2. top up provisioning of writers queue
                 let capacity = dispatcher.CurrentCapacity
                 if capacity <> 0 then
-                    let potential = streams.Pending(progressState.InScheduledOrder streams.QueueWeight, capacity)
+                    let potential = streams.Pending(progressState.InScheduledOrder streams.QueueWeight)
                     let xs = potential.GetEnumerator()
                     let mutable addsBeingAccepted = true
                     while xs.MoveNext() && addsBeingAccepted do
                         let (_,{stream = s} : StreamSpan) as item = xs.Current
                         let! succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
-                        if succeeded then streams.MarkBusy stream
+                        if succeeded then streams.MarkBusy s
                         idle <- idle && not succeeded // any add makes it not idle
                         addsBeingAccepted <- succeeded
                 // 3. Periodically emit status info
