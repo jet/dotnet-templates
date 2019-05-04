@@ -110,7 +110,7 @@ module Scheduling =
         let dumpStats capacity (used,maxDop) =
             log.Information("Projection Cycles {cycles} Filled {filled:P0} Capacity {capacity} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
                 !cycles, float !filled/float !cycles, capacity, used, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
-            cycles := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
+            cycles := 0; filled := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
         abstract member Handle : InternalMessage<'R> -> unit
         default __.Handle msg = msg |> function
             | Add _ | AddActive _ -> ()
