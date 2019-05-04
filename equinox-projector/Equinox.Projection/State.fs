@@ -95,7 +95,7 @@ type StreamStates() =
     let pending (requestedOrder : string seq) = seq {
         for x in requestedOrder do
             let state = states.[x]
-            if state.IsReady then
+            if state.IsReady && not (busy.Contains x) then
                 yield state.write, { stream = x; span = state.queue.[0] } }
     let markBusy stream = busy.Add stream |> ignore
     let markNotBusy stream = busy.Remove stream |> ignore
