@@ -201,7 +201,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, tryMapEvent, post : Re
     let sleepIntervalMs = 100
     let overallStats = OverallStats(?statsInterval=statsInterval)
     let slicesStats = SliceStatsBuffer()
-    let mutable eofSpottedInChunk = false
+    let mutable eofSpottedInChunk = 0
 
     /// Invoked by pump to process a tranche of work; can have parallel invocations
     let exec conn req = async {
@@ -238,8 +238,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, tryMapEvent, post : Re
                 Log.Warning("completed tranche AND REACHED THE END in {ms:n3}m", let e = t.Elapsed in e.TotalMinutes)
                 overallStats.DumpIfIntervalExpired(true)
                 let! _ = post (Res.EndOfChunk series) in ()
-                work.Enqueue <| Req.Tail (series+1, pos, pos, tailInterval, defaultBatchSize)
-                eofSpottedInChunk <- true
+                if 1 = Interlocked.Increment &eofSpottedInChunk then work.Enqueue <| Req.Tail (series+1, pos, pos, tailInterval, defaultBatchSize)
             | PullResult.EndOfTranche ->
                 Log.Information("completed tranche in {ms:n1}m", let e = t.Elapsed in e.TotalMinutes)
                 let! _ = post (Res.EndOfChunk series) in ()
@@ -383,7 +382,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxPro
             startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float max.CommitPosition,
             checkpointFreq.TotalMinutes)
         return startPos }
-    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","EqxCosmos"), maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
+    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Cosmos"), maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     let initialSeriesId, conns, dop =  
         log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
         if spec.gorge then
@@ -393,7 +392,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxPro
             chunk startPos |> int, conns, conns.Length
         else
             0, [|conn|], spec.stripes+1
-    let trancheEngine = Ingestion.Engine.Start (log.ForContext("Tranche","EventStore"), cosmosIngestionEngine, maxReadAhead, maxProcessing, initialSeriesId, TimeSpan.FromMinutes 1.)
+    let trancheEngine = Ingestion.Engine.Start (log.ForContext("Tranche","ES"), cosmosIngestionEngine, maxReadAhead, maxProcessing, initialSeriesId, TimeSpan.FromMinutes 1.)
     let post = function
         | Res.EndOfChunk seriesId -> trancheEngine.Submit <| Ingestion.EndOfSeries seriesId
         | Res.Batch (seriesId, pos, xs) ->
