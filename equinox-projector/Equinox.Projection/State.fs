@@ -93,10 +93,14 @@ type StreamStates() =
 
     let busy = HashSet<string>()
     let pending (requestedOrder : string seq) = seq {
-        for x in requestedOrder do
-            let state = states.[x]
-            if state.IsReady && not (busy.Contains x) then
-                yield state.write, { stream = x; span = state.queue.[0] } }
+        for s in requestedOrder do
+            let state = states.[s]
+            if state.IsReady && not (busy.Contains s) then
+                yield state.write, { stream = s; span = state.queue.[0] }
+        // [lazily] Slipstream in futher events that have been posted to streams which we've already visited
+        for KeyValue(s,v) in states do
+            if v.IsReady && not (busy.Contains s) then
+                yield v.write, { stream = s; span = v.queue.[0] } }
     let markBusy stream = busy.Add stream |> ignore
     let markNotBusy stream = busy.Remove stream |> ignore
 
