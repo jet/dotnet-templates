@@ -105,11 +105,11 @@ module Scheduling =
        
     /// Gathers stats pertaining to the core projection/ingestion activity
     type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
-        let cycles, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
+        let cycles, filled, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
         let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
         let dumpStats capacity (used,maxDop) =
-            log.Information("Projection Cycles {cycles} Capacity {capacity} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
-                !cycles, capacity, used, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
+            log.Information("Projection Cycles {cycles} Filled {filled:P0} Capacity {capacity} Active {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
+                !cycles, float !filled/float !cycles, capacity, used, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
             cycles := 0; batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
         abstract member Handle : InternalMessage<'R> -> unit
         default __.Handle msg = msg |> function
@@ -123,8 +123,9 @@ module Scheduling =
                 incr resultCompleted
             | Result (_stream, Choice2Of2 _) ->
                 incr resultExn
-        member __.TryDump(capacity,(used,max),streams : StreamStates) =
+        member __.TryDump(wasFull,capacity,(used,max),streams : StreamStates) =
             incr cycles
+            if wasFull then incr filled
             if statsDue () then
                 dumpStats capacity (used,max)
                 __.DumpExtraStats()
@@ -216,10 +217,10 @@ module Scheduling =
                     idle <- false)
                 // 2. top up provisioning of writers queue
                 let capacity = dispatcher.CurrentCapacity
-                if capacity <> 0 then
+                let mutable addsBeingAccepted = capacity <> 0
+                if addsBeingAccepted then
                     let potential = streams.Pending(progressState.InScheduledOrder streams.QueueWeight)
                     let xs = potential.GetEnumerator()
-                    let mutable addsBeingAccepted = true
                     while xs.MoveNext() && addsBeingAccepted do
                         let (_,{stream = s} : StreamSpan) as item = xs.Current
                         let! succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
@@ -227,7 +228,7 @@ module Scheduling =
                         idle <- idle && not succeeded // any add makes it not idle
                         addsBeingAccepted <- succeeded
                 // 3. Periodically emit status info
-                stats.TryDump(capacity,dispatcher.State,streams)
+                stats.TryDump(not addsBeingAccepted,capacity,dispatcher.State,streams)
                 // 4. Do a minimal sleep so we don't run completely hot when empty
                 if idle then do! Async.Sleep sleepIntervalMs }
         static member Start<'R>(stats, maxPendingBatches, processorDop, project, interpretProgress) =
