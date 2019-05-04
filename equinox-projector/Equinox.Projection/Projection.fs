@@ -44,17 +44,20 @@ module Progress =
 
     type State<'Pos>() =
         let pending = Queue<_>()
+        let trim () =
+            while pending.Count <> 0 && pending.Peek().streamToRequiredIndex.Count = 0 do
+                let batch = pending.Dequeue()
+                batch.markCompleted()
         member __.AppendBatch(markCompleted, reqs : Dictionary<string,int64>) =
+            trim ()
             pending.Enqueue { markCompleted = markCompleted; streamToRequiredIndex = reqs }
         member __.MarkStreamProgress(stream, index) =
             for x in pending do
                 match x.streamToRequiredIndex.TryGetValue stream with
                 | true, requiredIndex when requiredIndex <= index -> x.streamToRequiredIndex.Remove stream |> ignore
                 | _, _ -> ()
-            while pending.Count <> 0 && pending.Peek().streamToRequiredIndex.Count = 0 do
-                let batch = pending.Dequeue()
-                batch.markCompleted()
         member __.InScheduledOrder getStreamWeight =
+            trim ()
             let raw = seq {
                 let streams = HashSet()
                 let mutable batch = 0
