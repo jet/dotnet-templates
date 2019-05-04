@@ -310,7 +310,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, tryMapEvent, post : Re
             match work.TryDequeue(), remainder with
             | (true, task), _ ->
                 do! forkRunRelease task
-            | (false, _), Some nextChunk when not eofSpottedInChunk -> 
+            | (false, _), Some nextChunk when eofSpottedInChunk = 0 -> 
                 seriesId <- seriesId  + 1
                 let nextPos = posFromChunkAfter nextChunk
                 remainder <- Some nextPos
