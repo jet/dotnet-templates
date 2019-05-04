@@ -107,14 +107,17 @@ let start (log : Serilog.ILogger, maxPendingBatches, cosmosContext, maxWriters, 
     let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
     let writerResultLog = log.ForContext<Writer.Result>()
     let trim (writePos : int64 option, batch : StreamSpan) =
-        let mutable bytesBudget = cosmosPayloadLimit
+        // Reduce the item count when we don't yet know the write position in order to efficiently discover the redundancy where data is already present
+        // 100K budget for first page of an event makes validations cheaper while retaining general efficiency
+        let mutable bytesBudget, countBudget = match writePos with None -> 100 * 1024, 100 | Some _ -> cosmosPayloadLimit, 4096
         let mutable count = 0
         let max2MbMax100EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
             bytesBudget <- bytesBudget - cosmosPayloadBytes y
+            countBudget <- countBudget - 1
             count <- count + 1
-            // Reduce the item count when we don't yet know the write position in order to efficiently discover the redundancy where data is already present
-            count <= (if Option.isNone writePos then 100 else 4096) && (bytesBudget >= 0 || count = 1) // always send at least one event in order to surface the problem and have the stream mark malformed
-        { stream = batch.stream; span = { index = batch.span.index; events = batch.span.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
+            // always send at least one event in order to surface the problem and have the stream mark malformed
+            count = 1 || (countBudget >= 0 && bytesBudget >= 0)
+        { stream = batch.stream; span = { index = batch.span.index; events =  batch.span.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
     let project batch = async {
         let trimmed = trim batch
         try let! res = Writer.write log cosmosContext trimmed
