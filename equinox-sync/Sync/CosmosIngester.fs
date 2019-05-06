@@ -78,7 +78,7 @@ type Stats(log : ILogger, statsInterval) =
                 !rateLimited, !timedOut, !tooLarge, !malformed, !resultExnOther)
             rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0; resultExnOther := 0
             if badCats.Any then log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
-        Equinox.Cosmos.Metrics.dumpRuStats statsInterval log
+        Equinox.Cosmos.Store.Log.InternalMetrics.dump log
 
     override __.Handle message =
         base.Handle message
