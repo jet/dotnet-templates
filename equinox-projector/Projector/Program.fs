@@ -5,11 +5,10 @@ open Confluent.Kafka
 //#endif
 open Equinox.Cosmos
 open Equinox.Cosmos.Projection
+open Equinox.Store
 //#if kafka
-open Equinox.Projection.Codec
 open Jet.ConfluentKafka.FSharp
 //#endif
-open Equinox.Store
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
 //#if kafka
@@ -72,8 +71,8 @@ module CmdParser =
         (* ChangeFeed Args*)
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
         | [<AltCommandLine("-s"); Unique>] LeaseCollectionSuffix of string
-        | [<AltCommandLine("-i"); Unique>] ForceStartFromHere
-        | [<AltCommandLine("-m"); Unique>] BatchSize of int
+        | [<AltCommandLine("-f"); Unique>] ForceStartFromHere
+        | [<AltCommandLine("-m"); Unique>] MaxDocuments of int
         | [<AltCommandLine("-l"); Unique>] LagFreqS of float
         | [<AltCommandLine("-v"); Unique>] Verbose
         | [<AltCommandLine("-vc"); Unique>] ChangeFeedVerbose
@@ -90,7 +89,7 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LeaseCollectionSuffix _ -> "specify Collection Name suffix for Leases collection (default: `-aux`)."
                 | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
+                | MaxDocuments _ ->            "maximum item count to request from feed. Default: unlimited"
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
@@ -108,15 +107,17 @@ module CmdParser =
         member __.Suffix =                  args.GetResult(LeaseCollectionSuffix,"-aux")
         member __.Verbose =                 args.Contains Verbose
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
-        member __.BatchSize =               args.GetResult(BatchSize,1000)
+        member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
         member __.StartFromHere =           args.Contains ForceStartFromHere
         member x.BuildChangeFeedParams() =
-            Log.Information("Processing {leaseId} in {auxCollName} in batches of {batchSize}", x.LeaseId, x.AuxCollectionName, x.BatchSize)
+            match x.MaxDocuments with
+            | None -> Log.Information("Processing {leaseId} in {auxCollName} without document count liit", x.LeaseId, x.AuxCollectionName)
+            | Some lim -> Log.Information("Processing {leaseId} in {auxCollName} with max {maxItems} documents", x.LeaseId, x.AuxCollectionName, x.MaxDocuments)
             if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
-            { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
+            { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.MaxDocuments, x.LagFrequency
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
@@ -130,53 +131,59 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-let run discovery connectionPolicy source
-        (aux, leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
+let run (log : ILogger) discovery connectionPolicy source
+        (aux, leaseId, forceSkip, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
-        Log.Information("Lags by Range {@rangeLags}", remainingWork)
+        log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
     let! _feedEventHost =
         ChangeFeedProcessor.Start
-          ( Log.Logger, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
-            cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
+          ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
+            createObserver = createRangeProjector, ?cfBatchSize = maybeLimitDocumentCount, ?reportLagAndAwaitNextEstimation = maybeLogLag)
     do! Async.AwaitKeyboardInterrupt() }
 
 //#if kafka
-let mkRangeProjector (broker, topic) =
+// TODO remove when using 2.0.0-preview7
+open Equinox.Projection.Codec
+module RenderedEvent =
+    let ofStreamItem (x: Equinox.Projection.StreamItem) : RenderedEvent =
+        { s = x.stream; i = x.index; c = x.event.EventType; t = x.event.Timestamp; d = x.event.Data; m = x.event.Meta }
+
+let mkRangeProjector log (broker, topic) =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = CompressionType.Lz4)
     let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
     let disposeProducer = (producer :> IDisposable).Dispose
-    let projectBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+    let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.Timestamp; d = e.Data; m = e.Meta }
-        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map toKafkaEvent |> Array.ofSeq) |> Stopwatch.Time 
+        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map RenderedEvent.ofStreamItem |> Array.ofSeq) |> Stopwatch.Time 
         let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
         let! et,() = async {
+            // TODO handle failure
             let! _ = producer.ProduceBatch es
-            do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect } |> Stopwatch.Time
+            return! ctx.Checkpoint() |> Stopwatch.Time }
 
-        log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
-            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")),
+        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
+            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, int ctx.FeedResponse.RequestCharge,
             float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
-    ChangeFeedObserver.Create(Log.Logger, projectBatch, dispose = disposeProducer)
+    ChangeFeedObserver.Create(log, ingest, dispose = disposeProducer)
 //#else
-let createRangeHandler () =
-    let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
-    let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
-        sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.length) |> Stopwatch.Time
-        let! ct,() = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect } |> Stopwatch.Time
-        log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Parse {events,5} events {p:n3}s Checkpoint {c:n3}s",
-            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")),
-            float sw.ElapsedMilliseconds / 1000., events, (let e = pt.Elapsed in e.TotalSeconds), (let e = ct.Elapsed in e.TotalSeconds))
-        sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
-    }
-    ChangeFeedObserver.Create(Log.Logger, processBatch)
+let createRangeHandler (log:ILogger) () =
+        let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
+        let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+            sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
+            let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
+            let! ct,() = ctx.Checkpoint() |> Stopwatch.Time
+            log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Checkpoint {ct:n3}s",
+                epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000.,
+                let e = ct.Elapsed in e.TotalSeconds)
+            sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
+        }
+        ChangeFeedObserver.Create(log, ingest)
  //#endif
  
 // Illustrates how to emit direct to the Console using Serilog
@@ -186,26 +193,26 @@ module Logging =
         Log.Logger <-
             LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
+            // LibLog writes to the global logger, so we need to control the emission
             |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Message:lj} {NewLine}{Exception}"
+            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-                            .CreateLogger()
+            |> fun c -> c.CreateLogger()
 
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ChangeFeedVerbose
         let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-        let aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
-//#if kafka
-        let targetParams = args.Target.BuildTargetParams()
-        let createRangeHandler () = mkRangeProjector targetParams
+        let aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
+//#if kafka // uncomment to test Kafka
+        //let targetParams = args.Target.BuildTargetParams()
+        //let createRangeHandler log () = mkRangeProjector log targetParams
 //#endif
-        run discovery connector.ConnectionPolicy source
-            (aux, leaseId, startFromHere, batchSize, lagFrequency)
-            createRangeHandler     
+        run Log.Logger discovery connector.ConnectionPolicy source
+            (aux, leaseId, startFromHere, maxDocuments, lagFrequency)
+            (createRangeHandler Log.Logger)
         |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
