@@ -76,7 +76,7 @@ module CmdParser =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
         | [<AltCommandLine("-s"); Unique>] LeaseCollectionSuffix of string
         | [<AltCommandLine("-f"); Unique>] ForceStartFromHere
-        | [<AltCommandLine("-mi"); Unique>] BatchSize of int
+        | [<AltCommandLine("-mi"); Unique>] MaxDocuments of int
         | [<AltCommandLine "-mb"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-i"; Unique>] ProcessorDop of int
         | [<AltCommandLine("-l"); Unique>] LagFreqS of float
@@ -95,7 +95,7 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LeaseCollectionSuffix _ -> "specify Collection Name suffix for Leases collection (default: `-aux`)."
                 | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | BatchSize _ ->            "maximum item count to request from feed. Default: 1024"
+                | MaxDocuments _ ->         "maxiumum document count to supply for the Change Feed query. Default: ude response size limit"
                 | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 64"
                 | ProcessorDop _ ->         "Maximum number of streams to process concurrently. Default: 64"
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
@@ -115,18 +115,18 @@ module CmdParser =
         member __.Suffix =                  args.GetResult(LeaseCollectionSuffix,"-aux")
         member __.Verbose =                 args.Contains Verbose
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
-        member __.BatchSize =               args.GetResult(BatchSize,1024)
+        member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.MaxPendingBatches =       args.GetResult(MaxPendingBatches,64)
         member __.ProcessorDop =            args.GetResult(ProcessorDop,64)
         member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
         member __.StartFromHere =           args.Contains ForceStartFromHere
         member x.BuildChangeFeedParams() =
-            Log.Information("Processing {leaseId} in {auxCollName} in batches of {batchSize} (<= {maxPending} pending) using {dop} processors",
-                x.LeaseId, x.AuxCollectionName, x.BatchSize, x.MaxPendingBatches, x.ProcessorDop)
+            Log.Information("Processing {leaseId} in {auxCollName} with max Documents {maxDocuments} (<= {maxPending} pending) using {dop} processors",
+                x.LeaseId, x.AuxCollectionName, x.MaxDocuments, x.MaxPendingBatches, x.ProcessorDop)
             if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
-            { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.BatchSize, x.MaxPendingBatches, x.ProcessorDop, x.LagFrequency
+            { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.MaxDocuments, x.MaxPendingBatches, x.ProcessorDop, x.LagFrequency
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
@@ -141,7 +141,7 @@ module CmdParser =
         parser.ParseCommandLine argv |> Arguments
 
 let run (log : ILogger) discovery connectionPolicy source
-        (aux, leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
+        (aux, leaseId, forceSkip, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
         log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
@@ -150,10 +150,16 @@ let run (log : ILogger) discovery connectionPolicy source
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
-            cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
+            createObserver = createRangeProjector, ?cfBatchSize = maybeLimitDocumentCount, ?reportLagAndAwaitNextEstimation = maybeLogLag)
     do! Async.AwaitKeyboardInterrupt() }
 
 //#if kafka
+// TODO remove when using 2.0.0-preview7
+open Equinox.Projection.Codec
+module RenderedEvent =
+    let ofStreamItem (x: Equinox.Projection.StreamItem) : RenderedEvent =
+        { s = x.stream; i = x.index; c = x.event.EventType; t = x.event.Timestamp; d = x.event.Data; m = x.event.Meta }
+
 let mkRangeProjector log (_maxPendingBatches,_maxDop,_project) (broker, topic) =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = CompressionType.Lz4)
@@ -164,6 +170,7 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_project) (broker, topic) =
         let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map RenderedEvent.ofStreamItem |> Array.ofSeq) |> Stopwatch.Time 
         let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
         let! et,() = async {
+            // TODO handle failure
             let! _ = producer.ProduceBatch es
             return! ctx.Checkpoint() |> Stopwatch.Time }
 
@@ -217,7 +224,7 @@ let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ChangeFeedVerbose
         let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-        let aux, leaseId, startFromHere, batchSize, maxPendingBatches, processorDop, lagFrequency = args.BuildChangeFeedParams()
+        let aux, leaseId, startFromHere, maxDocuments, maxPendingBatches, processorDop, lagFrequency = args.BuildChangeFeedParams()
 //#if kafka
         //let targetParams = args.Target.BuildTargetParams()
         //let createRangeHandler log processingParams () = mkRangeProjector log processingParams targetParams
@@ -228,7 +235,7 @@ let main argv =
             do! Async.Sleep ms
             return batch.span.events.Length }
         run Log.Logger discovery connector.ConnectionPolicy source
-            (aux, leaseId, startFromHere, batchSize, lagFrequency)
+            (aux, leaseId, startFromHere, maxDocuments, lagFrequency)
             (createRangeHandler Log.Logger (maxPendingBatches, processorDop, project))
         |> Async.RunSynchronously
         0 
