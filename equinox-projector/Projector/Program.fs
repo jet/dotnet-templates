@@ -159,34 +159,32 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_project) (broker, topic) =
     let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = CompressionType.Lz4)
     let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
     let disposeProducer = (producer :> IDisposable).Dispose
-    let projectBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+    let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let toKafkaEvent (e: DocumentParser.IEvent) : RenderedEvent = { s = e.Stream; i = e.Index; c = e.EventType; t = e.Timestamp; d = e.Data; m = e.Meta }
-        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map toKafkaEvent |> Array.ofSeq) |> Stopwatch.Time 
+        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map RenderedEvent.ofStreamItem |> Array.ofSeq) |> Stopwatch.Time 
         let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
         let! et,() = async {
             let! _ = producer.ProduceBatch es
-            do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect } |> Stopwatch.Time
+            return! ctx.Checkpoint() |> Stopwatch.Time }
 
         log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
             ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, int ctx.FeedResponse.RequestCharge,
             float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
-    ChangeFeedObserver.Create(log, projectBatch, dispose = disposeProducer)
+    ChangeFeedObserver.Create(log, ingest, dispose = disposeProducer)
 //#else
 let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) =
     let projectionEngine = Projector.Start (log, maxPendingBatches, processorDop, project, TimeSpan.FromMinutes 1.)
     fun () ->
         let mutable rangeIngester = Unchecked.defaultof<IIngester>
-        let init rangeLog = rangeIngester <- Ingester.Start (rangeLog, projectionEngine, maxPendingBatches, processorDop, TimeSpan.FromMinutes 1.)
+        let init rangeLog = async { rangeIngester <- Ingester.Start (rangeLog, projectionEngine, maxPendingBatches, processorDop, TimeSpan.FromMinutes 1.) }
         let ingest epoch checkpoint docs =
-            let events = Seq.collect DocumentParser.enumEvents docs
-            let items = seq { for x in events -> { stream = x.Stream; index = x.Index; event = x } }
+            let items = Seq.collect DocumentParser.enumEvents docs
             rangeIngester.Submit(epoch, checkpoint, items)
         let dispose () = rangeIngester.Stop()
         let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
-        let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+        let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
             sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
             let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
             // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
@@ -197,7 +195,7 @@ let createRangeHandler (log:ILogger) (maxPendingBatches, processorDop, project) 
                 let e = pt.Elapsed in e.TotalSeconds, cur, max)
             sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
         }
-        ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
+        ChangeFeedObserver.Create(log, ingest, assign=init, dispose=dispose)
  //#endif
  
 // Illustrates how to emit direct to the Console using Serilog

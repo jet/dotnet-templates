@@ -15,7 +15,7 @@ let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: Cosmo
     let cosmosIngester = CosmosIngester.start (log, maxPendingBatches, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     fun () ->
         let mutable rangeIngester = Unchecked.defaultof<_>
-        let init rangeLog = rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxPendingBatches, maxWriters, TimeSpan.FromMinutes 1.)
+        let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxPendingBatches, maxWriters, TimeSpan.FromMinutes 1.) }
         let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform |> Array.ofSeq in rangeIngester.Submit(epoch, checkpoint, events)
         let dispose () = rangeIngester.Stop ()
         let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
@@ -94,7 +94,7 @@ let transformV0 catFilter (v0SchemaDocument: Document) : StreamItem seq = seq {
 //#else
 let transformOrFilter catFilter (changeFeedDocument: Document) : StreamItem seq = seq {
     for e in DocumentParser.enumEvents changeFeedDocument do
-        if catFilter (category e.Stream) then // TODO yield parsed
-            // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-            yield { stream = e.Stream; index = e.Index; event =  e } }
+        // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
+        if catFilter (category e.stream) then
+            yield e }
 //#endif

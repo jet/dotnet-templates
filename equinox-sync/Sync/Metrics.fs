@@ -65,9 +65,9 @@ let dumpRuStats duration (log: Serilog.ILogger) =
         totalRc <- totalRc + ru
         totalMs <- totalMs + stat.ms
         logActivity name stat.count ru stat.ms
-    logActivity "TOTAL" totalCount totalRc totalMs
-    // Yes, there's a minor race here!
+    // Yes, there's a minor race here between the capture and reset
     RuCounters.RuCounterSink.Reset()
+    logActivity "TOTAL" totalCount totalRc totalMs
     let measures : (string * (TimeSpan -> float)) list = [ "s", fun x -> x.TotalSeconds(*; "m", fun x -> x.TotalMinutes; "h", fun x -> x.TotalHours*) ]
     let logPeriodicRate name count ru = log.Information("rp{name} {count:n0} = ~{ru:n0} RU", name, count, ru)
     for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d) 
