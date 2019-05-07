@@ -12,10 +12,10 @@ open System
 open System.Collections.Generic
 
 let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: CosmosContext, maxWriters) (transform : Document -> StreamItem seq) =
-    let cosmosIngester = CosmosIngester.start (log, maxPendingBatches, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
+    let cosmosIngester = CosmosIngester.start (log.ForContext("Tranche","Target"), maxPendingBatches, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     fun () ->
         let mutable rangeIngester = Unchecked.defaultof<_>
-        let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxPendingBatches, maxWriters, TimeSpan.FromMinutes 1.) }
+        let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxPendingBatches, maxWriters, TimeSpan.FromMinutes 5.) }
         let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform |> Array.ofSeq in rangeIngester.Submit(epoch, checkpoint, events)
         let dispose () = rangeIngester.Stop ()
         let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
@@ -41,7 +41,7 @@ let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId,
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( Log.Logger, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
-            cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
+            cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag, leaseRenewInterval=TimeSpan.FromSeconds 7.)
     do! Async.AwaitKeyboardInterrupt() }
 
 //#if marveleqx

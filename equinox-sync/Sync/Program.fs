@@ -4,7 +4,6 @@ open Equinox.Cosmos
 open Equinox.Cosmos.Projection
 open Serilog
 open System
-open System.Diagnostics
 
 module CmdParser =
     open Argu
@@ -202,11 +201,11 @@ module Logging =
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
+        let log,storeLog = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
         let target =
             let destination = args.Destination.Connect "SyncTemplate" |> Async.RunSynchronously
             let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
-            Equinox.Cosmos.Core.CosmosContext(destination, colls, Log.ForContext<Core.CosmosContext>())
-        let log,storeLog = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
+            Equinox.Cosmos.Core.CosmosContext(destination, colls, storeLog)
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
 #if marveleqx
