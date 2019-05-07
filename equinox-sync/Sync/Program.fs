@@ -190,7 +190,9 @@ module Logging =
                             a.Logger(fun l ->
                                 let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
                                 let isWriter = Filters.Matching.FromSource<Equinox.Cosmos.Projection.CosmosIngester.Writer.Result>().Invoke
-                                (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriter x))
+                                let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
+                                let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
+                                (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriter x || isCfp429a x || isCfp429b x))
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
