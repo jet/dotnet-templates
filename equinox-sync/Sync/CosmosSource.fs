@@ -27,7 +27,7 @@ let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: Cosmo
             let! pt, (cur,max) = ingest epoch checkpoint docs |> Stopwatch.Time
             log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Post {pt:n3}s {cur}/{max}",
                 epoch, docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")), float sw.ElapsedMilliseconds / 1000.,
-                let e = pt.Elapsed in e.TotalSeconds, cur, max)
+                (let e = pt.Elapsed in e.TotalSeconds), cur, max)
             sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
         }
         ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
@@ -35,7 +35,7 @@ let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: Cosmo
 let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
-        Log.Information("Lags {@rangeLags} (Range, Docs count)", remainingWork)
+        Log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
     let! _feedEventHost =
