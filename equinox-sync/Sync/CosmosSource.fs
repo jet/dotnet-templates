@@ -32,7 +32,7 @@ let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: Cosmo
         }
         ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
 
-let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
+let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, startFromTail, maxDocuments, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
         Log.Information("Lags {@rangeLags} (Range, Docs count)", remainingWork)
@@ -40,8 +40,8 @@ let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId,
     let maybeLogLag = lagReportFreq |> Option.map logLag
     let! _feedEventHost =
         ChangeFeedProcessor.Start
-          ( Log.Logger, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
-            cfBatchSize = batchSize, createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag)
+          ( Log.Logger, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = startFromTail,
+            createObserver = createRangeProjector, ?cfBatchSize = maxDocuments, ?reportLagAndAwaitNextEstimation = maybeLogLag)
     do! Async.AwaitKeyboardInterrupt() }
 
 //#if marveleqx

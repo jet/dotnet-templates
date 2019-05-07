@@ -86,7 +86,7 @@ module CmdParser =
 #if cosmos
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
         member __.LeaseId =             a.GetResult ConsumerGroupName
-        member __.BatchSize =           a.GetResult(BatchSize,1000)
+        member __.MaxDocuments =        a.TryGetResult MaxDocuments
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
 #else
         member __.VerboseConsole =      a.Contains VerboseConsole
@@ -111,10 +111,10 @@ module CmdParser =
                 | Some sc, None ->  x.Source.Discovery, { database = x.Source.Database; collection = sc }
                 | None, Some dc ->  x.Destination.Discovery, { database = x.Destination.Database; collection = dc }
                 | Some _, Some _ -> raise (InvalidArguments "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
-            Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} in batches of {batchSize}", x.LeaseId, db.database, db.collection, x.BatchSize)
+            Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} in batches of {batchSize}", x.LeaseId, db.database, db.collection, x.MaxDocuments)
             if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
-            disco, db, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
+            disco, db, x.LeaseId, a.Contains FromTail, x.MaxDocuments, x.LagFrequency
 #else
         member x.BuildFeedParams() : EventStoreSource.ReaderSpec =
             let startPos =
@@ -326,16 +326,16 @@ let main argv =
         let target = Equinox.Cosmos.Core.CosmosContext(destination, colls, storeLog)
 #if cosmos
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
-        let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
+        let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
 #if marveleqx
-        let createSyncHandler () = CosmosSource.createRangeSyncHandler log args.MaxPendingBatches (target, args.MaxWriters) (CosmosSource.transformV0 catFilter)
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log args.MaxPendingBatches (target, args.MaxWriters) (CosmosSource.transformV0 catFilter)
 #else
-        let createSyncHandler () = CosmosSource.createRangeSyncHandler log args.MaxPendingBatches (target, args.MaxWriters) (CosmosSource.transformOrFilter catFilter)
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log args.MaxPendingBatches (target, args.MaxWriters) (CosmosSource.transformOrFilter catFilter)
         // Uncomment to test marveleqx mode
         // let createSyncHandler () = CosmosSource.createRangeSyncHandler log target (CosmosSource.transformV0 catFilter)
 #endif
         CosmosSource.run (discovery, source) (auxDiscovery, aux) connectionPolicy
-            (leaseId, startFromHere, batchSize, lagFrequency)
+            (leaseId, startFromHere, maxDocuments, lagFrequency)
             createSyncHandler
 #else
         let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 

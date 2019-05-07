@@ -95,7 +95,7 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LeaseCollectionSuffix _ -> "specify Collection Name suffix for Leases collection (default: `-aux`)."
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | MaxDocuments _ ->         "maxiumum document count to supply for the Change Feed query. Default: ude response size limit"
+                | MaxDocuments _ ->         "maxiumum document count to supply for the Change Feed query. Default: use response size limit"
                 | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 64"
                 | ProcessorDop _ ->         "Maximum number of streams to process concurrently. Default: 64"
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
