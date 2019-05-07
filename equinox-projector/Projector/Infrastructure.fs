@@ -17,3 +17,10 @@ type Async with
             let rec callback _ = Task.Run(fun () -> if Interlocked.Increment isDisposed = 1 then d.Dispose() ; sc ()) |> ignore
             and d : IDisposable = Console.CancelKeyPress.Subscribe callback
             in ()) 
+
+// TODO remove when using 2.0.0-preview7
+open Equinox.Projection.Codec
+
+module RenderedEvent =
+    let ofStreamItem (x: Equinox.Projection.StreamItem) : RenderedEvent =
+        { s = x.stream; i = x.index; c = x.event.EventType; t = x.event.Timestamp; d = x.event.Data; m = x.event.Meta }

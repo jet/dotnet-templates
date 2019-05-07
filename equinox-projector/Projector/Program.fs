@@ -71,8 +71,8 @@ module CmdParser =
         (* ChangeFeed Args*)
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
         | [<AltCommandLine("-s"); Unique>] LeaseCollectionSuffix of string
-        | [<AltCommandLine("-f"); Unique>] ForceStartFromHere
-        | [<AltCommandLine("-m"); Unique>] MaxDocuments of int
+        | [<AltCommandLine("-z"); Unique>] FromTail
+        | [<AltCommandLine("-md"); Unique>] MaxDocuments of int
         | [<AltCommandLine("-l"); Unique>] LagFreqS of float
         | [<AltCommandLine("-v"); Unique>] Verbose
         | [<AltCommandLine("-vc"); Unique>] ChangeFeedVerbose
@@ -88,8 +88,8 @@ module CmdParser =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LeaseCollectionSuffix _ -> "specify Collection Name suffix for Leases collection (default: `-aux`)."
-                | ForceStartFromHere _ ->   "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | MaxDocuments _ ->            "maximum item count to request from feed. Default: unlimited"
+                | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
@@ -110,14 +110,13 @@ module CmdParser =
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
-        member __.StartFromHere =           args.Contains ForceStartFromHere
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
-            | None -> Log.Information("Processing {leaseId} in {auxCollName} without document count liit", x.LeaseId, x.AuxCollectionName)
-            | Some lim -> Log.Information("Processing {leaseId} in {auxCollName} with max {maxItems} documents", x.LeaseId, x.AuxCollectionName, x.MaxDocuments)
-            if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
+            | None -> Log.Information("Processing {leaseId} in {auxCollName} without document count limit", x.LeaseId, x.AuxCollectionName)
+            | Some lim -> Log.Information("Processing {leaseId} in {auxCollName} with max {changeFeedMaxDocuments} documents", x.LeaseId, x.AuxCollectionName, x.MaxDocuments)
+            if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
-            { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, x.StartFromHere, x.MaxDocuments, x.LagFrequency
+            { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.LagFrequency
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
@@ -132,7 +131,7 @@ module CmdParser =
         parser.ParseCommandLine argv |> Arguments
 
 let run (log : ILogger) discovery connectionPolicy source
-        (aux, leaseId, forceSkip, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
+        (aux, leaseId, startFromTail, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
         log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
@@ -140,7 +139,7 @@ let run (log : ILogger) discovery connectionPolicy source
     let maybeLogLag = lagReportFreq |> Option.map logLag
     let! _feedEventHost =
         ChangeFeedProcessor.Start
-          ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, forceSkipExistingEvents = forceSkip,
+          ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, forceSkipExistingEvents = startFromTail,
             createObserver = createRangeProjector, ?cfBatchSize = maybeLimitDocumentCount, ?reportLagAndAwaitNextEstimation = maybeLogLag)
     do! Async.AwaitKeyboardInterrupt() }
 
@@ -205,13 +204,13 @@ let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ChangeFeedVerbose
         let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-        let aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
+        let aux, leaseId, startFromTail, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
 //#if kafka // uncomment to test Kafka
         //let targetParams = args.Target.BuildTargetParams()
         //let createRangeHandler log () = mkRangeProjector log targetParams
 //#endif
         run Log.Logger discovery connector.ConnectionPolicy source
-            (aux, leaseId, startFromHere, maxDocuments, lagFrequency)
+            (aux, leaseId, startFromTail, maxDocuments, lagFrequency)
             (createRangeHandler Log.Logger)
         |> Async.RunSynchronously
         0 
