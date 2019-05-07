@@ -11,7 +11,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 ### Changed
 
-- `dotnet new eqxprojector` now targets `Jet.ConfluentKafka.FSharp 1.0.0-rc4` (which targets `Confluent.Kafka 1.0.0-RC6`, `librdkafka 1.0.0`)
+- `dotnet new eqxprojector -k` now targets `Jet.ConfluentKafka.FSharp 1.0.0-rc6` (which targets `Confluent.Kafka 1.0.0`, `librdkafka 1.0.0`)
+- `dotnet new eqxsync` now targets `Equinox 2.0.-preview6`, using separated read/write/progress pipeline [#21](https://github.com/jet/dotnet-templates/pull/21)
 
 ### Removed
 ### Fixed
