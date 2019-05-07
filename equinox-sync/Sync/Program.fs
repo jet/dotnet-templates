@@ -352,7 +352,7 @@ let main argv =
                 || e.EventStreamId.StartsWith "Inventory-" // Too long
                 || e.EventStreamId.StartsWith "InventoryCount-" // No Longer used
                 || e.EventStreamId.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
-                //|| e.EventStreamId = "ReloadBatchId" // does not start at 0
+                || e.EventStreamId = "SkuFileUpload-534e4362c641461ca27e3d23547f0852"
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
