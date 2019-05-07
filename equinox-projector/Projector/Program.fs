@@ -121,8 +121,9 @@ module CmdParser =
         member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
         member x.BuildChangeFeedParams() =
-            Log.Information("Processing {leaseId} in {auxCollName} with max Documents {maxDocuments} (<= {maxPending} pending) using {dop} processors",
-                x.LeaseId, x.AuxCollectionName, x.MaxDocuments, x.MaxPendingBatches, x.ProcessorDop)
+            match x.MaxDocuments with
+            | None -> Log.Information("Processing {leaseId} in {auxCollName} without document count limit (<= {maxPending} pending) using {dop} processors", x.LeaseId, x.AuxCollectionName, x.MaxPendingBatches, x.ProcessorDop)
+            | Some lim -> Log.Information("Processing {leaseId} in {auxCollName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors", x.LeaseId, x.AuxCollectionName, x.MaxDocuments, x.MaxPendingBatches, x.ProcessorDop)
             if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.MaxPendingBatches, x.ProcessorDop, x.LagFrequency
