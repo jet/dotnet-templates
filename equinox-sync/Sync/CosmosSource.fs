@@ -30,7 +30,7 @@ let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: Cosmo
                 (let e = pt.Elapsed in e.TotalSeconds), cur, max)
             sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
         }
-        ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
+        ChangeFeedObserver.Create(log.ForContext<ChangeFeedObserver>(), processBatch, assign=init, dispose=dispose)
 
 let run (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, forceSkip, batchSize, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
