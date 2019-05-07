@@ -23,7 +23,7 @@ module CmdParser =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
         | [<AltCommandLine "-S"; Unique>] LocalSeq
         | [<AltCommandLine "-v"; Unique>] Verbose
-        | [<AltCommandLine "-z"; Unique>] FromTail
+        | [<AltCommandLine "-f"; Unique>] FromTail
         | [<AltCommandLine "-mi"; Unique>] BatchSize of int
         | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-mp"; Unique>] MaxProcessing of int
