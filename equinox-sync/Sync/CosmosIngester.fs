@@ -136,5 +136,5 @@ let start (log : Serilog.ILogger, maxPendingBatches, cosmosContext, maxWriters, 
         let _stream, { write = wp } = applyResultToStreamState res
         Writer.logTo writerResultLog (stream,res)
         wp
-    let projectionAndCosmosStats = Stats(log, statsInterval)
+    let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), statsInterval)
     Engine<(int*int)*Writer.Result>.Start(projectionAndCosmosStats, maxPendingBatches, maxWriters, project, interpretProgress)

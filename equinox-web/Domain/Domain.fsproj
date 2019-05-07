@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox" Version="2.0.0-preview5" />
+    <PackageReference Include="Equinox" Version="2.0.0-preview6" />
     <PackageReference Include="FSharp.UMX" Version="1.0.0-preview-001" />
     <PackageReference Include="TypeShape" Version="6.0.0" />
   </ItemGroup>

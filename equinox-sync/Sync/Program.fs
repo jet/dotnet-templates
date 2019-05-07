@@ -23,12 +23,12 @@ module CmdParser =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
         | [<AltCommandLine "-S"; Unique>] LocalSeq
         | [<AltCommandLine "-v"; Unique>] Verbose
-        | [<AltCommandLine "-f"; Unique>] FromTail
-        | [<AltCommandLine "-mi"; Unique>] BatchSize of int
+        | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-mp"; Unique>] MaxProcessing of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
 #if cosmos
+        | [<AltCommandLine "-md"; Unique>] MaxDocuments of int
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
         | [<AltCommandLine "-as"; Unique>] LeaseCollectionSource of string
         | [<AltCommandLine "-ad"; Unique>] LeaseCollectionDestination of string
@@ -36,6 +36,7 @@ module CmdParser =
 #else
         | [<AltCommandLine "-vc"; Unique>] VerboseConsole
         | [<AltCommandLine "-f"; Unique>] ForceRestart
+        | [<AltCommandLine "-mi"; Unique>] BatchSize of int
         | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-p"; Unique>] Position of int64
         | [<AltCommandLine "-c"; Unique>] Chunk of int
@@ -57,7 +58,7 @@ module CmdParser =
 #if cosmos
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
+                | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
                 | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
                 | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
@@ -65,8 +66,8 @@ module CmdParser =
 #else
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off"
                 | FromTail ->               "Start the processing from the Tail"
-                | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | ForceRestart _ ->         "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
+                | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
                 | Position _ ->             "EventStore $all Stream Position to commence from"
                 | Chunk _ ->                "EventStore $all Chunk to commence from"
@@ -86,7 +87,6 @@ module CmdParser =
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
         member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.BatchSize =           a.GetResult(BatchSize,1000)
-        member __.StartFromHere =       a.Contains FromTail
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
 #else
         member __.VerboseConsole =      a.Contains VerboseConsole
@@ -112,7 +112,7 @@ module CmdParser =
                 | None, Some dc ->  x.Destination.Discovery, { database = x.Destination.Database; collection = dc }
                 | Some _, Some _ -> raise (InvalidArguments "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
             Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} in batches of {batchSize}", x.LeaseId, db.database, db.collection, x.BatchSize)
-            if x.StartFromHere then Log.Warning("(If new projector group) Skipping projection of all existing events.")
+            if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             disco, db, x.LeaseId, x.StartFromHere, x.BatchSize, x.LagFrequency
 #else

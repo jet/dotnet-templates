@@ -46,10 +46,10 @@ This project was generated using:
         $env:EQUINOX_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
 
         # `default` defines the Projector Group identity - each id has separated state in the aux collection (aka LeaseId)
-        # `-mi 1000` sets the change feed maximum document limit to 1000
+        # `-md 1000` sets the change feed maximum document limit to 1000
         # `-t topic0` identifies the Kafka topic to which the Projector should write
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
-        dotnet run -p Projector -- default -mi 1000 -t topic0 cosmos
+        dotnet run -p Projector -- default -md 1000 -t topic0 cosmos
 
         # (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
 
