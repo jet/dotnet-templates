@@ -188,7 +188,7 @@ module Scheduling =
         let cycles, states, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, CatStats(), ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
         let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
         let dumpStats (used,maxDop) =
-            log.Information("Projection Cycles {cycles} States {states} Busy {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
+            log.Information("Projection Cycles {cycles} States {@states} Busy {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
                 !cycles, states.StatsDescending, used, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
             cycles := 0; states.Clear(); batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
         abstract member Handle : InternalMessage<'R> -> unit
