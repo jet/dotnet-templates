@@ -1,6 +1,5 @@
 ﻿module SyncTemplate.CosmosSource
 
-open Equinox.Cosmos.Core
 open Equinox.Cosmos.Projection
 open Equinox.Projection
 open Equinox.Projection2
@@ -12,37 +11,36 @@ open Serilog
 open System
 open System.Collections.Generic
 
-let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: CosmosContext, maxWriters) (transform : Document -> StreamItem seq) =
-    let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
-    fun () ->
-        let mutable rangeIngester = Unchecked.defaultof<_>
-        let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxPendingBatches*2, maxPendingBatches, TimeSpan.FromMinutes 1.) }
-        let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform |> Array.ofSeq in rangeIngester.Submit(epoch, checkpoint, events)
-        let dispose () = rangeIngester.Stop ()
-        let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
-        let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
-            sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-            let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
-            // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
-            let checkpoint = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect }
-            let! pt, (cur,max) = ingest epoch checkpoint docs |> Stopwatch.Time
-            log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Post {pt:n3}s {cur}/{max}",
-                epoch, docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")), float sw.ElapsedMilliseconds / 1000.,
-                (let e = pt.Elapsed in e.TotalSeconds), cur, max)
-            sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
-        }
-        ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
+let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq) (maxReads, maxSubmissions) cosmosIngester () =
+    let mutable rangeIngester = Unchecked.defaultof<_>
+    let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxReads, maxSubmissions, TimeSpan.FromMinutes 1.) }
+    let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform |> Array.ofSeq in rangeIngester.Submit(epoch, checkpoint, events)
+    let dispose () = rangeIngester.Stop ()
+    let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
+    let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
+        sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
+        let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
+        // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
+        let checkpoint = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect }
+        let! pt, (cur,max) = ingest epoch checkpoint docs |> Stopwatch.Time
+        log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Post {pt:n3}s {cur}/{max}",
+            epoch, docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")), float sw.ElapsedMilliseconds / 1000.,
+            (let e = pt.Elapsed in e.TotalSeconds), cur, max)
+        sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
+    }
+    ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
 
 let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, startFromTail, maxDocuments, lagReportFreq : TimeSpan option)
-        createRangeProjector = async {
+        (cosmosContext, maxWriters) createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
         log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
+    let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = startFromTail,
-            createObserver = createRangeProjector, ?cfBatchSize = maxDocuments, ?reportLagAndAwaitNextEstimation = maybeLogLag)
+            createObserver = createRangeProjector cosmosIngester, ?cfBatchSize = maxDocuments, ?reportLagAndAwaitNextEstimation = maybeLogLag)
     do! Async.AwaitKeyboardInterrupt() }
 
 //#if marveleqx

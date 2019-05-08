@@ -330,15 +330,16 @@ let main argv =
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
 #if marveleqx
-        let createSyncHandler = CosmosSource.createRangeSyncHandler log args.MaxPendingBatches (target, args.MaxWriters) (CosmosSource.transformV0 catFilter)
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformV0 catFilter)
 #else
-        let createSyncHandler = CosmosSource.createRangeSyncHandler log args.MaxPendingBatches (target, args.MaxWriters) (CosmosSource.transformOrFilter catFilter)
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformOrFilter catFilter)
         // Uncomment to test marveleqx mode
         // let createSyncHandler () = CosmosSource.createRangeSyncHandler log target (CosmosSource.transformV0 catFilter)
 #endif
         CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, maxDocuments, lagFrequency)
-            createSyncHandler
+            (target, args.MaxWriters)
+            (createSyncHandler (args.MaxPendingBatches*2,args.MaxPendingBatches))
 #else
         let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 
         let catFilter = args.Source.CategoryFilterFunction
