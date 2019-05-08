@@ -53,7 +53,7 @@ module CmdParser =
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 2048"
-                | MaxProcessing _ ->        "Maximum number of batches to process concurrently. Default: 128"
+                | MaxProcessing _ ->        "Maximum number of batches to process concurrently. Default: 16"
                 | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 512"
 #if cosmos
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
@@ -80,8 +80,8 @@ module CmdParser =
     and Arguments(a : ParseResults<Parameters>) =
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.Verbose =             a.Contains Verbose
-        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,1000)
-        member __.MaxProcessing =       a.GetResult(MaxProcessing,32)
+        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
+        member __.MaxProcessing =       a.GetResult(MaxProcessing,16)
         member __.MaxWriters =          a.GetResult(MaxWriters,1024)
 #if cosmos
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
@@ -293,11 +293,12 @@ module Logging =
                                 l.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.RuCounters.RuCounterSink()) |> ignore) |> ignore
                             a.Logger(fun l ->
                                 let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
+                                let isCp = Filters.Matching.FromSource<Checkpoint.CheckpointSeries>().Invoke
                                 let isWriter = Filters.Matching.FromSource<Equinox.Cosmos.Projection.CosmosIngester.Writer.Result>().Invoke
                                 let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
                                 let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                                 let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                                (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriter x || isCfp429a x || isCfp429b x || isCfp429c x))
+                                (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isCp x || isWriter x || isCfp429a x || isCfp429b x || isCfp429c x))
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
