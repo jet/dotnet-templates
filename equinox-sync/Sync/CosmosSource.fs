@@ -13,7 +13,7 @@ open System
 open System.Collections.Generic
 
 let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: CosmosContext, maxWriters) (transform : Document -> StreamItem seq) =
-    let cosmosIngester = CosmosIngester.start (log, maxPendingBatches, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
+    let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     fun () ->
         let mutable rangeIngester = Unchecked.defaultof<_>
         let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxPendingBatches, maxWriters, TimeSpan.FromMinutes 1.) }

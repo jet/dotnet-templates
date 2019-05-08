@@ -383,7 +383,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxPro
             startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float max.CommitPosition,
             checkpointFreq.TotalMinutes)
         return startPos }
-    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Cosmos"), maxProcessing, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
+    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Cosmos"), cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     let initialSeriesId, conns, dop =  
         log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
         if spec.gorge then

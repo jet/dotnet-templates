@@ -85,8 +85,7 @@ type Stats(log : ILogger, statsInterval) =
     override __.Handle message =
         base.Handle message
         match message with
-        | Add (_,_)
-        | AddActive _
+        | Merge _
         | Added _ -> ()
         | Result (_stream, Choice1Of2 ((es,bs),r)) ->
             events <- events + es
@@ -104,29 +103,26 @@ type Stats(log : ILogger, statsInterval) =
             | ResultKind.Malformed -> category stream |> badCats.Ingest; incr malformed
             | ResultKind.TimedOut -> incr timedOut
 
-let start (log : Serilog.ILogger, maxPendingBatches, cosmosContext, maxWriters, statsInterval) =
+let start (log : Serilog.ILogger, cosmosContext, maxWriters, statsInterval) =
     let cosmosPayloadLimit = 2 * 1024 * 1024 - (*fudge*)4096
     let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
     let writerResultLog = log.ForContext<Writer.Result>()
-    let trim (writePos : int64 option, batch : StreamSpan) =
-        // Reduce the item count when we don't yet know the write position in order to efficiently discover the redundancy where data is already present
-        // 100K budget for first page of an event makes validations cheaper while retaining general efficiency
-        let mutable bytesBudget, countBudget = match writePos with None -> 100 * 1024, 100 | Some _ -> cosmosPayloadLimit, 4096
-        let mutable count = 0
-        let max2MbMax100EventsMax10EventsFirstTranche (y : Equinox.Codec.IEvent<byte[]>) =
-            bytesBudget <- bytesBudget - cosmosPayloadBytes y
-            countBudget <- countBudget - 1
+    let trim (_currentWritePos : int64 option, batch : StreamSpan) =
+        let mutable count, countBudget, bytesBudget = 0, 4096, cosmosPayloadLimit
+        let withinLimits (y : Equinox.Codec.IEvent<byte[]>) =
             count <- count + 1
-            // always send at least one event in order to surface the problem and have the stream mark malformed
+            countBudget <- countBudget - 1
+            bytesBudget <- bytesBudget - cosmosPayloadBytes y
+            // always send at least one event in order to surface the problem and have the stream marked malformed
             count = 1 || (countBudget >= 0 && bytesBudget >= 0)
-        { stream = batch.stream; span = { index = batch.span.index; events =  batch.span.events |> Array.takeWhile max2MbMax100EventsMax10EventsFirstTranche } }
-    let project batch = async {
+        { stream = batch.stream; span = { index = batch.span.index; events =  batch.span.events |> Array.takeWhile withinLimits } }
+    let attemptWrite batch = async {
         let trimmed = trim batch
         try let! res = Writer.write log cosmosContext trimmed
             let stats = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
             return Choice1Of2 (stats,res)
         with e -> return Choice2Of2 e }
-    let interpretProgress (streams: StreamStates) stream res =
+    let interpretWriteResultProgress (streams: Scheduling.StreamStates) stream res =
         let applyResultToStreamState = function
             | Choice1Of2 (_stats, Writer.Ok pos) ->                       streams.InternalUpdate stream pos null
             | Choice1Of2 (_stats, Writer.Duplicate pos) ->                streams.InternalUpdate stream pos null
@@ -139,4 +135,4 @@ let start (log : Serilog.ILogger, maxPendingBatches, cosmosContext, maxWriters, 
         Writer.logTo writerResultLog (stream,res)
         wp
     let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), statsInterval)
-    Engine<(int*int)*Writer.Result>.Start(projectionAndCosmosStats, maxPendingBatches, maxWriters, project, interpretProgress)
+    Engine<(int*int)*Writer.Result>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress)
