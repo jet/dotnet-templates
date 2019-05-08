@@ -182,7 +182,7 @@ module Scheduling =
         /// Result of processing on stream - result (with basic stats) or the `exn` encountered
         | Result of stream: string * outcome: Choice<'R,exn>
        
-    type BufferState = Idle | Partial | Full | Slipstreaming
+    type BufferState = Idle | Full | Slipstreaming
     /// Gathers stats pertaining to the core projection/ingestion activity
     type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
         let cycles, states, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, CatStats(), ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
@@ -286,17 +286,17 @@ module Scheduling =
                     worked <- true
             worked
         let tryFillDispatcher includeSlipstreamed = async {
-            let mutable worked, filled = false, true
-            if dispatcher.HasCapacity then
+            let mutable hasCapacity, worked = dispatcher.HasCapacity, false
+            if hasCapacity then
                 let potential = streams.Pending(includeSlipstreamed, progressState.InScheduledOrder streams.QueueWeight)
                 let xs = potential.GetEnumerator()
-                while xs.MoveNext() && not filled do
+                while xs.MoveNext() && hasCapacity do
                     let (_,{stream = s} : StreamSpan) as item = xs.Current
                     let! succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
                     if succeeded then streams.MarkBusy s
                     worked <- worked || succeeded // if we added any request, we also don't sleep
-                    filled <- not succeeded
-            return worked, filled }
+                    hasCapacity <- succeeded
+            return hasCapacity, worked }
 
         member private __.Pump(stats : Stats<'R>) = async {
             use _ = dispatcher.Result.Subscribe(Result >> work.Enqueue)
@@ -307,12 +307,11 @@ module Scheduling =
                     // 1. propagate write write outcomes to buffer (can mark batches completed etc)
                     let processedResults = tryDrainResults stats.Handle
                     // 2. top up provisioning of writers queue
-                    let! dispatched, filled = tryFillDispatcher (dispatcherState = Slipstreaming)
+                    let! hasCapacity, dispatched = tryFillDispatcher (dispatcherState = Slipstreaming)
                     idle <- idle && not processedResults && not dispatched
-                    if dispatcherState = Idle && dispatched && filled then dispatcherState <- Full; finished <- true
+                    if dispatcherState = Idle && not hasCapacity then dispatcherState <- Full; finished <- true
                     elif dispatcherState = Slipstreaming then finished <- true
-                    elif dispatcherState = Idle && dispatched then dispatcherState <- Partial
-                    if not filled then // need to bring more work into the pool as we can't fill the work queue
+                    if hasCapacity && not finished then // need to bring more work into the pool as we can't fill the work queue
                         match pending.TryDequeue() with
                         | true, batch -> ingestPendingBatch stats.Handle batch
                         | false,_ -> dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
