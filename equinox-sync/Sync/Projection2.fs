@@ -314,9 +314,7 @@ module Scheduling =
                     | Slipstreaming ->                      finished <- true
                     | _ when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue
                         match pending.TryDequeue() with
-                        | true, batch ->
-                            Log.Error("Ingest")
-                            ingestPendingBatch stats.Handle batch
+                        | true, batch -> ingestPendingBatch stats.Handle batch
                         | false,_ -> dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
                     | _ -> ()
                 // 3. Supply state to accumulate (and periodically emit) status info
@@ -482,7 +480,6 @@ module Ingestion =
                     let markCompleted () =
                         submissionsMax.Release()
                         readMax.Release()
-                        Log.Error("MC {rm} {sm}",readMax.State,submissionsMax.State)
                         validatedPos <- Some (epoch,checkpoint)
                     work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
                     markCompleted, items
