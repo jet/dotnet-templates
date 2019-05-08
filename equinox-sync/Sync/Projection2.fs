@@ -166,11 +166,11 @@ module Scheduling =
                     readyB <- readyB + sz
             log.Information("Streams Synced {synced:n0} Active {busy:n0}/{busyMb:n1}MB Ready {ready:n0}/{readyMb:n1}MB Waiting {waiting}/{waitingMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
                 synced, busyCount, mb busyB, ready, mb readyB, unprefixed, mb unprefixedB, malformed, mb malformedB)
-            if busyCats.Any then log.Information("Active Categories, events {busyCats}", Seq.truncate 5 busyCats.StatsDescending)
-            if readyCats.Any then log.Information("Ready Categories, events {readyCats}", Seq.truncate 5 readyCats.StatsDescending)
-            if readyCats.Any then log.Information("Ready Streams, KB {readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
-            if unprefixedStreams.Any then log.Information("Waiting Streams, KB {missingStreams}", Seq.truncate 3 unprefixedStreams.StatsDescending)
-            if malformedStreams.Any then log.Information("Malformed Streams, MB {malformedStreams}", malformedStreams.StatsDescending)
+            if busyCats.Any then log.Information("Active Categories, events {@busyCats}", Seq.truncate 5 busyCats.StatsDescending)
+            if readyCats.Any then log.Information("Ready Categories, events {@readyCats}", Seq.truncate 5 readyCats.StatsDescending)
+            if readyCats.Any then log.Information("Ready Streams, KB {@readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
+            if unprefixedStreams.Any then log.Information("Waiting Streams, KB {@missingStreams}", Seq.truncate 3 unprefixedStreams.StatsDescending)
+            if malformedStreams.Any then log.Information("Malformed Streams, MB {@malformedStreams}", malformedStreams.StatsDescending)
 
     /// Messages used internally by projector, including synthetic ones for the purposes of the `Stats` listeners
     [<NoComparison; NoEquality>]
@@ -187,9 +187,9 @@ module Scheduling =
     type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
         let cycles, states, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, CatStats(), ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
         let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
-        let dumpStats (used,maxDop) =
-            log.Information("Projection Cycles {cycles} States {@states} Busy {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Completed {completed} Exceptions {exns}",
-                !cycles, states.StatsDescending, used, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !resultCompleted, !resultExn)
+        let dumpStats (used,maxDop) pendingCount =
+            log.Information("Projection Cycles {cycles} States {@states} Busy {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Pending {pending} Completed {completed} Exceptions {exns}",
+                !cycles, states.StatsDescending, used, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, pendingCount, !resultCompleted, !resultExn)
             cycles := 0; states.Clear(); batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
         abstract member Handle : InternalMessage<'R> -> unit
         default __.Handle msg = msg |> function
@@ -203,12 +203,12 @@ module Scheduling =
                 incr resultCompleted
             | Result (_stream, Choice2Of2 _) ->
                 incr resultExn
-        member __.TryDump(state,(used,max),streams : StreamStates) =
+        member __.TryDump(state,(used,max),streams : StreamStates, pendingCount) =
             incr cycles
             states.Ingest(string state)
             let due = statsDue ()
             if due then
-                dumpStats (used,max)
+                dumpStats (used,max) pendingCount
                 __.DumpExtraStats()
                 streams.Dump log
             due
@@ -316,7 +316,7 @@ module Scheduling =
                         | true, batch -> ingestPendingBatch stats.Handle batch
                         | false,_ -> dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
                 // 3. Supply state to accumulate (and periodically emit) status info
-                if stats.TryDump(dispatcherState,dispatcher.State,streams) then idle <- false
+                if stats.TryDump(dispatcherState,dispatcher.State,streams,pending.Count) then idle <- false
                 // 4. Do a minimal sleep so we don't run completely hot when empty
                 if idle then do! Async.Sleep sleepIntervalMs }
 
@@ -390,8 +390,8 @@ module Ingestion =
                 waiting <- waiting + 1
                 waitingB <- waitingB + sz
             if waiting <> 0 then log.Information("Streams Waiting {busy:n0}/{busyMb:n1}MB ", waiting, mb waitingB)
-            if waitingCats.Any then log.Information("Waiting Categories, events {readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
-            if waitingCats.Any then log.Information("Waiting Streams, KB {readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
+            if waitingCats.Any then log.Information("Waiting Categories, events {@readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
+            if waitingCats.Any then log.Information("Waiting Streams, KB {@readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
 
     type private Stats(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
         let mutable pendingBatchCount, validatedEpoch, comittedEpoch : int * int64 option * int64 option = 0, None, None

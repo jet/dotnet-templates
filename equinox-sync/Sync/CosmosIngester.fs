@@ -79,7 +79,7 @@ type Stats(log : ILogger, statsInterval) =
             log.Warning("Exceptions {rateLimited:n0} rate-limited, {timedOut:n0} timed out, {tooLarge} too large, {malformed} malformed, {other} other",
                 !rateLimited, !timedOut, !tooLarge, !malformed, !resultExnOther)
             rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0; resultExnOther := 0
-            if badCats.Any then log.Error("Malformed categories {badCats}", badCats.StatsDescending); badCats.Clear()
+            if badCats.Any then log.Error("Malformed categories {@badCats}", badCats.StatsDescending); badCats.Clear()
         Equinox.Cosmos.Store.Log.InternalMetrics.dump log
 
     override __.Handle message =
