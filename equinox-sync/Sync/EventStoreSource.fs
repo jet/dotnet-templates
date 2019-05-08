@@ -352,7 +352,7 @@ type ReaderSpec =
 
 type StartMode = Starting | Resuming | Overridding
 
-let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxProcessing (cosmosContext, maxWriters) resolveCheckpointStream = async {
+let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmosContext, maxWriters) resolveCheckpointStream = async {
     let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
     let conn = connect ()
     let! maxInParallel = Async.StartChild <| establishMax conn
@@ -393,7 +393,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead maxPro
             chunk startPos |> int, conns, conns.Length
         else
             0, [|conn|], spec.stripes+1
-    let trancheEngine = Ingestion.Engine.Start (log.ForContext("Tranche","ES"), cosmosIngestionEngine, maxReadAhead, maxProcessing, initialSeriesId, TimeSpan.FromMinutes 1.)
+    let trancheEngine = Ingestion.Engine.Start (log.ForContext("Tranche","ES"), cosmosIngestionEngine, maxReadAhead, maxReadAhead, initialSeriesId, TimeSpan.FromMinutes 1.)
     let post = function
         | Res.EndOfChunk seriesId -> trancheEngine.Submit <| Ingestion.EndOfSeries seriesId
         | Res.Batch (seriesId, pos, xs) ->

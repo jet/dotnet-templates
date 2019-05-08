@@ -25,9 +25,9 @@ module CmdParser =
         | [<AltCommandLine "-v"; Unique>] Verbose
         | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
-        | [<AltCommandLine "-mp"; Unique>] MaxProcessing of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
 #if cosmos
+        | [<AltCommandLine "-mp"; Unique>] MaxProcessing of int
         | [<AltCommandLine "-md"; Unique>] MaxDocuments of int
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
         | [<AltCommandLine "-as"; Unique>] LeaseCollectionSource of string
@@ -53,12 +53,12 @@ module CmdParser =
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 2048"
-                | MaxProcessing _ ->        "Maximum number of batches to process concurrently. Default: 16"
                 | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 512"
 #if cosmos
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
+                | MaxProcessing _ ->        "Maximum number of batches to submit concurrently. Default: 16"
                 | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
                 | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
@@ -81,12 +81,12 @@ module CmdParser =
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.Verbose =             a.Contains Verbose
         member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
-        member __.MaxProcessing =       a.GetResult(MaxProcessing,16)
         member __.MaxWriters =          a.GetResult(MaxWriters,1024)
 #if cosmos
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
         member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.MaxDocuments =        a.TryGetResult MaxDocuments
+        member __.MaxProcessing =       a.GetResult(MaxProcessing,16)
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
 #else
         member __.VerboseConsole =      a.Contains VerboseConsole
@@ -111,6 +111,7 @@ module CmdParser =
                 | Some sc, None ->  x.Source.Discovery, { database = x.Source.Database; collection = sc }
                 | None, Some dc ->  x.Destination.Discovery, { database = x.Destination.Database; collection = dc }
                 | Some _, Some _ -> raise (InvalidArguments "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
+            Log.Information("Max batches to process concurrently per Range: {maxProcessing}", x.MaxProcessing)
             Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} with maximum document count limited to {maxDocuments}", x.LeaseId, db.database, db.collection, x.MaxDocuments)
             if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
@@ -128,8 +129,6 @@ module CmdParser =
                 x.ConsumerGroupName, startPos, x.ForceRestart, x.Destination.Database, x.Destination.Collection)
             Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxPendingBatches} uncommitted batches ahead",
                 x.MinBatchSize, x.StartingBatchSize, x.MaxPendingBatches)
-            Log.Information("Max batches to process concurrently: {maxProcessing}",
-                x.MaxProcessing)
             {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = x.CheckpointInterval; tailInterval = x.TailInterval; forceRestart = x.ForceRestart
                 batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; gorge = x.Gorge; stripes = x.Stripes }
 #endif
@@ -340,7 +339,7 @@ let main argv =
         CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, maxDocuments, lagFrequency)
             (target, args.MaxWriters)
-            (createSyncHandler (args.MaxPendingBatches*2,args.MaxPendingBatches))
+            (createSyncHandler (args.MaxPendingBatches*2,args.MaxProcessing))
 #else
         let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 
         let catFilter = args.Source.CategoryFilterFunction
@@ -361,7 +360,7 @@ let main argv =
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
-        EventStoreSource.run log (connect, spec, tryMapEvent catFilter) args.MaxPendingBatches args.MaxProcessing (target, args.MaxWriters) resolveCheckpointStream
+        EventStoreSource.run log (connect, spec, tryMapEvent catFilter) args.MaxPendingBatches (target, args.MaxWriters) resolveCheckpointStream
 #endif
         |> Async.RunSynchronously
         0 
