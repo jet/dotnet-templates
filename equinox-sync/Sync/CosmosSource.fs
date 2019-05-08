@@ -14,7 +14,7 @@ open System.Collections.Generic
 let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq) (maxReads, maxSubmissions) cosmosIngester () =
     let mutable rangeIngester = Unchecked.defaultof<_>
     let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxReads, maxSubmissions, TimeSpan.FromMinutes 1.) }
-    let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform |> Array.ofSeq in rangeIngester.Submit(epoch, checkpoint, events)
+    let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform in rangeIngester.Submit(epoch, checkpoint, events)
     let dispose () = rangeIngester.Stop ()
     let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
     let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
