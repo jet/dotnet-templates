@@ -26,7 +26,6 @@ module private Helpers =
         /// Wait for the specified timeout to acquire (or return false instantly)
         member __.TryAwait(?timeout) = inner.Await(defaultArg timeout TimeSpan.Zero)
         member __.HasCapacity = inner.CurrentCount > 0
-        member __.CurrentCapacity = inner.CurrentCount
 
 module Progress =
 
@@ -286,7 +285,7 @@ module Scheduling =
                     worked <- true
             worked
         let tryFillDispatcher includeSlipstreamed = async {
-            let mutable hasCapacity, worked = dispatcher.HasCapacity, false
+            let mutable hasCapacity, dispatched = dispatcher.HasCapacity, false
             if hasCapacity then
                 let potential = streams.Pending(includeSlipstreamed, progressState.InScheduledOrder streams.QueueWeight)
                 let xs = potential.GetEnumerator()
@@ -294,9 +293,9 @@ module Scheduling =
                     let (_,{stream = s} : StreamSpan) as item = xs.Current
                     let! succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
                     if succeeded then streams.MarkBusy s
-                    worked <- worked || succeeded // if we added any request, we also don't sleep
+                    dispatched <- dispatched || succeeded // if we added any request, we also don't sleep
                     hasCapacity <- succeeded
-            return hasCapacity, worked }
+            return hasCapacity, dispatched }
 
         member private __.Pump(stats : Stats<'R>) = async {
             use _ = dispatcher.Result.Subscribe(Result >> work.Enqueue)
@@ -313,11 +312,11 @@ module Scheduling =
                     | Idle when not hasCapacity ->          dispatcherState <- Full; finished <- true
                     | Slipstreaming when not dispatched ->  dispatcherState <- Idle; finished <- true
                     | Slipstreaming ->                      finished <- true
-                    | _ when not hasCapacity -> ()
-                    | _ -> // need to bring more work into the pool as we can't fill the work queue
+                    | _ when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue
                         match pending.TryDequeue() with
                         | true, batch -> ingestPendingBatch stats.Handle batch
                         | false,_ -> dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
+                    | _ -> ()
                 // 3. Supply state to accumulate (and periodically emit) status info
                 if stats.TryDump(dispatcherState,dispatcher.State,streams,pending.Count) then idle <- false
                 // 4. Do a minimal sleep so we don't run completely hot when empty
@@ -481,6 +480,7 @@ module Ingestion =
                     let markCompleted () =
                         submissionsMax.Release()
                         readMax.Release()
+                        Log.Error("MC {rm} {sm}",readMax.State,submissionsMax.State)
                         validatedPos <- Some (epoch,checkpoint)
                     work.Enqueue(Added (HashSet(seq { for x in items -> x.stream }).Count,items.Length))
                     markCompleted, items
@@ -528,8 +528,7 @@ module Ingestion =
                 while pending.Count <> 0 && submissionsMax.HasCapacity do
                     // mark off a write as being in progress (there is a race if there are multiple Ingesters, but thats good)
                     do! submissionsMax.Await()
-                    let markCompleted, events = pending.Dequeue()
-                    scheduler.Submit(markCompleted, events)
+                    scheduler.Submit(pending.Dequeue())
                 // 2. Update any progress into the stats
                 stats.HandleValidated(Option.map fst validatedPos, fst submissionsMax.State)
                 validatedPos |> Option.iter progressWriter.Post
