@@ -309,13 +309,13 @@ module Scheduling =
                     let! hasCapacity, dispatched = tryFillDispatcher (dispatcherState = Slipstreaming)
                     idle <- idle && not processedResults && not dispatched
                     match dispatcherState with
-                    | Idle when not hasCapacity ->          dispatcherState <- Full; finished <- true
+                    | Idle when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue
+                        match pending.TryDequeue() with
+                        | true, batch ->                    ingestPendingBatch stats.Handle batch
+                        | false,_ ->                        dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
+                    | Idle ->                               dispatcherState <- Full; finished <- true
                     | Slipstreaming when not dispatched ->  dispatcherState <- Idle; finished <- true
                     | Slipstreaming ->                      finished <- true
-                    | _ when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue
-                        match pending.TryDequeue() with
-                        | true, batch -> ingestPendingBatch stats.Handle batch
-                        | false,_ -> dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
                     | _ -> ()
                 // 3. Supply state to accumulate (and periodically emit) status info
                 if stats.TryDump(dispatcherState,dispatcher.State,streams,pending.Count) then idle <- false
