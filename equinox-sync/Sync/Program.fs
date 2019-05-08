@@ -336,7 +336,7 @@ let main argv =
         // Uncomment to test marveleqx mode
         // let createSyncHandler () = CosmosSource.createRangeSyncHandler log target (CosmosSource.transformV0 catFilter)
 #endif
-        CosmosSource.run (discovery, source) (auxDiscovery, aux) connectionPolicy
+        CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, maxDocuments, lagFrequency)
             createSyncHandler
 #else
