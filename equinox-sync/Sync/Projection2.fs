@@ -309,9 +309,9 @@ module Scheduling =
                     // 2. top up provisioning of writers queue
                     let! dispatched, filled = tryFillDispatcher (dispatcherState = Slipstreaming)
                     idle <- idle && not processedResults && not dispatched
-                    if dispatcherState = Idle && filled then dispatcherState <- Full
+                    if dispatcherState = Idle && dispatched && filled then dispatcherState <- Full; finished <- true
+                    elif dispatcherState = Slipstreaming then finished <- true
                     elif dispatcherState = Idle && dispatched then dispatcherState <- Partial
-                    if dispatcherState = Slipstreaming then finished <- true
                     if not filled then // need to bring more work into the pool as we can't fill the work queue
                         match pending.TryDequeue() with
                         | true, batch -> ingestPendingBatch stats.Handle batch
