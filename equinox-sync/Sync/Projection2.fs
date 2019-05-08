@@ -457,14 +457,14 @@ module Ingestion =
         | false, _ -> None
     
     /// Holds batches away from Core processing to limit in-flight processing
-    type Engine<'R>(log : ILogger, scheduler: Scheduling.Engine<'R>, maxQueued, maxSubmissions, initialSeriesIndex, statsInterval : TimeSpan, ?pumpDelayMs) =
+    type Engine<'R>(log : ILogger, scheduler: Scheduling.Engine<'R>, maxRead, maxSubmissions, initialSeriesIndex, statsInterval : TimeSpan, ?pumpDelayMs) =
         let cts = new CancellationTokenSource()
         let pumpDelayMs = defaultArg pumpDelayMs 5
         let work = ConcurrentQueue<InternalMessage>()
-        let readMax = new Sem(maxQueued)
+        let readMax = new Sem(maxRead)
         let submissionsMax = new Sem(maxSubmissions)
         let streams = Streams()
-        let stats = Stats(log, maxQueued, statsInterval)
+        let stats = Stats(log, maxRead, statsInterval)
         let pending = Queue<_>()
         let readingAhead, ready = Dictionary<int,ResizeArray<_>>(), Dictionary<int,ResizeArray<_>>()
         let progressWriter = Progress.Writer<_>()
@@ -529,7 +529,7 @@ module Ingestion =
                     let markCompleted, events = pending.Dequeue()
                     scheduler.Submit(markCompleted, events)
                 // 2. Update any progress into the stats
-                stats.HandleValidated(Option.map fst validatedPos, fst readMax.State)
+                stats.HandleValidated(Option.map fst validatedPos, fst submissionsMax.State)
                 validatedPos |> Option.iter progressWriter.Post
                 stats.HandleCommitted progressWriter.CommittedEpoch
                 // 3. Forward content for any active streams into processor immediately

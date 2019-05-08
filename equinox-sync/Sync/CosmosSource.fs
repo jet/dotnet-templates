@@ -16,7 +16,7 @@ let createRangeSyncHandler (log:ILogger) maxPendingBatches (cosmosContext: Cosmo
     let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     fun () ->
         let mutable rangeIngester = Unchecked.defaultof<_>
-        let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxPendingBatches, maxWriters, TimeSpan.FromMinutes 1.) }
+        let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxPendingBatches*2, maxPendingBatches, TimeSpan.FromMinutes 1.) }
         let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform |> Array.ofSeq in rangeIngester.Submit(epoch, checkpoint, events)
         let dispose () = rangeIngester.Stop ()
         let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
