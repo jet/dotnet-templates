@@ -41,7 +41,8 @@ let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connection
         ChangeFeedProcessor.Start
           ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = startFromTail,
             createObserver = createRangeProjector cosmosIngester, ?cfBatchSize = maxDocuments, ?reportLagAndAwaitNextEstimation = maybeLogLag)
-    do! Async.AwaitKeyboardInterrupt() }
+    do! Async.AwaitKeyboardInterrupt()
+    cosmosIngester.Stop() }
 
 //#if marveleqx
 [<RequireQualifiedAccess>]
