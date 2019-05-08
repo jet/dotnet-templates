@@ -89,10 +89,10 @@ module Scheduling =
     type InternalMessage<'R> =
         /// Enqueue a batch of items with supplied progress marking function
         | Add of markCompleted: (unit -> unit) * items: StreamItem[]
-        /// Stats per submitted batch for stats listeners to aggregate
-        | Added of streams: int * skip: int * events: int
         /// Submit new data pertaining to a stream that has commenced processing
         | AddActive of KeyValuePair<string,StreamState>[]
+        /// Stats per submitted batch for stats listeners to aggregate
+        | Added of streams: int * skip: int * events: int
         /// Result of processing on stream - result (with basic stats) or the `exn` encountered
         | Result of stream: string * outcome: Choice<'R,exn>
        
@@ -163,44 +163,46 @@ module Scheduling =
         let streams = StreamStates()
         let progressState = Progress.State()
 
+        let validVsSkip (streamState : StreamState) (item : StreamItem) =
+            match streamState.write, item.index + 1L with
+            | Some cw, required when cw >= required -> 0, 1
+            | _ -> 1, 0
+
+        let handle x =
+            match x with
+            | Add (releaseRead, items) ->
+                let reqs = Dictionary()
+                let mutable count, skipCount = 0, 0
+                for item in items do
+                    let stream,streamState = streams.Add(item.stream,item.index,item.event)
+                    match validVsSkip streamState item with
+                    | 0, skip ->
+                        skipCount <- skipCount + skip
+                    | required, _ ->
+                        count <- count + required
+                        reqs.[stream] <- item.index+1L
+                let markCompleted () =
+                    releaseRead()
+                    batches.Release()
+                progressState.AppendBatch(markCompleted,reqs)
+                work.Enqueue(Added (reqs.Count,skipCount,count))
+            | AddActive events ->
+                for e in events do
+                    streams.InternalMerge(e.Key,e.Value)
+            | Added _  ->
+                ()
+            | Result (stream,r) ->
+                match interpretProgress streams stream r with
+                | Some index ->
+                    progressState.MarkStreamProgress(stream,index)
+                    streams.MarkCompleted(stream,index)
+                | None ->
+                    streams.MarkFailed stream
+            
         member private __.Pump(stats : Stats<'R>) = async {
             use _ = dispatcher.Result.Subscribe(Result >> work.Enqueue)
             Async.Start(dispatcher.Pump(), cts.Token)
-            let validVsSkip (streamState : StreamState) (item : StreamItem) =
-                match streamState.write, item.index + 1L with
-                | Some cw, required when cw >= required -> 0, 1
-                | _ -> 1, 0
-            let handle x =
-                match x with
-                | Add (releaseRead, items) ->
-                    let reqs = Dictionary()
-                    let mutable count, skipCount = 0, 0
-                    for item in items do
-                        let stream,streamState = streams.Add(item.stream,item.index,item.event)
-                        match validVsSkip streamState item with
-                        | 0, skip ->
-                            skipCount <- skipCount + skip
-                        | required, _ ->
-                            count <- count + required
-                            reqs.[stream] <- item.index+1L
-                    let markCompleted () =
-                        releaseRead()
-                        batches.Release()
-                    progressState.AppendBatch(markCompleted,reqs)
-                    work.Enqueue(Added (reqs.Count,skipCount,count))
-                | AddActive events ->
-                    for e in events do
-                        streams.InternalMerge(e.Key,e.Value)
-                | Added _  ->
-                    ()
-                | Result (stream,r) ->
-                    match interpretProgress streams stream r with
-                    | Some index ->
-                        progressState.MarkStreamProgress(stream,index)
-                        streams.MarkCompleted(stream,index)
-                    | None ->
-                        streams.MarkFailed stream
-                
+
             while not cts.IsCancellationRequested do
                 // 1. propagate read items to buffer; propagate write write results to buffer and progress write impacts to local state
                 let mutable idle = true
@@ -224,6 +226,7 @@ module Scheduling =
                 stats.TryDump(not addsBeingAccepted,capacity,dispatcher.State,streams)
                 // 4. Do a minimal sleep so we don't run completely hot when empty
                 if idle then do! Async.Sleep sleepIntervalMs }
+
         static member Start<'R>(stats, maxPendingBatches, processorDop, project, interpretProgress) =
             let dispatcher = Dispatcher(processorDop)
             let instance = new Engine<'R>(maxPendingBatches, dispatcher, project, interpretProgress)
@@ -391,6 +394,18 @@ module Ingestion =
                     match readingAhead.TryGetValue seriesId with
                     | false, _ -> readingAhead.[seriesId] <- ResizeArray(Seq.singleton batchInfo)
                     | true,current -> current.Add(batchInfo)
+            | CloseSeries seriesIndex ->
+                if activeSeries = seriesIndex then
+                    log.Information("Completed reading active series {activeSeries}; moving to next", activeSeries)
+                    work.Enqueue <| ActivateSeries (activeSeries + 1)
+                else
+                    match readingAhead |> tryRemove seriesIndex with
+                    | Some batchesRead ->
+                        ready.[seriesIndex] <- batchesRead
+                        log.Information("Completed reading {series}, marking {buffered} buffered items ready", seriesIndex, batchesRead.Count)
+                    | None ->
+                        ready.[seriesIndex] <- ResizeArray()
+                        log.Information("Completed reading {series}, leaving empty batch list", seriesIndex)
             | ActivateSeries newActiveSeries ->
                 activeSeries <- newActiveSeries
                 let buffered =
@@ -405,18 +420,6 @@ module Ingestion =
                         | None -> 0
                 log.Information("Moving to series {activeChunk}, releasing {buffered} buffered batches, {ready} others ready, {ahead} reading ahead",
                     newActiveSeries, buffered, ready.Count, readingAhead.Count)
-            | CloseSeries seriesIndex ->
-                if activeSeries = seriesIndex then
-                    log.Information("Completed reading active series {activeSeries}; moving to next", activeSeries)
-                    work.Enqueue <| ActivateSeries (activeSeries + 1)
-                else
-                    match readingAhead |> tryRemove seriesIndex with
-                    | Some batchesRead ->
-                        ready.[seriesIndex] <- batchesRead
-                        log.Information("Completed reading {series}, marking {buffered} buffered items ready", seriesIndex, batchesRead.Count)
-                    | None ->
-                        ready.[seriesIndex] <- ResizeArray()
-                        log.Information("Completed reading {series}, leaving empty batch list", seriesIndex)
             // These events are for stats purposes
             | Added _
             | ProgressResult _ -> ()
