@@ -309,9 +309,12 @@ module Scheduling =
                     // 2. top up provisioning of writers queue
                     let! hasCapacity, dispatched = tryFillDispatcher (dispatcherState = Slipstreaming)
                     idle <- idle && not processedResults && not dispatched
-                    if dispatcherState = Idle && not hasCapacity then dispatcherState <- Full; finished <- true
-                    elif dispatcherState = Slipstreaming then finished <- true
-                    if hasCapacity && not finished then // need to bring more work into the pool as we can't fill the work queue
+                    match dispatcherState with
+                    | Idle when not hasCapacity ->          dispatcherState <- Full; finished <- true
+                    | Slipstreaming when not dispatched ->  dispatcherState <- Idle; finished <- true
+                    | Slipstreaming ->                      finished <- true
+                    | _ when not hasCapacity -> ()
+                    | _ -> // need to bring more work into the pool as we can't fill the work queue
                         match pending.TryDequeue() with
                         | true, batch -> ingestPendingBatch stats.Handle batch
                         | false,_ -> dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
