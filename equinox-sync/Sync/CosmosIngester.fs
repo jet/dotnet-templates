@@ -3,6 +3,8 @@
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Store
 open Equinox.Projection.Scheduling
+open Equinox.Projection2
+open Equinox.Projection2.Scheduling
 open Equinox.Projection.State
 open Serilog
 

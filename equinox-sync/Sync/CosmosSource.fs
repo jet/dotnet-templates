@@ -3,6 +3,7 @@
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Projection
 open Equinox.Projection
+open Equinox.Projection2
 open Equinox.Projection.State
 open Equinox.Store // AwaitTaskCorrect
 open Microsoft.Azure.Documents

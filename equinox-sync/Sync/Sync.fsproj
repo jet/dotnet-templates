@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
     <Compile Include="Checkpoint.fs" />
+    <Compile Include="Projection2.fs" />
     <Compile Include="CosmosIngester.fs" />
     <Compile Include="CosmosSource.fs" />
     <Compile Include="EventStoreSource.fs" />
