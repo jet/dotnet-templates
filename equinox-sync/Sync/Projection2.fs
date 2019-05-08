@@ -253,19 +253,6 @@ module Scheduling =
             match streamState.write, item.index + 1L with
             | Some cw, required when cw >= required -> 0, 1
             | _ -> 1, 0
-        let ingestPendingBatch feedStats (markCompleted, items : StreamItem seq) = 
-            let reqs = Dictionary()
-            let mutable count, skipCount = 0, 0
-            for item in items do
-                let stream,streamState = streams.Add(item.stream,item.index,item.event)
-                match validVsSkip streamState item with
-                | 0, skip ->
-                    skipCount <- skipCount + skip
-                | required, _ ->
-                    count <- count + required
-                    reqs.[stream] <- item.index+1L
-            progressState.AppendBatch(markCompleted,reqs)
-            feedStats <| Added (reqs.Count,skipCount,count)
         let tryDrainResults feedStats =
             let mutable worked, more = false, true
             while more do
@@ -296,6 +283,19 @@ module Scheduling =
                     dispatched <- dispatched || succeeded // if we added any request, we also don't sleep
                     hasCapacity <- succeeded
             return hasCapacity, dispatched }
+        let ingestPendingBatch feedStats (markCompleted, items : StreamItem seq) = 
+            let reqs = Dictionary()
+            let mutable count, skipCount = 0, 0
+            for item in items do
+                let stream,streamState = streams.Add(item.stream,item.index,item.event)
+                match validVsSkip streamState item with
+                | 0, skip ->
+                    skipCount <- skipCount + skip
+                | required, _ ->
+                    count <- count + required
+                    reqs.[stream] <- item.index+1L
+            progressState.AppendBatch(markCompleted,reqs)
+            feedStats <| Added (reqs.Count,skipCount,count)
 
         member private __.Pump(stats : Stats<'R>) = async {
             use _ = dispatcher.Result.Subscribe(Result >> work.Enqueue)
@@ -314,7 +314,9 @@ module Scheduling =
                     | Slipstreaming ->                      finished <- true
                     | _ when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue
                         match pending.TryDequeue() with
-                        | true, batch -> ingestPendingBatch stats.Handle batch
+                        | true, batch ->
+                            Log.Error("Ingest")
+                            ingestPendingBatch stats.Handle batch
                         | false,_ -> dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
                     | _ -> ()
                 // 3. Supply state to accumulate (and periodically emit) status info
