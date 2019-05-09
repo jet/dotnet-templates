@@ -53,10 +53,10 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 2048"
                 | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 512"
                 | MaxCosmosConnections _ -> "Size of CosmosDb connection pool to maintain. Default: 1"
 #if cosmos
+                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 256"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
@@ -66,6 +66,7 @@ module CmdParser =
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | Source _ ->               "CosmosDb input parameters."
 #else
+                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 2048"
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off"
                 | FromTail ->               "Start the processing from the Tail"
                 | ForceRestart _ ->         "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
@@ -82,16 +83,17 @@ module CmdParser =
     and Arguments(a : ParseResults<Parameters>) =
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.Verbose =             a.Contains Verbose
-        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
         member __.MaxWriters =          a.GetResult(MaxWriters,1024)
         member __.CosmosConnectionPool =a.GetResult(MaxCosmosConnections,1)
 #if cosmos
+        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,256)
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
         member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.MaxDocuments =        a.TryGetResult MaxDocuments
         member __.MaxProcessing =       a.GetResult(MaxProcessing,16)
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
 #else
+        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
         member __.VerboseConsole =      a.Contains VerboseConsole
         member __.ConsumerGroupName =   a.GetResult ConsumerGroupName
         member __.ConsoleMinLevel =     if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
@@ -343,7 +345,7 @@ let main argv =
         CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, maxDocuments, lagFrequency)
             (targets, args.MaxWriters)
-            (createSyncHandler (args.MaxPendingBatches*2,args.MaxProcessing))
+            (createSyncHandler (args.MaxPendingBatches,args.MaxProcessing/2))
 #else
         let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 
         let catFilter = args.Source.CategoryFilterFunction
