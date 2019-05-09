@@ -403,7 +403,7 @@ module Ingestion =
             let mutable buffered = 0
             let count (xs : IDictionary<int,ResizeArray<_>>) = seq { for x in xs do buffered <- buffered + x.Value.Count; yield x.Key, x.Value.Count } |> Seq.sortBy fst |> Seq.toArray
             let ahead, ready = count readingAhead, count ready
-            if buffered <> 0 then log.Information("Preloading {buffered} Reading {@reading} Ready {@ready}", ahead, ready)
+            if buffered <> 0 then log.Information("Holding {buffered} Reading {@reading} Ready {@ready}", buffered, ahead, ready)
             log.Information("Buffering Cycles {cycles} Ingested {batches} ({streams:n0}s {events:n0}e) Submissions {active}/{writers}",
                 !cycles, !batchesPended, !streamsPended, !eventsPended, available, maxDop)
             cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0
