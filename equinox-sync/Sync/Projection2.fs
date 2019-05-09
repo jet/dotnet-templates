@@ -399,9 +399,10 @@ module Ingestion =
         let progCommitFails, progCommits = ref 0, ref 0 
         let cycles, batchesPended, streamsPended, eventsPended = ref 0, ref 0, ref 0, ref 0
         let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
-        let dumpStats (available,maxDop) =
-            log.Information("Holding Cycles {cycles} Ingested {batches} ({streams:n0}s {events:n0}e) Submissions {active}/{writers}",
-                !cycles, !batchesPended, !streamsPended, !eventsPended, available, maxDop)
+        let dumpStats (available,maxDop) (readingAhead,ready) =
+            let inline rd (xs : IDictionary<int,ResizeArray<_>>) = seq { for x in xs -> x.Key, x.Value.Count }  |> Seq.sortByDescending snd
+            log.Information("Buffering Cycles {cycles} Ingested {batches} ({streams:n0}s {events:n0}e) Reading {@reading} Ready {@ready} Submissions {active}/{writers}",
+                !cycles, !batchesPended, !streamsPended, !eventsPended, rd readingAhead, rd ready, available, maxDop)
             cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0
             if !progCommitFails <> 0 || !progCommits <> 0 then
                 match comittedEpoch with
@@ -434,10 +435,10 @@ module Ingestion =
             pendingBatchCount <- pendingBatches
         member __.HandleCommitted epoch = 
             comittedEpoch <- epoch
-        member __.TryDump((available,maxDop),streams : Streams) =
+        member __.TryDump((available,maxDop),streams : Streams,readingAhead,ready) =
             incr cycles
             if statsDue () then
-                dumpStats (available,maxDop)
+                dumpStats (available,maxDop) (readingAhead,ready)
                 streams.Dump log
 
     and [<NoComparison; NoEquality>] private InternalMessage =
@@ -537,7 +538,7 @@ module Ingestion =
                     let relevantBufferedStreams = streams.Take(fun x -> true (*scheduler.AllStreams.Contains*))
                     scheduler.AddOpenStreamData(relevantBufferedStreams)
                 // 4. Periodically emit status info
-                stats.TryDump(submissionsMax.State,streams)
+                stats.TryDump(submissionsMax.State,streams,readingAhead,ready)
                 do! Async.Sleep pumpDelayMs }
 
         /// Generalized; normal usage is via Ingester.Start, this is used by the `eqxsync` template to handle striped reading for bulk ingestion purposes
