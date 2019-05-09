@@ -400,9 +400,12 @@ module Ingestion =
         let cycles, batchesPended, streamsPended, eventsPended = ref 0, ref 0, ref 0, ref 0
         let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
         let dumpStats (available,maxDop) (readingAhead,ready) =
-            let inline rd (xs : IDictionary<int,ResizeArray<_>>) = seq { for x in xs -> x.Key, x.Value.Count }  |> Seq.sortBy fst
-            log.Information("Buffering Cycles {cycles} Ingested {batches} ({streams:n0}s {events:n0}e) Reading {@reading} Ready {@ready} Submissions {active}/{writers}",
-                !cycles, !batchesPended, !streamsPended, !eventsPended, rd readingAhead, rd ready, available, maxDop)
+            let mutable buffered = 0
+            let count (xs : IDictionary<int,ResizeArray<_>>) = seq { for x in xs do buffered <- buffered + x.Value.Count; yield x.Key, x.Value.Count } |> Seq.sortBy fst |> Seq.toArray
+            let ahead, ready = count readingAhead, count ready
+            if buffered <> 0 then log.Information("Preloading {buffered} Reading {@reading} Ready {@ready}", ahead, ready)
+            log.Information("Buffering Cycles {cycles} Ingested {batches} ({streams:n0}s {events:n0}e) Submissions {active}/{writers}",
+                !cycles, !batchesPended, !streamsPended, !eventsPended, available, maxDop)
             cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0
             if !progCommitFails <> 0 || !progCommits <> 0 then
                 match comittedEpoch with
