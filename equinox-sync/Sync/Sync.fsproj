@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <WarningLevel>5</WarningLevel>
-    <DefineConstants>$(DefineConstants);cosmos_</DefineConstants>
+    <DefineConstants>$(DefineConstants);cosmos</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

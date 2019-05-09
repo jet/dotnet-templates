@@ -342,7 +342,7 @@ let main argv =
 #endif
         CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, maxDocuments, lagFrequency)
-            (target, args.MaxWriters)
+            (targets, args.MaxWriters)
             (createSyncHandler (args.MaxPendingBatches*2,args.MaxProcessing))
 #else
         let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 
