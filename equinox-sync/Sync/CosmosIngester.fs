@@ -7,6 +7,7 @@ open Equinox.Projection2
 open Equinox.Projection2.Scheduling
 open Equinox.Projection.State
 open Serilog
+open System.Threading
 
 [<AutoOpen>]
 module Writer =
@@ -103,7 +104,7 @@ type Stats(log : ILogger, statsInterval) =
             | ResultKind.Malformed -> category stream |> badCats.Ingest; incr malformed
             | ResultKind.TimedOut -> incr timedOut
 
-let start (log : Serilog.ILogger, cosmosContext, maxWriters, statsInterval) =
+let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, statsInterval) =
     let cosmosPayloadLimit = 2 * 1024 * 1024 - (*fudge*)4096
     let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
     let writerResultLog = log.ForContext<Writer.Result>()
@@ -116,9 +117,12 @@ let start (log : Serilog.ILogger, cosmosContext, maxWriters, statsInterval) =
             // always send at least one event in order to surface the problem and have the stream marked malformed
             count = 1 || (countBudget >= 0 && bytesBudget >= 0)
         { stream = batch.stream; span = { index = batch.span.index; events =  batch.span.events |> Array.takeWhile withinLimits } }
+    let mutable robin = 0
     let attemptWrite batch = async {
         let trimmed = trim batch
-        try let! res = Writer.write log cosmosContext trimmed
+        let index = Interlocked.Increment(&robin) % cosmosContexts.Length
+        let selectedConnection = cosmosContexts.[index]
+        try let! res = Writer.write log selectedConnection trimmed
             let stats = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
             return Choice1Of2 (stats,res)
         with e -> return Choice2Of2 e }

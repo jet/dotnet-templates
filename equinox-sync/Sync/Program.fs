@@ -26,6 +26,7 @@ module CmdParser =
         | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
+        | [<AltCommandLine "-cc"; Unique>] MaxCosmosConnections of int
 #if cosmos
         | [<AltCommandLine "-mp"; Unique>] MaxProcessing of int
         | [<AltCommandLine "-md"; Unique>] MaxDocuments of int
@@ -54,6 +55,7 @@ module CmdParser =
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 2048"
                 | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 512"
+                | MaxCosmosConnections _ -> "Size of CosmosDb connection pool to maintain. Default: 1"
 #if cosmos
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
@@ -72,8 +74,8 @@ module CmdParser =
                 | Position _ ->             "EventStore $all Stream Position to commence from"
                 | Chunk _ ->                "EventStore $all Chunk to commence from"
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
-                | Gorge _ ->                  "Parallel readers (instead of reading by stream)"
-                | StreamReaders _ ->              "number of concurrent readers to run one chunk (256MB) apart. Default: 1"
+                | Gorge _ ->                 "Request Parallel readers phase during initial catchup, running one chunk (256MB) apart. Default: off"
+                | StreamReaders _ ->        "number of concurrent readers that will fetch a missing stream when in tailing mode. Default: 1. TODO: IMPLEMENT!"
                 | Tail _ ->                 "attempt to read from tail at specified interval in Seconds. Default: 1"
                 | Source _ ->               "EventStore input parameters."
 #endif
@@ -82,6 +84,7 @@ module CmdParser =
         member __.Verbose =             a.Contains Verbose
         member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
         member __.MaxWriters =          a.GetResult(MaxWriters,1024)
+        member __.CosmosConnectionPool =a.GetResult(MaxCosmosConnections,1)
 #if cosmos
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
         member __.LeaseId =             a.GetResult ConsumerGroupName
@@ -313,10 +316,10 @@ let main argv =
 #else
         let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
 #endif
-        let destination = args.Destination.Connect "SyncTemplate" |> Async.RunSynchronously
+        let destinations = Seq.init args.CosmosConnectionPool (fun i -> args.Destination.Connect (sprintf "%s Pool %d" "SyncTemplate" i)) |> Async.Parallel |> Async.RunSynchronously
         let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
         let resolveCheckpointStream =
-            let gateway = CosmosGateway(destination, CosmosBatchingPolicy())
+            let gateway = CosmosGateway(destinations.[0], CosmosBatchingPolicy())
             let store = Equinox.Cosmos.CosmosStore(gateway, colls)
             let settings = Newtonsoft.Json.JsonSerializerSettings()
             let codec = Equinox.Codec.NewtonsoftJson.Json.Create settings
@@ -325,7 +328,7 @@ let main argv =
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.CosmosResolver(store, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
-        let target = Equinox.Cosmos.Core.CosmosContext(destination, colls, storeLog)
+        let targets = destinations |> Array.mapi (fun i x -> Equinox.Cosmos.Core.CosmosContext(x, colls, storeLog.ForContext("PoolId", i)))
 #if cosmos
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
@@ -360,7 +363,7 @@ let main argv =
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
-        EventStoreSource.run log (connect, spec, tryMapEvent catFilter) args.MaxPendingBatches (target, args.MaxWriters) resolveCheckpointStream
+        EventStoreSource.run log (connect, spec, tryMapEvent catFilter) args.MaxPendingBatches (targets, args.MaxWriters) resolveCheckpointStream
 #endif
         |> Async.RunSynchronously
         0 

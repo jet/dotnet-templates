@@ -351,7 +351,7 @@ type ReaderSpec =
 
 type StartMode = Starting | Resuming | Overridding
 
-let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmosContext, maxWriters) resolveCheckpointStream = async {
+let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmosContexts, maxWriters) resolveCheckpointStream = async {
     let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
     let conn = connect ()
     let! maxInParallel = Async.StartChild <| establishMax conn
@@ -382,7 +382,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmo
             startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float maxPos.CommitPosition,
             checkpointFreq.TotalMinutes)
         return startPos }
-    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Cosmos"), cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
+    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Cosmos"), cosmosContexts, maxWriters, TimeSpan.FromMinutes 1.)
     let initialSeriesId, conns, dop =  
         log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.streamReaders)
         match spec.gorge with
