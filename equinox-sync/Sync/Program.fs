@@ -56,11 +56,11 @@ module CmdParser =
                 | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 512"
                 | MaxCosmosConnections _ -> "Size of CosmosDb connection pool to maintain. Default: 1"
 #if cosmos
-                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 256"
+                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 32"
+                | MaxProcessing _ ->        "Maximum number of batches to submit concurrently. Default: 16"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
-                | MaxProcessing _ ->        "Maximum number of batches to submit concurrently. Default: 16"
                 | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
                 | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
@@ -86,11 +86,11 @@ module CmdParser =
         member __.MaxWriters =          a.GetResult(MaxWriters,1024)
         member __.CosmosConnectionPool =a.GetResult(MaxCosmosConnections,1)
 #if cosmos
-        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,256)
+        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,32)
+        member __.MaxProcessing =       a.GetResult(MaxProcessing,16)
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
         member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.MaxDocuments =        a.TryGetResult MaxDocuments
-        member __.MaxProcessing =       a.GetResult(MaxProcessing,16)
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
 #else
         member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
@@ -345,7 +345,7 @@ let main argv =
         CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, maxDocuments, lagFrequency)
             (targets, args.MaxWriters)
-            (createSyncHandler (args.MaxPendingBatches,args.MaxProcessing/2))
+            (createSyncHandler (args.MaxPendingBatches,args.MaxProcessing))
 #else
         let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 
         let catFilter = args.Source.CategoryFilterFunction
