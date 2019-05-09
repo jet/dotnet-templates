@@ -109,7 +109,7 @@ let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, statsInterv
     let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
     let writerResultLog = log.ForContext<Writer.Result>()
     let trim (_currentWritePos : int64 option, batch : StreamSpan) =
-        let mutable count, countBudget, bytesBudget = 0, 4096, cosmosPayloadLimit
+        let mutable count, countBudget, bytesBudget = 0, (*4096*)16384, cosmosPayloadLimit
         let withinLimits (y : Equinox.Codec.IEvent<byte[]>) =
             count <- count + 1
             countBudget <- countBudget - 1
