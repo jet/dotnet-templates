@@ -116,7 +116,7 @@ module CmdParser =
                 | Some sc, None ->  x.Source.Discovery, { database = x.Source.Database; collection = sc }
                 | None, Some dc ->  x.Destination.Discovery, { database = x.Destination.Database; collection = dc }
                 | Some _, Some _ -> raise (InvalidArguments "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
-            Log.Information("Max batches to process concurrently per Range: {maxProcessing}", x.MaxProcessing)
+            Log.Information("Max read backlog: {maxPending}, of which up to {maxProcessing} processing", x.MaxPendingBatches, x.MaxProcessing)
             Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} with maximum document count limited to {maxDocuments}", x.LeaseId, db.database, db.collection, x.MaxDocuments)
             if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 

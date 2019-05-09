@@ -40,7 +40,7 @@ let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connection
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = startFromTail,
-            createObserver = createRangeProjector cosmosIngester, ?cfBatchSize = maxDocuments, ?reportLagAndAwaitNextEstimation = maybeLogLag)
+            createObserver = createRangeProjector cosmosIngester, ?reportLagAndAwaitNextEstimation = maybeLogLag, cfBatchSize = defaultArg maxDocuments 999999)
     do! Async.AwaitKeyboardInterrupt()
     cosmosIngester.Stop() }
 
