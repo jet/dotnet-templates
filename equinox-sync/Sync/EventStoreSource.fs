@@ -319,6 +319,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, tryMapEvent, post : Re
             | (false, _), Some _ ->
                 dop.Release() |> ignore
                 Log.Warning("No further ingestion work to commence, transitioning to tailing...")
+                // TODO release connections, reduce DOP, implement stream readers
                 remainder <- None
             | (false, _), None ->
                 dop.Release() |> ignore
@@ -338,13 +339,11 @@ type ReaderSpec =
         checkpointInterval: TimeSpan
         /// Delay when reading yields an empty batch
         tailInterval: TimeSpan
-        /// Enable initial phase where interleaved reading stripes a 256MB chunk apart attain a balance between good reading speed and not killing the server
-        gorge: bool
-        /// Maximum number of striped readers to permit
-        /// - for gorging, this dictates how many concurrent readers there will be
-        /// - when tailing, this dictates how many stream readers will be used to perform catchup work on streams that are missing a prefix
-        ///   (e.g. due to not starting from the start of the $all stream, and/or deleting data from the destination store)
-        stripes: int
+        /// Specify initial phase where interleaved reading stripes a 256MB chunk apart attain a balance between good reading speed and not killing the server
+        gorge: int option
+        /// Maximum number of striped readers to permit when tailing; this dictates how many stream readers will be used to perform catchup work on streams
+        ///   that are missing a prefix (e.g. due to not starting from the start of the $all stream, and/or deleting data from the destination store)
+        streamReaders: int // TODO
         /// Initial batch size to use when commencing reading
         batchSize: int
         /// Smallest batch size to degrade to in the presence of failures
@@ -357,15 +356,15 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmo
     let conn = connect ()
     let! maxInParallel = Async.StartChild <| establishMax conn
     let! initialCheckpointState = checkpoints.Read
-    let! max = maxInParallel
+    let! maxPos = maxInParallel
     let! startPos = async {
         let mkPos x = EventStore.ClientAPI.Position(x, 0L)
         let requestedStartPos =
             match spec.start with
             | Absolute p -> mkPos p
             | Chunk c -> posFromChunk c
-            | Percentage pct -> posFromPercentage (pct, max)
-            | TailOrCheckpoint -> max
+            | Percentage pct -> posFromPercentage (pct, maxPos)
+            | TailOrCheckpoint -> maxPos
             | StartOrCheckpoint -> EventStore.ClientAPI.Position.Start
         let! startMode, startPos, checkpointFreq = async {
             match initialCheckpointState, requestedStartPos with
@@ -380,19 +379,20 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmo
                 return Overridding, r, spec.checkpointInterval
         }
         log.Information("Sync {mode} {groupName} @ {pos} (chunk {chunk}, {pct:p1}) checkpointing every {checkpointFreq:n1}m",
-            startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float max.CommitPosition,
+            startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float maxPos.CommitPosition,
             checkpointFreq.TotalMinutes)
         return startPos }
     let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Cosmos"), cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
     let initialSeriesId, conns, dop =  
-        log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.stripes)
-        if spec.gorge then
-            log.Information("Commencing Gorging with {stripes} $all reader stripes covering a 256MB chunk each", spec.stripes)
-            let extraConns = Seq.init (spec.stripes-1) (ignore >> connect)
+        log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.streamReaders)
+        match spec.gorge with
+        | Some factor ->
+            log.Information("Commencing Gorging with {stripes} $all reader stripes covering a 256MB chunk each", factor)
+            let extraConns = Seq.init (factor-1) (ignore >> connect)
             let conns = [| yield conn; yield! extraConns |]
-            chunk startPos |> int, conns, conns.Length
-        else
-            0, [|conn|], spec.stripes+1
+            chunk startPos |> int, conns, (max (conns.Length) (spec.streamReaders+1))
+        | None ->
+            0, [|conn|], spec.streamReaders+1
     let trancheEngine = Ingestion.Engine.Start (log.ForContext("Tranche","ES"), cosmosIngestionEngine, maxReadAhead, maxReadAhead, initialSeriesId, TimeSpan.FromMinutes 1.)
     let post = function
         | Res.EndOfChunk seriesId -> trancheEngine.Submit <| Ingestion.EndOfSeries seriesId
@@ -400,5 +400,5 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmo
             let cp = pos.CommitPosition
             trancheEngine.Submit <| Ingestion.Message.Batch(seriesId, cp, checkpoints.Commit cp, xs)
     let reader = Reader(conns, spec.batchSize, spec.minBatchSize, tryMapEvent, post, spec.tailInterval, dop)
-    do! reader.Start (initialSeriesId,startPos) max
+    do! reader.Start (initialSeriesId,startPos) maxPos
     do! Async.AwaitKeyboardInterrupt() }

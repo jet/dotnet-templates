@@ -41,8 +41,8 @@ module CmdParser =
         | [<AltCommandLine "-p"; Unique>] Position of int64
         | [<AltCommandLine "-c"; Unique>] Chunk of int
         | [<AltCommandLine "-P"; Unique>] Percent of float
-        | [<AltCommandLine "-g"; Unique>] Gorge
-        | [<AltCommandLine "-i"; Unique>] Stripes of int
+        | [<AltCommandLine "-g"; Unique>] Gorge of int
+        | [<AltCommandLine "-i"; Unique>] StreamReaders of int
         | [<AltCommandLine "-t"; Unique>] Tail of intervalS: float
 #endif
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
@@ -72,8 +72,8 @@ module CmdParser =
                 | Position _ ->             "EventStore $all Stream Position to commence from"
                 | Chunk _ ->                "EventStore $all Chunk to commence from"
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
-                | Gorge ->                  "Parallel readers (instead of reading by stream)"
-                | Stripes _ ->              "number of concurrent readers to run one chunk (256MB) apart. Default: 1"
+                | Gorge _ ->                  "Parallel readers (instead of reading by stream)"
+                | StreamReaders _ ->              "number of concurrent readers to run one chunk (256MB) apart. Default: 1"
                 | Tail _ ->                 "attempt to read from tail at specified interval in Seconds. Default: 1"
                 | Source _ ->               "EventStore input parameters."
 #endif
@@ -94,8 +94,8 @@ module CmdParser =
         member __.ConsoleMinLevel =     if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
         member __.StartingBatchSize =   a.GetResult(BatchSize,4096)
         member __.MinBatchSize =        a.GetResult(MinBatchSize,512)
-        member __.Gorge =               a.Contains(Gorge)
-        member __.Stripes =             a.GetResult(Stripes,1)
+        member __.Gorge =               a.TryGetResult Gorge
+        member __.StreamReaders =       a.GetResult(StreamReaders,1)
         member __.TailInterval =        a.GetResult(Tail,1.) |> TimeSpan.FromSeconds
         member __.CheckpointInterval =  TimeSpan.FromHours 1.
         member __.ForceRestart =        a.Contains ForceRestart
@@ -130,7 +130,7 @@ module CmdParser =
             Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxPendingBatches} uncommitted batches ahead",
                 x.MinBatchSize, x.StartingBatchSize, x.MaxPendingBatches)
             {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = x.CheckpointInterval; tailInterval = x.TailInterval; forceRestart = x.ForceRestart
-                batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; gorge = x.Gorge; stripes = x.Stripes }
+                batchSize = x.StartingBatchSize; minBatchSize = x.MinBatchSize; gorge = x.Gorge; streamReaders = x.StreamReaders }
 #endif
     and [<NoEquality; NoComparison>] SourceParameters =
 #if cosmos
