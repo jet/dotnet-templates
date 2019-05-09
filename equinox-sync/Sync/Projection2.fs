@@ -526,20 +526,24 @@ module Ingestion =
             Async.Start(progressWriter.Pump(), cts.Token)
             let presubmitInterval = expiredMs (1000L*10L)
             while not cts.IsCancellationRequested do
-                try work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
-                    // 1. Submit to ingester until read queue, tranche limit or ingester limit exhausted
+                try let mutable itemLimit = 4096
+                    while itemLimit > 0 do
+                        match work.TryDequeue() with
+                        | true, x -> handle x; stats.Handle x; itemLimit <- itemLimit - 1
+                        | false, _ -> itemLimit <- 0
+                    // 1. Update any progress into the stats
+                    stats.HandleValidated(Option.map fst validatedPos, fst submissionsMax.State)
+                    validatedPos |> Option.iter progressWriter.Post
+                    stats.HandleCommitted progressWriter.CommittedEpoch
+                    // 2. Forward content for any active streams into processor immediately
+                    if presubmitInterval () then
+                        let relevantBufferedStreams = streams.Take(fun x -> true (*scheduler.AllStreams.Contains*))
+                        scheduler.AddOpenStreamData(relevantBufferedStreams)
+                    // 3. Submit to ingester until read queue, tranche limit or ingester limit exhausted
                     while pending.Count <> 0 && submissionsMax.HasCapacity do
                         // mark off a write as being in progress (there is a race if there are multiple Ingesters, but thats good)
                         do! submissionsMax.Await()
                         scheduler.Submit(pending.Dequeue())
-                    // 2. Update any progress into the stats
-                    stats.HandleValidated(Option.map fst validatedPos, fst submissionsMax.State)
-                    validatedPos |> Option.iter progressWriter.Post
-                    stats.HandleCommitted progressWriter.CommittedEpoch
-                    // 3. Forward content for any active streams into processor immediately
-                    if presubmitInterval () then
-                        let relevantBufferedStreams = streams.Take(fun x -> true (*scheduler.AllStreams.Contains*))
-                        scheduler.AddOpenStreamData(relevantBufferedStreams)
                     // 4. Periodically emit status info
                     stats.TryDump(submissionsMax.State,streams,readingAhead,ready)
                     do! Async.Sleep pumpDelayMs
