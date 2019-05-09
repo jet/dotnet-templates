@@ -520,7 +520,7 @@ module Ingestion =
         member private __.Pump() = async {
             use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
             Async.Start(progressWriter.Pump(), cts.Token)
-            let presubmitInterval = expiredMs (1000L*30L)
+            let presubmitInterval = expiredMs (1000L*10L)
             while not cts.IsCancellationRequested do
                 work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
                 // 1. Submit to ingester until read queue, tranche limit or ingester limit exhausted
@@ -534,7 +534,7 @@ module Ingestion =
                 stats.HandleCommitted progressWriter.CommittedEpoch
                 // 3. Forward content for any active streams into processor immediately
                 if presubmitInterval () then
-                    let relevantBufferedStreams = streams.Take(scheduler.AllStreams.Contains)
+                    let relevantBufferedStreams = streams.Take(fun x -> true (*scheduler.AllStreams.Contains*))
                     scheduler.AddOpenStreamData(relevantBufferedStreams)
                 // 4. Periodically emit status info
                 stats.TryDump(submissionsMax.State,streams)
