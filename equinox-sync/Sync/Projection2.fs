@@ -400,13 +400,13 @@ module Ingestion =
         let cycles, batchesPended, streamsPended, eventsPended = ref 0, ref 0, ref 0, ref 0
         let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
         let dumpStats (available,maxDop) (readingAhead,ready) =
+            log.Information("Buffering Cycles {cycles} Ingested {batches} ({streams:n0}s {events:n0}e) Submissions {active}/{writers}",
+                !cycles, !batchesPended, !streamsPended, !eventsPended, available, maxDop)
+            cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0
             let mutable buffered = 0
             let count (xs : IDictionary<int,ResizeArray<_>>) = seq { for x in xs do buffered <- buffered + x.Value.Count; yield x.Key, x.Value.Count } |> Seq.sortBy fst |> Seq.toArray
             let ahead, ready = count readingAhead, count ready
             if buffered <> 0 then log.Information("Holding {buffered} Reading {@reading} Ready {@ready}", buffered, ahead, ready)
-            log.Information("Buffering Cycles {cycles} Ingested {batches} ({streams:n0}s {events:n0}e) Submissions {active}/{writers}",
-                !cycles, !batchesPended, !streamsPended, !eventsPended, available, maxDop)
-            cycles := 0; batchesPended := 0; streamsPended := 0; eventsPended := 0
             if !progCommitFails <> 0 || !progCommits <> 0 then
                 match comittedEpoch with
                 | None ->
@@ -526,23 +526,24 @@ module Ingestion =
             Async.Start(progressWriter.Pump(), cts.Token)
             let presubmitInterval = expiredMs (1000L*10L)
             while not cts.IsCancellationRequested do
-                work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
-                // 1. Submit to ingester until read queue, tranche limit or ingester limit exhausted
-                while pending.Count <> 0 && submissionsMax.HasCapacity do
-                    // mark off a write as being in progress (there is a race if there are multiple Ingesters, but thats good)
-                    do! submissionsMax.Await()
-                    scheduler.Submit(pending.Dequeue())
-                // 2. Update any progress into the stats
-                stats.HandleValidated(Option.map fst validatedPos, fst submissionsMax.State)
-                validatedPos |> Option.iter progressWriter.Post
-                stats.HandleCommitted progressWriter.CommittedEpoch
-                // 3. Forward content for any active streams into processor immediately
-                if presubmitInterval () then
-                    let relevantBufferedStreams = streams.Take(fun x -> true (*scheduler.AllStreams.Contains*))
-                    scheduler.AddOpenStreamData(relevantBufferedStreams)
-                // 4. Periodically emit status info
-                stats.TryDump(submissionsMax.State,streams,readingAhead,ready)
-                do! Async.Sleep pumpDelayMs }
+                try work |> ConcurrentQueue.drain (fun x -> handle x; stats.Handle x)
+                    // 1. Submit to ingester until read queue, tranche limit or ingester limit exhausted
+                    while pending.Count <> 0 && submissionsMax.HasCapacity do
+                        // mark off a write as being in progress (there is a race if there are multiple Ingesters, but thats good)
+                        do! submissionsMax.Await()
+                        scheduler.Submit(pending.Dequeue())
+                    // 2. Update any progress into the stats
+                    stats.HandleValidated(Option.map fst validatedPos, fst submissionsMax.State)
+                    validatedPos |> Option.iter progressWriter.Post
+                    stats.HandleCommitted progressWriter.CommittedEpoch
+                    // 3. Forward content for any active streams into processor immediately
+                    if presubmitInterval () then
+                        let relevantBufferedStreams = streams.Take(fun x -> true (*scheduler.AllStreams.Contains*))
+                        scheduler.AddOpenStreamData(relevantBufferedStreams)
+                    // 4. Periodically emit status info
+                    stats.TryDump(submissionsMax.State,streams,readingAhead,ready)
+                    do! Async.Sleep pumpDelayMs
+                with e -> log.Error(e,"Buffer thread exception") }
 
         /// Generalized; normal usage is via Ingester.Start, this is used by the `eqxsync` template to handle striped reading for bulk ingestion purposes
         static member Start<'R>(log, scheduler, maxRead, maxSubmissions, startingSeriesId, statsInterval) =
