@@ -314,7 +314,6 @@ module Scheduling =
                         | true, batch ->                    ingestPendingBatch stats.Handle batch
                         | false,_ ->                        dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
                     | Idle ->                               dispatcherState <- Full; finished <- true
-                    | Slipstreaming when not dispatched ->  dispatcherState <- Idle; finished <- true
                     | Slipstreaming ->                      finished <- true
                     | _ -> ()
                 // 3. Supply state to accumulate (and periodically emit) status info
