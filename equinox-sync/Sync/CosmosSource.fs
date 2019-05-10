@@ -36,7 +36,7 @@ let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connection
         log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
-    let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, TimeSpan.FromMinutes 1.)
+    let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 1.))
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = startFromTail,

@@ -183,16 +183,21 @@ module Scheduling =
        
     type BufferState = Idle | Full | Slipstreaming
     /// Gathers stats pertaining to the core projection/ingestion activity
-    type Stats<'R>(log : ILogger, statsInterval : TimeSpan) =
-        let cycles, states, batchesPended, streamsPended, eventsSkipped, eventsPended, resultCompleted, resultExn = ref 0, CatStats(), ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
-        let statsDue = expiredMs (int64 statsInterval.TotalMilliseconds)
+    type Stats<'R>(log : ILogger, statsInterval : TimeSpan, stateInterval : TimeSpan) =
+        let states, fullCycles, cycles, resultCompleted, resultExn = CatStats(), ref 0, ref 0, ref 0, ref 0
+        let merges, batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0, ref 0
+        let statsDue, stateDue = expiredMs (int64 statsInterval.TotalMilliseconds), expiredMs (int64 stateInterval.TotalMilliseconds)
         let dumpStats (used,maxDop) pendingCount =
-            log.Information("Projection Cycles {cycles} States {@states} Busy {busy}/{processors} Ingested {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Pending {pending} Completed {completed} Exceptions {exns}",
-                !cycles, states.StatsDescending, used, maxDop, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, pendingCount, !resultCompleted, !resultExn)
-            cycles := 0; states.Clear(); batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; resultCompleted := 0; resultExn:= 0
+            log.Information("Projection Cycles {cycles}/{fullCycles} States {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
+                !cycles, !fullCycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
+            cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
+            log.Information("Ingestions {batches} {streams:n0}s {events:n0}-{skipped:n0}e Merged {merges} Pending {pending}",
+                !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !merges, pendingCount)
+            batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; merges := 0
         abstract member Handle : InternalMessage<'R> -> unit
         default __.Handle msg = msg |> function
-            | Merge _ -> ()
+            | Merge _ ->
+                incr merges
             | Added (streams, skipped, events) ->
                 incr batchesPended
                 streamsPended := !streamsPended + streams
@@ -202,18 +207,24 @@ module Scheduling =
                 incr resultCompleted
             | Result (_stream, Choice2Of2 _) ->
                 incr resultExn
-        member __.TryDump(state,(used,max),streams : StreamStates, pendingCount) =
+        member __.DumpStats((used,max), pendingCount) =
             incr cycles
-            states.Ingest(string state)
-            let due = statsDue ()
-            if due then
+            if statsDue () then
                 dumpStats (used,max) pendingCount
                 __.DumpExtraStats()
+        member __.TryDumpState(state, streams : StreamStates) =
+            incr fullCycles
+            states.Ingest(string state)
+            let due = stateDue ()
+            if due then
+                __.DumpExtraState()
                 streams.Dump log
             due
         /// Allows an ingester or projector to wire in custom stats (typically based on data gathered in a `Handle` override)
         abstract DumpExtraStats : unit -> unit
         default __.DumpExtraStats () = ()
+        abstract DumpExtraState : unit -> unit
+        default __.DumpExtraState () = ()
 
     /// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
     type Dispatcher<'R>(maxDop) =
@@ -259,7 +270,7 @@ module Scheduling =
                 for i in 0..c-1 do
                     let x = workLocalBuffer.[i]
                     match x with
-                    | Added _  -> () // Only processed in Stats
+                    | Added _  -> () // Only processed in Stats (and actually never enters this queue)
                     | Merge events -> for e in events do streams.InternalMerge(e.Key,e.Value)
                     | Result (stream,res) ->
                         match interpretProgress streams stream res with
@@ -318,10 +329,12 @@ module Scheduling =
                     | Idle ->                               dispatcherState <- Full; finished <- true
                     | Slipstreaming ->                      finished <- true
                     | _ -> ()
-                // 3. Supply state to accumulate (and periodically emit) status info
-                if stats.TryDump(dispatcherState,dispatcher.State,streams,pending.Count) then idle <- false
-                // 4. Do a minimal sleep so we don't run completely hot when empty
-                if idle then do! Async.Sleep sleepIntervalMs }
+                    // This loop can take a long time; attempt logging of stats per iteration
+                    stats.DumpStats(dispatcher.State,pending.Count)
+                // 3. Record completion state once per full iteration; dumping streams is expensive so needs to be done infrequently
+                if not (stats.TryDumpState(dispatcherState,streams)) && not idle then
+                    // 4. Do a minimal sleep so we don't run completely hot when empty (unless we did something non-trivial)
+                    do! Async.Sleep sleepIntervalMs }
 
         static member Start<'R>(stats, projectorDop, project, interpretProgress) =
             let dispatcher = Dispatcher(projectorDop)
@@ -345,7 +358,7 @@ module Scheduling =
 
 type Projector =
 
-    static member Start(log, projectorDop, project : StreamSpan -> Async<int>, ?statsInterval) =
+    static member Start(log, projectorDop, project : StreamSpan -> Async<int>, ?statsInterval, ?statesInterval) =
         let project (_maybeWritePos, batch) = async {
             try let! count = project batch
                 return Choice1Of2 (batch.span.index + int64 count)
@@ -353,7 +366,7 @@ type Projector =
         let interpretProgress _streams _stream = function
             | Choice1Of2 index -> Some index
             | Choice2Of2 _ -> None
-        let stats = Scheduling.Stats(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.))
+        let stats = Scheduling.Stats(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg statesInterval (TimeSpan.FromMinutes 5.))
         Scheduling.Engine<int64>.Start(stats, projectorDop, project, interpretProgress)
 
 module Ingestion =

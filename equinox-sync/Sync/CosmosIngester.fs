@@ -64,8 +64,8 @@ module Writer =
         | ResultKind.RateLimited | ResultKind.TimedOut | ResultKind.Other -> false
         | ResultKind.TooLarge | ResultKind.Malformed -> true
 
-type Stats(log : ILogger, statsInterval) =
-    inherit Stats<(int*int)*Writer.Result>(log, statsInterval)
+type Stats(log : ILogger, statsInterval, statesInterval) =
+    inherit Stats<(int*int)*Writer.Result>(log, statsInterval, statesInterval)
     let resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = ref 0, ref 0, ref 0, ref 0, ref 0
     let rateLimited, timedOut, tooLarge, malformed = ref 0, ref 0, ref 0, ref 0
     let mutable events, bytes = 0, 0L
@@ -104,7 +104,7 @@ type Stats(log : ILogger, statsInterval) =
             | ResultKind.Malformed -> category stream |> badCats.Ingest; incr malformed
             | ResultKind.TimedOut -> incr timedOut
 
-let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, statsInterval) =
+let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, (statsInterval, statesInterval)) =
     let cosmosPayloadLimit = 65536 // 2 * 1024 * 1024 - (*fudge*)4096
     let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
     let writerResultLog = log.ForContext<Writer.Result>()
@@ -138,5 +138,5 @@ let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, statsInterv
         let _stream, { write = wp } = applyResultToStreamState res
         Writer.logTo writerResultLog (stream,res)
         wp
-    let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), statsInterval)
+    let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), statsInterval, statesInterval)
     Engine<(int*int)*Writer.Result>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress)
