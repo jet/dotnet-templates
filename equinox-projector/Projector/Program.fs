@@ -5,7 +5,6 @@ open Confluent.Kafka
 //#endif
 open Equinox.Cosmos
 open Equinox.Cosmos.Projection
-open Equinox.Projection.State
 //#if kafka
 open Equinox.Projection.Codec
 open Equinox.Store
@@ -229,7 +228,7 @@ let main argv =
         //let targetParams = args.Target.BuildTargetParams()
         //let createRangeHandler log processingParams () = mkRangeProjector log processingParams targetParams
 //#endif
-        let project (batch : StreamSpan) = async { 
+        let project (batch : Equinox.Projection.State.StreamSpan) = async { 
             let r = Random()
             let ms = r.Next(1,batch.span.events.Length * 10)
             do! Async.Sleep ms

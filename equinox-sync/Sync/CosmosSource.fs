@@ -3,7 +3,6 @@
 open Equinox.Cosmos.Projection
 open Equinox.Projection
 open Equinox.Projection2
-open Equinox.Projection.State
 open Equinox.Store // AwaitTaskCorrect
 open Microsoft.Azure.Documents
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
@@ -11,9 +10,9 @@ open Serilog
 open System
 open System.Collections.Generic
 
-let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq) (maxReads, maxSubmissions) cosmosIngester () =
+let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq) (maxReads, maxSubmissions) categorize cosmosIngester () =
     let mutable rangeIngester = Unchecked.defaultof<_>
-    let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxReads, maxSubmissions, TimeSpan.FromMinutes 1.) }
+    let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxReads, maxSubmissions, categorize, TimeSpan.FromMinutes 1.) }
     let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform in rangeIngester.Submit(epoch, checkpoint, events)
     let dispose () = rangeIngester.Stop ()
     let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
@@ -31,12 +30,14 @@ let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq
     ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
 
 let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, startFromTail, maxDocuments, lagReportFreq : TimeSpan option)
-        (cosmosContext, maxWriters) createRangeProjector = async {
+        (cosmosContext, maxWriters)
+        categorize
+        createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
         log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
-    let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 1.))
+    let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 1.))
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = startFromTail,
@@ -87,15 +88,15 @@ module EventV0Parser =
         let (StandardCodecEvent e) as x = d.Cast<EventV0>()
         { stream = x.s; index = x.i; event = e } : Equinox.Projection.StreamItem
 
-let transformV0 catFilter (v0SchemaDocument: Document) : StreamItem seq = seq {
+let transformV0 categorize catFilter (v0SchemaDocument: Document) : StreamItem seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
     let streamName = (*if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+*)parsed.stream
-    if catFilter (category streamName) then yield parsed }
+    if catFilter (categorize streamName) then yield parsed }
 //#else
-let transformOrFilter catFilter (changeFeedDocument: Document) : StreamItem seq = seq {
+let transformOrFilter categorize catFilter (changeFeedDocument: Document) : StreamItem seq = seq {
     for e in DocumentParser.enumEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-        if catFilter (category e.stream) then
+        if catFilter (categorize e.stream) then
             let e2 =
                 { new Equinox.Codec.IEvent<_> with
                     member __.Data = null

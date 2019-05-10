@@ -2,13 +2,17 @@
 
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Store
-open Equinox.Projection.Scheduling
 open Equinox.Projection2
+open Equinox.Projection2.Buffer
 open Equinox.Projection2.Scheduling
-open Equinox.Projection.State
 open Serilog
 open System.Threading
 open System.Collections.Generic
+
+[<AutoOpen>]
+module private Impl =
+    let arrayBytes (x:byte[]) = if x = null then 0 else x.Length
+    let inline mb x = float x / 1024. / 1024.
 
 [<AutoOpen>]
 module Writer =
@@ -32,7 +36,7 @@ module Writer =
         | stream, Choice2Of2 exn ->
             log.Warning(exn,"Writing   {stream} failed, retrying", stream)
 
-    let write (log : ILogger) (ctx : CosmosContext) ({ stream = s; span = { index = i; events = e}} as batch) = async {
+    let write (log : ILogger) (ctx : CosmosContext) ({ stream = s; span = { index = i; events = e}} : StreamSpan as batch) = async {
         let stream = ctx.CreateStream s
         log.Debug("Writing {s}@{i}x{n}",s,i,e.Length)
         let! res = ctx.Sync(stream, { index = i; etag = None }, e)
@@ -65,7 +69,7 @@ module Writer =
         | ResultKind.RateLimited | ResultKind.TimedOut | ResultKind.Other -> false
         | ResultKind.TooLarge | ResultKind.Malformed -> true
 
-type Stats(log : ILogger, statsInterval, statesInterval) =
+type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
     inherit Stats<(int*int)*Writer.Result>(log, statsInterval, statesInterval)
     let okStreams, resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = HashSet(), ref 0, ref 0, ref 0, ref 0, ref 0
     let badCats, failStreams, rateLimited, timedOut, tooLarge, malformed = CatStats(), HashSet(), ref 0, ref 0, ref 0, ref 0
@@ -90,7 +94,7 @@ type Stats(log : ILogger, statsInterval, statesInterval) =
 
     override __.Handle message =
         let inline adds x (set:HashSet<_>) = set.Add x |> ignore
-        let inline bads x (set:HashSet<_>) = badCats.Ingest(Helpers.category x); adds x set
+        let inline bads x (set:HashSet<_>) = badCats.Ingest(categorize x); adds x set
         base.Handle message
         match message with
         | Merge _ | Added _ -> () // Processed by standard logging already; we have nothing to add
@@ -112,7 +116,7 @@ type Stats(log : ILogger, statsInterval, statesInterval) =
             | ResultKind.Malformed -> bads stream mfStreams; incr malformed
             | ResultKind.Other -> bads stream oStreams; incr resultExnOther
 
-let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, (statsInterval, statesInterval)) =
+let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, categorize, (statsInterval, statesInterval)) =
     let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
     let writerResultLog = log.ForContext<Writer.Result>()
     let trim (_currentWritePos : int64 option, batch : StreamSpan) =
@@ -146,5 +150,5 @@ let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, (statsInter
         let _stream, { write = wp } = applyResultToStreamState res
         Writer.logTo writerResultLog (stream,res)
         wp
-    let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), statsInterval, statesInterval)
-    Engine<(int*int)*Writer.Result>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress)
+    let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, statesInterval)
+    Engine<(int*int)*Writer.Result>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))

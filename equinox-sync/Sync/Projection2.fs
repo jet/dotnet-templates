@@ -1,7 +1,6 @@
 ﻿namespace Equinox.Projection2
 
 open Equinox.Projection
-open Equinox.Projection.State
 open Serilog
 open System
 open System.Collections.Concurrent
@@ -9,9 +8,28 @@ open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
 
+/// Gathers stats relating to how many items of a given category have been observed
+type CatStats() =
+    let cats = Dictionary<string,int64>()
+    member __.Ingest(cat,?weight) = 
+        let weight = defaultArg weight 1L
+        match cats.TryGetValue cat with
+        | true, catCount -> cats.[cat] <- catCount + weight
+        | false, _ -> cats.[cat] <- weight
+    member __.Any = cats.Count <> 0
+    member __.Clear() = cats.Clear()
+#if NET461
+    member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortBy (fun (_,s) -> -s)
+#else
+    member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
+#endif
+
 [<AutoOpen>]
-module Helpers =
-    let category (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+module private Impl =
+    let (|NNA|) xs = if xs = null then Array.empty else xs
+    let arrayBytes (x:byte[]) = if x = null then 0 else x.Length
+    let inline eventSize (x : Equinox.Codec.IEvent<_>) = arrayBytes x.Data + arrayBytes x.Meta + x.EventType.Length + 16
+    let inline mb x = float x / 1024. / 1024.
     let expiredMs ms =
         let timer = Stopwatch.StartNew()
         fun () ->
@@ -82,7 +100,68 @@ module Progress =
                     with e -> result.Trigger (Choice2Of2 e)
                 | _ -> do! Async.Sleep pumpSleepMs }
 
+module Buffer =
+
+    type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
+    module Span =
+        let (|End|) (x : Span) = x.index + if x.events = null then 0L else x.events.LongLength
+        let trim min : Span -> Span = function
+            | x when x.index >= min -> x // don't adjust if min not within
+            | End n when n < min -> { index = min; events = [||] } // throw away if before min
+#if NET461
+            | x -> { index = min; events = x.events |> Seq.skip (min - x.index |> int) |> Seq.toArray }
+#else
+            | x -> { index = min; events = x.events |> Array.skip (min - x.index |> int) }  // slice
+#endif
+        let merge min (xs : Span seq) =
+            let xs =
+                seq { for x in xs -> { x with events = (|NNA|) x.events } }
+                |> Seq.map (trim min)
+                |> Seq.filter (fun x -> x.events.Length <> 0)
+                |> Seq.sortBy (fun x -> x.index)
+            let buffer = ResizeArray()
+            let mutable curr = None
+            for x in xs do
+                match curr, x with
+                // Not overlapping, no data buffered -> buffer
+                | None, _ ->
+                    curr <- Some x
+                // Gap
+                | Some (End nextIndex as c), x when x.index > nextIndex ->
+                    buffer.Add c
+                    curr <- Some x
+                // Overlapping, join
+                | Some (End nextIndex as c), x  ->
+                    curr <- Some { c with events = Array.append c.events (trim nextIndex x).events }
+            curr |> Option.iter buffer.Add
+            if buffer.Count = 0 then null else buffer.ToArray()
+    type [<NoComparison>] StreamSpan = { stream: string; span: Span }
+    type [<NoComparison>] StreamState = { isMalformed: bool; write: int64 option; queue: Span[] } with
+        member __.Size =
+            if __.queue = null then 0
+            else __.queue |> Seq.collect (fun x -> x.events) |> Seq.sumBy eventSize
+        member __.IsReady =
+            if __.queue = null || __.isMalformed then false
+            else
+                match __.write, Array.tryHead __.queue with
+                | Some w, Some { index = i } -> i = w
+                | None, _ -> true
+                | _ -> false
+    module StreamState =
+        let inline optionCombine f (r1: int64 option) (r2: int64 option) =
+            match r1, r2 with
+            | Some x, Some y -> f x y |> Some
+            | None, None -> None
+            | None, x | x, None -> x
+        let combine (s1: StreamState) (s2: StreamState) : StreamState =
+            let writePos = optionCombine max s1.write s2.write
+            let items = let (NNA q1, NNA q2) = s1.queue, s2.queue in Seq.append q1 q2
+            { write = writePos; queue = Span.merge (defaultArg writePos 0L) items; isMalformed = s1.isMalformed || s2.isMalformed }
+
 module Scheduling =
+
+    open Buffer
+    
     type StreamStates() =
         let mutable streams = Set.empty 
         let states = Dictionary<string, StreamState>()
@@ -137,9 +216,9 @@ module Scheduling =
             markCompleted stream index
         member __.MarkFailed stream =
             markNotBusy stream
-        member __.Pending(trySlipsteamed, byQueuedPriority : string seq) : (int64 option * StreamSpan) seq =
-            pending trySlipsteamed byQueuedPriority
-        member __.Dump(log : ILogger) =
+        member __.Pending(trySlipstreamed, byQueuedPriority : string seq) : (int64 option * StreamSpan) seq =
+            pending trySlipstreamed byQueuedPriority
+        member __.Dump(log : ILogger, categorize) =
             let mutable busyCount, busyB, ready, readyB, unprefixed, unprefixedB, malformed, malformedB, synced = 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0
             let busyCats, readyCats, readyStreams, unprefixedStreams, malformedStreams = CatStats(), CatStats(), CatStats(), CatStats(), CatStats()
             let kb sz = (sz + 512L) / 1024L
@@ -148,7 +227,7 @@ module Scheduling =
                 | 0L ->
                     synced <- synced + 1
                 | sz when busy.Contains stream ->
-                    busyCats.Ingest(category stream)
+                    busyCats.Ingest(categorize stream)
                     busyCount <- busyCount + 1
                     busyB <- busyB + sz
                 | sz when state.isMalformed ->
@@ -160,7 +239,7 @@ module Scheduling =
                     unprefixed <- unprefixed + 1
                     unprefixedB <- unprefixedB + sz
                 | sz ->
-                    readyCats.Ingest(category stream)
+                    readyCats.Ingest(categorize stream)
                     readyStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.[0].events.Length, kb sz)
                     ready <- ready + 1
                     readyB <- readyB + sz
@@ -213,19 +292,16 @@ module Scheduling =
             if statsDue () then
                 dumpStats (used,max) pendingCount
                 __.DumpExtraStats()
-        member __.TryDumpState(state, streams : StreamStates) =
+        member __.TryDumpState(state,dump) =
             incr fullCycles
             states.Ingest(string state)
             let due = stateDue ()
             if due then
-                __.DumpExtraState()
-                streams.Dump log
+                dump log
             due
         /// Allows an ingester or projector to wire in custom stats (typically based on data gathered in a `Handle` override)
         abstract DumpExtraStats : unit -> unit
         default __.DumpExtraStats () = ()
-        abstract DumpExtraState : unit -> unit
-        default __.DumpExtraState () = ()
 
     /// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
     type Dispatcher<'R>(maxDop) =
@@ -254,7 +330,7 @@ module Scheduling =
     /// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
     /// c) submits work to the supplied Dispatcher (which it triggers pumping of)
     /// d) periodically reports state (with hooks for ingestion engines to report same)
-    type Engine<'R>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress) =
+    type Engine<'R>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress, dumpStreams) =
         let sleepIntervalMs = 1
         let cts = new CancellationTokenSource()
         let work = ConcurrentStack<InternalMessage<'R>>() // dont need so complexity of Queue is unwarranted and usage is cross thread so Bag is not better
@@ -333,13 +409,13 @@ module Scheduling =
                     // This loop can take a long time; attempt logging of stats per iteration
                     stats.DumpStats(dispatcher.State,pending.Count)
                 // 3. Record completion state once per full iteration; dumping streams is expensive so needs to be done infrequently
-                if not (stats.TryDumpState(dispatcherState,streams)) && not idle then
+                if not (stats.TryDumpState(dispatcherState,dumpStreams streams)) && not idle then
                     // 4. Do a minimal sleep so we don't run completely hot when empty (unless we did something non-trivial)
                     do! Async.Sleep sleepIntervalMs }
 
-        static member Start<'R>(stats, projectorDop, project, interpretProgress) =
+        static member Start<'R>(stats, projectorDop, project, interpretProgress, dumpStreams) =
             let dispatcher = Dispatcher(projectorDop)
-            let instance = new Engine<'R>(dispatcher, project, interpretProgress)
+            let instance = new Engine<'R>(dispatcher, project, interpretProgress, dumpStreams)
             Async.Start <| instance.Pump(stats)
             instance
 
@@ -359,7 +435,7 @@ module Scheduling =
 
 type Projector =
 
-    static member Start(log, projectorDop, project : StreamSpan -> Async<int>, ?statsInterval, ?statesInterval) =
+    static member Start(log, projectorDop, project : Buffer.StreamSpan -> Async<int>, categorize, ?statsInterval, ?statesInterval) =
         let project (_maybeWritePos, batch) = async {
             try let! count = project batch
                 return Choice1Of2 (batch.span.index + int64 count)
@@ -368,7 +444,9 @@ type Projector =
             | Choice1Of2 index -> Some index
             | Choice2Of2 _ -> None
         let stats = Scheduling.Stats(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg statesInterval (TimeSpan.FromMinutes 5.))
-        Scheduling.Engine<int64>.Start(stats, projectorDop, project, interpretProgress)
+            //let category (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+        let dumpStreams (streams: Scheduling.StreamStates) log = streams.Dump(log, categorize)
+        Scheduling.Engine<int64>.Start(stats, projectorDop, project, interpretProgress, dumpStreams)
 
 module Ingestion =
 
@@ -379,13 +457,13 @@ module Ingestion =
         | EndOfSeries of seriesIndex: int
 
     type private Streams() =
-        let states = Dictionary<string, StreamState>()
-        let merge stream (state : StreamState) =
+        let states = Dictionary<string, Buffer.StreamState>()
+        let merge stream (state : Buffer.StreamState) =
             match states.TryGetValue stream with
             | false, _ ->
                 states.Add(stream, state)
             | true, current ->
-                let updated = StreamState.combine current state
+                let updated = Buffer.StreamState.combine current state
                 states.[stream] <- updated
 
         member __.Merge(items : StreamItem seq) =
@@ -397,12 +475,12 @@ module Ingestion =
             for x in forward do states.Remove x.Key |> ignore
             forward
 
-        member __.Dump(log : ILogger) =
+        member __.Dump(categorize, log : ILogger) =
             let mutable waiting, waitingB = 0, 0L
             let waitingCats, waitingStreams = CatStats(), CatStats()
             for KeyValue (stream,state) in states do
                 let sz = int64 state.Size
-                waitingCats.Ingest(category stream)
+                waitingCats.Ingest(categorize stream)
                 waitingStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.[0].events.Length, (sz + 512L) / 1024L)
                 waiting <- waiting + 1
                 waitingB <- waitingB + sz
@@ -410,7 +488,7 @@ module Ingestion =
             if waitingCats.Any then log.Information("Waiting Categories, events {@readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
             if waitingCats.Any then log.Information("Waiting Streams, KB {@readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
 
-    type private Stats(log : ILogger, maxPendingBatches, statsInterval : TimeSpan) =
+    type private Stats(log : ILogger, maxPendingBatches, categorize, statsInterval : TimeSpan) =
         let mutable pendingBatchCount, validatedEpoch, comittedEpoch : int * int64 option * int64 option = 0, None, None
         let progCommitFails, progCommits = ref 0, ref 0 
         let cycles, batchesPended, streamsPended, eventsPended = ref 0, ref 0, ref 0, ref 0
@@ -458,7 +536,7 @@ module Ingestion =
             incr cycles
             if statsDue () then
                 dumpStats (available,maxDop) (readingAhead,ready)
-                streams.Dump log
+                streams.Dump(categorize,log)
 
     and [<NoComparison; NoEquality>] private InternalMessage =
         | Batch of seriesIndex: int * epoch: int64 * markCompleted: Async<unit> * items: StreamItem seq
@@ -477,14 +555,14 @@ module Ingestion =
         | false, _ -> None
     
     /// Holds batches away from Core processing to limit in-flight processing
-    type Engine<'R>(log : ILogger, scheduler: Scheduling.Engine<'R>, maxRead, maxSubmissions, initialSeriesIndex, statsInterval : TimeSpan, ?pumpDelayMs) =
+    type Engine<'R>(log : ILogger, scheduler: Scheduling.Engine<'R>, maxRead, maxSubmissions, initialSeriesIndex, categorize, statsInterval : TimeSpan, ?pumpDelayMs) =
         let cts = new CancellationTokenSource()
         let pumpDelayMs = defaultArg pumpDelayMs 5
         let work = ConcurrentQueue<InternalMessage>() // Queue as need ordering semantically
         let readMax = new Sem(maxRead)
         let submissionsMax = new Sem(maxSubmissions)
         let streams = Streams()
-        let stats = Stats(log, maxRead, statsInterval)
+        let stats = Stats(log, maxRead, categorize, statsInterval)
         let pending = Queue<_>()
         let readingAhead, ready = Dictionary<int,ResizeArray<_>>(), Dictionary<int,ResizeArray<_>>()
         let progressWriter = Progress.Writer<_>()
@@ -566,8 +644,8 @@ module Ingestion =
                 with e -> log.Error(e,"Buffer thread exception") }
 
         /// Generalized; normal usage is via Ingester.Start, this is used by the `eqxsync` template to handle striped reading for bulk ingestion purposes
-        static member Start<'R>(log, scheduler, maxRead, maxSubmissions, startingSeriesId, statsInterval) =
-            let instance = new Engine<'R>(log, scheduler, maxRead, maxSubmissions, startingSeriesId, statsInterval = statsInterval)
+        static member Start<'R>(log, scheduler, maxRead, maxSubmissions, startingSeriesId, categorize, statsInterval) =
+            let instance = new Engine<'R>(log, scheduler, maxRead, maxSubmissions, startingSeriesId, categorize, statsInterval = statsInterval)
             Async.Start <| instance.Pump()
             instance
 
@@ -589,9 +667,9 @@ module Ingestion =
 type Ingester =
 
     /// Starts an Ingester that will submit up to `maxSubmissions` items at a time to the `scheduler`, blocking on Submits when more than `maxRead` batches have yet to complete processing 
-    static member Start<'R>(log, scheduler, maxRead, maxSubmissions, ?statsInterval) =
+    static member Start<'R>(log, scheduler, maxRead, maxSubmissions, categorize, ?statsInterval) =
         let singleSeriesIndex = 0
-        let instance = Ingestion.Engine<'R>.Start(log, scheduler, maxRead, maxSubmissions, singleSeriesIndex, statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 1.))
+        let instance = Ingestion.Engine<'R>.Start(log, scheduler, maxRead, maxSubmissions, singleSeriesIndex, categorize, statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 1.))
         { new IIngester with
             member __.Submit(epoch, markCompleted, items) : Async<int*int> =
                 instance.Submit(Ingestion.Message.Batch(singleSeriesIndex, epoch, markCompleted, items))

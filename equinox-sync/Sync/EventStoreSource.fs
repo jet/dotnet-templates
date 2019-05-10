@@ -351,7 +351,7 @@ type ReaderSpec =
 
 type StartMode = Starting | Resuming | Overridding
 
-let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmosContexts, maxWriters) resolveCheckpointStream = async {
+let run (log : Serilog.ILogger) (connect, spec, categorize, tryMapEvent) maxReadAhead (cosmosContexts, maxWriters) resolveCheckpointStream = async {
     let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
     let conn = connect ()
     let! maxInParallel = Async.StartChild <| establishMax conn
@@ -382,7 +382,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmo
             startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float maxPos.CommitPosition,
             checkpointFreq.TotalMinutes)
         return startPos }
-    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Sync"), cosmosContexts, maxWriters, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2.))
+    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Sync"), cosmosContexts, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2.))
     let initialSeriesId, conns, dop =  
         log.Information("Tailing every every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.streamReaders)
         match spec.gorge with
@@ -393,7 +393,7 @@ let run (log : Serilog.ILogger) (connect, spec, tryMapEvent) maxReadAhead (cosmo
             chunk startPos |> int, conns, (max (conns.Length) (spec.streamReaders+1))
         | None ->
             0, [|conn|], spec.streamReaders+1
-    let trancheEngine = Ingestion.Engine.Start (log.ForContext("Tranche","EventStore"), cosmosIngestionEngine, maxReadAhead, maxReadAhead, initialSeriesId, TimeSpan.FromMinutes 1.)
+    let trancheEngine = Ingestion.Engine.Start(log.ForContext("Tranche","EventStore"), cosmosIngestionEngine, maxReadAhead, maxReadAhead, initialSeriesId, categorize, TimeSpan.FromMinutes 1.)
     let post = function
         | Res.EndOfChunk seriesId -> trancheEngine.Submit <| Ingestion.EndOfSeries seriesId
         | Res.Batch (seriesId, pos, xs) ->

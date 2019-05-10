@@ -286,7 +286,7 @@ module Logging =
                         let cfpLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
             |> fun c -> let ingesterLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<Equinox.Projection.State.StreamStates>.FullName, ingesterLevel)
+                        c.MinimumLevel.Override(typeof<Equinox.Projection2.Scheduling.StreamStates>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                         c.MinimumLevel.Override(typeof<Equinox.Cosmos.Projection.CosmosIngester.Writer.Result>.FullName, generalLevel)
@@ -308,7 +308,7 @@ module Logging =
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
-        Log.ForContext<Equinox.Projection.State.StreamStates>(), Log.ForContext<Core.CosmosContext>()
+        Log.ForContext<Equinox.Projection2.Scheduling.StreamStates>(), Log.ForContext<Core.CosmosContext>()
 
 [<EntryPoint>]
 let main argv =
@@ -332,20 +332,22 @@ let main argv =
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.CosmosResolver(store, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let targets = destinations |> Array.mapi (fun i x -> Equinox.Cosmos.Core.CosmosContext(x, colls, storeLog.ForContext("PoolId", i)))
+        let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
 #if cosmos
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
         let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
 #if marveleqx
         let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformV0 catFilter)
 #else
-        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformOrFilter catFilter)
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformOrFilter categorize catFilter)
         // Uncomment to test marveleqx mode
-        // let createSyncHandler () = CosmosSource.createRangeSyncHandler log target (CosmosSource.transformV0 catFilter)
+        // let createSyncHandler () = CosmosSource.createRangeSyncHandler log categorize target (CosmosSource.transformV0 categorize catFilter)
 #endif
         CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
             (leaseId, startFromHere, maxDocuments, lagFrequency)
             (targets, args.MaxWriters)
-            (createSyncHandler (args.MaxPendingBatches,args.MaxProcessing))
+            categorize
+            (createSyncHandler (args.MaxPendingBatches,args.MaxProcessing) categorize)
 #else
         let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 
         let catFilter = args.Source.CategoryFilterFunction
@@ -366,7 +368,7 @@ let main argv =
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
                 || not (catFilter e.EventStreamId) -> None
             | e -> e |> EventStoreSource.toIngestionItem |> Some
-        EventStoreSource.run log (connect, spec, tryMapEvent catFilter) args.MaxPendingBatches (targets, args.MaxWriters) resolveCheckpointStream
+        EventStoreSource.run log (connect, spec, categorize, tryMapEvent catFilter) args.MaxPendingBatches (targets, args.MaxWriters) resolveCheckpointStream
 #endif
         |> Async.RunSynchronously
         0 
