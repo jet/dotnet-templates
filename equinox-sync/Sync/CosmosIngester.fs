@@ -79,7 +79,7 @@ type Stats(log : ILogger, statsInterval, statesInterval) =
             results, mb bytes, okStreams.Count, events, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
         okStreams.Clear(); resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; events <- 0; bytes <- 0L
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
-            log.Warning("Exceptions {streams:n0} s Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s Too large {tooLarge:n0}e {@tlStreams} Malformed {malformed:n0} {@mfStrea,s} Other {other:n0} {@oStreams}",
+            log.Warning("Exceptions {streams:n0} s Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s Too large {tooLarge:n0}e {@tlStreams} Malformed {malformed:n0} {@mfStreams} Other {other:n0} {@oStreams}",
                 failStreams.Count, !rateLimited, rlStreams.Count, !timedOut, toStreams.Count, !tooLarge, tlStreams, !malformed, mfStreams, !resultExnOther, oStreams)
             rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0; resultExnOther := 0
             if badCats.Any then log.Error("Malformed categories {@badCats}", badCats.StatsDescending); badCats.Clear()
