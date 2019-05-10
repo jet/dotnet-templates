@@ -217,7 +217,8 @@ module Scheduling =
 
     /// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
     type Dispatcher<'R>(maxDop) =
-        let work = new BlockingCollection<_>(ConcurrentBag<_>())
+        // Using a Queue as a) the ordering is more correct, favoring more important work b) we are adding from many threads so no value in ConcurrentBag'sthread-affinity
+        let work = new BlockingCollection<_>(ConcurrentQueue<_>()) 
         let result = Event<'R>()
         let dop = new Sem(maxDop)
         let dispatch work = async {
@@ -244,8 +245,8 @@ module Scheduling =
     type Engine<'R>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress) =
         let sleepIntervalMs = 1
         let cts = new CancellationTokenSource()
-        let work = ConcurrentBag<InternalMessage<'R>>()
-        let pending = ConcurrentQueue<_*StreamItem[]>()
+        let work = ConcurrentStack<InternalMessage<'R>>() // dont need so complexity of Queue is unwarranted and usage is cross thread so Bag is not better
+        let pending = ConcurrentQueue<_*StreamItem[]>() // Queue as need ordering
         let streams = StreamStates()
         let progressState = Progress.State()
 
@@ -253,12 +254,14 @@ module Scheduling =
             match streamState.write, item.index + 1L with
             | Some cw, required when cw >= required -> 0, 1
             | _ -> 1, 0
+        static let workLocalBuffer = Array.zeroCreate 200
         let tryDrainResults feedStats =
             let mutable worked, more = false, true
             while more do
-                match work.TryTake() with
-                | false, _ -> more <- false
-                | true, x ->
+                let c = work.TryPopRange(workLocalBuffer)
+                if c = 0 then more <- false else worked <- true
+                for i in 0..c do
+                    let x = workLocalBuffer.[i]
                     match x with
                     | Added _  -> () // Only processed in Stats
                     | Merge events -> for e in events do streams.InternalMerge(e.Key,e.Value)
@@ -269,7 +272,6 @@ module Scheduling =
                             progressState.MarkStreamProgress(stream,index)
                             streams.MarkCompleted(stream,index)
                     feedStats x
-                    worked <- true
             worked
         let tryFillDispatcher includeSlipstreamed = async {
             let mutable hasCapacity, dispatched = dispatcher.HasCapacity, false
@@ -298,7 +300,7 @@ module Scheduling =
             feedStats <| Added (reqs.Count,skipCount,count)
 
         member private __.Pump(stats : Stats<'R>) = async {
-            use _ = dispatcher.Result.Subscribe(Result >> work.Add)
+            use _ = dispatcher.Result.Subscribe(Result >> work.Push)
             Async.Start(dispatcher.Pump(), cts.Token)
             while not cts.IsCancellationRequested do
                 let mutable idle, dispatcherState, finished = true, Idle, false
@@ -334,7 +336,7 @@ module Scheduling =
             pending.Enqueue (markCompleted, items)
 
         member __.AddOpenStreamData(events) =
-            work.Add <| Merge events
+            work.Push <| Merge events
 
         member __.AllStreams = streams.All
 
@@ -464,7 +466,7 @@ module Ingestion =
     type Engine<'R>(log : ILogger, scheduler: Scheduling.Engine<'R>, maxRead, maxSubmissions, initialSeriesIndex, statsInterval : TimeSpan, ?pumpDelayMs) =
         let cts = new CancellationTokenSource()
         let pumpDelayMs = defaultArg pumpDelayMs 5
-        let work = ConcurrentQueue<InternalMessage>()
+        let work = ConcurrentQueue<InternalMessage>() // Queue as need ordering semantically
         let readMax = new Sem(maxRead)
         let submissionsMax = new Sem(maxSubmissions)
         let streams = Streams()
