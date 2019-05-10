@@ -96,5 +96,12 @@ let transformOrFilter catFilter (changeFeedDocument: Document) : StreamItem seq 
     for e in DocumentParser.enumEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter (category e.stream) then
-            yield e }
+            let e2 =
+                { new Equinox.Codec.IEvent<_> with
+                    member __.Data = null
+                    member __.Meta = null
+                    member __.EventType = e.event.EventType 
+                    member __.Timestamp = e.event.Timestamp }
+            yield { e with event = e2 }
+}
 //#endif
