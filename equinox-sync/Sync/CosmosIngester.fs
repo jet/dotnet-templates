@@ -67,33 +67,34 @@ module Writer =
 
 type Stats(log : ILogger, statsInterval, statesInterval) =
     inherit Stats<(int*int)*Writer.Result>(log, statsInterval, statesInterval)
-    let resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = ref 0, ref 0, ref 0, ref 0, ref 0
-    let rateLimited, timedOut, tooLarge, malformed = ref 0, ref 0, ref 0, ref 0
+    let okStreams, resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = HashSet(), ref 0, ref 0, ref 0, ref 0, ref 0
+    let badCats, failStreams, rateLimited, timedOut, tooLarge, malformed = CatStats(), HashSet(), ref 0, ref 0, ref 0, ref 0
+    let rlStreams, toStreams, tlStreams, mfStreams, oStreams = HashSet(), HashSet(), HashSet(), HashSet(), HashSet()
     let mutable events, bytes = 0, 0L
-    let badCats, failStreams, okStreams, toStreams, rlStreams, tlStreams, mfStreams, oStreams =
-        CatStats(), HashSet(), HashSet(), HashSet(), HashSet(), HashSet(), HashSet(), HashSet()
 
     override __.DumpExtraStats() =
         let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix
-        log.Information("Completed {completed:n0}r {mb:n0}MB {streams:n0}s {events:n0}e ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
-            results, mb bytes, okStreams.Count, events, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
+        log.Information("Completed {completed:n0}r {streams:n0}s {events:n0}e {mb:n0}MB ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
+            results, okStreams.Count, events, mb bytes, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
         okStreams.Clear(); resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; events <- 0; bytes <- 0L
-        if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 then
-            log.Warning("Exceptions {streams:n0} s Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s Too large {tooLarge:n0}e {@tlStreams} Malformed {malformed:n0} {@mfStreams} Other {other:n0} {@oStreams}",
-                failStreams.Count, !rateLimited, rlStreams.Count, !timedOut, toStreams.Count, !tooLarge, tlStreams, !malformed, mfStreams, !resultExnOther, oStreams)
-            rateLimited := 0; timedOut := 0; tooLarge := 0; malformed := 0; resultExnOther := 0
-            if badCats.Any then log.Error("Malformed categories {@badCats}", badCats.StatsDescending); badCats.Clear()
-            toStreams.Clear(); rlStreams.Clear(); tlStreams.Clear(); mfStreams.Clear(); oStreams.Clear()
+        if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 || !resultExnOther <> 0 then
+            log.Warning("Failures {streams:n0}s Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s Other {other:n0} {@oStreams}",
+                failStreams.Count, !rateLimited, rlStreams.Count, !timedOut, toStreams.Count, !resultExnOther, oStreams)
+            rateLimited := 0; timedOut := 0; resultExnOther := 0; failStreams.Clear(); rlStreams.Clear(); toStreams.Clear(); oStreams.Clear()
+        if badCats.Any then
+            log.Warning("Malformed cats {@badCats} Too large {tooLarge:n0} {@tlStreams} Malformed {malformed:n0} {@mfStreams}",
+                badCats.StatsDescending, !tooLarge, tlStreams, !malformed, mfStreams)
+            badCats.Clear(); tooLarge := 0; malformed := 0; tlStreams.Clear(); mfStreams.Clear()
         Equinox.Cosmos.Store.Log.InternalMetrics.dump log
 
     override __.Handle message =
-        base.Handle message
         let inline adds x (set:HashSet<_>) = set.Add x |> ignore
+        let inline bads x (set:HashSet<_>) = badCats.Ingest(category x); adds x set
+        base.Handle message
         match message with
-        | Merge _
-        | Added _ -> ()
+        | Merge _ | Added _ -> () // Processed by standard logging already; we have nothing to add
         | Result (stream, Choice1Of2 ((es,bs),r)) ->
-            okStreams.Add stream |> ignore
+            adds stream okStreams
             events <- events + es
             bytes <- bytes + int64 bs
             match r with
@@ -102,13 +103,13 @@ type Stats(log : ILogger, statsInterval, statesInterval) =
             | Writer.Result.PartialDuplicate _ -> incr resultPartialDup
             | Writer.Result.PrefixMissing _ -> incr resultPrefix
         | Result (stream, Choice2Of2 exn) ->
-            failStreams.Add stream |> ignore
+            adds stream failStreams
             match Writer.classify exn with
-            | ResultKind.Other -> adds stream oStreams; incr resultExnOther
             | ResultKind.RateLimited -> adds stream rlStreams; incr rateLimited
-            | ResultKind.TooLarge -> category stream |> badCats.Ingest; adds stream tlStreams; incr tooLarge
-            | ResultKind.Malformed -> category stream |> badCats.Ingest; adds stream mfStreams; incr malformed
             | ResultKind.TimedOut -> adds stream toStreams; incr timedOut
+            | ResultKind.TooLarge -> bads stream tlStreams; incr tooLarge
+            | ResultKind.Malformed -> bads stream mfStreams; incr malformed
+            | ResultKind.Other -> bads stream oStreams; incr resultExnOther
 
 let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, (statsInterval, statesInterval)) =
     let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96

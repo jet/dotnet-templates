@@ -188,7 +188,7 @@ module Scheduling =
         let merges, batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0, ref 0
         let statsDue, stateDue = expiredMs (int64 statsInterval.TotalMilliseconds), expiredMs (int64 stateInterval.TotalMilliseconds)
         let dumpStats (used,maxDop) pendingCount =
-            log.Information("Projection Cycles {cycles}/{fullCycles} States {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
+            log.Information("Cycles {cycles}/{fullCycles} {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
                 !cycles, !fullCycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
             cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
             log.Information("Ingestions {batches} {streams:n0}s {events:n0}-{skipped:n0}e Merged {merges} Pending {pending}",
