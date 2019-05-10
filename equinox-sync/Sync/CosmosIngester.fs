@@ -105,11 +105,11 @@ type Stats(log : ILogger, statsInterval, statesInterval) =
             | ResultKind.TimedOut -> incr timedOut
 
 let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, (statsInterval, statesInterval)) =
-    let cosmosPayloadLimit = 512 * 1024 - (*fudge*)4096
     let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
     let writerResultLog = log.ForContext<Writer.Result>()
     let trim (_currentWritePos : int64 option, batch : StreamSpan) =
-        let mutable count, countBudget, bytesBudget = 0, (*4096*)65536, cosmosPayloadLimit
+        let mutable countBudget, bytesBudget = 16384, 512 * 1024 - (*fudge*)4096
+        let mutable count = 0
         let withinLimits (y : Equinox.Codec.IEvent<byte[]>) =
             count <- count + 1
             countBudget <- countBudget - 1
