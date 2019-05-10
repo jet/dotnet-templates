@@ -250,11 +250,7 @@ module Scheduling =
         let streams = StreamStates()
         let progressState = Progress.State()
 
-        let validVsSkip (streamState : StreamState) (item : StreamItem) =
-            match streamState.write, item.index + 1L with
-            | Some cw, required when cw >= required -> 0, 1
-            | _ -> 1, 0
-        static let workLocalBuffer = Array.zeroCreate 200
+        static let workLocalBuffer = Array.zeroCreate 1024
         let tryDrainResults feedStats =
             let mutable worked, more = false, true
             while more do
@@ -286,6 +282,10 @@ module Scheduling =
                     hasCapacity <- succeeded
             return hasCapacity, dispatched }
         let ingestPendingBatch feedStats (markCompleted, items : StreamItem seq) = 
+            let inline validVsSkip (streamState : StreamState) (item : StreamItem) =
+                match streamState.write, item.index + 1L with
+                | Some cw, required when cw >= required -> 0, 1
+                | _ -> 1, 0
             let reqs = Dictionary()
             let mutable count, skipCount = 0, 0
             for item in items do
