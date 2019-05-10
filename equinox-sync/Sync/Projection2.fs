@@ -260,7 +260,7 @@ module Scheduling =
             while more do
                 let c = work.TryPopRange(workLocalBuffer)
                 if c = 0 then more <- false else worked <- true
-                for i in 0..c do
+                for i in 0..c-1 do
                     let x = workLocalBuffer.[i]
                     match x with
                     | Added _  -> () // Only processed in Stats
