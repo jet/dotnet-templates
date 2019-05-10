@@ -10,7 +10,8 @@ open System.Diagnostics
 open System.Threading
 
 [<AutoOpen>]
-module private Helpers =
+module Helpers =
+    let category (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
     let expiredMs ms =
         let timer = Stopwatch.StartNew()
         fun () ->

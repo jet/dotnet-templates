@@ -74,22 +74,23 @@ type Stats(log : ILogger, statsInterval, statesInterval) =
 
     override __.DumpExtraStats() =
         let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix
-        log.Information("Completed {completed:n0}r {streams:n0}s {events:n0}e {mb:n0}MB ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
+        log.Information("Completed {completed}r {streams}s {events:n0}e {mb:n0}MB ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
             results, okStreams.Count, events, mb bytes, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
         okStreams.Clear(); resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; events <- 0; bytes <- 0L
-        if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 || !resultExnOther <> 0 then
-            log.Warning("Failures {streams:n0}s Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s Other {other:n0} {@oStreams}",
-                failStreams.Count, !rateLimited, rlStreams.Count, !timedOut, toStreams.Count, !resultExnOther, oStreams)
-            rateLimited := 0; timedOut := 0; resultExnOther := 0; failStreams.Clear(); rlStreams.Clear(); toStreams.Clear(); oStreams.Clear()
+        if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 || badCats.Any then
+            let fails = !rateLimited + !timedOut + !tooLarge + !malformed + !resultExnOther
+            log.Warning("Failures {fails}r {streams:n0}s Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s",
+                failStreams.Count, !rateLimited, rlStreams.Count, !timedOut, toStreams.Count)
+            rateLimited := 0; timedOut := 0; resultExnOther := 0; failStreams.Clear(); rlStreams.Clear(); toStreams.Clear()
         if badCats.Any then
-            log.Warning("Malformed cats {@badCats} Too large {tooLarge:n0} {@tlStreams} Malformed {malformed:n0} {@mfStreams}",
-                badCats.StatsDescending, !tooLarge, tlStreams, !malformed, mfStreams)
-            badCats.Clear(); tooLarge := 0; malformed := 0; tlStreams.Clear(); mfStreams.Clear()
+            log.Warning("Malformed cats {@badCats} Too large {tooLarge:n0}r {@tlStreams} Malformed {malformed:n0}r {@mfStreams} Other {other:n0}r {@oStreams}",
+                badCats.StatsDescending, !tooLarge, tlStreams, !malformed, mfStreams, !resultExnOther, oStreams)
+            badCats.Clear(); tooLarge := 0; malformed := 0;  resultExnOther := 0; tlStreams.Clear(); mfStreams.Clear(); oStreams.Clear()
         Equinox.Cosmos.Store.Log.InternalMetrics.dump log
 
     override __.Handle message =
         let inline adds x (set:HashSet<_>) = set.Add x |> ignore
-        let inline bads x (set:HashSet<_>) = badCats.Ingest(category x); adds x set
+        let inline bads x (set:HashSet<_>) = badCats.Ingest(Helpers.category x); adds x set
         base.Handle message
         match message with
         | Merge _ | Added _ -> () // Processed by standard logging already; we have nothing to add
