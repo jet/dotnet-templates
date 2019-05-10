@@ -265,18 +265,19 @@ module Scheduling =
     /// Gathers stats pertaining to the core projection/ingestion activity
     type Stats<'R>(log : ILogger, statsInterval : TimeSpan, stateInterval : TimeSpan) =
         let states, fullCycles, cycles, resultCompleted, resultExn = CatStats(), ref 0, ref 0, ref 0, ref 0
-        let merges, batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0, ref 0
+        let merges, mergedStreams, batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
         let statsDue, stateDue = expiredMs (int64 statsInterval.TotalMilliseconds), expiredMs (int64 stateInterval.TotalMilliseconds)
         let dumpStats (used,maxDop) pendingCount =
             log.Information("Cycles {cycles}/{fullCycles} {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
                 !cycles, !fullCycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
             cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
-            log.Information("Ingestions {batches}b {streams:n0}s {events:n0}-{skipped:n0}e Merged {merges} Pending {pending}",
-                !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !merges, pendingCount)
-            batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; merges := 0
+            log.Information("Batches Pending {pending) Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Merged {merges}b {mergedStreams}s",
+                pendingCount, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !merges, !mergedStreams)
+            batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; merges := 0; mergedStreams := 0
         abstract member Handle : InternalMessage<'R> -> unit
         default __.Handle msg = msg |> function
-            | Merge _ ->
+            | Merge items ->
+                mergedStreams := !mergedStreams + items.Length
                 incr merges
             | Added (streams, skipped, events) ->
                 incr batchesPended
