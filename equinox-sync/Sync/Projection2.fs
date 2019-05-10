@@ -217,7 +217,7 @@ module Scheduling =
 
     /// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
     type Dispatcher<'R>(maxDop) =
-        let work = new BlockingCollection<_>(ConcurrentQueue<_>())
+        let work = new BlockingCollection<_>(ConcurrentBag<_>())
         let result = Event<'R>()
         let dop = new Sem(maxDop)
         let dispatch work = async {
@@ -244,7 +244,7 @@ module Scheduling =
     type Engine<'R>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress) =
         let sleepIntervalMs = 1
         let cts = new CancellationTokenSource()
-        let work = ConcurrentQueue<InternalMessage<'R>>()
+        let work = ConcurrentBag<InternalMessage<'R>>()
         let pending = ConcurrentQueue<_*StreamItem[]>()
         let streams = StreamStates()
         let progressState = Progress.State()
@@ -256,7 +256,7 @@ module Scheduling =
         let tryDrainResults feedStats =
             let mutable worked, more = false, true
             while more do
-                match work.TryDequeue() with
+                match work.TryTake() with
                 | false, _ -> more <- false
                 | true, x ->
                     match x with
@@ -298,7 +298,7 @@ module Scheduling =
             feedStats <| Added (reqs.Count,skipCount,count)
 
         member private __.Pump(stats : Stats<'R>) = async {
-            use _ = dispatcher.Result.Subscribe(Result >> work.Enqueue)
+            use _ = dispatcher.Result.Subscribe(Result >> work.Add)
             Async.Start(dispatcher.Pump(), cts.Token)
             while not cts.IsCancellationRequested do
                 let mutable idle, dispatcherState, finished = true, Idle, false
@@ -334,7 +334,7 @@ module Scheduling =
             pending.Enqueue (markCompleted, items)
 
         member __.AddOpenStreamData(events) =
-            work.Enqueue <| Merge events
+            work.Add <| Merge events
 
         member __.AllStreams = streams.All
 
