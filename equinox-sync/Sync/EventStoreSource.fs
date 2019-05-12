@@ -25,8 +25,6 @@ let toIngestionItem (e : RecordedEvent) : StreamItem =
     let event : Equinox.Codec.IEvent<_> = Equinox.Codec.Core.EventData.Create(e.EventType, data', meta', e.Timestamp) :> _
     { stream = e.EventStreamId; index = e.EventNumber; event = event}
 
-let category (streamName : string) = streamName.Split([|'-'|],2).[0]
-
 /// Maintains ingestion stats (thread safe via lock free data structures so it can be used across multiple overlapping readers)
 type OverallStats(?statsInterval) =
     let intervalMs = let t = defaultArg statsInterval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
@@ -46,14 +44,14 @@ type OverallStats(?statsInterval) =
             progressStart.Restart()
 
 /// Maintains stats for traversals of $all; Threadsafe [via naive locks] so can be used by multiple stripes reading concurrently
-type SliceStatsBuffer(?interval) =
+type SliceStatsBuffer(categorize, ?interval) =
     let intervalMs = let t = defaultArg interval (TimeSpan.FromMinutes 5.) in t.TotalMilliseconds |> int64
     let recentCats, accStart = Dictionary<string,int*int>(), Stopwatch.StartNew()
     member __.Ingest(slice: AllEventsSlice) =
         lock recentCats <| fun () ->
             let mutable batchBytes = 0
             for x in slice.Events do
-                let cat = category x.OriginalStreamId
+                let cat = categorize x.OriginalStreamId
                 let eventBytes = payloadBytes x
                 match recentCats.TryGetValue cat with
                 | true, (currCount, currSize) -> recentCats.[cat] <- (currCount + 1, currSize+eventBytes)
@@ -197,11 +195,11 @@ type Res =
 
 /// Holds work queue, together with stats relating to the amount and/or categories of data being traversed
 /// Processing is driven by external callers running multiple concurrent invocations of `Process`
-type Reader(conns : _ [], defaultBatchSize, minBatchSize, tryMapEvent, post : Res -> Async<int*int>, tailInterval, dop, ?statsInterval) =
+type Reader(conns : _ [], defaultBatchSize, minBatchSize, categorize, tryMapEvent, post : Res -> Async<int*int>, tailInterval, dop, ?statsInterval) =
     let work = System.Collections.Concurrent.ConcurrentQueue()
     let sleepIntervalMs = 100
     let overallStats = OverallStats(?statsInterval=statsInterval)
-    let slicesStats = SliceStatsBuffer()
+    let slicesStats = SliceStatsBuffer(categorize)
     let mutable eofSpottedInChunk = 0
 
     /// Invoked by pump to process a tranche of work; can have parallel invocations
@@ -259,7 +257,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, tryMapEvent, post : Re
                 | waitTimeMs when waitTimeMs > 0L -> do! Async.Sleep (int waitTimeMs)
                 | _ -> ()
                 tailSw.Restart() }
-            let slicesStats, stats = SliceStatsBuffer(), OverallStats()
+            let slicesStats, stats = SliceStatsBuffer(categorize), OverallStats()
             let progressSw = Stopwatch.StartNew()
             while true do
                 let currentPos = range.Current
@@ -399,6 +397,6 @@ let run (log : Serilog.ILogger) (connect, spec, categorize, tryMapEvent) maxRead
         | Res.Batch (seriesId, pos, xs) ->
             let cp = pos.CommitPosition
             trancheEngine.Submit <| Ingestion.Message.Batch(seriesId, cp, checkpoints.Commit cp, xs)
-    let reader = Reader(conns, spec.batchSize, spec.minBatchSize, tryMapEvent, post, spec.tailInterval, dop)
+    let reader = Reader(conns, spec.batchSize, spec.minBatchSize, categorize, tryMapEvent, post, spec.tailInterval, dop)
     do! reader.Start (initialSeriesId,startPos) maxPos
     do! Async.AwaitKeyboardInterrupt() }
