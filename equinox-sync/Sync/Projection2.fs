@@ -461,7 +461,7 @@ module Scheduling =
                         // If we're going to bring in lots of batches, that's more efficient when the streamwise merges are carried out first
                         ingestStreamMerges ()
                         let mutable batchesTaken = 0
-                        while batchesTaken <> 10 && dispatcherState = Idle do
+                        while batchesTaken < 32 && dispatcherState = Idle do
                             batchesTaken <- batchesTaken + 1
                             match pending.TryDequeue() with
                             | true, batch ->
