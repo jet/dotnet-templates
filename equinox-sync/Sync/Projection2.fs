@@ -241,7 +241,7 @@ module Scheduling =
         member __.SetMalformed(stream,isMalformed) =
             updateWritePos stream isMalformed None [| { index = 0L; events = null } |]
         member __.QueueWeight(stream) =
-            states.[stream].queue.[0].events.Length // HACK |> Seq.sumBy eventSize
+            states.[stream].queue.[0].events |> Seq.sumBy eventSize
         member __.MarkBusy stream =
             markBusy stream
         member __.MarkCompleted(stream, index) =
@@ -366,7 +366,7 @@ module Scheduling =
     /// d) periodically reports state (with hooks for ingestion engines to report same)
     type Engine<'R>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress, dumpStreams, ?maxBatches) =
         let sleepIntervalMs = 1
-        let maxBatches = defaultArg maxBatches 64
+        let maxBatches = defaultArg maxBatches 32
         let cts = new CancellationTokenSource()
         let work = ConcurrentStack<InternalMessage<'R>>()// dont need so complexity of Queue is unwarranted and usage is cross thread so Bag is not better
         let slipstreamed = ResizeArray() // pulled from `work` and kept aside for processing at the right time as they are encountered
