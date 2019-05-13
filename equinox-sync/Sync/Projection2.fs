@@ -440,7 +440,7 @@ module Scheduling =
             use _ = dispatcher.Result.Subscribe(Result >> work.Push)
             Async.Start(dispatcher.Pump(), cts.Token)
             while not cts.IsCancellationRequested do
-                let mutable idle, dispatcherState, remaining = true, Idle, 100
+                let mutable idle, dispatcherState, remaining = true, Idle, 16
                 ingestStreamMerges ()
                 while remaining <> 0 do
                     remaining <- remaining - 1
@@ -450,22 +450,24 @@ module Scheduling =
                     let! hasCapacity, dispatched = tryFillDispatcher (dispatcherState = Slipstreaming)
                     idle <- idle && not processedResults && not dispatched
                     match dispatcherState with
-                    | Idle when remaining = 0 ->
-                        dispatcherState <- Busy
-                    | Idle when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue from what we have
-                        match pending.TryDequeue() with
-                        | true, batch ->
-                            // Periodically merge events in stream-wise to maximize stream write size especially when we are behind
-                            if remaining % 10 = 0 then ingestStreamMerges ()
-                            ingestPendingBatch stats.Handle batch
-                        | false,_ ->
-                            // If we're going to fill the write queue with random work, we should bring all read events into the state first
-                            ingestStreamMerges ()
-                            dispatcherState <- Slipstreaming
-                    | Idle ->
+                    | Idle when not hasCapacity ->
                         // If we've achieved full state, spin around the loop to dump stats and ingest reader data
                         dispatcherState <- Full
                         remaining <- 0
+                    | Idle when remaining = 0 ->
+                        dispatcherState <- Busy
+                    | Idle -> // need to bring more work into the pool as we can't fill the work queue from what we have
+                        // If we're going to fill the write queue with random work, we should bring all read events into the state first
+                        // If we're going to bring in lots of batches, that's more efficient when the streamwise merges are carried out first
+                        ingestStreamMerges ()
+                        let mutable batchesTaken = 0
+                        while batchesTaken < 10 do
+                            batchesTaken <- batchesTaken + 1
+                            match pending.TryDequeue() with
+                            | true, batch ->
+                                ingestPendingBatch stats.Handle batch
+                            | false,_ ->
+                                dispatcherState <- Slipstreaming
                     | Slipstreaming -> // only do one round of slipstreaming
                         remaining <- 0
                     | Busy | Full -> failwith "Not handled here"
