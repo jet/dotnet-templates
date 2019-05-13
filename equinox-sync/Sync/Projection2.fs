@@ -294,7 +294,7 @@ module Scheduling =
         /// Result of processing on stream - result (with basic stats) or the `exn` encountered
         | Result of stream: string * outcome: Choice<'R,exn>
        
-    type BufferState = Idle | Full | Slipstreaming
+    type BufferState = Idle | Busy | Full | Slipstreaming
     /// Gathers stats pertaining to the core projection/ingestion activity
     type Stats<'R>(log : ILogger, statsInterval : TimeSpan, stateInterval : TimeSpan) =
         let states, fullCycles, cycles, resultCompleted, resultExn = CatStats(), ref 0, ref 0, ref 0, ref 0
@@ -379,7 +379,7 @@ module Scheduling =
             let mutable worked, more = false, true
             while more do
                 let c = work.TryPopRange(workLocalBuffer)
-                if c = 0 then more <- false else worked <- true
+                if c = 0 && work.IsEmpty then more <- false else worked <- true
                 for i in 0..c-1 do
                     let x = workLocalBuffer.[i]
                     match x with
@@ -450,6 +450,8 @@ module Scheduling =
                     let! hasCapacity, dispatched = tryFillDispatcher (dispatcherState = Slipstreaming)
                     idle <- idle && not processedResults && not dispatched
                     match dispatcherState with
+                    | Idle when remaining = 0 ->
+                        dispatcherState <- Busy
                     | Idle when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue from what we have
                         match pending.TryDequeue() with
                         | true, batch ->
@@ -466,7 +468,7 @@ module Scheduling =
                         remaining <- 0
                     | Slipstreaming -> // only do one round of slipstreaming
                         remaining <- 0
-                    | Full -> failwith "Not handled here"
+                    | Busy | Full -> failwith "Not handled here"
                     // This loop can take a long time; attempt logging of stats per iteration
                     stats.DumpStats(dispatcher.State,(pending.Count,slipstreamed.Count))
                 // Do another ingest before a) reporting state to give best picture b) going to sleep in order to get work out of the way
