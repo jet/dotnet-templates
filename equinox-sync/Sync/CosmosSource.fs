@@ -34,7 +34,7 @@ let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connection
         categorize
         createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
-        log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
+        log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortBy fst)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
     let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 1.))

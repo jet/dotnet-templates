@@ -300,12 +300,12 @@ module Scheduling =
         let states, fullCycles, cycles, resultCompleted, resultExn = CatStats(), ref 0, ref 0, ref 0, ref 0
         let merges, mergedStreams, batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
         let statsDue, stateDue = expiredMs (int64 statsInterval.TotalMilliseconds), expiredMs (int64 stateInterval.TotalMilliseconds)
-        let dumpStats (used,maxDop) pendingCount =
+        let dumpStats (used,maxDop) (waitingBatches,pendingMerges) =
             log.Information("Cycles {cycles}/{fullCycles} {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
                 !cycles, !fullCycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
             cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
-            log.Information("Batches Pending {pending} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Merged {merges}b {mergedStreams}s",
-                pendingCount, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !merges, !mergedStreams)
+            log.Information("Batches Waiting {batchesWaiting} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Merged {merges}/{pendingMerges} {mergedStreams}s",
+                waitingBatches, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !merges, pendingMerges, !mergedStreams)
             batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; merges := 0; mergedStreams := 0
         abstract member Handle : InternalMessage<'R> -> unit
         default __.Handle msg = msg |> function
@@ -395,7 +395,7 @@ module Scheduling =
             worked
         // We periodically process streamwise submissions of events from Ingesters in advance of them entering the processing queue as pending batches
         // This allows events that are not yet a requirement for a given batch to complete to be included in work before it becomes due, smoothing throughput
-        let ingestSlipstreamed () =
+        let ingestStreamMerges () =
             match slipstreamed.ToArray() with
             | [||] -> ()
             | [| one |] -> streams.InternalMerge one
@@ -440,24 +440,37 @@ module Scheduling =
             use _ = dispatcher.Result.Subscribe(Result >> work.Push)
             Async.Start(dispatcher.Pump(), cts.Token)
             while not cts.IsCancellationRequested do
-                let mutable idle, dispatcherState, finished = true, Idle, false
-                while not finished do
+                let mutable idle, dispatcherState, remaining = true, Idle, 100
+                ingestStreamMerges ()
+                while remaining <> 0 do
+                    remaining <- remaining - 1
                     // 1. propagate write write outcomes to buffer (can mark batches completed etc)
                     let processedResults = tryDrainResults stats.Handle
                     // 2. top up provisioning of writers queue
                     let! hasCapacity, dispatched = tryFillDispatcher (dispatcherState = Slipstreaming)
                     idle <- idle && not processedResults && not dispatched
                     match dispatcherState with
-                    | Idle when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue
+                    | Idle when hasCapacity -> // need to bring more work into the pool as we can't fill the work queue from what we have
                         match pending.TryDequeue() with
-                        | true, batch ->                    ingestPendingBatch stats.Handle batch
-                        | false,_ ->                        ingestSlipstreamed (); dispatcherState <- Slipstreaming // TODO preload extra spans from active submitters
-                    | Idle ->                               dispatcherState <- Full; finished <- true
-                    | Slipstreaming ->                      finished <- true
-                    | _ -> ()
+                        | true, batch ->
+                            // Periodically merge events in stream-wise to maximize stream write size especially when we are behind
+                            if remaining % 10 = 0 then ingestStreamMerges ()
+                            ingestPendingBatch stats.Handle batch
+                        | false,_ ->
+                            // If we're going to fill the write queue with random work, we should bring all read events into the state first
+                            ingestStreamMerges ()
+                            dispatcherState <- Slipstreaming
+                    | Idle ->
+                        // If we've achieved full state, spin around the loop to dump stats and ingest reader data
+                        dispatcherState <- Full
+                        remaining <- 0
+                    | Slipstreaming -> // only do one round of slipstreaming
+                        remaining <- 0
+                    | Full -> failwith "Not handled here"
                     // This loop can take a long time; attempt logging of stats per iteration
-                    stats.DumpStats(dispatcher.State,pending.Count)
-                ingestSlipstreamed ()
+                    stats.DumpStats(dispatcher.State,(pending.Count,slipstreamed.Count))
+                // Do another ingest before a) reporting state to give best picture b) going to sleep in order to get work out of the way
+                ingestStreamMerges ()
                 // 3. Record completion state once per full iteration; dumping streams is expensive so needs to be done infrequently
                 if not (stats.TryDumpState(dispatcherState,dumpStreams streams)) && not idle then
                     // 4. Do a minimal sleep so we don't run completely hot when empty (unless we did something non-trivial)
