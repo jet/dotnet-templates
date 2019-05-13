@@ -74,7 +74,7 @@ module Progress =
                     batch <- batch + 1
                     for s in x.streamToRequiredIndex.Keys do
                         if streams.Add s then
-                            yield s,(batch,getStreamWeight s) }
+                            yield s,(batch,0(*getStreamWeight s*)) }
             raw |> Seq.sortBy (fun (_s,(b,l)) -> b,-l) |> Seq.map fst
 
     /// Manages writing of progress
