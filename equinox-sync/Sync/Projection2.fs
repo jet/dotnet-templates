@@ -462,8 +462,7 @@ module Scheduling =
                     // 1. propagate write write outcomes to buffer (can mark batches completed etc)
                     let processedResults = (fun () -> tryDrainResults stats.Handle) |> accStopwatch <| fun x -> dt <- dt + x
                     // 2. top up provisioning of writers queue
-                    let! _ft,(hasCapacity, dispatched) = tryFillDispatcher (dispatcherState = Slipstreaming) |> Stopwatch.Time
-                    ft <- ft + _ft.Elapsed
+                    let hasCapacity, dispatched = (fun () -> tryFillDispatcher (dispatcherState = Slipstreaming)) |> accStopwatch <| fun x -> ft <- ft + x
                     idle <- idle && not processedResults && not dispatched
                     match dispatcherState with
                     | Idle when not hasCapacity ->
@@ -499,7 +498,7 @@ module Scheduling =
                 // 3. Record completion state once per full iteration; dumping streams is expensive so needs to be done infrequently
                 if not (stats.TryDumpState(dispatcherState,dumpStreams streams,(dt,ft,mt,it,st))) && not idle then
                     // 4. Do a minimal sleep so we don't run completely hot when empty (unless we did something non-trivial)
-                    do! Async.Sleep sleepIntervalMs }
+                    Thread.Sleep sleepIntervalMs } // Not Async.Sleep so we don't give up the thread
 
         static member Start<'R>(stats, projectorDop, project, interpretProgress, dumpStreams) =
             let dispatcher = Dispatcher(projectorDop)
