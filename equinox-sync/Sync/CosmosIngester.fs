@@ -78,8 +78,8 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
 
     override __.DumpExtraStats() =
         let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix
-        log.Information("Completed {completed}r {streams}s {events:n0}e {mb:n0}MB ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
-            results, okStreams.Count, events, mb bytes, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
+        log.Information("Completed {mb:n0}MB {completed:n0}r {streams:n0}s {events:n0}e ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
+            mb bytes, results, okStreams.Count, events, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
         okStreams.Clear(); resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; events <- 0; bytes <- 0L
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 || badCats.Any then
             let fails = !rateLimited + !timedOut + !tooLarge + !malformed + !resultExnOther
