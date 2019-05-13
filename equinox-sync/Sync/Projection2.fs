@@ -364,8 +364,9 @@ module Scheduling =
     /// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
     /// c) submits work to the supplied Dispatcher (which it triggers pumping of)
     /// d) periodically reports state (with hooks for ingestion engines to report same)
-    type Engine<'R>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress, dumpStreams) =
+    type Engine<'R>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress, dumpStreams, ?maxBatches) =
         let sleepIntervalMs = 1
+        let maxBatches = defaultArg maxBatches 64
         let cts = new CancellationTokenSource()
         let work = ConcurrentStack<InternalMessage<'R>>()// dont need so complexity of Queue is unwarranted and usage is cross thread so Bag is not better
         let slipstreamed = ResizeArray() // pulled from `work` and kept aside for processing at the right time as they are encountered
@@ -459,14 +460,19 @@ module Scheduling =
                         // If we're going to fill the write queue with random work, we should bring all read events into the state first
                         // If we're going to bring in lots of batches, that's more efficient when the streamwise merges are carried out first
                         ingestStreamMerges ()
-                        let mutable batchesTaken = 0
-                        while batchesTaken < 32 && dispatcherState = Idle do
-                            batchesTaken <- batchesTaken + 1
+                        let mutable more, batchesTaken = true, 0
+                        while more do
                             match pending.TryDequeue() with
                             | true, batch ->
                                 ingestPendingBatch stats.Handle batch
-                            | false,_ ->
+                                batchesTaken <- batchesTaken + 1
+                                more <- batchesTaken < maxBatches
+                            | false,_ when batchesTaken <> 0 ->
+                                more <- false
+                            | false,_ when batchesTaken = 0 ->
                                 dispatcherState <- Slipstreaming
+                                more <- false
+                            | false,_ -> ()
                     | Slipstreaming -> // only do one round of slipstreaming
                         remaining <- 0
                     | Busy | Full -> failwith "Not handled here"
