@@ -241,7 +241,7 @@ module Scheduling =
         member __.SetMalformed(stream,isMalformed) =
             updateWritePos stream isMalformed None [| { index = 0L; events = null } |]
         member __.QueueWeight(stream) =
-            states.[stream].queue.[0].events |> Seq.sumBy eventSize
+            states.[stream].queue.[0].events.Length // HACK |> Seq.sumBy eventSize
         member __.MarkBusy stream =
             markBusy stream
         member __.MarkCompleted(stream, index) =
