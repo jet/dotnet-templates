@@ -7,6 +7,7 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
+open Equinox.Store
 
 /// Gathers stats relating to how many items of a given category have been observed
 type CatStats() =
@@ -300,7 +301,11 @@ module Scheduling =
         let states, fullCycles, cycles, resultCompleted, resultExn = CatStats(), ref 0, ref 0, ref 0, ref 0
         let merges, mergedStreams, batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0, ref 0, ref 0
         let statsDue, stateDue = expiredMs (int64 statsInterval.TotalMilliseconds), expiredMs (int64 stateInterval.TotalMilliseconds)
+        let mutable dt,ft,it,st,mt = TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero
         let dumpStats (used,maxDop) (waitingBatches,pendingMerges) =
+            log.Information("Timing Merge {mt:n1}s Ingest {it:n1}s Fill {ft:n1}s Drain {dt:n1}s Stats {st:n1}s",
+                mt.TotalSeconds,it.TotalSeconds,ft.TotalSeconds,dt.TotalSeconds,st.TotalSeconds)
+            dt <- TimeSpan.Zero; ft <- TimeSpan.Zero; it <- TimeSpan.Zero; st <- TimeSpan.Zero; mt <- TimeSpan.Zero
             log.Information("Cycles {cycles}/{fullCycles} {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
                 !cycles, !fullCycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
             cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
@@ -326,9 +331,15 @@ module Scheduling =
             if statsDue () then
                 dumpStats (used,max) pendingCount
                 __.DumpExtraStats()
-        member __.TryDumpState(state,dump) =
+        member __.TryDumpState(state,dump,(_dt,_ft,_mt,_it,_st)) =
+            dt <- dt + _dt
+            ft <- ft + _ft
+            mt <- mt + _mt
+            it <- it + _it
+            st <- st + _st
             incr fullCycles
             states.Ingest(string state)
+            
             let due = stateDue ()
             if due then
                 dump log
@@ -368,7 +379,7 @@ module Scheduling =
         let sleepIntervalMs = 1
         let maxBatches = defaultArg maxBatches 32
         let cts = new CancellationTokenSource()
-        let work = ConcurrentStack<InternalMessage<'R>>()// dont need so complexity of Queue is unwarranted and usage is cross thread so Bag is not better
+        let work = ConcurrentStack<InternalMessage<'R>>() // dont need them ordered so Queue is unwarranted; usage is cross-thread so Bag is not better
         let slipstreamed = ResizeArray() // pulled from `work` and kept aside for processing at the right time as they are encountered
         let pending = ConcurrentQueue<_*StreamItem[]>() // Queue as need ordering
         let streams = StreamStates()
@@ -442,12 +453,18 @@ module Scheduling =
             Async.Start(dispatcher.Pump(), cts.Token)
             while not cts.IsCancellationRequested do
                 let mutable idle, dispatcherState, remaining = true, Idle, 16
+                let mutable dt,ft,mt,it,st = TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero
+                let inline accStopwatch (f : unit -> 't) at =
+                    let t,r = f |> Stopwatch.Time
+                    at t.Elapsed
+                    r
                 while remaining <> 0 do
                     remaining <- remaining - 1
                     // 1. propagate write write outcomes to buffer (can mark batches completed etc)
-                    let processedResults = tryDrainResults stats.Handle
+                    let processedResults = (fun () -> tryDrainResults stats.Handle) |> accStopwatch <| fun x -> dt <- dt + x
                     // 2. top up provisioning of writers queue
-                    let! hasCapacity, dispatched = tryFillDispatcher (dispatcherState = Slipstreaming)
+                    let! _ft,(hasCapacity, dispatched) = tryFillDispatcher (dispatcherState = Slipstreaming) |> Stopwatch.Time
+                    ft <- ft + _ft.Elapsed
                     idle <- idle && not processedResults && not dispatched
                     match dispatcherState with
                     | Idle when not hasCapacity ->
@@ -459,12 +476,12 @@ module Scheduling =
                     | Idle -> // need to bring more work into the pool as we can't fill the work queue from what we have
                         // If we're going to fill the write queue with random work, we should bring all read events into the state first
                         // If we're going to bring in lots of batches, that's more efficient when the streamwise merges are carried out first
-                        ingestStreamMerges ()
+                        ingestStreamMerges |> accStopwatch <| fun t -> mt <- mt + t
                         let mutable more, batchesTaken = true, 0
                         while more do
                             match pending.TryDequeue() with
                             | true, batch ->
-                                ingestPendingBatch stats.Handle batch
+                                (fun () -> ingestPendingBatch stats.Handle batch) |> accStopwatch <| fun t -> it <- it + t
                                 batchesTaken <- batchesTaken + 1
                                 more <- batchesTaken < maxBatches
                             | false,_ when batchesTaken <> 0 ->
@@ -477,11 +494,11 @@ module Scheduling =
                         remaining <- 0
                     | Busy | Full -> failwith "Not handled here"
                     // This loop can take a long time; attempt logging of stats per iteration
-                    stats.DumpStats(dispatcher.State,(pending.Count,slipstreamed.Count))
+                    (fun () -> stats.DumpStats(dispatcher.State,(pending.Count,slipstreamed.Count))) |> accStopwatch <| fun t -> st <- st + t
                 // Do another ingest before a) reporting state to give best picture b) going to sleep in order to get work out of the way
-                ingestStreamMerges ()
+                ingestStreamMerges |> accStopwatch <| fun t -> mt <- mt + t
                 // 3. Record completion state once per full iteration; dumping streams is expensive so needs to be done infrequently
-                if not (stats.TryDumpState(dispatcherState,dumpStreams streams)) && not idle then
+                if not (stats.TryDumpState(dispatcherState,dumpStreams streams,(dt,ft,mt,it,st))) && not idle then
                     // 4. Do a minimal sleep so we don't run completely hot when empty (unless we did something non-trivial)
                     do! Async.Sleep sleepIntervalMs }
 
