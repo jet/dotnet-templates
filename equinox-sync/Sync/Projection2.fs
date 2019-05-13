@@ -45,6 +45,8 @@ module private Impl =
         member __.Await() = inner.Await() |> Async.Ignore
         /// Wait for the specified timeout to acquire (or return false instantly)
         member __.TryAwait(?timeout) = inner.Await(defaultArg timeout TimeSpan.Zero)
+        /// Dont use
+        member __.TryWaitWithoutCancellationForPerf() = inner.Wait(0)
         member __.HasCapacity = inner.CurrentCount > 0
 
 module Progress =
@@ -361,11 +363,8 @@ module Scheduling =
         [<CLIEvent>] member __.Result = result.Publish
         member __.HasCapacity = dop.HasCapacity
         member __.State = dop.State
-        member __.TryAdd(item,?timeout) = async {
-            let! got = dop.TryAwait(?timeout=timeout)
-            if got then
-                work.Add(item)
-            return got }
+        member __.TryAdd(item) =
+            if dop.TryWaitWithoutCancellationForPerf() then work.Add(item); true else false
         member __.Pump () = async {
             let! ct = Async.CancellationToken
             for item in work.GetConsumingEnumerable ct do
@@ -417,18 +416,18 @@ module Scheduling =
                 streams.InternalMerge combined
             slipstreamed.Clear()
         // On ech iteration, we try to fill the in-flight queue, taking the oldest and/or heaviest streams first
-        let tryFillDispatcher includeSlipstreamed = async {
+        let tryFillDispatcher includeSlipstreamed =
             let mutable hasCapacity, dispatched = dispatcher.HasCapacity, false
             if hasCapacity then
                 let potential = streams.Pending(includeSlipstreamed, progressState.InScheduledOrder streams.QueueWeight)
                 let xs = potential.GetEnumerator()
                 while xs.MoveNext() && hasCapacity do
                     let (_,{stream = s} : StreamSpan) as item = xs.Current
-                    let! succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
+                    let succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
                     if succeeded then streams.MarkBusy s
                     dispatched <- dispatched || succeeded // if we added any request, we also don't sleep
                     hasCapacity <- succeeded
-            return hasCapacity, dispatched }
+            hasCapacity, dispatched
         // Take an incoming batch of events, correlating it against our known stream state to yield a set of remaining work
         let ingestPendingBatch feedStats (markCompleted, items : StreamItem seq) = 
             let inline validVsSkip (streamState : StreamState) (item : StreamItem) =
