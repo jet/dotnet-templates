@@ -441,7 +441,6 @@ module Scheduling =
             Async.Start(dispatcher.Pump(), cts.Token)
             while not cts.IsCancellationRequested do
                 let mutable idle, dispatcherState, remaining = true, Idle, 16
-                ingestStreamMerges ()
                 while remaining <> 0 do
                     remaining <- remaining - 1
                     // 1. propagate write write outcomes to buffer (can mark batches completed etc)
