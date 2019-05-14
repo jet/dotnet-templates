@@ -49,6 +49,8 @@ module private Impl =
         member __.TryWaitWithoutCancellationForPerf() = inner.Wait(0)
         member __.HasCapacity = inner.CurrentCount > 0
 
+#nowarn "52" // see tmp.Sort
+
 module Progress =
 
     type [<NoComparison; NoEquality>] internal BatchState = { markCompleted: unit -> unit; streamToRequiredIndex : Dictionary<string,int64> }
