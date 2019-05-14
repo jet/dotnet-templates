@@ -79,8 +79,9 @@ module Progress =
                 for s in x.streamToRequiredIndex.Keys do
                     if streams.Add s then
                         tmp.Add(struct (s,struct (batch,-getStreamWeight s)))
-            tmp.Sort(fun (struct (_,a)) (struct (_,b)) -> a.CompareTo(b) )
-            seq { for s,_ in tmp -> s }
+            let a = tmp.ToArray()
+            Array.sortInPlaceBy(fun (struct(_a,o)) -> o) a
+            seq { for s,_ in a -> s }
 
     /// Manages writing of progress
     /// - Each write attempt is always of the newest token (each update is assumed to also count for all preceding ones)
