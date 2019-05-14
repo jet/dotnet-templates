@@ -491,8 +491,8 @@ module Scheduling =
                         // If we're going to fill the write queue with random work, we should bring all read events into the state first
                         // If we're going to bring in lots of batches, that's more efficient when the streamwise merges are carried out first
                         let mutable more, batchesTaken = true, 0
+                        ingestStreamMerges |> accStopwatch <| fun t -> mt <- mt + t
                         while more do
-                            ingestStreamMerges |> accStopwatch <| fun t -> mt <- mt + t
                             match pending.TryDequeue() with
                             | true, batch ->
                                 (fun () -> ingestPendingBatch stats.Handle batch) |> accStopwatch <| fun t -> it <- it + t
