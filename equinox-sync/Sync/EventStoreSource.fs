@@ -232,7 +232,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, categorize, tryMapEven
         | Chunk (series, range, batchSize) ->
             let postBatch pos items = post (Res.Batch (series, pos, items))
             use _ = Serilog.Context.LogContext.PushProperty("Tranche", series)
-            Log.Warning("Commencing tranche, batch size {bs}", batchSize)
+            Log.Information("Commencing tranche, batch size {bs}", batchSize)
             let! t, res = pullAll (slicesStats, overallStats) (conn, batchSize) (range, false) tryMapEvent postBatch |> Stopwatch.Time
             match res with
             | PullResult.Eof pos ->
@@ -289,7 +289,7 @@ type Reader(conns : _ [], defaultBatchSize, minBatchSize, categorize, tryMapEven
                 // Jitter is most relevant when processing commences - any commencement of a chunk can trigger significant page faults on server
                 // which we want to attempt to limit the effects of
                 let jitterMs = match currentCount with 0 -> 200 | x -> r.Next(1000, 2000)
-                Log.Warning("Waiting {jitter}ms to jitter reader stripes, {currentCount} further reader stripes awaiting start", jitterMs, currentCount)
+                Log.Information("Waiting {jitter}ms to jitter reader stripes, {currentCount} further reader stripes awaiting start", jitterMs, currentCount)
                 do! Async.Sleep jitterMs
                 let! _ = Async.StartChild <| async {
                     try let conn = selectConn () 
