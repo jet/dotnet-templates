@@ -304,7 +304,7 @@ module Scheduling =
             log.Information("Batches Waiting {batchesWaiting} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e) Merged {merges}/{pendingMerges} {mergedStreams}s",
                 waitingBatches, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped, !merges, pendingMerges, !mergedStreams)
             batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0; merges := 0; mergedStreams := 0
-            log.Information("Scheduling Merge {mt:n1}s Ingest {it:n1}s Fill {ft:n1}s Drain {dt:n1}s Stats {st:n1}s",
+            log.Information("Scheduling Streams {mt:n1}s Batches {it:n1}s Dispatch {ft:n1}s Results {dt:n1}s Stats {st:n1}s",
                 mt.TotalSeconds, it.TotalSeconds, ft.TotalSeconds, dt.TotalSeconds, st.TotalSeconds)
             dt <- TimeSpan.Zero; ft <- TimeSpan.Zero; it <- TimeSpan.Zero; st <- TimeSpan.Zero; mt <- TimeSpan.Zero
         abstract member Handle : InternalMessage<'R,'E> -> unit
