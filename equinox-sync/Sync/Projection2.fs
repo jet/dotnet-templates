@@ -381,7 +381,7 @@ module Scheduling =
     /// d) periodically reports state (with hooks for ingestion engines to report same)
     type Engine<'R>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,exn>>, interpretProgress, dumpStreams, ?maxBatches) =
         let sleepIntervalMs = 1
-        let maxBatches = defaultArg maxBatches 4
+        let maxBatches = defaultArg maxBatches 16 
         let cts = new CancellationTokenSource()
         let work = ConcurrentStack<InternalMessage<'R>>() // dont need them ordered so Queue is unwarranted; usage is cross-thread so Bag is not better
         let pending = ConcurrentQueue<_*StreamItem[]>() // Queue as need ordering
