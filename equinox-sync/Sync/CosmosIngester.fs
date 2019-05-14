@@ -86,7 +86,7 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
             let fails = !rateLimited + !timedOut + !tooLarge + !malformed + !resultExnOther
             log.Warning("Exceptions {mb:n0}MB {fails:n0}r {streams:n0}s {events:n0}e Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s",
                 mb exnBytes, fails, failStreams.Count, exnEvents, !rateLimited, rlStreams.Count, !timedOut, toStreams.Count)
-            rateLimited := 0; timedOut := 0; resultExnOther := 0; failStreams.Clear(); rlStreams.Clear(); toStreams.Clear()
+            rateLimited := 0; timedOut := 0; resultExnOther := 0; failStreams.Clear(); rlStreams.Clear(); toStreams.Clear(); exnBytes := 0L; exnEvents := 0
         if badCats.Any then
             log.Warning("Malformed cats {@badCats} Too large {tooLarge:n0}r {@tlStreams} Malformed {malformed:n0}r {@mfStreams} Other {other:n0}r {@oStreams}",
                 badCats.StatsDescending, !tooLarge, tlStreams, !malformed, mfStreams, !resultExnOther, oStreams)
