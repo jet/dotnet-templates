@@ -81,7 +81,7 @@ module Progress =
                         tmp.Add(struct (s,struct (batch,-getStreamWeight s)))
             let a = tmp.ToArray()
             Array.sortInPlaceBy(fun (struct(_a,o)) -> o) a
-            seq { for s,_ in a -> s }
+            a |> Seq.map (fun (struct(s,_)) -> s)
 
     /// Manages writing of progress
     /// - Each write attempt is always of the newest token (each update is assumed to also count for all preceding ones)
