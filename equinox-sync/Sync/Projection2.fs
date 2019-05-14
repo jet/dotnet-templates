@@ -401,7 +401,7 @@ module Scheduling =
                 do! slipstreamsCoalescing.Await()
                 streamsMerged <- (streamsMerged,tryGetStream()) ||> StreamState.optionCombine (fun x y -> x.Merge y; x)
                 slipstreamsCoalescing.Release()
-                do! Async.Sleep 5 } // ms // needs to be long enough for ingestStreamMerges to be able to grab
+                do! Async.Sleep 1 } // ms // needs to be long enough for ingestStreamMerges to be able to grab
         let ingestStreamMerges () =
             slipstreamsCoalescing.SpinWaitWithoutCancellationForPerf()
             match streamsMerged with
@@ -688,7 +688,6 @@ module Ingestion =
         member private __.Pump() = async {
             use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
             Async.Start(progressWriter.Pump(), cts.Token)
-            let presubmitInterval = expiredMs (1000L*10L)
             while not cts.IsCancellationRequested do
                 try let mutable itemLimit = 4096
                     while itemLimit > 0 do
@@ -699,9 +698,8 @@ module Ingestion =
                     stats.HandleValidated(Option.map fst validatedPos, fst submissionsMax.State)
                     validatedPos |> Option.iter progressWriter.Post
                     stats.HandleCommitted progressWriter.CommittedEpoch
-                    // 2. Forward content for any active streams into processor immediately
-                    if presubmitInterval () then
-                        grabAccumulatedStreams () |> scheduler.SubmitStreamBuffers
+                    // 2. Forward info grouped by streams into processor immediately
+                    grabAccumulatedStreams () |> scheduler.SubmitStreamBuffers
 
                     // 3. Submit to ingester until read queue, tranche limit or ingester limit exhausted
                     while pending.Count <> 0 && submissionsMax.HasCapacity do
