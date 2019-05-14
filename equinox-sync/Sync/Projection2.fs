@@ -45,8 +45,10 @@ module private Impl =
         member __.Await() = inner.Await() |> Async.Ignore
         /// Wait for the specified timeout to acquire (or return false instantly)
         member __.TryAwait(?timeout) = inner.Await(defaultArg timeout TimeSpan.Zero)
-        /// Dont use
+        /// Dont use without profiling proving it helps as it doesnt help correctness or legibility
         member __.TryWaitWithoutCancellationForPerf() = inner.Wait(0)
+        /// Only use where you're interested in intenionally busywaiting on a thread - i.e. when you have proven its critical
+        member __.SpinWaitWithoutCancellationForPerf() = inner.Wait(Timeout.Infinite) |> ignore
         member __.HasCapacity = inner.CurrentCount > 0
 
 #nowarn "52" // see tmp.Sort
@@ -154,7 +156,7 @@ module Buffer =
                 | None, _ -> true
                 | _ -> false
     module StreamState =
-        let inline optionCombine f (r1: int64 option) (r2: int64 option) =
+        let inline optionCombine f (r1: 'a option) (r2: 'a option) =
             match r1, r2 with
             | Some x, Some y -> f x y |> Some
             | None, None -> None
@@ -382,11 +384,32 @@ module Scheduling =
         let maxBatches = defaultArg maxBatches 4
         let cts = new CancellationTokenSource()
         let work = ConcurrentStack<InternalMessage<'R>>() // dont need them ordered so Queue is unwarranted; usage is cross-thread so Bag is not better
-        let slipstreamed = ResizeArray() // pulled from `work` and kept aside for processing at the right time as they are encountered
         let pending = ConcurrentQueue<_*StreamItem[]>() // Queue as need ordering
         let streams = StreamStates()
         let progressState = Progress.State()
 
+        // Arguably could be a bag, which would be more efficient, but sequencing in order of submission yields cheaper merges
+        let streamsPending = ConcurrentQueue<Streams>() // pulled from `work` and kept aside for processing at the right time as they are encountered
+        let mutable streamsMerged : Streams option = None
+        let slipstreamsCoalescing = Sem(1)
+        let tryGetStream () = match streamsPending.TryDequeue() with true,x -> Some x | false,_-> None
+        // We periodically process streamwise submissions of events from Ingesters in advance of them entering the processing queue as pending batches
+        // This allows events that are not yet a requirement for a given batch to complete to be included in work before it becomes due, smoothing throughput
+        let continuouslyCompactStreamMerges () = async {
+            let! ct = Async.CancellationToken
+            while not ct.IsCancellationRequested do
+                do! slipstreamsCoalescing.Await()
+                streamsMerged <- (streamsMerged,tryGetStream()) ||> StreamState.optionCombine (fun x y -> x.Merge y; x)
+                slipstreamsCoalescing.Release()
+                do! Async.Sleep 5 } // ms // needs to be long enough for ingestStreamMerges to be able to grab
+        let ingestStreamMerges () =
+            slipstreamsCoalescing.SpinWaitWithoutCancellationForPerf()
+            match streamsMerged with
+            | None -> ()
+            | Some ready ->
+                streamsMerged <- None
+                streams.InternalMerge ready
+            slipstreamsCoalescing.Release()
         // ingest information to be gleaned from processing the results into `streams`
         static let workLocalBuffer = Array.zeroCreate 1024
         let tryDrainResults feedStats =
@@ -398,7 +421,7 @@ module Scheduling =
                     let x = workLocalBuffer.[i]
                     match x with
                     | Added _ -> () // Only processed in Stats (and actually never enters this queue)
-                    | Merge buffer -> slipstreamed.Add buffer // put aside as a) they can be done more efficiently in bulk b) we only want to pay the tax at the right time
+                    | Merge buffer -> streamsPending.Enqueue buffer // put aside as a) they can be done more efficiently in bulk b) we only want to pay the tax at the right time
                     | Result (stream,res) ->
                         match interpretProgress streams stream res with
                         | None -> streams.MarkFailed stream
@@ -407,17 +430,6 @@ module Scheduling =
                             streams.MarkCompleted(stream,index)
                     feedStats x
             worked
-        // We periodically process streamwise submissions of events from Ingesters in advance of them entering the processing queue as pending batches
-        // This allows events that are not yet a requirement for a given batch to complete to be included in work before it becomes due, smoothing throughput
-        let ingestStreamMerges () =
-            match slipstreamed.ToArray() with
-            | [||] -> ()
-            | [| one |] -> streams.InternalMerge one
-            | many ->
-                let combined = many.[0]
-                for x in Array.skip 1 many do combined.Merge x
-                streams.InternalMerge combined
-            slipstreamed.Clear()
         // On ech iteration, we try to fill the in-flight queue, taking the oldest and/or heaviest streams first
         let tryFillDispatcher includeSlipstreamed =
             let mutable hasCapacity, dispatched = dispatcher.HasCapacity, false
@@ -453,6 +465,7 @@ module Scheduling =
         member private __.Pump(stats : Stats<'R>) = async {
             use _ = dispatcher.Result.Subscribe(Result >> work.Push)
             Async.Start(dispatcher.Pump(), cts.Token)
+            Async.Start(continuouslyCompactStreamMerges (), cts.Token)
             while not cts.IsCancellationRequested do
                 let mutable idle, dispatcherState, remaining = true, Idle, 16
                 let mutable dt,ft,mt,it,st = TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero
@@ -477,9 +490,9 @@ module Scheduling =
                     | Idle -> // need to bring more work into the pool as we can't fill the work queue from what we have
                         // If we're going to fill the write queue with random work, we should bring all read events into the state first
                         // If we're going to bring in lots of batches, that's more efficient when the streamwise merges are carried out first
-                        ingestStreamMerges |> accStopwatch <| fun t -> mt <- mt + t
                         let mutable more, batchesTaken = true, 0
                         while more do
+                            ingestStreamMerges |> accStopwatch <| fun t -> mt <- mt + t
                             match pending.TryDequeue() with
                             | true, batch ->
                                 (fun () -> ingestPendingBatch stats.Handle batch) |> accStopwatch <| fun t -> it <- it + t
@@ -495,7 +508,7 @@ module Scheduling =
                         remaining <- 0
                     | Busy | Full -> failwith "Not handled here"
                     // This loop can take a long time; attempt logging of stats per iteration
-                    (fun () -> stats.DumpStats(dispatcher.State,(pending.Count,slipstreamed.Count))) |> accStopwatch <| fun t -> st <- st + t
+                    (fun () -> stats.DumpStats(dispatcher.State,(pending.Count,streamsPending.Count))) |> accStopwatch <| fun t -> st <- st + t
                 // Do another ingest before a) reporting state to give best picture b) going to sleep in order to get work out of the way
                 ingestStreamMerges |> accStopwatch <| fun t -> mt <- mt + t
                 // 3. Record completion state once per full iteration; dumping streams is expensive so needs to be done infrequently
