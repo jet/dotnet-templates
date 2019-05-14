@@ -163,7 +163,7 @@ let run (log : ILogger) discovery connectionPolicy source
     do! Async.AwaitKeyboardInterrupt() }
 
 //#if kafka
-let mkRangeProjector log (_maxPendingBatches,_maxDop,_project) (broker, topic) =
+let mkRangeProjector (broker, topic) log (_maxPendingBatches,_maxDop,_project) _categorize () =
     let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
     let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = CompressionType.Lz4)
     let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
@@ -181,7 +181,7 @@ let mkRangeProjector log (_maxPendingBatches,_maxDop,_project) (broker, topic) =
             float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
-    ChangeFeedObserver.Create(log, ingest, dispose = disposeProducer)
+    ChangeFeedObserver.Create(log, ingest, dispose=disposeProducer)
 //#else
 let createRangeHandler (log:ILogger) (maxReadAhead, maxSubmissionsPerRange, projectionDop) categorize project =
     let scheduler = Projector.Start (log, projectionDop, project, categorize, TimeSpan.FromMinutes 1.)
@@ -229,7 +229,7 @@ let main argv =
         let aux, leaseId, startFromTail, maxDocuments, limits, lagFrequency = args.BuildChangeFeedParams()
 //#if kafka
         //let targetParams = args.Target.BuildTargetParams()
-        //let createRangeHandler log processingParams () = mkRangeProjector log processingParams targetParams
+        //let createRangeHandler = mkRangeProjector targetParams
 //#endif
         let project (batch : Equinox.Projection.Buffer.StreamSpan) = async { 
             let r = Random()

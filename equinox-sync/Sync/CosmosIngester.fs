@@ -24,7 +24,7 @@ module Writer =
         | Duplicate of updatedPos: int64
         | PartialDuplicate of overage: Span
         | PrefixMissing of batch: Span * writePos: int64
-    let logTo (log: ILogger) (res : string * Choice<(int*int)*Result,exn>) =
+    let logTo (log: ILogger) (res : string * Choice<(int*int)*Result,(int*int)*exn>) =
         match res with
         | stream, (Choice1Of2 (_, Ok pos)) ->
             log.Information("Wrote     {stream} up to {pos}", stream, pos)
@@ -34,7 +34,7 @@ module Writer =
             log.Information("Requeing  {stream} {pos} ({count} events)", stream, overage.index, overage.events.Length)
         | stream, (Choice1Of2 (_, PrefixMissing (batch,pos))) ->
             log.Information("Waiting   {stream} missing {gap} events ({count} events @ {pos})", stream, batch.index-pos, batch.events.Length, batch.index)
-        | stream, Choice2Of2 exn ->
+        | stream, (Choice2Of2 (_, exn)) ->
             log.Warning(exn,"Writing   {stream} failed, retrying", stream)
 
     let write (log : ILogger) (ctx : CosmosContext) ({ stream = s; span = { index = i; events = e}} : StreamSpan as batch) = async {
@@ -71,21 +71,21 @@ module Writer =
         | ResultKind.TooLarge | ResultKind.Malformed -> true
 
 type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
-    inherit Stats<(int*int)*Writer.Result>(log, statsInterval, statesInterval)
+    inherit Stats<(int*int)*Writer.Result,(int*int)*exn>(log, statsInterval, statesInterval)
     let okStreams, resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = HashSet(), ref 0, ref 0, ref 0, ref 0, ref 0
     let badCats, failStreams, rateLimited, timedOut, tooLarge, malformed = CatStats(), HashSet(), ref 0, ref 0, ref 0, ref 0
     let rlStreams, toStreams, tlStreams, mfStreams, oStreams = HashSet(), HashSet(), HashSet(), HashSet(), HashSet()
-    let mutable events, bytes = 0, 0L
+    let mutable okEvents, okBytes, exnEvents, exnBytes = 0, 0L, 0, 0L
 
     override __.DumpExtraStats() =
         let results = !resultOk + !resultDup + !resultPartialDup + !resultPrefix
         log.Information("Completed {mb:n0}MB {completed:n0}r {streams:n0}s {events:n0}e ({ok:n0} ok {dup:n0} redundant {partial:n0} partial {prefix:n0} waiting)",
-            mb bytes, results, okStreams.Count, events, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
-        okStreams.Clear(); resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; events <- 0; bytes <- 0L
+            mb okBytes, results, okStreams.Count, okEvents, !resultOk, !resultDup, !resultPartialDup, !resultPrefix)
+        okStreams.Clear(); resultOk := 0; resultDup := 0; resultPartialDup := 0; resultPrefix := 0; okEvents <- 0; okBytes <- 0L
         if !rateLimited <> 0 || !timedOut <> 0 || !tooLarge <> 0 || !malformed <> 0 || badCats.Any then
             let fails = !rateLimited + !timedOut + !tooLarge + !malformed + !resultExnOther
-            log.Warning("Failures {fails}r {streams:n0}s Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s",
-                fails, failStreams.Count, !rateLimited, rlStreams.Count, !timedOut, toStreams.Count)
+            log.Warning("Exceptions {mb:n0}MB {fails:n0}r {streams:n0}s {events:n0}e Rate-limited {rateLimited:n0}r {rlStreams:n0}s Timed out {toCount:n0}r {toStreams:n0}s",
+                mb exnBytes, fails, failStreams.Count, exnEvents, !rateLimited, rlStreams.Count, !timedOut, toStreams.Count)
             rateLimited := 0; timedOut := 0; resultExnOther := 0; failStreams.Clear(); rlStreams.Clear(); toStreams.Clear()
         if badCats.Any then
             log.Warning("Malformed cats {@badCats} Too large {tooLarge:n0}r {@tlStreams} Malformed {malformed:n0}r {@mfStreams} Other {other:n0}r {@oStreams}",
@@ -101,15 +101,17 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
         | Merge _ | Added _ -> () // Processed by standard logging already; we have nothing to add
         | Result (stream, Choice1Of2 ((es,bs),r)) ->
             adds stream okStreams
-            events <- events + es
-            bytes <- bytes + int64 bs
+            okEvents <- okEvents + es
+            okBytes <- okBytes + int64 bs
             match r with
             | Writer.Result.Ok _ -> incr resultOk
             | Writer.Result.Duplicate _ -> incr resultDup
             | Writer.Result.PartialDuplicate _ -> incr resultPartialDup
             | Writer.Result.PrefixMissing _ -> incr resultPrefix
-        | Result (stream, Choice2Of2 exn) ->
+        | Result (stream, Choice2Of2 ((es,bs),exn)) ->
             adds stream failStreams
+            exnEvents <- exnEvents + es
+            exnBytes <- exnBytes + int64 bs
             match Writer.classify exn with
             | ResultKind.RateLimited -> adds stream rlStreams; incr rateLimited
             | ResultKind.TimedOut -> adds stream toStreams; incr timedOut
@@ -135,21 +137,21 @@ let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, categorize,
         let trimmed = trim batch
         let index = Interlocked.Increment(&robin) % cosmosContexts.Length
         let selectedConnection = cosmosContexts.[index]
+        let stats = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
         try let! res = Writer.write log selectedConnection trimmed
-            let stats = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
             return Choice1Of2 (stats,res)
-        with e -> return Choice2Of2 e }
+        with e -> return Choice2Of2 (stats,e) }
     let interpretWriteResultProgress (streams: Scheduling.StreamStates) stream res =
         let applyResultToStreamState = function
             | Choice1Of2 (_stats, Writer.Ok pos) ->                       streams.InternalUpdate stream pos null
             | Choice1Of2 (_stats, Writer.Duplicate pos) ->                streams.InternalUpdate stream pos null
             | Choice1Of2 (_stats, Writer.PartialDuplicate overage) ->     streams.InternalUpdate stream overage.index [|overage|]
             | Choice1Of2 (_stats, Writer.PrefixMissing (overage,pos)) ->  streams.InternalUpdate stream pos [|overage|]
-            | Choice2Of2 exn ->
+            | Choice2Of2 (_stats, exn) ->
                 let malformed = Writer.classify exn |> Writer.isMalformed
                 streams.SetMalformed(stream,malformed)
         let _stream, { write = wp } = applyResultToStreamState res
         Writer.logTo writerResultLog (stream,res)
         wp
     let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, statesInterval)
-    Engine<(int*int)*Writer.Result>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))
+    Engine<(int*int)*Writer.Result,_>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))
