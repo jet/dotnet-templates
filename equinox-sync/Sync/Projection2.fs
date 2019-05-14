@@ -688,7 +688,7 @@ module Ingestion =
         member private __.Pump() = async {
             use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
             Async.Start(progressWriter.Pump(), cts.Token)
-            let presubmitInterval = expiredMs (1000L*2L)
+            let presubmitInterval = expiredMs (4000L*2L)
             while not cts.IsCancellationRequested do
                 try let mutable itemLimit = 4096
                     while itemLimit > 0 do
