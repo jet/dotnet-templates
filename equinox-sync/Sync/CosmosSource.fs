@@ -29,7 +29,7 @@ let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq
     }
     ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
 
-let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, startFromTail, maxDocuments, lagReportFreq : TimeSpan option)
+let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, startFromTail, maybeLimitDocuments, lagReportFreq : TimeSpan option)
         (cosmosContext, maxWriters)
         categorize
         createRangeProjector = async {
@@ -40,8 +40,8 @@ let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connection
     let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 1.))
     let! _feedEventHost =
         ChangeFeedProcessor.Start
-          ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, forceSkipExistingEvents = startFromTail,
-            createObserver = createRangeProjector cosmosIngester, ?reportLagAndAwaitNextEstimation = maybeLogLag, cfBatchSize = defaultArg maxDocuments 999999,
+          ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, startFromTail = startFromTail,
+            createObserver = createRangeProjector cosmosIngester, ?reportLagAndAwaitNextEstimation = maybeLogLag, ?maxDocuments = maybeLimitDocuments,
             leaseAcquireInterval=TimeSpan.FromSeconds 5., leaseRenewInterval=TimeSpan.FromSeconds 5., leaseTtl=TimeSpan.FromMinutes 1.)
     do! Async.AwaitKeyboardInterrupt()
     cosmosIngester.Stop() }

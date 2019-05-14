@@ -9,22 +9,6 @@ open System.Diagnostics
 open System.Threading
 open Equinox.Store
 
-/// Gathers stats relating to how many items of a given category have been observed
-type CatStats() =
-    let cats = Dictionary<string,int64>()
-    member __.Ingest(cat,?weight) = 
-        let weight = defaultArg weight 1L
-        match cats.TryGetValue cat with
-        | true, catCount -> cats.[cat] <- catCount + weight
-        | false, _ -> cats.[cat] <- weight
-    member __.Any = cats.Count <> 0
-    member __.Clear() = cats.Clear()
-#if NET461
-    member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortBy (fun (_,s) -> -s)
-#else
-    member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
-#endif
-
 [<AutoOpen>]
 module private Impl =
     let (|NNA|) xs = if xs = null then Array.empty else xs
@@ -37,6 +21,11 @@ module private Impl =
             let due = timer.ElapsedMilliseconds > ms
             if due then timer.Restart()
             due
+    let inline accStopwatch (f : unit -> 't) at =
+        let sw = Stopwatch.StartNew()
+        let r = f ()
+        at sw.Elapsed
+        r
     type Sem(max) =
         let inner = new SemaphoreSlim(max)
         member __.Release(?count) = match defaultArg count 1 with 0 -> () | x -> inner.Release x |> ignore
@@ -202,7 +191,7 @@ module Buffer =
 module Scheduling =
 
     open Buffer
-    
+
     type StreamStates() =
         let states = Dictionary<string, StreamState>()
         let update stream (state : StreamState) =
@@ -469,10 +458,6 @@ module Scheduling =
             while not cts.IsCancellationRequested do
                 let mutable idle, dispatcherState, remaining = true, Idle, 16
                 let mutable dt,ft,mt,it,st = TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero
-                let inline accStopwatch (f : unit -> 't) at =
-                    let t,r = f |> Stopwatch.Time
-                    at t.Elapsed
-                    r
                 while remaining <> 0 do
                     remaining <- remaining - 1
                     // 1. propagate write write outcomes to buffer (can mark batches completed etc)

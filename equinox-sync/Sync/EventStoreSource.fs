@@ -1,6 +1,6 @@
 ﻿module SyncTemplate.EventStoreSource
 
-//open Equinox.Cosmos.Projection
+open Equinox.Cosmos.Projection
 open Equinox.Store // AwaitTaskCorrect
 open Equinox.Projection
 open Equinox.Projection2
@@ -10,14 +10,16 @@ open System
 open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
-open Equinox.Cosmos.Projection
 
 type EventStore.ClientAPI.RecordedEvent with
     member __.Timestamp = System.DateTimeOffset.FromUnixTimeMilliseconds(__.CreatedEpoch)
 
-let inline recPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = State.arrayBytes x.Data + State.arrayBytes x.Metadata
-let inline payloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = recPayloadBytes x.Event + x.OriginalStreamId.Length * 2
-let private mb x = float x / 1024. / 1024.
+[<AutoOpen>]
+module private Impl =
+    let inline arrayBytes (x:byte[]) = if x = null then 0 else x.Length
+    let inline recPayloadBytes (x: EventStore.ClientAPI.RecordedEvent) = arrayBytes x.Data + arrayBytes x.Metadata
+    let inline payloadBytes (x: EventStore.ClientAPI.ResolvedEvent) = recPayloadBytes x.Event + x.OriginalStreamId.Length * 2
+    let inline mb x = float x / 1024. / 1024.
 
 let toIngestionItem (e : RecordedEvent) : StreamItem =
     let meta' = if e.Metadata <> null && e.Metadata.Length = 0 then null else e.Metadata
@@ -127,7 +129,7 @@ let establishMax (conn : IEventStoreConnection) = async {
 
 /// Walks a stream within the specified constraints; used to grab data when writing to a stream for which a prefix is missing
 /// Can throw (in which case the caller is in charge of retrying, possibly with a smaller batch size)
-let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : State.StreamSpan -> Async<unit>) =
+let pullStream (conn : IEventStoreConnection, batchSize) (stream,pos,limit : int option) (postBatch : Buffer.StreamSpan -> Async<unit>) =
     let rec fetchFrom pos limit = async {
         let reqLen = match limit with Some limit -> min limit batchSize | None -> batchSize
         let! currentSlice = conn.ReadStreamEventsForwardAsync(stream, pos, reqLen, resolveLinkTos=true) |> Async.AwaitTaskCorrect
