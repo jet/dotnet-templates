@@ -69,15 +69,16 @@ module Progress =
                 | _, _ -> ()
             trim ()
         member __.InScheduledOrder getStreamWeight =
-            let raw = seq {
-                let streams = HashSet()
-                let mutable batch = 0
-                for x in pending do
-                    batch <- batch + 1
-                    for s in x.streamToRequiredIndex.Keys do
-                        if streams.Add s then
-                            yield s,(batch,getStreamWeight s) }
-            raw |> Seq.sortBy (fun (_s,(b,l)) -> b,-l) |> Seq.map fst
+            let streams = HashSet()
+            let tmp = ResizeArray(16384)
+            let mutable batch = 0
+            for x in pending do
+                batch <- batch + 1
+                for s in x.streamToRequiredIndex.Keys do
+                    if streams.Add s then
+                        tmp.Add(struct (s,struct (batch,-getStreamWeight s)))
+            tmp.Sort(fun (struct (_,a)) (struct (_,b)) -> a.CompareTo(b) )
+            seq { for s,_ in tmp -> s }
 
     /// Manages writing of progress
     /// - Each write attempt is always of the newest token (each update is assumed to also count for all preceding ones)
