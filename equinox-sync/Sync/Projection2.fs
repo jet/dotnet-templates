@@ -8,6 +8,18 @@ open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
 
+/// Item from a reader as supplied to the `IIngester`
+type [<NoComparison>] StreamItem = { stream: string; index: int64; event: Equinox.Codec.IEvent<byte[]> }
+
+/// Core interface for projection system, representing the complete contract a feed consumer uses to deliver batches of work for projection
+type IIngester<'Epoch,'Item> =
+    /// Passes a (lazy) batch of items into the Ingestion Engine; the batch will then be materialized out of band and submitted to the Scheduler
+    /// Admission is Async in order that the Projector and Ingester can together contrive to force backpressure on the producer of the batches by delaying conclusion of the Async computation
+    /// Returns the ephemeral position of this entry in the queue of uncheckpointed batches at time of posting, together with current max number of items permissible
+    abstract member Submit: progressEpoch: 'Epoch * markCompleted: Async<unit> * items: 'Item seq -> Async<int*int>
+    /// Requests cancellation of ingestion processing as soon as practicable (typically this is in reaction to a lease being revoked)
+    abstract member Stop: unit -> unit
+
 [<AutoOpen>]
 module private Impl =
     let (|NNA|) xs = if xs = null then Array.empty else xs
@@ -31,8 +43,6 @@ module private Impl =
         member __.State = max-inner.CurrentCount,max 
         /// Wait infinitely to get the semaphore
         member __.Await() = inner.Await() |> Async.Ignore
-        /// Wait for the specified timeout to acquire (or return false instantly)
-        member __.TryAwait(?timeout) = inner.Await(defaultArg timeout TimeSpan.Zero)
         /// Dont use without profiling proving it helps as it doesnt help correctness or legibility
         member __.TryWaitWithoutCancellationForPerf() = inner.Wait(0)
         /// Only use where you're interested in intenionally busywaiting on a thread - i.e. when you have proven its critical
@@ -101,7 +111,7 @@ module Buffer =
     type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
     module Span =
         let (|End|) (x : Span) = x.index + if x.events = null then 0L else x.events.LongLength
-        let trim min : Span -> Span = function
+        let dropBeforeIndex min : Span -> Span = function
             | x when x.index >= min -> x // don't adjust if min not within
             | End n when n < min -> { index = min; events = [||] } // throw away if before min
 #if NET461
@@ -112,7 +122,7 @@ module Buffer =
         let merge min (xs : Span seq) =
             let xs =
                 seq { for x in xs -> { x with events = (|NNA|) x.events } }
-                |> Seq.map (trim min)
+                |> Seq.map (dropBeforeIndex min)
                 |> Seq.filter (fun x -> x.events.Length <> 0)
                 |> Seq.sortBy (fun x -> x.index)
             let buffer = ResizeArray()
@@ -128,9 +138,26 @@ module Buffer =
                     curr <- Some x
                 // Overlapping, join
                 | Some (End nextIndex as c), x  ->
-                    curr <- Some { c with events = Array.append c.events (trim nextIndex x).events }
+                    curr <- Some { c with events = Array.append c.events (dropBeforeIndex nextIndex x).events }
             curr |> Option.iter buffer.Add
             if buffer.Count = 0 then null else buffer.ToArray()
+        let slice (maxEvents,maxBytes) (x: Span) =
+            let inline arrayBytes (x:byte[]) = if x = null then 0 else x.Length
+            // TODO tests etc
+            let inline estimateBytesAsJsonUtf8 (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
+            let mutable count,bytes = 0, 0
+            let mutable countBudget, bytesBudget = maxEvents,maxBytes
+            let withinLimits (y : Equinox.Codec.IEvent<byte[]>) =
+                countBudget <- countBudget - 1
+                let eventBytes = estimateBytesAsJsonUtf8 y
+                bytesBudget <- bytesBudget - eventBytes
+                // always send at least one event in order to surface the problem and have the stream marked malformed
+                let res = count = 1 || (countBudget >= 0 && bytesBudget >= 0)
+                if res then count <- count + 1; bytes <- bytes + eventBytes
+                res
+            let trimmed = { x with events = x.events |> Array.takeWhile withinLimits }
+            let stats = trimmed.events.Length, trimmed.events |> Seq.sumBy estimateBytesAsJsonUtf8
+            stats, trimmed
     type [<NoComparison>] StreamSpan = { stream: string; span: Span }
     type [<NoComparison>] StreamState = { isMalformed: bool; write: int64 option; queue: Span[] } with
         member __.Size =
@@ -204,12 +231,12 @@ module Scheduling =
                 stream, updated
         let updateWritePos stream isMalformed pos span = update stream { isMalformed = isMalformed; write = pos; queue = span }
         let markCompleted stream index = updateWritePos stream false (Some index) null |> ignore
-        let mergeBuffered (buffer : Buffer.Streams) =
+        let mergeBuffered (buffer : Streams) =
             for x in buffer.Items do
                 update x.Key x.Value |> ignore
 
         let busy = HashSet<string>()
-        let pending trySlipstreamed (requestedOrder : string seq) = seq {
+        let pending trySlipstreamed (requestedOrder : string seq) : seq<int64 option*StreamSpan> = seq {
             let proposed = HashSet()
             for s in requestedOrder do
                 let state = states.[s]
@@ -357,11 +384,15 @@ module Scheduling =
         member __.HasCapacity = dop.HasCapacity
         member __.State = dop.State
         member __.TryAdd(item) =
-            if dop.TryWaitWithoutCancellationForPerf() then work.Add(item); true else false
+            if dop.TryWaitWithoutCancellationForPerf() then
+                work.Add(item)
+                true
+            else false
         member __.Pump () = async {
             let! ct = Async.CancellationToken
             for item in work.GetConsumingEnumerable ct do
                 Async.Start(dispatch item) }
+
     /// Consolidates ingested events into streams; coordinates dispatching of these to projector/ingester in the order implied by the submission order
     /// a) does not itself perform any reading activities
     /// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
@@ -428,7 +459,7 @@ module Scheduling =
                     let (_,{stream = s} : StreamSpan) as item = xs.Current
                     let succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
                     if succeeded then streams.MarkBusy s
-                    dispatched <- dispatched || succeeded // if we added any request, we also don't sleep
+                    dispatched <- dispatched || succeeded // if we added any request, we'll skip sleeping
                     hasCapacity <- succeeded
             hasCapacity, dispatched
         // Take an incoming batch of events, correlating it against our known stream state to yield a set of remaining work
@@ -518,21 +549,6 @@ module Scheduling =
         member __.Stop() =
             cts.Cancel()
 
-type Projector =
-
-    static member Start(log, projectorDop, project : Buffer.StreamSpan -> Async<int>, categorize, ?statsInterval, ?statesInterval) =
-        let project (_maybeWritePos, batch) = async {
-            try let! count = project batch
-                return Choice1Of2 (batch.span.index + int64 count)
-            with e -> return Choice2Of2 e }
-        let interpretProgress _streams _stream = function
-            | Choice1Of2 index -> Some index
-            | Choice2Of2 _ -> None
-        let stats = Scheduling.Stats(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg statesInterval (TimeSpan.FromMinutes 5.))
-            //let category (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
-        let dumpStreams (streams: Scheduling.StreamStates) log = streams.Dump(log, categorize)
-        Scheduling.Engine<int64,_>.Start(stats, projectorDop, project, interpretProgress, dumpStreams)
-
 module Ingestion =
 
     [<NoComparison; NoEquality>]
@@ -600,7 +616,7 @@ module Ingestion =
         | CloseSeries of seriesIndex: int
         | ActivateSeries of seriesIndex: int
 
-    let tryRemove key (dict: Dictionary<_,_>) =
+    let tryTake key (dict: Dictionary<_,_>) =
         match dict.TryGetValue key with
         | true, value ->
             dict.Remove key |> ignore
@@ -644,7 +660,7 @@ module Ingestion =
                     log.Information("Completed reading active series {activeSeries}; moving to next", activeSeries)
                     work.Enqueue <| ActivateSeries (activeSeries + 1)
                 else
-                    match readingAhead |> tryRemove seriesIndex with
+                    match readingAhead |> tryTake seriesIndex with
                     | Some batchesRead ->
                         ready.[seriesIndex] <- batchesRead
                         log.Information("Completed reading {series}, marking {buffered} buffered items ready", seriesIndex, batchesRead.Count)
@@ -654,13 +670,13 @@ module Ingestion =
             | ActivateSeries newActiveSeries ->
                 activeSeries <- newActiveSeries
                 let buffered =
-                    match ready |> tryRemove newActiveSeries with
+                    match ready |> tryTake newActiveSeries with
                     | Some completedChunkBatches ->
                         completedChunkBatches |> Seq.iter pending.Enqueue
                         work.Enqueue <| ActivateSeries (newActiveSeries + 1)
                         completedChunkBatches.Count
                     | None ->
-                        match readingAhead |> tryRemove newActiveSeries with
+                        match readingAhead |> tryTake newActiveSeries with
                         | Some batchesReadToDate -> batchesReadToDate |> Seq.iter pending.Enqueue; batchesReadToDate.Count
                         | None -> 0
                 log.Information("Moving to series {activeChunk}, releasing {buffered} buffered batches, {ready} others ready, {ahead} reading ahead",
@@ -717,14 +733,3 @@ module Ingestion =
 
         /// As range assignments get revoked, a user is expected to `Stop `the active processing thread for the Ingester before releasing references to it
         member __.Stop() = cts.Cancel()
-
-type Ingester =
-
-    /// Starts an Ingester that will submit up to `maxSubmissions` items at a time to the `scheduler`, blocking on Submits when more than `maxRead` batches have yet to complete processing 
-    static member Start<'R>(log, scheduler, maxRead, maxSubmissions, categorize, ?statsInterval) =
-        let singleSeriesIndex = 0
-        let instance = Ingestion.Engine<'R,_>.Start(log, scheduler, maxRead, maxSubmissions, singleSeriesIndex, categorize, statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 1.))
-        { new IIngester with
-            member __.Submit(epoch, markCompleted, items) : Async<int*int> =
-                instance.Submit(Ingestion.Message.Batch(singleSeriesIndex, epoch, markCompleted, items))
-            member __.Stop() = __.Stop() }

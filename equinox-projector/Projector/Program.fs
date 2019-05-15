@@ -1,22 +1,12 @@
 ﻿module ProjectorTemplate.Projector.Program
 
-//#if kafka
-open Confluent.Kafka
-//#endif
 open Equinox.Cosmos
+open Equinox.Store // Stopwatch.Time
 open Equinox.Cosmos.Projection
-//#if kafka
-open Equinox.Projection.Codec
-open Equinox.Store
-open Jet.ConfluentKafka.FSharp
-//#else
 open Equinox.Projection
-//#endif
+open Equinox.Projection2
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
-//#if kafka
-open Newtonsoft.Json
-//#endif
 open Serilog
 open System
 open System.Collections.Generic
@@ -153,59 +143,34 @@ let run (log : ILogger) discovery connectionPolicy source
         (aux, leaseId, startFromTail, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
         createRangeProjector = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
-        log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortByDescending snd)
+        log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortBy fst)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, startFromTail = startFromTail,
             createObserver = createRangeProjector, ?maxDocuments = maybeLimitDocumentCount, ?reportLagAndAwaitNextEstimation = maybeLogLag)
-    do! Async.AwaitKeyboardInterrupt() }
+    do! Async.AwaitKeyboardInterrupt() } // exiting will Cancel the child tasks, i.e. the _feedEventHost
 
-//#if kafka
-let mkRangeProjector (broker, topic) log (_maxPendingBatches,_maxDop,_project) _categorize () =
-    let sw = Stopwatch.StartNew() // we'll report the warmup/connect time on the first batch
-    let cfg = KafkaProducerConfig.Create("ProjectorTemplate", broker, Acks.Leader, compression = CompressionType.Lz4)
-    let producer = KafkaProducer.Create(Log.Logger, cfg, topic)
-    let disposeProducer = (producer :> IDisposable).Dispose
+let createRangeHandler (log : ILogger) (createIngester : ILogger -> IIngester<int64,'item>) (mapContent : Microsoft.Azure.Documents.Document seq -> 'item seq) () =
+    let mutable rangeIngester = Unchecked.defaultof<_>
+    let init rangeLog = async { rangeIngester <- createIngester rangeLog }
+    let ingest epoch checkpoint docs =
+        let items : 'item seq = mapContent docs
+        rangeIngester.Submit(epoch, checkpoint, items)
+    let dispose () = rangeIngester.Stop()
+    let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
     let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let pt,events = (fun () -> docs |> Seq.collect DocumentParser.enumEvents |> Seq.map RenderedEvent.ofStreamItem |> Array.ofSeq) |> Stopwatch.Time 
-        let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
-        let! et,() = async {
-            // TODO handle failure
-            let! _ = producer.ProduceBatch es
-            return! ctx.Checkpoint() |> Stopwatch.Time }
-        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Parse {events,5} events {p:n3}s Emit {e:n1}s",
-            ctx.FeedResponse.ResponseContinuation.Trim[|'"'|], docs.Count, int ctx.FeedResponse.RequestCharge,
-            float sw.ElapsedMilliseconds / 1000., events.Length, (let e = pt.Elapsed in e.TotalSeconds), (let e = et.Elapsed in e.TotalSeconds))
+        let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
+        // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
+        let! pt, (cur,max) = ingest epoch (ctx.Checkpoint()) docs |> Stopwatch.Time
+        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Post {pt:n3}s {cur}/{max}",
+            epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000.,
+            (let e = pt.Elapsed in e.TotalSeconds), cur, max)
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
-    ChangeFeedObserver.Create(log, ingest, dispose=disposeProducer)
-//#else
-let createRangeHandler (log:ILogger) (maxReadAhead, maxSubmissionsPerRange, projectionDop) categorize project =
-    let scheduler = Projector.Start (log, projectionDop, project, categorize, TimeSpan.FromMinutes 1.)
-    fun () ->
-        let mutable rangeIngester = Unchecked.defaultof<IIngester>
-        let init rangeLog = async { rangeIngester <- Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize) }
-        let ingest epoch checkpoint docs =
-            let items = Seq.collect DocumentParser.enumEvents docs
-            rangeIngester.Submit(epoch, checkpoint, items)
-        let dispose () = rangeIngester.Stop()
-        let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
-        let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
-            sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-            let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
-            // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
-            let checkpoint = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect }
-            let! pt, (cur,max) = ingest epoch checkpoint docs |> Stopwatch.Time
-            log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Post {pt:n3}s {cur}/{max}",
-                epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000.,
-                let e = pt.Elapsed in e.TotalSeconds, cur, max)
-            sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
-        }
-        ChangeFeedObserver.Create(log, ingest, assign=init, dispose=dispose)
- //#endif
+    ChangeFeedObserver.Create(log, ingest, assign=init, dispose=dispose)
  
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
@@ -221,25 +186,40 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
+let TODOremove (e : Equinox.Projection.StreamItem) =
+    let e2 =
+        { new Equinox.Codec.IEvent<_> with
+            member __.Data = e.event.Data
+            member __.Meta = e.event.Meta
+            member __.EventType = e.event.EventType 
+            member __.Timestamp = e.event.Timestamp }
+    { stream = e.stream; index = e.index; event = e2 }
+
 [<EntryPoint>]
 let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ChangeFeedVerbose
         let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-        let aux, leaseId, startFromTail, maxDocuments, limits, lagFrequency = args.BuildChangeFeedParams()
-//#if kafka
-        //let targetParams = args.Target.BuildTargetParams()
-        //let createRangeHandler = mkRangeProjector targetParams
-//#endif
-        let project (batch : Equinox.Projection.Buffer.StreamSpan) = async { 
+        let aux, leaseId, startFromTail, maxDocuments, (maxReadAhead, maxSubmissionsPerRange, projectionDop), lagFrequency = args.BuildChangeFeedParams()
+        let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+#if !nokafka
+        let (broker,topic) = args.Target.BuildTargetParams()
+        let scheduler = ProjectorTemplate.KafkaSink.Scheduler.Start(Log.Logger, "ProjectorTemplate", broker, topic, projectionDop, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.))
+        let createIngester rangeLog = SyncTemplate.ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize)
+        let mapContent : Microsoft.Azure.Documents.Document seq -> StreamItem seq = Seq.collect DocumentParser.enumEvents >> Seq.map TODOremove 
+#else
+        let project (batch : Buffer.StreamSpan) = async { 
             let r = Random()
             let ms = r.Next(1,batch.span.events.Length * 10)
             do! Async.Sleep ms
             return batch.span.events.Length }
-        let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+        let scheduler = ProjectorSink.Scheduler.Start (Log.Logger, projectionDop, project, categorize, TimeSpan.FromMinutes 1.)
+        let createIngester rangeLog = ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize)
+        let mapContent : Microsoft.Azure.Documents.Document seq -> StreamItem seq = Seq.collect DocumentParser.enumEvents >> Seq.map TODOremove
+#endif
         run Log.Logger discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromTail, maxDocuments, lagFrequency)
-            (createRangeHandler Log.Logger limits categorize project)
+            (createRangeHandler Log.Logger createIngester mapContent)
         |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

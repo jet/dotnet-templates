@@ -10,9 +10,9 @@ open Serilog
 open System
 open System.Collections.Generic
 
-let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq) (maxReads, maxSubmissions) categorize cosmosIngester () =
+let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq) (maxReads, maxSubmissions) categorize scheduler () =
     let mutable rangeIngester = Unchecked.defaultof<_>
-    let init rangeLog = async { rangeIngester <- Ingester.Start(rangeLog, cosmosIngester, maxReads, maxSubmissions, categorize, TimeSpan.FromMinutes 1.) }
+    let init rangeLog = async { rangeIngester <- ProjectorSink.Ingester.Start(rangeLog, scheduler, maxReads, maxSubmissions, categorize, TimeSpan.FromMinutes 1.) }
     let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform in rangeIngester.Submit(epoch, checkpoint, events)
     let dispose () = rangeIngester.Stop ()
     let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
@@ -37,7 +37,7 @@ let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connection
         log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortBy fst)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
-    let cosmosIngester = CosmosIngester.start (log, cosmosContext, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 1.))
+    let cosmosIngester = CosmosSink.Scheduler.Start(log, cosmosContext, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 1.))
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, startFromTail = startFromTail,
@@ -87,7 +87,7 @@ module EventV0Parser =
     /// We assume all Documents represent Events laid out as above
     let parse (d : Document) : StreamItem =
         let (StandardCodecEvent e) as x = d.Cast<EventV0>()
-        { stream = x.s; index = x.i; event = e } : Equinox.Projection.StreamItem
+        { stream = x.s; index = x.i; event = e } : StreamItem
 
 let transformV0 categorize catFilter (v0SchemaDocument: Document) : StreamItem seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
@@ -98,14 +98,14 @@ let transformOrFilter categorize catFilter (changeFeedDocument: Document) : Stre
     for e in DocumentParser.enumEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter (categorize e.stream) then
-            //let removeBody e =
-            //let e2 =
-            //    { new Equinox.Codec.IEvent<_> with
-            //        member __.Data = null
-            //        member __.Meta = null
-            //        member __.EventType = e.event.EventType 
-            //        member __.Timestamp = e.event.Timestamp }
-            //yield { e with event = e2 }
-            yield e
+            //yield e
+            // TODO remove this temporary type bridging
+            let e2 =
+                { new Equinox.Codec.IEvent<_> with
+                    member __.Data = e.event.Data
+                    member __.Meta = e.event.Meta
+                    member __.EventType = e.event.EventType 
+                    member __.Timestamp = e.event.Timestamp }
+            yield { stream = e.stream; index = e.index; event = e2 }
 }
 //#endif

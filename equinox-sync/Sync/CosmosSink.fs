@@ -1,4 +1,4 @@
-﻿module Equinox.Cosmos.Projection.CosmosIngester
+﻿module SyncTemplate.CosmosSink
 
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Store
@@ -12,7 +12,6 @@ open System.Collections.Generic
 
 [<AutoOpen>]
 module private Impl =
-    let arrayBytes (x:byte[]) = if x = null then 0 else x.Length
     let inline mb x = float x / 1024. / 1024.
 
 [<AutoOpen>]
@@ -119,39 +118,31 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
             | ResultKind.Malformed -> bads stream mfStreams; incr malformed
             | ResultKind.Other -> bads stream oStreams; incr resultExnOther
 
-let start (log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, categorize, (statsInterval, statesInterval)) =
-    let cosmosPayloadBytes (x: Equinox.Codec.IEvent<byte[]>) = arrayBytes x.Data + arrayBytes x.Meta + (x.EventType.Length * 2) + 96
-    let writerResultLog = log.ForContext<Writer.Result>()
-    let trim (_currentWritePos : int64 option, batch : StreamSpan) =
-        let mutable countBudget, bytesBudget = 16384, 1024 * 1024 - (*fudge*)4096
-        let mutable count = 0
-        let withinLimits (y : Equinox.Codec.IEvent<byte[]>) =
-            count <- count + 1
-            countBudget <- countBudget - 1
-            bytesBudget <- bytesBudget - cosmosPayloadBytes y
-            // always send at least one event in order to surface the problem and have the stream marked malformed
-            count = 1 || (countBudget >= 0 && bytesBudget >= 0)
-        { stream = batch.stream; span = { index = batch.span.index; events =  batch.span.events |> Array.takeWhile withinLimits } }
-    let mutable robin = 0
-    let attemptWrite batch = async {
-        let trimmed = trim batch
-        let index = Interlocked.Increment(&robin) % cosmosContexts.Length
-        let selectedConnection = cosmosContexts.[index]
-        let stats = trimmed.span.events.Length, trimmed.span.events |> Seq.sumBy cosmosPayloadBytes
-        try let! res = Writer.write log selectedConnection trimmed
-            return Choice1Of2 (stats,res)
-        with e -> return Choice2Of2 (stats,e) }
-    let interpretWriteResultProgress (streams: Scheduling.StreamStates) stream res =
-        let applyResultToStreamState = function
-            | Choice1Of2 (_stats, Writer.Ok pos) ->                       streams.InternalUpdate stream pos null
-            | Choice1Of2 (_stats, Writer.Duplicate pos) ->                streams.InternalUpdate stream pos null
-            | Choice1Of2 (_stats, Writer.PartialDuplicate overage) ->     streams.InternalUpdate stream overage.index [|overage|]
-            | Choice1Of2 (_stats, Writer.PrefixMissing (overage,pos)) ->  streams.InternalUpdate stream pos [|overage|]
-            | Choice2Of2 (_stats, exn) ->
-                let malformed = Writer.classify exn |> Writer.isMalformed
-                streams.SetMalformed(stream,malformed)
-        let _stream, { write = wp } = applyResultToStreamState res
-        Writer.logTo writerResultLog (stream,res)
-        wp
-    let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, statesInterval)
-    Engine<(int*int)*Writer.Result,_>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))
+type Scheduler =
+    static member Start(log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, categorize, (statsInterval, statesInterval))
+            : Scheduling.Engine<(int*int)*Result,(int*int)*exn> =
+        let writerResultLog = log.ForContext<Writer.Result>()
+        let mutable robin = 0
+        let attemptWrite (_writePos,batch) = async {
+            let index = Interlocked.Increment(&robin) % cosmosContexts.Length
+            let selectedConnection = cosmosContexts.[index]
+            let maxEvents, maxBytes = 16384, 1024 * 1024 - (*fudge*)4096
+            let stats, span' = Span.slice (maxEvents,maxBytes) batch.span
+            let trimmed = { batch with span = span' }
+            try let! res = Writer.write log selectedConnection trimmed
+                return Choice1Of2 (stats,res)
+            with e -> return Choice2Of2 (stats,e) }
+        let interpretWriteResultProgress (streams: Scheduling.StreamStates) stream res =
+            let applyResultToStreamState = function
+                | Choice1Of2 (_stats, Writer.Ok pos) ->                       streams.InternalUpdate stream pos null
+                | Choice1Of2 (_stats, Writer.Duplicate pos) ->                streams.InternalUpdate stream pos null
+                | Choice1Of2 (_stats, Writer.PartialDuplicate overage) ->     streams.InternalUpdate stream overage.index [|overage|]
+                | Choice1Of2 (_stats, Writer.PrefixMissing (overage,pos)) ->  streams.InternalUpdate stream pos [|overage|]
+                | Choice2Of2 (_stats, exn) ->
+                    let malformed = Writer.classify exn |> Writer.isMalformed
+                    streams.SetMalformed(stream,malformed)
+            let _stream, { write = wp } = applyResultToStreamState res
+            Writer.logTo writerResultLog (stream,res)
+            wp
+        let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, statesInterval)
+        Engine<(int*int)*Writer.Result,_>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))

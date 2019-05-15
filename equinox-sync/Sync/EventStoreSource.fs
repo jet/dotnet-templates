@@ -1,6 +1,5 @@
 ﻿module SyncTemplate.EventStoreSource
 
-open Equinox.Cosmos.Projection
 open Equinox.Store // AwaitTaskCorrect
 open Equinox.Projection
 open Equinox.Projection2
@@ -382,7 +381,7 @@ let run (log : Serilog.ILogger) (connect, spec, categorize, tryMapEvent) maxRead
             startMode, spec.groupName, startPos.CommitPosition, chunk startPos, float startPos.CommitPosition/float maxPos.CommitPosition,
             checkpointFreq.TotalMinutes)
         return startPos }
-    let cosmosIngestionEngine = CosmosIngester.start (log.ForContext("Tranche","Sync"), cosmosContexts, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2.))
+    let cosmosIngester = CosmosSink.Scheduler.Start (log.ForContext("Tranche","Sync"), cosmosContexts, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2.))
     let initialSeriesId, conns, dop =  
         log.Information("Tailing every {intervalS:n1}s TODO with {streamReaders} stream catchup-readers", spec.tailInterval.TotalSeconds, spec.streamReaders)
         match spec.gorge with
@@ -393,12 +392,12 @@ let run (log : Serilog.ILogger) (connect, spec, categorize, tryMapEvent) maxRead
             chunk startPos |> int, conns, (max (conns.Length) (spec.streamReaders+1))
         | None ->
             0, [|conn|], spec.streamReaders+1
-    let trancheEngine = Ingestion.Engine.Start(log.ForContext("Tranche","EventStore"), cosmosIngestionEngine, maxReadAhead, maxReadAhead, initialSeriesId, categorize, TimeSpan.FromMinutes 1.)
+    let trancheIngester = Ingestion.Engine.Start(log.ForContext("Tranche","EventStore"), cosmosIngester, maxReadAhead, maxReadAhead, initialSeriesId, categorize, TimeSpan.FromMinutes 1.)
     let post = function
-        | Res.EndOfChunk seriesId -> trancheEngine.Submit <| Ingestion.EndOfSeries seriesId
+        | Res.EndOfChunk seriesId -> trancheIngester.Submit <| Ingestion.EndOfSeries seriesId
         | Res.Batch (seriesId, pos, xs) ->
             let cp = pos.CommitPosition
-            trancheEngine.Submit <| Ingestion.Message.Batch(seriesId, cp, checkpoints.Commit cp, xs)
+            trancheIngester.Submit <| Ingestion.Message.Batch(seriesId, cp, checkpoints.Commit cp, xs)
     let reader = Reader(conns, spec.batchSize, spec.minBatchSize, categorize, tryMapEvent, post, spec.tailInterval, dop)
     do! reader.Start (initialSeriesId,startPos) maxPos
     do! Async.AwaitKeyboardInterrupt() }
