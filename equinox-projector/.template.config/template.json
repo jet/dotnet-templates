@@ -33,6 +33,7 @@
           "condition": "(!kafka)",
           "exclude": [
             "**/Consumer/**/*",
+            "**/Projector/KafkaSink.fs",
             "equinox-projector-consumer.sln"
           ]
         },
