@@ -20,6 +20,22 @@ type IIngester<'Epoch,'Item> =
     /// Requests cancellation of ingestion processing as soon as practicable (typically this is in reaction to a lease being revoked)
     abstract member Stop: unit -> unit
 
+/// Gathers stats relating to how many items of a given category have been observed
+type CatStats() =
+    let cats = Dictionary<string,int64>()
+    member __.Ingest(cat,?weight) = 
+        let weight = defaultArg weight 1L
+        match cats.TryGetValue cat with
+        | true, catCount -> cats.[cat] <- catCount + weight
+        | false, _ -> cats.[cat] <- weight
+    member __.Any = cats.Count <> 0
+    member __.Clear() = cats.Clear()
+#if NET461
+    member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortBy (fun (_,s) -> -s)
+#else
+    member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
+#endif
+
 [<AutoOpen>]
 module private Impl =
     let (|NNA|) xs = if xs = null then Array.empty else xs
@@ -78,9 +94,10 @@ module Progress =
                 batch <- batch + 1
                 for s in x.streamToRequiredIndex.Keys do
                     if streams.Add s then
-                        tmp.Add(struct (s,struct (batch,-getStreamWeight s)))
-            tmp.Sort(fun (struct(_,_a)) (struct(_,_b)) -> _a.CompareTo(_b))
-            tmp |> Seq.map (fun (struct(s,_)) -> s)
+                        tmp.Add((s,(batch,-getStreamWeight s)))
+            let c = Comparer<_>.Default
+            tmp.Sort(fun (_,_a) ((_,_b)) -> c.Compare(_a,_b))
+            tmp |> Seq.map (fun ((s,_)) -> s)
 
     /// Manages writing of progress
     /// - Each write attempt is always of the newest token (each update is assumed to also count for all preceding ones)
@@ -539,16 +556,16 @@ module Scheduling =
                     // 4. Do a minimal sleep so we don't run completely hot when empty (unless we did something non-trivial)
                     Thread.Sleep sleepIntervalMs } // Not Async.Sleep so we don't give up the thread
 
+        interface ISchedulingEngine with
+            member __.Stop() = cts.Cancel()
+            member __.Submit(markCompleted: (unit -> unit), items : StreamItem[]) = pending.Enqueue (markCompleted, items)
+            member __.SubmitStreamBuffers streams = work.Push <| Merge streams
+
         static member Start(stats, projectorDop, project, interpretProgress, dumpStreams) =
             let dispatcher = Dispatcher(projectorDop)
             let instance = new Engine<_,_>(dispatcher, stats, project, interpretProgress, dumpStreams)
             Async.Start instance.Pump
             instance
-
-        interface ISchedulingEngine with
-            member __.Stop() = cts.Cancel()
-            member __.Submit(markCompleted: (unit -> unit), items : StreamItem[]) = pending.Enqueue (markCompleted, items)
-            member __.SubmitStreamBuffers streams = work.Push <| Merge streams
 
 module Ingestion =
 
@@ -625,7 +642,7 @@ module Ingestion =
         | false, _ -> None
     
     /// Holds batches away from Core processing to limit in-flight processing
-    type Engine(log : ILogger, scheduler: ISchedulingEngine, maxRead, maxSubmissions, initialSeriesIndex, categorize, statsInterval : TimeSpan, ?pumpDelayMs) =
+    type Engine(log : ILogger, scheduler : ISchedulingEngine, maxRead, maxSubmissions, initialSeriesIndex, categorize, statsInterval : TimeSpan, ?pumpDelayMs) =
         let cts = new CancellationTokenSource()
         let pumpDelayMs = defaultArg pumpDelayMs 5
         let work = ConcurrentQueue<InternalMessage>() // Queue as need ordering semantically
