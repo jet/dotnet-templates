@@ -120,9 +120,9 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
 
     override __.DumpExtraStats() =
         log.Information("Completed {mb:n0}MB {completed:n0}r {streams:n0}s {events:n0}e ({ok:n0} ok)", mb okBytes, !resultOk, okStreams.Count, okEvents, !resultOk)
-        okStreams.Clear(); failStreams.Clear(); resultOk := 0; resultExnOther := 0; okEvents <- 0; okBytes <- 0L;
+        okStreams.Clear(); resultOk := 0; okEvents <- 0; okBytes <- 0L
         if !resultExnOther <> 0 then
-            log.Warning("Exceptions {mb:n0}MB {fails:n0}r {streams:n0}s {events:n0}e ", mb exnBytes, !resultExnOther, failStreams.Count, exnEvents)
+            log.Warning("Exceptions {mb:n0}MB {fails:n0}r {streams:n0}s {events:n0}e", mb exnBytes, !resultExnOther, failStreams.Count, exnEvents)
             resultExnOther := 0; failStreams.Clear(); exnBytes <- 0L; exnEvents <- 0
             log.Warning("Malformed cats {@badCats}", badCats.StatsDescending)
             badCats.Clear()
@@ -143,6 +143,7 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
             exnEvents <- exnEvents + es
             exnBytes <- exnBytes + int64 bs
             incr resultExnOther
+            log.Warning(exn,"Could not write {b:n0} bytes {e:n0}e in stream {stream}", bs, es, stream)
 
 type Scheduler =
     static member Start(log : Serilog.ILogger, clientId, broker, topic, maxInFlightMessages, categorize, (statsInterval, statesInterval))
@@ -162,18 +163,3 @@ type Scheduler =
             | Choice2Of2 (_,_) -> None
         let projectionAndKafkaStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, statesInterval)
         Engine<_,_>.Start(projectionAndKafkaStats, maxInFlightMessages, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))
-
-//type Ingester =
-
-//    static member Start(log, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize, ?statsInterval) : IIngester<int64,StreamItem> =
-//        let project (batch : Buffer.StreamSpan) = async { 
-//            let r = Random()
-//            let ms = r.Next(1,batch.span.events.Length * 10)
-//            do! Async.Sleep ms
-//            return batch.span.events.Length }
-//        //let createIngester rangeLog = SyncTemplate.ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize)
-//        //let mapContent : Microsoft.Azure.Documents.Document seq -> StreamItem seq = Seq.collect DocumentParser.enumEvents >> Seq.map TODOremove >> Seq.map RenderedEvent.ofStreamItem 
-//        //let disposeProducer = (producer :> IDisposable).Dispose
-//        //let es = [| for e in events -> e.s, JsonConvert.SerializeObject e |]
-
-//        SyncTemplate.ProjectorSink.Ingester.Start(log, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize, ?statsInterval=statsInterval) 

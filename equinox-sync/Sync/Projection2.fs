@@ -152,7 +152,7 @@ module Buffer =
                 let eventBytes = estimateBytesAsJsonUtf8 y
                 bytesBudget <- bytesBudget - eventBytes
                 // always send at least one event in order to surface the problem and have the stream marked malformed
-                let res = count = 1 || (countBudget >= 0 && bytesBudget >= 0)
+                let res = count = 0 || (countBudget >= 0 && bytesBudget >= 0)
                 if res then count <- count + 1; bytes <- bytes + eventBytes
                 res
             let trimmed = { x with events = x.events |> Array.takeWhile withinLimits }
@@ -435,7 +435,7 @@ module Scheduling =
             let mutable worked, more = false, true
             while more do
                 let c = work.TryPopRange(workLocalBuffer)
-                if c = 0 then more <- false else worked <- true
+                if c = 0 (*&& work.IsEmpty*) then more <- false else worked <- true
                 for i in 0..c-1 do
                     let x = workLocalBuffer.[i]
                     match x with
