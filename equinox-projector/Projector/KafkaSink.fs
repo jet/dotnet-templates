@@ -8,64 +8,6 @@ open Jet.ConfluentKafka.FSharp
 open Newtonsoft.Json
 open System
 
-open Serilog
-open System.Threading.Tasks
-open System.Threading
-type KafkaProducer private (log: ILogger, inner : IProducer<string, string>, topic : string) =
-    member __.Topic = topic
-
-    interface IDisposable with member __.Dispose() = inner.Dispose()
-
-    /// Produces a single item, yielding a response upon completion/failure of the ack
-    /// <remarks>
-    ///     There's no assurance of ordering [without dropping `maxInFlight` down to `1` and annihilating throughput].
-    ///     Thus its critical to ensure you don't submit another message for the same key until you've had a success / failure response from the call.<remarks/>
-    member __.ProduceAsync(key, value) : Async<DeliveryResult<_,_>>= async {
-        return! inner.ProduceAsync(topic, Message<_,_>(Key=key, Value=value)) |> Async.AwaitTaskCorrect }
-
-    /// Produces a batch of supplied key/value messages. Results are returned in order of writing (which may vary from order of submission).
-    /// <throws>
-    ///    1. if there is an immediate local config issue
-    ///    2. upon receipt of the first failed `DeliveryReport` (NB without waiting for any further reports) </throws>
-    /// <remarks>
-    ///    Note that the delivery and/or write order may vary from the supplied order (unless you drop `maxInFlight` down to 1, massively constraining throughput).
-    ///    Thus it's important to note that supplying >1 item into the queue bearing the same key risks them being written to the topic out of order. <remarks/>
-    member __.ProduceBatch(keyValueBatch : (string * string)[]) = async {
-        if Array.isEmpty keyValueBatch then return [||] else
-
-        let! ct = Async.CancellationToken
-
-        let tcs = new TaskCompletionSource<DeliveryReport<_,_>[]>()
-        let numMessages = keyValueBatch.Length
-        let results = Array.zeroCreate<DeliveryReport<_,_>> numMessages
-        let numCompleted = ref 0
-
-        use _ = ct.Register(fun _ -> tcs.TrySetCanceled() |> ignore)
-
-        let handler (m : DeliveryReport<string,string>) =
-            if m.Error.IsError then
-                let errorMsg = exn (sprintf "Error on message topic=%s code=%O reason=%s" m.Topic m.Error.Code m.Error.Reason)
-                tcs.TrySetException errorMsg |> ignore
-            else
-                let i = Interlocked.Increment numCompleted
-                results.[i - 1] <- m
-                if i = numMessages then tcs.TrySetResult results |> ignore 
-        for key,value in keyValueBatch do
-            inner.Produce(topic, Message<_,_>(Key=key, Value=value), deliveryHandler = handler)
-        inner.Flush(ct)
-        log.Debug("Produced {count}",!numCompleted)
-        return! Async.AwaitTaskCorrect tcs.Task }
-
-    static member Create(log : ILogger, config : KafkaProducerConfig, topic : string) =
-        if String.IsNullOrEmpty topic then nullArg "topic"
-        log.Information("Producing... {broker} / {topic} compression={compression} acks={acks}", config.Broker, topic, config.Compression, config.Acks)
-        let producer =
-            ProducerBuilder<string, string>(config.Kvps)
-                .SetLogHandler(fun _p m -> log.Information("{message} level={level} name={name} facility={facility}", m.Message, m.Level, m.Name, m.Facility))
-                .SetErrorHandler(fun _p e -> log.Error("{reason} code={code} isBrokerError={isBrokerError}", e.Reason, e.Code, e.IsBrokerError))
-                .Build()
-        new KafkaProducer(log, producer, topic)
-
 module Codec =
     /// Rendition of an event when being projected as Spans to Kafka
     type [<NoEquality; NoComparison>] RenderedSpanEvent =

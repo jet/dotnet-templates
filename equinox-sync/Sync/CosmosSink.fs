@@ -70,7 +70,7 @@ module Writer =
         | ResultKind.TooLarge | ResultKind.Malformed -> true
 
 type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
-    inherit Stats<(int*int)*Writer.Result,(int*int)*exn>(log, statsInterval, statesInterval)
+    inherit Scheduling.Stats<(int*int)*Writer.Result,(int*int)*exn>(log, statsInterval, statesInterval)
     let okStreams, resultOk, resultDup, resultPartialDup, resultPrefix, resultExnOther = HashSet(), ref 0, ref 0, ref 0, ref 0, ref 0
     let badCats, failStreams, rateLimited, timedOut, tooLarge, malformed = CatStats(), HashSet(), ref 0, ref 0, ref 0, ref 0
     let rlStreams, toStreams, tlStreams, mfStreams, oStreams = HashSet(), HashSet(), HashSet(), HashSet(), HashSet()
@@ -120,7 +120,7 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
 
 type Scheduler =
     static member Start(log : Serilog.ILogger, cosmosContexts : _ [], maxWriters, categorize, (statsInterval, statesInterval))
-            : Scheduling.Engine<(int*int)*Result,(int*int)*exn> =
+            : ISchedulingEngine =
         let writerResultLog = log.ForContext<Writer.Result>()
         let mutable robin = 0
         let attemptWrite (_writePos,batch) = async {
@@ -145,4 +145,4 @@ type Scheduler =
             Writer.logTo writerResultLog (stream,res)
             wp
         let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, statesInterval)
-        Engine<(int*int)*Writer.Result,_>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))
+        Engine<(int*int)*Writer.Result,_>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize)) :> _

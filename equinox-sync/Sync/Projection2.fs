@@ -214,6 +214,14 @@ module Buffer =
             if waitingCats.Any then log.Information("Waiting Categories, events {@readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
             if waitingCats.Any then log.Information("Waiting Streams, KB {@readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
 
+type ISchedulingEngine =
+    abstract member Stop : unit -> unit
+    /// Enqueue a batch of items with supplied progress marking function
+    /// Submission is accepted on trust; they are internally processed in order of submission
+    /// caller should ensure that (when multiple submitters are in play) no single Range submits more than their fair share
+    abstract member Submit : markCompleted : (unit -> unit) * items : StreamItem[] -> unit
+    abstract member SubmitStreamBuffers : Buffer.Streams -> unit
+
 module Scheduling =
 
     open Buffer
@@ -309,13 +317,13 @@ module Scheduling =
 
     /// Messages used internally by projector, including synthetic ones for the purposes of the `Stats` listeners
     [<NoComparison; NoEquality>]
-    type InternalMessage<'R,'E> =
+    type InternalMessage<'R> =
         /// Periodic submission of events as they are read, grouped by stream for efficient merging into the StreamState
         | Merge of Streams
         /// Stats per submitted batch for stats listeners to aggregate
         | Added of streams: int * skip: int * events: int
         /// Result of processing on stream - result (with basic stats) or the `exn` encountered
-        | Result of stream: string * outcome: Choice<'R,'E>
+        | Result of stream: string * outcome: 'R
        
     type BufferState = Idle | Busy | Full | Slipstreaming
     /// Gathers stats pertaining to the core projection/ingestion activity
@@ -334,7 +342,7 @@ module Scheduling =
             log.Information("Scheduling Streams {mt:n1}s Batches {it:n1}s Dispatch {ft:n1}s Results {dt:n1}s Stats {st:n1}s",
                 mt.TotalSeconds, it.TotalSeconds, ft.TotalSeconds, dt.TotalSeconds, st.TotalSeconds)
             dt <- TimeSpan.Zero; ft <- TimeSpan.Zero; it <- TimeSpan.Zero; st <- TimeSpan.Zero; mt <- TimeSpan.Zero
-        abstract member Handle : InternalMessage<'R,'E> -> unit
+        abstract member Handle : InternalMessage<Choice<'R,'E>> -> unit
         default __.Handle msg = msg |> function
             | Merge buffer ->
                 mergedStreams := !mergedStreams + buffer.StreamCount
@@ -398,11 +406,11 @@ module Scheduling =
     /// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
     /// c) submits work to the supplied Dispatcher (which it triggers pumping of)
     /// d) periodically reports state (with hooks for ingestion engines to report same)
-    type Engine<'R,'E>(dispatcher : Dispatcher<_>, project : int64 option * StreamSpan -> Async<Choice<'R,'E>>, interpretProgress, dumpStreams, ?maxBatches) =
+    type Engine<'R,'E>(dispatcher : Dispatcher<_>, stats : Stats<'R,'E>, project : int64 option * StreamSpan -> Async<Choice<_,_>>, interpretProgress, dumpStreams, ?maxBatches) =
         let sleepIntervalMs = 1
         let maxBatches = defaultArg maxBatches 16 
         let cts = new CancellationTokenSource()
-        let work = ConcurrentStack<InternalMessage<'R,'E>>() // dont need them ordered so Queue is unwarranted; usage is cross-thread so Bag is not better
+        let work = ConcurrentStack<InternalMessage<Choice<'R,'E>>>() // dont need them ordered so Queue is unwarranted; usage is cross-thread so Bag is not better
         let pending = ConcurrentQueue<_*StreamItem[]>() // Queue as need ordering
         let streams = StreamStates()
         let progressState = Progress.State()
@@ -481,7 +489,7 @@ module Scheduling =
             progressState.AppendBatch(markCompleted,reqs)
             feedStats <| Added (reqs.Count,skipCount,count)
 
-        member private __.Pump(stats : Stats<'R,'E>) = async {
+        member private __.Pump = async {
             use _ = dispatcher.Result.Subscribe(Result >> work.Push)
             Async.Start(dispatcher.Pump(), cts.Token)
             Async.Start(continuouslyCompactStreamMerges (), cts.Token)
@@ -531,23 +539,16 @@ module Scheduling =
                     // 4. Do a minimal sleep so we don't run completely hot when empty (unless we did something non-trivial)
                     Thread.Sleep sleepIntervalMs } // Not Async.Sleep so we don't give up the thread
 
-        static member Start<'R>(stats, projectorDop, project, interpretProgress, dumpStreams) =
+        static member Start(stats, projectorDop, project, interpretProgress, dumpStreams) =
             let dispatcher = Dispatcher(projectorDop)
-            let instance = new Engine<'R,'E>(dispatcher, project, interpretProgress, dumpStreams)
-            Async.Start <| instance.Pump(stats)
+            let instance = new Engine<_,_>(dispatcher, stats, project, interpretProgress, dumpStreams)
+            Async.Start instance.Pump
             instance
 
-        /// Enqueue a batch of items with supplied progress marking function
-        /// Submission is accepted on trust; they are internally processed in order of submission
-        /// caller should ensure that (when multiple submitters are in play) no single Range submits more than their fair share
-        member __.Submit(markCompleted: (unit -> unit), items: StreamItem[]) =
-            pending.Enqueue (markCompleted, items)
-
-        member __.SubmitStreamBuffers(events) =
-            work.Push <| Merge events
-
-        member __.Stop() =
-            cts.Cancel()
+        interface ISchedulingEngine with
+            member __.Stop() = cts.Cancel()
+            member __.Submit(markCompleted: (unit -> unit), items : StreamItem[]) = pending.Enqueue (markCompleted, items)
+            member __.SubmitStreamBuffers streams = work.Push <| Merge streams
 
 module Ingestion =
 
@@ -624,7 +625,7 @@ module Ingestion =
         | false, _ -> None
     
     /// Holds batches away from Core processing to limit in-flight processing
-    type Engine<'R,'E>(log : ILogger, scheduler: Scheduling.Engine<'R,'E>, maxRead, maxSubmissions, initialSeriesIndex, categorize, statsInterval : TimeSpan, ?pumpDelayMs) =
+    type Engine(log : ILogger, scheduler: ISchedulingEngine, maxRead, maxSubmissions, initialSeriesIndex, categorize, statsInterval : TimeSpan, ?pumpDelayMs) =
         let cts = new CancellationTokenSource()
         let pumpDelayMs = defaultArg pumpDelayMs 5
         let work = ConcurrentQueue<InternalMessage>() // Queue as need ordering semantically
@@ -685,7 +686,7 @@ module Ingestion =
             | Added _
             | ProgressResult _ -> ()
 
-        member private __.Pump() = async {
+        member private __.Pump = async {
             use _ = progressWriter.Result.Subscribe(ProgressResult >> work.Enqueue)
             Async.Start(progressWriter.Pump(), cts.Token)
             let presubmitInterval = expiredMs (4000L*2L)
@@ -714,9 +715,9 @@ module Ingestion =
                 with e -> log.Error(e,"Buffer thread exception") }
 
         /// Generalized; normal usage is via Ingester.Start, this is used by the `eqxsync` template to handle striped reading for bulk ingestion purposes
-        static member Start<'R>(log, scheduler, maxRead, maxSubmissions, startingSeriesId, categorize, statsInterval) =
-            let instance = new Engine<'R,'E>(log, scheduler, maxRead, maxSubmissions, startingSeriesId, categorize, statsInterval = statsInterval)
-            Async.Start <| instance.Pump()
+        static member Start(log, scheduler, maxRead, maxSubmissions, startingSeriesId, categorize, statsInterval) =
+            let instance = new Engine(log, scheduler, maxRead, maxSubmissions, startingSeriesId, categorize, statsInterval = statsInterval)
+            Async.Start instance.Pump
             instance
 
         /// Awaits space in `read` to limit reading ahead - yields (used,maximum) counts from Read Semaphore for logging purposes

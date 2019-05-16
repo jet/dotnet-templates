@@ -22,7 +22,7 @@ type Ingester =
     /// Starts an Ingester that will submit up to `maxSubmissions` items at a time to the `scheduler`, blocking on Submits when more than `maxRead` batches have yet to complete processing 
     static member Start<'R,'E>(log, scheduler, maxRead, maxSubmissions, categorize, ?statsInterval) : IIngester<int64,StreamItem> =
         let singleSeriesIndex = 0
-        let instance = Ingestion.Engine<'R,'E>.Start(log, scheduler, maxRead, maxSubmissions, singleSeriesIndex, categorize, statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 1.))
+        let instance = Ingestion.Engine.Start(log, scheduler, maxRead, maxSubmissions, singleSeriesIndex, categorize, statsInterval = defaultArg statsInterval (TimeSpan.FromMinutes 1.))
         { new IIngester<int64,StreamItem> with
             member __.Submit(epoch, markCompleted, items) : Async<int*int> =
                 instance.Submit(Ingestion.Message.Batch(singleSeriesIndex, epoch, markCompleted, items))
