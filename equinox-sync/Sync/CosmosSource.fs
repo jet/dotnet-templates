@@ -76,12 +76,7 @@ module EventV0Parser =
             tmp.GetPropertyValue<'T>("content")
 
     /// Maps fields in an Equinox V0 Event within an Eqinox.Cosmos Event (in a Batch or Tip) to the interface defined by the default Codec
-    let (|StandardCodecEvent|) (x: EventV0) =
-        { new Equinox.Codec.IEvent<_> with
-            member __.EventType = x.t
-            member __.Data = x.d
-            member __.Meta = null
-            member __.Timestamp = x.c }
+    let (|StandardCodecEvent|) (x: EventV0) = Equinox.Codec.Core.EventData.Create(x.t, x.d, timestamp = x.c)
 
     /// We assume all Documents represent Events laid out as above
     let parse (d : Document) : StreamItem =

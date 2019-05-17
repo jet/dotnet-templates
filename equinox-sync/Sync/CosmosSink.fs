@@ -147,4 +147,4 @@ type Scheduler =
             Writer.logTo writerResultLog (stream,res)
             wp
         let projectionAndCosmosStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, statesInterval)
-        Engine<(int*int)*Writer.Result,_>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize)) :> _
+        Engine<_,_>.Start(projectionAndCosmosStats, maxWriters, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize)) :> _
