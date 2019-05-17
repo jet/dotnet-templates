@@ -50,12 +50,15 @@ module Writer =
         log.Debug("Result: {res}",ress)
         return ress }
     let (|TimedOutMessage|RateLimitedMessage|TooLargeMessage|MalformedMessage|Other|) (e: exn) =
-        match string e with
-        | m when m.Contains "Microsoft.Azure.Documents.RequestTimeoutException" -> TimedOutMessage
-        | m when m.Contains "Microsoft.Azure.Documents.RequestRateTooLargeException" -> RateLimitedMessage
-        | m when m.Contains "Microsoft.Azure.Documents.RequestEntityTooLargeException" -> TooLargeMessage
-        | m when m.Contains "SyntaxError: JSON.parse Error: Unexpected input at position"
-             || m.Contains "SyntaxError: JSON.parse Error: Invalid character at position" -> MalformedMessage
+        let isMalformed () =
+            let m = string e
+            m.Contains "SyntaxError: JSON.parse Error: Unexpected input at position"
+             || m.Contains "SyntaxError: JSON.parse Error: Invalid character at position"
+        match e.GetType().Name with
+        | "Microsoft.Azure.Documents.RequestTimeoutException" -> TimedOutMessage
+        | "Microsoft.Azure.Documents.RequestRateTooLargeException" -> RateLimitedMessage
+        | "Microsoft.Azure.Documents.RequestEntityTooLargeException" -> TooLargeMessage
+        | _ when isMalformed () -> MalformedMessage
         | _ -> Other
 
     let classify = function
