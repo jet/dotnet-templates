@@ -179,26 +179,26 @@ module Logging =
             // LibLog writes to the global logger, so we need to control the emission
             |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
-                        let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
+            |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
                         let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                         let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                        (if verboseConsole then c else c.Filter.ByExcluding(fun x -> isEqx x || isCfp429a x || isCfp429b x || isCfp429c x))
-                            .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+                        if changeLogVerbose then c else c.Filter.ByExcluding(fun x -> isCfp429a x || isCfp429b x || isCfp429c x)
+            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
+                        c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let dropLargeData (x : Equinox.Codec.IEvent<_[]>) =
+let replaceLongDataWithNull (x : Equinox.Codec.IEvent<_[]>) =
     if x.Data.Length < 900_000 then x
     else Equinox.Codec.Core.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
 
-let hackDropLargeMessages (e : Equinox.Projection.StreamItem) =
-    { stream = e.stream; index = e.index; event = dropLargeData e.event }
+let hackDropBigBodies (e : Equinox.Projection.StreamItem) =
+    { stream = e.stream; index = e.index; event = replaceLongDataWithNull e.event }
 
 let mapContent (docs : Microsoft.Azure.Documents.Document seq) : StreamItem seq =
     docs
     |> Seq.collect DocumentParser.enumEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent
-    //>> Seq.map hackDropLargeMessages
+    //>> Seq.map hackDropBigBodies
 
 [<EntryPoint>]
 let main argv =
