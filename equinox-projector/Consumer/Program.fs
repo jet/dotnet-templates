@@ -42,15 +42,15 @@ module EventParser =
             interface TypeShape.UnionContract.IUnionContract
         let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
     
-    let tryExtractCategory (x : RenderedEvent) =
-        x.s.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries)
+    let tryExtractCategory (stream : string) =
+        stream.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries)
         |> Array.tryHead
-    let tryDecode (log : ILogger) (codec : Equinox.Codec.IUnionEncoder<_,_>) (x : RenderedEvent) =
-        match codec.TryDecode (Equinox.Codec.Core.EventData.Create(x.c, x.d)) with
+    let tryDecode (log : ILogger) (stream : string) (codec : Equinox.Codec.IUnionEncoder<_,_>) (x : Equinox.Codec.IEvent<byte[]>) =
+        match codec.TryDecode x with
         | None ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.d), true)
-                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.c, x.s);
+                log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
+                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, stream);
             None
         | Some e -> Some e
 
@@ -60,15 +60,16 @@ module EventParser =
         let log = Log.ForContext<Interpreter>()
 
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
-        member __.TryDecode(x : Confluent.Kafka.ConsumeResult<_,_>) =
-            let ke = JsonConvert.DeserializeObject<RenderedEvent>(x.Value)
-            match tryExtractCategory ke with
-            | Some "Favorites" -> tryDecode log Favorites.codec ke |> Option.map Choice1Of2
-            | Some "SavedForLater" -> tryDecode log SavedForLater.codec ke |> Option.map Choice2Of2
+        member __.TryDecode(x : Confluent.Kafka.ConsumeResult<_,_>) = seq {
+            let span = JsonConvert.DeserializeObject<RenderedSpan>(x.Value)
+            let events = span |> RenderedSpan.enumEvents
+            match tryExtractCategory span.s with
+            | Some "Favorites" -> yield! events |> Seq.choose (tryDecode log span.s Favorites.codec >> Option.map Choice1Of2)
+            | Some "SavedForLater" -> yield! events |> Seq.choose (tryDecode log span.s SavedForLater.codec >> Option.map Choice2Of2)
             | x ->
                 if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                    log.ForContext("event", ke).Debug("Event could not be interpreted due to unknown category {category}", x)
-                None
+                    log.ForContext("span", span).Debug("Span could not be interpreted due to unknown category {category}", x)
+                () }
 
 module Consumer =
     open EventParser
@@ -94,13 +95,13 @@ module Consumer =
                 | Choice1Of2 fe -> handleFave fe
                 | Choice2Of2 se -> handleSave se
             }
-            let! _ =
+            let! res =
                 msgs
-                |> Seq.choose decoder.TryDecode
+                |> Seq.collect decoder.TryDecode
                 |> Seq.map (handle >> dop.Throttle)
                 |> Async.Parallel
             log.Information("Consumed {b} Favorited {f} Unfavorited {u} Saved {s} Cleared {c}",
-                Array.length msgs, favorited, unfavorited, saved, cleared)
+                Array.length res, favorited, unfavorited, saved, cleared)
         }
         KafkaConsumer.Start log cfg consume
 

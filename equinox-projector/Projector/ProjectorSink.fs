@@ -1,6 +1,6 @@
 ﻿module ProjectorTemplate.Projector.ProjectorSink
 
-open Equinox.Projection2
+open Equinox.Projection
 open System
 
 type Scheduler =

@@ -4,7 +4,6 @@ open Equinox.Cosmos
 open Equinox.Store // Stopwatch.Time
 open Equinox.Cosmos.Projection
 open Equinox.Projection
-open Equinox.Projection2
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
 open Serilog
@@ -187,14 +186,18 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let TODOremove (e : Equinox.Projection.StreamItem) =
-    let e2 =
-        { new Equinox.Codec.IEvent<_> with
-            member __.Data = if e.event.Data.Length > 900_000 then null else e.event.Data
-            member __.Meta = e.event.Meta
-            member __.EventType = e.event.EventType 
-            member __.Timestamp = e.event.Timestamp }
-    { stream = e.stream; index = e.index; event = e2 }
+let dropLargeData (x : Equinox.Codec.IEvent<_[]>) =
+    if x.Data.Length < 900_000 then x
+    else Equinox.Codec.Core.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
+
+let hackDropLargeMessages (e : Equinox.Projection.StreamItem) =
+    { stream = e.stream; index = e.index; event = dropLargeData e.event }
+
+let mapContent (docs : Microsoft.Azure.Documents.Document seq) : StreamItem seq =
+    docs
+    |> Seq.collect DocumentParser.enumEvents
+    // TODO use Seq.filter and/or Seq.map to adjust what's being sent
+    //>> Seq.map hackDropLargeMessages
 
 [<EntryPoint>]
 let main argv =
@@ -205,9 +208,8 @@ let main argv =
         let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
 #if kafka
         let (broker,topic) = args.Target.BuildTargetParams()
-        let scheduler = ProjectorTemplate.KafkaSink.Scheduler.Start(Log.Logger, "ProjectorTemplate", broker, topic, maxConcurrentStreams, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.))
-        let createIngester rangeLog = SyncTemplate.ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize, TimeSpan.FromMinutes 10.)
-        let mapContent : Microsoft.Azure.Documents.Document seq -> StreamItem seq = Seq.collect DocumentParser.enumEvents >> Seq.map TODOremove 
+        let scheduler = KafkaSink.Scheduler.Start(Log.Logger, "ProjectorTemplate", broker, topic, maxConcurrentStreams, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.))
+        let createIngester rangeLog = ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize, TimeSpan.FromMinutes 10.)
 #else
         let project (batch : Buffer.StreamSpan) = async { 
             let r = Random()
@@ -216,7 +218,6 @@ let main argv =
             return batch.span.events.Length }
         let scheduler = ProjectorSink.Scheduler.Start(Log.Logger, maxConcurrentStreams, project, categorize, TimeSpan.FromMinutes 1.)
         let createIngester rangeLog = ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize)
-        let mapContent : Microsoft.Azure.Documents.Document seq -> StreamItem seq = Seq.collect DocumentParser.enumEvents >> Seq.map TODOremove
 #endif
         run Log.Logger discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromTail, maxDocuments, lagFrequency)
