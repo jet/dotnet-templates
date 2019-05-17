@@ -4,7 +4,6 @@ open Equinox.Cosmos
 open Equinox.Store // Stopwatch.Time
 open Equinox.Cosmos.Projection
 open Equinox.Projection
-open Equinox.Projection2
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
 open Serilog
@@ -67,6 +66,7 @@ module CmdParser =
         | [<AltCommandLine("-z"); Unique>] FromTail
         | [<AltCommandLine("-md"); Unique>] MaxDocuments of int
         | [<AltCommandLine "-r"; Unique>] MaxReadAhead of int
+        | [<AltCommandLine "-rw"; Unique>] MaxSubmissionsPerRange of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine("-l"); Unique>] LagFreqS of float
         | [<AltCommandLine("-v"); Unique>] Verbose
@@ -75,8 +75,6 @@ module CmdParser =
         (* Kafka Args *)
         | [<AltCommandLine("-b"); Unique>] Broker of string
         | [<AltCommandLine("-t"); Unique>] Topic of string
-//#else
-        | [<AltCommandLine "-rw"; Unique>] MaxSubmissionsPerRange of int
 //#endif
         (* ChangeFeed Args *)
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
@@ -88,6 +86,7 @@ module CmdParser =
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
+                | MaxSubmissionsPerRange _ -> "Maximum number of batches to submit to the processor at any time. Default: 32"
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
@@ -95,16 +94,12 @@ module CmdParser =
 //#if kafka
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable EQUINOX_KAFKA_BROKER, if specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable EQUINOX_KAFKA_TOPIC, if specified)"
-//#else
-                | MaxSubmissionsPerRange _ -> "Maximum number of batches to submit to the processor at any time. Default: 32"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(args : ParseResults<Parameters>) =
         member val Cosmos = Cosmos.Arguments(args.GetResult Cosmos)
 //#if kafka
         member val Target = TargetInfo args
-//#else
-        member __.MaxSubmissionPerRange =   args.GetResult(MaxSubmissionsPerRange,32)
 //#endif
         member __.LeaseId =                 args.GetResult ConsumerGroupName
         member __.Suffix =                  args.GetResult(LeaseCollectionSuffix,"-aux")
@@ -112,6 +107,7 @@ module CmdParser =
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
+        member __.MaxSubmissionsPerRange =  args.GetResult(MaxSubmissionsPerRange,32)
         member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,64)
         member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
@@ -126,7 +122,7 @@ module CmdParser =
             if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.LagFrequency,
-            (x.MaxReadAhead, x.MaxSubmissionPerRange, x.ConcurrentStreamProcessors)
+            (x.MaxReadAhead, x.MaxSubmissionsPerRange, x.ConcurrentStreamProcessors)
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
@@ -187,14 +183,18 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let TODOremove (e : Equinox.Projection.StreamItem) =
-    let e2 =
-        { new Equinox.Codec.IEvent<_> with
-            member __.Data = if e.event.Data.Length > 900_000 then null else e.event.Data
-            member __.Meta = e.event.Meta
-            member __.EventType = e.event.EventType 
-            member __.Timestamp = e.event.Timestamp }
-    { stream = e.stream; index = e.index; event = e2 }
+let dropLargeData (x : Equinox.Codec.IEvent<_[]>) =
+    if x.Data.Length < 900_000 then x
+    else Equinox.Codec.Core.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
+
+let hackDropLargeMessages (e : Equinox.Projection.StreamItem) =
+    { stream = e.stream; index = e.index; event = dropLargeData e.event }
+
+let mapContent (docs : Microsoft.Azure.Documents.Document seq) : StreamItem seq =
+    docs
+    |> Seq.collect DocumentParser.enumEvents
+    // TODO use Seq.filter and/or Seq.map to adjust what's being sent
+    //>> Seq.map hackDropLargeMessages
 
 [<EntryPoint>]
 let main argv =
@@ -203,20 +203,18 @@ let main argv =
         let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
         let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxSubmissionsPerRange, maxConcurrentStreams) = args.BuildChangeFeedParams()
         let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
-#if !nokafka
+#if kafka
         let (broker,topic) = args.Target.BuildTargetParams()
-        let scheduler = ProjectorTemplate.KafkaSink.Scheduler.Start(Log.Logger, "ProjectorTemplate", broker, topic, maxConcurrentStreams, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.))
-        let createIngester rangeLog = SyncTemplate.ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize, TimeSpan.FromMinutes 10.)
-        let mapContent : Microsoft.Azure.Documents.Document seq -> StreamItem seq = Seq.collect DocumentParser.enumEvents >> Seq.map TODOremove 
+        let scheduler = KafkaSink.Scheduler.Start(Log.Logger, "ProjectorTemplate", broker, topic, maxConcurrentStreams, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.))
+        let createIngester rangeLog = ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize, TimeSpan.FromMinutes 10.)
 #else
         let project (batch : Buffer.StreamSpan) = async { 
             let r = Random()
             let ms = r.Next(1,batch.span.events.Length * 10)
             do! Async.Sleep ms
             return batch.span.events.Length }
-        let scheduler = ProjectorSink.Scheduler.Start (Log.Logger, projectionDop, project, categorize, TimeSpan.FromMinutes 1.)
+        let scheduler = ProjectorSink.Scheduler.Start(Log.Logger, maxConcurrentStreams, project, categorize, TimeSpan.FromMinutes 1.)
         let createIngester rangeLog = ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize)
-        let mapContent : Microsoft.Azure.Documents.Document seq -> StreamItem seq = Seq.collect DocumentParser.enumEvents >> Seq.map TODOremove
 #endif
         run Log.Logger discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromTail, maxDocuments, lagFrequency)

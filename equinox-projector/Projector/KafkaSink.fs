@@ -1,52 +1,13 @@
-﻿module ProjectorTemplate.KafkaSink
+﻿module ProjectorTemplate.Projector.KafkaSink
 
 open Confluent.Kafka
-open Equinox.Projection2
-open Equinox.Projection.Codec
-open Equinox.Store
-open Jet.ConfluentKafka.FSharp
-open Newtonsoft.Json
-open System
-
-module Codec =
-    /// Rendition of an event when being projected as Spans to Kafka
-    type [<NoEquality; NoComparison>] RenderedSpanEvent =
-        {   /// Event Type associated with event data in `d`
-            c: string
-
-            /// Timestamp of original write
-            t: DateTimeOffset // ISO 8601
-
-            /// Event body, as UTF-8 encoded json ready to be injected directly into the Json being rendered
-            [<JsonConverter(typeof<Equinox.Cosmos.Internal.Json.VerbatimUtf8JsonConverter>)>]
-            d: byte[] // required
-
-            /// Optional metadata, as UTF-8 encoded json, ready to emit directly (entire field is not written if value is null)
-            [<JsonConverter(typeof<Equinox.Cosmos.Internal.Json.VerbatimUtf8JsonConverter>)>]
-            [<JsonProperty(Required=Required.Default, NullValueHandling=NullValueHandling.Ignore)>]
-            m: byte[] }
-
-    /// A 'normal' (frozen, not Tip) Batch of Events (without any Unfolds)
-    type [<NoEquality; NoComparison>]
-        RenderedSpan =
-        {   /// base 'i' value for the Events held herein
-            i: int64
-
-            /// The Events comprising this span
-            e: RenderedSpanEvent[] }
-
-    module RenderedSpan =
-        let ofStreamSpan (x: Buffer.StreamSpan) : RenderedSpan =
-            { i = x.span.index; e = [| for x in x.span.events -> { c = x.EventType; t = x.Timestamp; d = x.Data; m = x.Meta }|] }
-            
-open Equinox.Cosmos.Core
 open Equinox.Cosmos.Store
 open Equinox.Projection
-open Equinox.Projection2
-open Equinox.Projection2.Buffer
-open Equinox.Projection2.Scheduling
+open Equinox.Projection.Buffer
+open Equinox.Projection.Scheduling
+open Jet.ConfluentKafka.FSharp
+open Newtonsoft.Json
 open Serilog
-open System.Threading
 open System.Collections.Generic
 
 [<AutoOpen>]
@@ -96,7 +57,7 @@ type Scheduler =
             let maxEvents, maxBytes = 16384, 1_000_000 - (*fudge*)4096
             let ((eventCount,_) as stats), span' = Span.slice (maxEvents,maxBytes) fullBuffer.span
             let trimmed = { fullBuffer with span = span' }
-            let rendered = Codec.RenderedSpan.ofStreamSpan trimmed
+            let rendered = Codec.RenderedSpan.ofStreamSpan trimmed.stream trimmed.span.index trimmed.span.events
             try let! res = producer.ProduceAsync(trimmed.stream,JsonConvert.SerializeObject(rendered))
                 return Choice1Of2 (trimmed.span.index + int64 eventCount,stats,res)
             with e -> return Choice2Of2 (stats,e) }
