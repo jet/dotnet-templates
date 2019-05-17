@@ -20,10 +20,11 @@ module CmdParser =
         | [<AltCommandLine "-S"; Unique>] LocalSeq
         | [<AltCommandLine "-v"; Unique>] Verbose
         | [<AltCommandLine "-z"; Unique>] FromTail
-        | [<AltCommandLine "-mi"; Unique>] BatchSize of int
         | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
-        | [<AltCommandLine "-mp"; Unique>] MaxProcessing of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
+        | [<AltCommandLine "-cc"; Unique>] MaxCosmosConnections of int
+        | [<AltCommandLine "-mp"; Unique>] MaxProcessing of int
+        | [<AltCommandLine "-md"; Unique>] MaxDocuments of int
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
         | [<AltCommandLine "-as"; Unique>] LeaseCollectionSource of string
         | [<AltCommandLine "-ad"; Unique>] LeaseCollectionDestination of string
@@ -35,12 +36,13 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 2048"
-                | MaxProcessing _ ->        "Maximum number of batches to process concurrently. Default: 128"
                 | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 512"
+                | MaxCosmosConnections _ -> "Size of CosmosDb connection pool to maintain. Default: 1"
+                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 32"
+                | MaxProcessing _ ->        "Maximum number of batches to submit concurrently. Default: 16"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | BatchSize _ ->            "maximum item count to request from feed. Default: 1000"
+                | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
                 | LeaseCollectionSource _ ->"specify Collection Name for Leases collection, within `source` connection/database (default: `source`'s `collection` + `-aux`)."
                 | LeaseCollectionDestination _ -> "specify Collection Name for Leases collection, within [destination] `cosmos` connection/database (default: defined relative to `source`'s `collection`)."
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
@@ -48,14 +50,14 @@ module CmdParser =
     and Arguments(a : ParseResults<Parameters>) =
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.Verbose =             a.Contains Verbose
-        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,1000)
-        member __.MaxProcessing =       a.GetResult(MaxProcessing,32)
         member __.MaxWriters =          a.GetResult(MaxWriters,1024)
+        member __.CosmosConnectionPool =a.GetResult(MaxCosmosConnections,1)
+        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,32)
+        member __.MaxProcessing =       a.GetResult(MaxProcessing,16)
         member __.ChangeFeedVerbose =   a.Contains ChangeFeedVerbose
         member __.LeaseId =             a.GetResult ConsumerGroupName
-        member __.BatchSize =           a.GetResult(BatchSize,1000)
+        member __.MaxDocuments =        a.TryGetResult MaxDocuments
         member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
-
         member val Source : SourceArguments = SourceArguments(a.GetResult Source)
         member __.Destination : DestinationArguments = __.Source.Destination
         member x.BuildChangeFeedParams() =
@@ -65,10 +67,11 @@ module CmdParser =
                 | Some sc, None ->  x.Source.Discovery, { database = x.Source.Database; collection = sc }
                 | None, Some dc ->  x.Destination.Discovery, { database = x.Destination.Database; collection = dc }
                 | Some _, Some _ -> raise (InvalidArguments "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
-            Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} in batches of {batchSize}", x.LeaseId, db.database, db.collection, x.BatchSize)
+            Log.Information("Max read backlog: {maxPending}, of which up to {maxProcessing} processing", x.MaxPendingBatches, x.MaxProcessing)
+            Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} with maximum document count limited to {maxDocuments}", x.LeaseId, db.database, db.collection, x.MaxDocuments)
             if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
-            disco, db, x.LeaseId, a.Contains FromTail, x.BatchSize, x.LagFrequency
+            disco, db, x.LeaseId, a.Contains FromTail, x.MaxDocuments, x.LagFrequency
     and [<NoEquality; NoComparison>] SourceParameters =
         | [<AltCommandLine "-m">] SourceConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-o">] SourceTimeout of float
@@ -178,17 +181,17 @@ module Logging =
                         let cfpLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
             |> fun c -> let ingesterLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<Equinox.Projection.State.StreamStates>.FullName, ingesterLevel)
+                        c.MinimumLevel.Override(typeof<Equinox.Projection.Scheduling.StreamStates>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
-                        c.MinimumLevel.Override(typeof<Equinox.Cosmos.Projection.CosmosIngester.Writer.Result>.FullName, generalLevel)
+                        c.MinimumLevel.Override(typeof<CosmosSink.Writer.Result>.FullName, generalLevel)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
                         let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                             a.Logger(fun l ->
                                 l.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.RuCounters.RuCounterSink()) |> ignore) |> ignore
                             a.Logger(fun l ->
                                 let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
-                                let isWriter = Filters.Matching.FromSource<Equinox.Cosmos.Projection.CosmosIngester.Writer.Result>().Invoke
+                                let isWriter = Filters.Matching.FromSource<CosmosSink.Writer.Result>().Invoke
                                 let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
                                 let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                                 let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
@@ -198,28 +201,29 @@ module Logging =
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
-        Log.ForContext<Equinox.Projection.State.StreamStates>(), Log.ForContext<Core.CosmosContext>()
+        Log.ForContext<Equinox.Projection.Scheduling.StreamStates>(), Log.ForContext<Core.CosmosContext>()
 
 [<EntryPoint>]
 let main argv =
-    try let args = CmdParser.parse argv
+    try //if not (System.Threading.ThreadPool.SetMaxThreads(512,512)) then raise (CmdParser.InvalidArguments "Could not set thread limits")
+        let args = CmdParser.parse argv
         let log,storeLog = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
-        let target =
-            let destination = args.Destination.Connect "SyncTemplate" |> Async.RunSynchronously
-            let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
-            Equinox.Cosmos.Core.CosmosContext(destination, colls, storeLog)
+        let destinations = Seq.init args.CosmosConnectionPool (fun i -> args.Destination.Connect (sprintf "%s Pool %d" "SyncTemplate" i)) |> Async.Parallel |> Async.RunSynchronously
+        let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
+        let targets = destinations |> Array.mapi (fun i x -> Equinox.Cosmos.Core.CosmosContext(x, colls, storeLog.ForContext("PoolId", i)))
+        let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
         let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
-        let auxDiscovery, aux, leaseId, startFromHere, batchSize, lagFrequency = args.BuildChangeFeedParams()
+        let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
 #if marveleqx
-        let createSyncHandler = CosmosSource.createRangeSyncHandler log args.MaxPendingBatches (target, args.MaxWriters) (CosmosSource.transformV0 catFilter)
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformV0 categorize catFilter)
 #else
-        let createSyncHandler = CosmosSource.createRangeSyncHandler log args.MaxPendingBatches (target, args.MaxWriters) (CosmosSource.transformOrFilter catFilter)
-        // Uncomment to test marveleqx mode
-        // let createSyncHandler () = CosmosSource.createRangeSyncHandler log target (CosmosSource.transformV0 catFilter)
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformOrFilter categorize catFilter)
 #endif
-        CosmosSource.run (discovery, source) (auxDiscovery, aux) connectionPolicy
-            (leaseId, startFromHere, batchSize, lagFrequency)
-            createSyncHandler
+        CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
+            (leaseId, startFromHere, maxDocuments, lagFrequency)
+            (targets, args.MaxWriters)
+            categorize
+            (createSyncHandler (args.MaxPendingBatches,args.MaxProcessing) categorize)
         |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

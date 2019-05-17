@@ -13,8 +13,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
-<a name="2.2.0"></a>
-## [2.2.0] - 2019-05-17
+<a name="2.2.1"></a>
+## [2.2.1] - 2019-05-17
 
 ### Added
 
@@ -89,8 +89,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.2.0...HEAD
-[2.2.0]: https://github.com/jet/dotnet-templates/compare/2.1.2...2.2.0
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.2.1...HEAD
+[2.2.0]: https://github.com/jet/dotnet-templates/compare/2.1.2...2.2.1
 [2.1.2]: https://github.com/jet/dotnet-templates/compare/2.0.0...2.1.2
 [2.0.0]: https://github.com/jet/dotnet-templates/compare/1.2.0...2.0.0
 [1.2.0]: https://github.com/jet/dotnet-templates/compare/1.1.1...1.2.0
