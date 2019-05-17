@@ -2,7 +2,6 @@
 
 open Equinox.Store // AwaitTaskCorrect
 open Equinox.Projection
-open Equinox.Projection2
 open EventStore.ClientAPI
 open Serilog // NB Needs to shadow ILogger
 open System

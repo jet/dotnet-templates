@@ -2,7 +2,6 @@
 
 open Equinox.Cosmos.Projection
 open Equinox.Projection
-open Equinox.Projection2
 open Equinox.Store // AwaitTaskCorrect
 open Microsoft.Azure.Documents
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing

@@ -3,9 +3,8 @@
 open Equinox.Cosmos.Core
 open Equinox.Cosmos.Store
 open Equinox.Projection
-open Equinox.Projection2
-open Equinox.Projection2.Buffer
-open Equinox.Projection2.Scheduling
+open Equinox.Projection.Buffer
+open Equinox.Projection.Scheduling
 open Serilog
 open System.Threading
 open System.Collections.Generic
