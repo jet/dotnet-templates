@@ -205,8 +205,7 @@ module Logging =
 
 [<EntryPoint>]
 let main argv =
-    try //if not (System.Threading.ThreadPool.SetMaxThreads(512,512)) then raise (CmdParser.InvalidArguments "Could not set thread limits")
-        let args = CmdParser.parse argv
+    try let args = CmdParser.parse argv
         let log,storeLog = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
         let destinations = Seq.init args.CosmosConnectionPool (fun i -> args.Destination.Connect (sprintf "%s Pool %d" "SyncTemplate" i)) |> Async.Parallel |> Async.RunSynchronously
         let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)

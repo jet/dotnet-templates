@@ -26,4 +26,4 @@ type Ingester =
         { new IIngester<int64,StreamItem> with
             member __.Submit(epoch, markCompleted, items) : Async<int*int> =
                 instance.Submit(Ingestion.Message.Batch(singleSeriesIndex, epoch, markCompleted, items))
-            member __.Stop() = __.Stop() } 
+            member __.Stop() = __.Stop() }

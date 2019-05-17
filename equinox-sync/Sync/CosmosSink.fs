@@ -6,8 +6,8 @@ open Equinox.Projection
 open Equinox.Projection.Buffer
 open Equinox.Projection.Scheduling
 open Serilog
-open System.Threading
 open System.Collections.Generic
+open System.Threading
 
 [<AutoOpen>]
 module private Impl =
