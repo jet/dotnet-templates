@@ -9,16 +9,23 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="2.2.0"></a>
+## [2.2.0] - 2019-05-17
+
+### Added
 
 - `dotnet new eqxprojector` uses separated read/write/progress pipeline [#22](https://github.com/jet/dotnet-templates/pull/22)
 
 ### Changed
 
-- targets `Equinox 2.0.0-preview8`
 - `dotnet new eqxprojector -k` now targets `Jet.ConfluentKafka.FSharp 1.0.0-rc7` (which targets `Confluent.Kafka 1.0.0`, `librdkafka 1.0.0`)
 - `dotnet new eqxsync` uses separated read/write/progress pipeline [#21](https://github.com/jet/dotnet-templates/pull/21)
+- targets `Equinox 2.0.0-preview8`
 
-### Removed
 ### Fixed
 
 - `dotnet new eqxprojector` correctly handles progress writing [#22](https://github.com/jet/dotnet-templates/pull/22)
@@ -82,7 +89,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.1.2...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/2.2.0...HEAD
+[2.2.0]: https://github.com/jet/dotnet-templates/compare/2.1.2...2.2.0
 [2.1.2]: https://github.com/jet/dotnet-templates/compare/2.0.0...2.1.2
 [2.0.0]: https://github.com/jet/dotnet-templates/compare/1.2.0...2.0.0
 [1.2.0]: https://github.com/jet/dotnet-templates/compare/1.1.1...1.2.0
