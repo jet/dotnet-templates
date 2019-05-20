@@ -53,11 +53,11 @@ module CmdParser =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | MaxWriters _ ->           "Maximum number of concurrent writes to target permitted. Default: 512"
-                | MaxCosmosConnections _ -> "Size of CosmosDb connection pool to maintain. Default: 1"
+                | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 512"
+                | MaxCosmosConnections _ -> "size of CosmosDb connection pool to maintain. Default: 1"
 #if cosmos
-                | MaxPendingBatches _ ->    "Maximum number of batches to let processing get ahead of completion. Default: 32"
-                | MaxProcessing _ ->        "Maximum number of batches to submit concurrently. Default: 16"
+                | MaxPendingBatches _ ->    "maximum number of batches to let processing get ahead of completion. Default: 32"
+                | MaxProcessing _ ->        "maximum number of batches to submit concurrently. Default: 16"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
@@ -180,8 +180,8 @@ module CmdParser =
                 | Password _ ->             "specify a Password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
                 | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds (default: 1.5)."
 #endif
-                | CategoryBlacklist _ ->    "Category whitelist"
-                | CategoryWhitelist _ ->    "Category blacklist"
+                | CategoryBlacklist _ ->    "category whitelist"
+                | CategoryWhitelist _ ->    "category blacklist"
                 | Cosmos _ ->               "CosmosDb destination parameters."
     and SourceArguments(a : ParseResults<SourceParameters>) =
         member val Destination =        DestinationArguments(a.GetResult Cosmos)
@@ -303,7 +303,7 @@ module Logging =
                                 let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                                 let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
                                 (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isCp x || isWriter x || isCfp429a x || isCfp429b x || isCfp429c x))
-                                    .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Grayscale, outputTemplate=t)
+                                    .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
@@ -312,8 +312,7 @@ module Logging =
 
 [<EntryPoint>]
 let main argv =
-    try //if not (System.Threading.ThreadPool.SetMaxThreads(512,512)) then raise (CmdParser.InvalidArguments "Could not set thread limits")
-        let args = CmdParser.parse argv
+    try let args = CmdParser.parse argv
 #if cosmos
         let log,storeLog = Logging.initialize args.Verbose args.ChangeFeedVerbose args.MaybeSeqEndpoint
 #else
@@ -321,6 +320,22 @@ let main argv =
 #endif
         let destinations = Seq.init args.CosmosConnectionPool (fun i -> args.Destination.Connect (sprintf "%s Pool %d" "SyncTemplate" i)) |> Async.Parallel |> Async.RunSynchronously
         let colls = CosmosCollections(args.Destination.Database, args.Destination.Collection)
+        let targets = destinations |> Array.mapi (fun i x -> Equinox.Cosmos.Core.CosmosContext(x, colls, storeLog.ForContext("PoolId", i)))
+        let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+#if cosmos
+        let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
+        let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
+#if marveleqx
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformV0 categorize catFilter)
+#else
+        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformOrFilter categorize catFilter)
+#endif
+        CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
+            (leaseId, startFromHere, maxDocuments, lagFrequency)
+            (targets, args.MaxWriters)
+            categorize
+            (createSyncHandler (args.MaxPendingBatches,args.MaxProcessing) categorize)
+#else
         let resolveCheckpointStream =
             let gateway = CosmosGateway(destinations.[0], CosmosBatchingPolicy())
             let store = Equinox.Cosmos.CosmosStore(gateway, colls)
@@ -331,24 +346,6 @@ let main argv =
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.CosmosResolver(store, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
-        let targets = destinations |> Array.mapi (fun i x -> Equinox.Cosmos.Core.CosmosContext(x, colls, storeLog.ForContext("PoolId", i)))
-        let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
-#if cosmos
-        let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
-        let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
-#if marveleqx
-        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformV0 catFilter)
-#else
-        let createSyncHandler = CosmosSource.createRangeSyncHandler log (CosmosSource.transformOrFilter categorize catFilter)
-        // Uncomment to test marveleqx mode
-        // let createSyncHandler () = CosmosSource.createRangeSyncHandler log categorize target (CosmosSource.transformV0 categorize catFilter)
-#endif
-        CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy
-            (leaseId, startFromHere, maxDocuments, lagFrequency)
-            (targets, args.MaxWriters)
-            categorize
-            (createSyncHandler (args.MaxPendingBatches,args.MaxProcessing) categorize)
-#else
         let connect () = let c = args.Source.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection 
         let catFilter = args.Source.CategoryFilterFunction
         let spec = args.BuildFeedParams()

@@ -1,5 +1,4 @@
 ﻿[<AutoOpen>]
-[<AutoOpen>]
 module TestbedTemplate.Infrastructure
 
 open FSharp.UMX

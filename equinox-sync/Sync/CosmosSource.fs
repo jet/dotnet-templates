@@ -76,12 +76,7 @@ module EventV0Parser =
             tmp.GetPropertyValue<'T>("content")
 
     /// Maps fields in an Equinox V0 Event within an Eqinox.Cosmos Event (in a Batch or Tip) to the interface defined by the default Codec
-    let (|StandardCodecEvent|) (x: EventV0) =
-        { new Equinox.Codec.IEvent<_> with
-            member __.EventType = x.t
-            member __.Data = x.d
-            member __.Meta = null
-            member __.Timestamp = x.c }
+    let (|StandardCodecEvent|) (x: EventV0) = Equinox.Codec.Core.EventData.Create(x.t, x.d, timestamp = x.c)
 
     /// We assume all Documents represent Events laid out as above
     let parse (d : Document) : StreamItem =
@@ -97,14 +92,6 @@ let transformOrFilter categorize catFilter (changeFeedDocument: Document) : Stre
     for e in DocumentParser.enumEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter (categorize e.stream) then
-            //yield e
-            // TODO remove this temporary type bridging
-            let e2 =
-                { new Equinox.Codec.IEvent<_> with
-                    member __.Data = e.event.Data
-                    member __.Meta = e.event.Meta
-                    member __.EventType = e.event.EventType 
-                    member __.Timestamp = e.event.Timestamp }
-            yield { stream = e.stream; index = e.index; event = e2 }
+            yield e
 }
 //#endif
