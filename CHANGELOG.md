@@ -14,6 +14,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - `eqxprojector -k`'s `Consumer` offers a `StreamSpan`-based API for ordered, de-deduplicated consumption without concurrent executions at stream level [#24](https://github.com/jet/dotnet-templates/pull/24)
 - `eqxprojector -k -n`'s `Producer` offers a parallel producer mode which runs all projections in parallel without constraints (or need to synthesize streams) [#24](https://github.com/jet/dotnet-templates/pull/24)
+- `eqxsync` has EventStore Sink support via `es` commandline option [#23](https://github.com/jet/dotnet-templates/pull/23)
 
 ### Changed
 
