@@ -232,7 +232,8 @@ module Logging =
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
                         let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                             a.Logger(fun l ->
-                                l.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.RuCounters.RuCounterSink()) |> ignore) |> ignore
+                                l.WriteTo.Sink(Equinox.EventStore2.Log.InternalMetrics.Counters.CounterSink())
+                                 .WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.RuCounters.RuCounterSink()) |> ignore) |> ignore
                             a.Logger(fun l ->
                                 let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
                                 let isWriterA = Filters.Matching.FromSource<EventStoreSink.Writer.Result>().Invoke

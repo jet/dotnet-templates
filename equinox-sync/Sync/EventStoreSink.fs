@@ -75,6 +75,7 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
             log.Warning("Malformed cats {@badCats} Other {other:n0}r {@oStreams}",
                 badCats.StatsDescending |> Seq.truncate 50, !resultExnOther, oStreams |> Seq.truncate 100)
             badCats.Clear(); resultExnOther := 0; oStreams.Clear()
+        Equinox.EventStore2.Log.InternalMetrics.dump log
 
     override __.Handle message =
         let inline adds x (set:HashSet<_>) = set.Add x |> ignore
