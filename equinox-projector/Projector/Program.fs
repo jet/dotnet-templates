@@ -136,19 +136,6 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-let run (log : ILogger) discovery connectionPolicy source
-        (aux, leaseId, startFromTail, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
-        createRangeProjector = async {
-    let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
-        log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortBy fst)
-        return! Async.Sleep interval }
-    let maybeLogLag = lagReportFreq |> Option.map logLag
-    let! _feedEventHost =
-        ChangeFeedProcessor.Start
-          ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, startFromTail = startFromTail,
-            createObserver = createRangeProjector, ?maxDocuments = maybeLimitDocumentCount, ?reportLagAndAwaitNextEstimation = maybeLogLag)
-    do! Async.AwaitKeyboardInterrupt() } // exiting will Cancel the child tasks, i.e. the _feedEventHost
-
 let createRangeHandler (log : ILogger) (createIngester : ILogger -> IIngester<int64,'item>) (mapContent : Microsoft.Azure.Documents.Document seq -> 'item seq) () =
     let mutable rangeIngester = Unchecked.defaultof<_>
     let init rangeLog = async { rangeIngester <- createIngester rangeLog }
@@ -162,13 +149,27 @@ let createRangeHandler (log : ILogger) (createIngester : ILogger -> IIngester<in
         let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
         // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
         let! pt, (cur,max) = ingest epoch (ctx.Checkpoint()) docs |> Stopwatch.Time
-        log.Information("Read {token,8} {count,4} docs {requestCharge,4}RU {l:n1}s Post {pt:n3}s {cur}/{max}",
-            epoch, docs.Count, int ctx.FeedResponse.RequestCharge, float sw.ElapsedMilliseconds / 1000.,
-            (let e = pt.Elapsed in e.TotalSeconds), cur, max)
+        let age, readS, postS = DateTime.UtcNow - docs.[docs.Count-1].Timestamp, float sw.ElapsedMilliseconds / 1000., let e = pt.Elapsed in e.TotalSeconds
+        log.Information("Read {token,9} age {age:dd\.hh\:mm\:ss} {count,4} docs {requestCharge,6:f1}RU {l,5:f1}s Ingest {pt:f3}s {cur}/{max}",
+            epoch, age, docs.Count, ctx.FeedResponse.RequestCharge, readS, postS, cur, max)
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
     ChangeFeedObserver.Create(log, ingest, assign=init, dispose=dispose)
  
+let run (log : ILogger) discovery connectionPolicy source
+        (aux, leaseId, startFromTail, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
+        createRangeProjector = async {
+    let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
+        log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortBy fst)
+        return! Async.Sleep interval }
+    let maybeLogLag = lagReportFreq |> Option.map logLag
+    let! _feedEventHost =
+        ChangeFeedProcessor.Start
+          ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, startFromTail = startFromTail,
+            createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag, ?maxDocuments = maybeLimitDocumentCount,
+            leaseAcquireInterval = TimeSpan.FromSeconds 5., leaseRenewInterval = TimeSpan.FromSeconds 5., leaseTtl = TimeSpan.FromSeconds 10.)
+    do! Async.AwaitKeyboardInterrupt() } // exiting will Cancel the child tasks, i.e. the _feedEventHost
+
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
 module Logging =
@@ -182,7 +183,9 @@ module Logging =
             |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
                         let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                         let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                        if changeLogVerbose then c else c.Filter.ByExcluding(fun x -> isCfp429a x || isCfp429b x || isCfp429c x)
+                        let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
+                        let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
+                        if changeLogVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()

@@ -9,9 +9,13 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `dotnet new eqxprojector -k`'s `Consumer` now offers a `StreamSpan`-based API consistent with how the default `dotnet new exqprojector` works [#24](https://github.com/jet/dotnet-templates/pull/24)
+
 ### Changed
 
 - eqxtestbed, eqxweb, eqxwebcs targets `Equinox 2.0.0-preview9`
+- `dotnet new eqxprojector -k`'s `Consumer` now targets `Jet.ConfluentKafka.FSharp`+`Propulsion.Kafka` v `1.0.0-rc13` [#24](https://github.com/jet/dotnet-templates/pull/24)
 
 ### Removed
 ### Fixed

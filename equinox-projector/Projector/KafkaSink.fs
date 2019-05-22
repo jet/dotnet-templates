@@ -8,6 +8,7 @@ open Equinox.Projection.Scheduling
 open Jet.ConfluentKafka.FSharp
 open Newtonsoft.Json
 open Serilog
+open System
 open System.Collections.Generic
 
 [<AutoOpen>]
@@ -51,7 +52,7 @@ type Stats(log : ILogger, categorize, statsInterval, statesInterval) =
 type Scheduler =
     static member Start(log : Serilog.ILogger, clientId, broker, topic, maxInFlightMessages, categorize, (statsInterval, statesInterval))
             : Scheduling.Engine<OkResult,FailResult> =
-        let producerConfig = KafkaProducerConfig.Create(clientId, broker, Acks.Leader, compression = CompressionType.Lz4, maxInFlight=1_000_000)
+        let producerConfig = KafkaProducerConfig.Create(clientId, broker, Acks.Leader, compression = CompressionType.Lz4, maxInFlight=1_000_000, linger = TimeSpan.Zero)
         let producer = KafkaProducer.Create(Log.Logger, producerConfig, topic)
         let attemptWrite (_writePos,fullBuffer) = async {
             let maxEvents, maxBytes = 16384, 1_000_000 - (*fudge*)4096

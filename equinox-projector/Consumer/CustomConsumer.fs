@@ -75,7 +75,7 @@ open System.Threading
 
 /// Starts a consumer which will will be driven based on batches emanating from the supplied `cfg`
 let start (cfg: KafkaConsumerConfig) (degreeOfParallelism: int) =
-    let log = Log.ForContext<KafkaConsumer>()
+    let log = Log.ForContext<BatchedConsumer>()
     let dop = new SemaphoreSlim(degreeOfParallelism)
     let decoder = EventParser.Interpreter()
     let consume msgs = async {
@@ -102,4 +102,4 @@ let start (cfg: KafkaConsumerConfig) (degreeOfParallelism: int) =
         log.Information("Consumed {b} Favorited {f} Unfavorited {u} Saved {s} Cleared {c}",
             Array.length res, favorited, unfavorited, saved, cleared)
     }
-    KafkaConsumer.Start log cfg consume
+    BatchedConsumer.Start(log, cfg, consume)
