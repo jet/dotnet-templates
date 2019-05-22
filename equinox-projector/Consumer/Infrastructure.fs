@@ -26,7 +26,7 @@ type System.Threading.SemaphoreSlim with
         let task = semaphore.WaitAsync(timeout, ct) 
         return! Async.AwaitTaskCorrect task
     }
-    /// Throttling wrapper which waits asynchronously until the semaphore has available capacity
+    /// Throttling wrapper that waits asynchronously until the semaphore has available capacity
     member semaphore.Throttle(workflow : Async<'T>) : Async<'T> = async {
         let! _ = semaphore.Await()
         try return! workflow
