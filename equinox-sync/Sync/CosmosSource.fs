@@ -9,41 +9,36 @@ open Serilog
 open System
 open System.Collections.Generic
 
-let createRangeSyncHandler (log:ILogger) (transform : Document -> StreamItem seq) (maxReads, maxSubmissions) categorize scheduler () =
+let createRangeSyncHandler (log:ILogger) (createIngester : ILogger -> IIngester<_,_>) (transform : Document -> StreamItem seq) () =
     let mutable rangeIngester = Unchecked.defaultof<_>
-    let init rangeLog = async { rangeIngester <- ProjectorSink.Ingester.Start(rangeLog, scheduler, maxReads, maxSubmissions, categorize, TimeSpan.FromMinutes 1.) }
+    let init rangeLog = async { rangeIngester <- createIngester rangeLog }
     let ingest epoch checkpoint docs = let events = docs |> Seq.collect transform in rangeIngester.Submit(epoch, checkpoint, events)
     let dispose () = rangeIngester.Stop ()
     let sw = System.Diagnostics.Stopwatch() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
     let processBatch (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
         let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
-        // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
-        let checkpoint = async { do! ctx.CheckpointAsync() |> Async.AwaitTaskCorrect }
-        let! pt, (cur,max) = ingest epoch checkpoint docs |> Stopwatch.Time
-        log.Information("Read -{token,6} {count,4} docs {requestCharge,6}RU {l:n1}s Post {pt:n3}s {cur}/{max}",
-            epoch, docs.Count, (let c = ctx.FeedResponse.RequestCharge in c.ToString("n1")), float sw.ElapsedMilliseconds / 1000.,
-            (let e = pt.Elapsed in e.TotalSeconds), cur, max)
+        let! pt, (cur,max) = ingest epoch (ctx.Checkpoint()) docs |> Stopwatch.Time
+        let age, readS, postS = DateTime.UtcNow - docs.[docs.Count-1].Timestamp, float sw.ElapsedMilliseconds / 1000., let e = pt.Elapsed in e.TotalSeconds
+        log.Information("Read {token,9} age {age:dd\.hh\:mm\:ss} {count,4} docs {requestCharge,6:f1}RU {l,5:f1}s Ingest {pt:f3}s {cur}/{max}",
+            epoch, age, docs.Count, ctx.FeedResponse.RequestCharge, readS, postS, cur, max)
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
     ChangeFeedObserver.Create(log, processBatch, assign=init, dispose=dispose)
 
 let run (log : ILogger) (sourceDiscovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, startFromTail, maybeLimitDocuments, lagReportFreq : TimeSpan option)
-        (cosmosContext, maxWriters)
-        categorize
-        createRangeProjector = async {
+        createRangeProjector (scheduler : ISchedulingEngine) = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
         log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortBy fst)
         return! Async.Sleep interval }
     let maybeLogLag = lagReportFreq |> Option.map logLag
-    let cosmosIngester = CosmosSink.Scheduler.Start(log, cosmosContext, maxWriters, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 1.))
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, sourceDiscovery, connectionPolicy, source, aux, auxDiscovery = auxDiscovery, leasePrefix = leaseId, startFromTail = startFromTail,
-            createObserver = createRangeProjector cosmosIngester, ?reportLagAndAwaitNextEstimation = maybeLogLag, ?maxDocuments = maybeLimitDocuments,
-            leaseAcquireInterval=TimeSpan.FromSeconds 5., leaseRenewInterval=TimeSpan.FromSeconds 5., leaseTtl=TimeSpan.FromMinutes 1.)
+            createObserver = createRangeProjector scheduler, ?reportLagAndAwaitNextEstimation = maybeLogLag, ?maxDocuments = maybeLimitDocuments,
+            leaseAcquireInterval = TimeSpan.FromSeconds 5., leaseRenewInterval = TimeSpan.FromSeconds 5., leaseTtl = TimeSpan.FromSeconds 10.)
     do! Async.AwaitKeyboardInterrupt()
-    cosmosIngester.Stop() }
+    scheduler.Stop() }
 
 //#if marveleqx
 [<RequireQualifiedAccess>]
@@ -86,7 +81,8 @@ module EventV0Parser =
 let transformV0 categorize catFilter (v0SchemaDocument: Document) : StreamItem seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
     let streamName = (*if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+*)parsed.stream
-    if catFilter (categorize streamName) then yield parsed }
+    if catFilter (categorize streamName) then
+        yield parsed }
 //#else
 let transformOrFilter categorize catFilter (changeFeedDocument: Document) : StreamItem seq = seq {
     for e in DocumentParser.enumEvents changeFeedDocument do
