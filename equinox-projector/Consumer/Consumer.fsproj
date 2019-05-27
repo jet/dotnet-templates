@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="JCKFS.fs" />
+    <None Include="JCKFS.fs" />
     <Compile Include="Examples.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
@@ -19,7 +19,7 @@
     <PackageReference Include="Equinox.Codec" Version="2.0.0-preview8" />
     <PackageReference Include="Equinox.Projection" Version="2.0.0-preview8" />
     <PackageReference Include="Equinox.Projection.Codec" Version="2.0.0-preview8" />
-    <PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-rc10" />
+    <PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-rc11" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
 

@@ -69,5 +69,5 @@ let main argv =
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
             // If the handler throws, we exit the app in order to let an orchesterator flag the failure
             | e -> Log.Fatal(e, "Exiting"); 1
-    // But first... , but need to sunsure all logs are flushed first
+    // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()
