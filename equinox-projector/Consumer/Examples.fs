@@ -134,7 +134,7 @@ type Parallel =
         let handleMessage (KeyValue (streamName,eventsSpan)) = async {
             for x in interpreter.TryDecode(streamName,eventsSpan) do
                 processor.Handle x }
-        ParallelConsumer.Start(log, cfg, degreeOfParallelism, handleMessage, statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
+        Equinox.Projection.Kafka.ParallelConsumer.Start(log, cfg, degreeOfParallelism, handleMessage, statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
         
 type Ordered =
     static member Start(cfg: KafkaConsumerConfig, degreeOfParallelism: int) =
@@ -147,7 +147,7 @@ type Ordered =
             return span.events.Length }
         let categorize (streamName : string) =
             streamName.Split([|'-';'_'|],2).[0]
-        Equinox.Projection.OrderedConsumer.Start
+        Equinox.Projection.Kafka.OrderedConsumer.Start
             (   log, cfg, degreeOfParallelism, interpreter.EnumStreamItems, handle, categorize, maxSubmissionsPerPartition = 4,
                 statsInterval = statsInterval, stateInterval = stateInterval, logExternalStats = processor.DumpStats)
         

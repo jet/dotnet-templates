@@ -23,16 +23,32 @@ type CatStats() =
     member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
 #endif
 
+/// Gathers stats relating to how many items of a given partition have been observed
+type PartitionStats() =
+    let partitions = Dictionary<int,int64>()
+    member __.Record(partitionId, ?weight) = 
+        let weight = defaultArg weight 1L
+        match partitions.TryGetValue partitionId with
+        | true, catCount -> partitions.[partitionId] <- catCount + weight
+        | false, _ -> partitions.[partitionId] <- weight
+    member __.Clear() = partitions.Clear()
+#if NET461
+    member __.StatsDescending = partitions |> Seq.map (|KeyValue|) |> Seq.sortBy (fun (_,s) -> -s)
+#else
+    member __.StatsDescending = partitions |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
+#endif
+
 [<AutoOpen>]
 module private Impl =
     let (|NNA|) xs = if xs = null then Array.empty else xs
     let arrayBytes (x:byte[]) = if x = null then 0 else x.Length
     let inline eventSize (x : Equinox.Codec.IEvent<_>) = arrayBytes x.Data + arrayBytes x.Meta + x.EventType.Length + 16
     let inline mb x = float x / 1024. / 1024.
-    let expiredMs ms =
-        let timer = Stopwatch.StartNew()
+    /// Maintains a Stopwatch such that invoking will yield true at intervals defined by `period`
+    let intervalCheck (period : TimeSpan) =
+        let timer, max = Stopwatch.StartNew(), int64 period.TotalMilliseconds
         fun () ->
-            let due = timer.ElapsedMilliseconds > ms
+            let due = timer.ElapsedMilliseconds > max
             if due then timer.Restart()
             due
     let inline accStopwatch (f : unit -> 't) at =
@@ -184,7 +200,7 @@ module Buffering =
             if waitingCats.Any then log.Information("Waiting Categories, events {@readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
             if waitingCats.Any then log.Information("Waiting Streams, KB {@readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
 
-module Scheduling =
+module StreamScheduling =
 
     open Buffering
 
@@ -288,7 +304,7 @@ module Scheduling =
     type Stats<'R,'E>(log : ILogger, statsInterval : TimeSpan, stateInterval : TimeSpan) =
         let states, fullCycles, cycles, resultCompleted, resultExn = CatStats(), ref 0, ref 0, ref 0, ref 0
         let batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0
-        let statsDue, stateDue = expiredMs (int64 statsInterval.TotalMilliseconds), expiredMs (int64 stateInterval.TotalMilliseconds)
+        let statsDue, stateDue = intervalCheck statsInterval, intervalCheck stateInterval
         let mutable dt,ft,it,st,mt = TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero
         let dumpStats (used,maxDop) waitingBatches =
             log.Information("Cycles {cycles}/{fullCycles} {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
@@ -383,7 +399,7 @@ module Scheduling =
     /// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
     /// c) submits work to the supplied Dispatcher (which it triggers pumping of)
     /// d) periodically reports state (with hooks for ingestion engines to report same)
-    type SchedulingEngine<'R,'E>(dispatcher : Dispatcher<_>, stats : Stats<'R,'E>, project : int64 option * StreamSpan -> Async<Choice<_,_>>, interpretProgress, dumpStreams, ?maxBatches) =
+    type StreamSchedulingEngine<'R,'E>(dispatcher : Dispatcher<_>, stats : Stats<'R,'E>, project : int64 option * StreamSpan -> Async<Choice<_,_>>, interpretProgress, dumpStreams, ?maxBatches) =
         let sleepIntervalMs = 1
         let maxBatches = defaultArg maxBatches 4 
         let work = ConcurrentStack<InternalMessage<Choice<'R,'E>>>() // dont need them ordered so Queue is unwarranted; usage is cross-thread so Bag is not better
@@ -492,7 +508,7 @@ module Scheduling =
             pending.Enqueue(x)
 
     type Factory =
-        static member Create(dispatcher : Dispatcher<_>, stats : Stats<int64,exn>, handle : StreamSpan -> Async<int>, dumpStreams, ?maxBatches) : SchedulingEngine<int64,exn> =
+        static member Create(dispatcher : Dispatcher<_>, stats : Stats<int64,exn>, handle : StreamSpan -> Async<int>, dumpStreams, ?maxBatches) : StreamSchedulingEngine<int64,exn> =
             let project (_maybeWritePos, batch : StreamSpan) = async {
                 try let! count = handle batch
                     return Choice1Of2 (batch.span.index + int64 count)
@@ -501,39 +517,94 @@ module Scheduling =
                 | Choice1Of2 index -> Some index
                 | Choice2Of2 _ -> None
 
-            SchedulingEngine<int64,exn>(dispatcher, stats, project, interpretProgress, dumpStreams, ?maxBatches = maxBatches)
+            StreamSchedulingEngine<int64,exn>(dispatcher, stats, project, interpretProgress, dumpStreams, ?maxBatches = maxBatches)
 
-type OrderedConsumer =
-    /// Builds a processing pipeline per the `config` running up to `dop` instances of `handle` concurrently to maximize global throughput across partitions.
-    /// Processor pumps until `handle` yields a `Choice2Of2` or `Stop()` is requested.
-    static member Start<'M>
-        (   log : ILogger, config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, maxDop, enumStreamItems, handle, categorize,
-            ?maxSubmissionsPerPartition, ?pumpInterval, ?statsInterval, ?stateInterval, ?logExternalStats) =
-        let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
-        let pumpInterval = defaultArg pumpInterval (TimeSpan.FromMilliseconds 5.)
-        let maxSubmissionsPerPartition = defaultArg maxSubmissionsPerPartition 5
+/// Holds batches from the Ingestion pipe, feeding them continuously to the scheduler in an appropriate order
+module Submission =
 
-        let dispatcher = Scheduling.Dispatcher<_> maxDop
-        let stats = Scheduling.Stats(log, statsInterval, stateInterval)
-        let dumpStreams (streams : Scheduling.StreamStates) log =
-            logExternalStats |> Option.iter (fun f -> f log)
-            streams.Dump(log, categorize)
-        let handle (x : Buffering.StreamSpan) = handle (x.stream, x.span)
-        let scheduler = Scheduling.Factory.Create(dispatcher, stats, handle, dumpStreams)
-        let mapBatch onCompletion (x : Jet.ConfluentKafka.FSharp.Submission.Batch<_>) : Scheduling.Batch =
-            let onCompletion () = x.onCompletion(); onCompletion()
-            Scheduling.Batch.Create(onCompletion, Seq.collect enumStreamItems x.messages)
+    /// Batch of work as passed from the Submitter to the Scheduler comprising messages with their associated checkpointing/completion callback
+    [<NoComparison; NoEquality>]
+    type Batch<'M> = { partitionId : int; onCompletion: unit -> unit; messages: 'M [] }
 
-        let tryCompactQueue (queue : Queue<Scheduling.Batch>) =
-            let mutable acc, worked = None, false
-            for x in queue do
-                match acc with
-                | None -> acc <- Some x
-                | Some a -> if a.TryMerge x then worked <- true
+    /// Holds the queue for a given partition, together with a semaphore we use to ensure the number of in-flight batches per partition is constrained
+    [<NoComparison>]
+    type PartitionQueue<'B> = { submissions: SemaphoreSlim; queue : Queue<'B> } with
+        member __.Append(batch) = __.queue.Enqueue batch
+        static member Create(maxSubmits) = { submissions = new SemaphoreSlim(maxSubmits); queue = Queue(maxSubmits * 2) } 
+
+    /// Holds the stream of incoming batches, grouping by partition
+    /// Manages the submission of batches into the Scheduler in a fair manner
+    type SubmissionEngine<'M,'B>
+        (   log : ILogger, pumpInterval : TimeSpan, maxSubmitsPerPartition, mapBatch: (unit -> unit) -> Batch<'M> -> 'B, submitBatch : 'B -> int, statsInterval,
+            ?tryCompactQueue) =
+        let incoming = new BlockingCollection<Batch<'M>[]>(ConcurrentQueue())
+        let buffer = Dictionary<int,PartitionQueue<'B>>()
+        let mutable cycles, ingested, compacted = 0, 0, 0
+        let submittedBatches,submittedMessages = PartitionStats(), PartitionStats()
+        let dumpStats () =
+            let waiting = seq { for x in buffer do if x.Value.queue.Count <> 0 then yield x.Key, x.Value.queue.Count } |> Seq.sortBy (fun (_,snd) -> -snd)
+            log.Information("Submitter {cycles} cycles {compactions} compactions Ingested {ingested} Waiting {@waiting} Batches {@batches} Messages {@messages}",
+                cycles, ingested, compacted, waiting, submittedBatches.StatsDescending, submittedMessages.StatsDescending)
+            ingested <- 0; compacted <- 0; cycles <- 0; submittedBatches.Clear(); submittedMessages.Clear()
+        let maybeLogStats =
+            let due = intervalCheck statsInterval
+            fun () ->
+                cycles <- cycles + 1
+                if due () then dumpStats ()
+        // Loop, submitting 0 or 1 item per partition per iteration to ensure
+        // - each partition has a controlled maximum number of entrants in the scheduler queue
+        // - a fair ordering of batch submissions
+        let propagate () =
+            let mutable more, worked = true, false
+            while more do
+                more <- false
+                for KeyValue(pi,pq) in buffer do
+                    if pq.queue.Count <> 0 then
+                        if pq.submissions.Wait(0) then
+                            worked <- true
+                            more <- true
+                            let count = submitBatch <| pq.queue.Dequeue()
+                            submittedBatches.Record(pi)
+                            submittedMessages.Record(pi, int64 count)
             worked
-        let submitBatch (x : Scheduling.Batch) : int =
-            scheduler.Submit x
-            x.ItemCount
-        let submitter = Jet.ConfluentKafka.FSharp.Submission.SubmissionEngine(log, pumpInterval, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, tryCompactQueue)
-        let mapResult (x : Confluent.Kafka.ConsumeResult<string,string>) = KeyValuePair(x.Key,x.Value)
-        Jet.ConfluentKafka.FSharp.ParallelConsumer.Start(log, config, mapResult, submitter.Submit, submitter.Pump(), scheduler.Pump, dispatcher.Pump(), statsInterval)
+        /// Take one timeslice worth of ingestion and add to relevant partition queues
+        /// When ingested, we allow one propagation submission per partition
+        let ingest (partitionBatches : Batch<'M>[]) =
+            for { partitionId = pid } as batch in partitionBatches do
+                let pq =
+                    match buffer.TryGetValue pid with
+                    | false, _ -> let t = PartitionQueue<_>.Create(maxSubmitsPerPartition) in buffer.[pid] <- t; t
+                    | true, pq -> pq
+                let mapped = mapBatch (fun () -> pq.submissions.Release |> ignore) batch
+                pq.Append(mapped)
+            propagate()
+        /// We use timeslices where we're we've fully provisioned the scheduler to index any waiting Batches
+        let compact f =
+            compacted <- compacted + 1
+            let mutable worked = false
+            for KeyValue(_,pq) in buffer do
+                if f pq.queue then
+                    worked <- true
+            worked
+
+        /// Processing loop, continuously splitting `Submit`ted items into per-partition queues and ensuring enough items are provided to the Scheduler
+        member __.Pump() = async {
+            let! ct = Async.CancellationToken
+            while not ct.IsCancellationRequested do
+                let mutable items = Unchecked.defaultof<_>
+                let mutable propagated = false
+                if incoming.TryTake(&items, pumpInterval) then
+                    propagated <- ingest items
+                    while incoming.TryTake(&items) do
+                        if ingest items then propagated <- true
+                match propagated, tryCompactQueue with
+                | false, None -> Thread.Sleep 2
+                | false, Some f when not (compact f) -> Thread.Sleep 2
+                | _ -> ()
+
+                maybeLogStats () }
+
+        /// Supplies an incoming Batch for holding and forwarding to scheduler at the right time
+        member __.Submit(items : Batch<'M>[]) =
+            Interlocked.Increment(&ingested) |> ignore
+            incoming.Add items
