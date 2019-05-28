@@ -72,14 +72,24 @@ type MessageInterpreter() =
     let log = Log.ForContext<MessageInterpreter>()
 
     /// Handles various category / eventType / payload types as produced by Equinox.Tool
-    member __.TryDecode(streamName, spanJson) = seq {
+    member __.Interpret(streamName, events) = seq {
         let tryExtractCategory (stream : string) = stream.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries)
-        let events = JsonConvert.DeserializeObject<RenderedSpan>(spanJson) |> RenderedSpan.enumEvents
         match tryExtractCategory streamName with
         | [| "Favorites"; _ |] -> yield! events |> Seq.choose (tryDecode log streamName Favorites.codec >> Option.map Faves)
         | [| "SavedForLater"; _ |] -> yield! events |> Seq.choose (tryDecode log streamName SavedForLater.codec >> Option.map Saves)
         | [| category; _ |] -> yield Category (category, Seq.length events)
         | _ -> yield Unclassified streamName }
+
+    member __.EnumEvents(spanJson) =
+        JsonConvert.DeserializeObject<RenderedSpan>(spanJson) |> RenderedSpan.enumEvents
+    member __.EnumStreamItems(KeyValue (streamName, spanJson)) : seq<Equinox.Projection.Buffering.StreamItem> =
+        let span = JsonConvert.DeserializeObject<RenderedSpan>(spanJson)
+        __.EnumEvents(spanJson) |> Seq.mapi (fun i x -> { stream = streamName; index = span.i + int64 i; event = x })
+
+    /// Handles various category / eventType / payload types as produced by Equinox.Tool
+    member __.TryDecode(streamName, spanJson) = seq {
+        let events = __.EnumEvents(spanJson)
+        yield! __.Interpret(streamName, events) }
 
 type Processor() =
     let mutable favorited, unfavorited, saved, cleared = 0, 0, 0, 0 
@@ -114,17 +124,32 @@ type BatchingSync =
             processor.DumpStats log }
         BatchedConsumer.Start(log, cfg, handleBatch)
         
-type Streaming =
+type Parallel =
     /// Starts a consumer that consumes a topic in streamed mode
     /// StreamingConsumer manages the parallelism, spreading individual messages out to Async tasks
     /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
     static member Start(cfg: KafkaConsumerConfig, degreeOfParallelism: int) =
-        let log = Log.ForContext<Streaming>()
+        let log = Log.ForContext<Parallel>()
         let interpreter, processor = MessageInterpreter(), Processor()
         let handleMessage (KeyValue (streamName,eventsSpan)) = async {
             for x in interpreter.TryDecode(streamName,eventsSpan) do
                 processor.Handle x }
         ParallelConsumer.Start(log, cfg, degreeOfParallelism, handleMessage, statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
+        
+type Ordered =
+    static member Start(cfg: KafkaConsumerConfig, degreeOfParallelism: int) =
+        let log = Log.ForContext<Ordered>()
+        let interpreter, processor = MessageInterpreter(), Processor()
+        let statsInterval, stateInterval = TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.
+        let handle (streamName : string, span : Equinox.Projection.Buffering.Span) = async {
+            for x in interpreter.Interpret(streamName, span.events) do
+                processor.Handle x
+            return span.events.Length }
+        let categorize (streamName : string) =
+            streamName.Split([|'-';'_'|],2).[0]
+        Equinox.Projection.OrderedConsumer.Start
+            (   log, cfg, degreeOfParallelism, interpreter.EnumStreamItems, handle, categorize, maxSubmissionsPerPartition = 4,
+                statsInterval = statsInterval, stateInterval = stateInterval, logExternalStats = processor.DumpStats)
         
 type BatchingAsync =
     /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`

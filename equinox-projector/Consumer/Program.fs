@@ -62,7 +62,8 @@ let main argv =
             let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group)
             //use c = BatchingSync.Start(cfg)
             //use c = BatchingAsync.Start(cfg, args.MaxWriters)
-            use c = Streaming.Start(cfg, args.MaxWriters)
+            //use c = Parallel.Start(cfg, args.MaxWriters)
+            use c = Ordered.Start(cfg, args.MaxWriters)
             c.AwaitCompletion() |> Async.RunSynchronously
             0 
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
