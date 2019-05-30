@@ -10,7 +10,7 @@
     <Compile Include="Infrastructure.fs" />
     <Compile Include="JCKFS.fs" />
     <Compile Include="Projection.fs" />
-    <Compile Include="KafkaConsumer.fs" />
+    <Compile Include="StreamsConsumer.fs" />
     <Compile Include="Examples.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

@@ -113,11 +113,11 @@ open Confluent.Kafka
 open Jet.ConfluentKafka.FSharp
 open Jet.Projection.Kafka
 
-type BatchingSync =
+type BatchesSync =
     /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
     /// Processing runs as a single Async computation per batch, which can work well where parallism is not relevant
     static member Start(config : KafkaConsumerConfig) =
-        let log = Log.ForContext<BatchingSync>()
+        let log = Log.ForContext<BatchesSync>()
         let interpreter = MessageInterpreter()
         let handleBatch (msgs : ConsumeResult<_,_>[]) = async {
             let processor = Processor()
@@ -127,21 +127,21 @@ type BatchingSync =
             processor.DumpStats log }
         BatchedConsumer.Start(log, config, handleBatch)
         
-type Parallel =
+type Messages =
     /// Starts a consumer that consumes a topic in streamed mode
     /// StreamingConsumer manages the parallelism, spreading individual messages out to Async tasks
     /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
     static member Start(config : KafkaConsumerConfig, degreeOfParallelism : int) =
-        let log = Log.ForContext<Parallel>()
+        let log = Log.ForContext<Messages>()
         let interpreter, processor = MessageInterpreter(), Processor()
         let handleMessage (KeyValue (streamName,eventsSpan)) = async {
             for x in interpreter.TryDecode(streamName,eventsSpan) do
                 processor.Handle x }
         ParallelConsumer.Start(log, config, degreeOfParallelism, handleMessage, statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
         
-type StreamSpan =
+type Streams =
     static member Start(config : KafkaConsumerConfig, degreeOfParallelism : int) =
-        let log = Log.ForContext<StreamSpan>()
+        let log = Log.ForContext<Streams>()
         let interpreter, processor = MessageInterpreter(), Processor()
         let statsInterval, stateInterval = TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.
         let handle (streamName : string, span : Span) = async {
@@ -150,17 +150,17 @@ type StreamSpan =
             return span.events.Length }
         let categorize (streamName : string) =
             streamName.Split([|'-';'_'|],2).[0]
-        StreamSpanConsumer.Start
+        StreamsConsumer.Start
             (   log, config, degreeOfParallelism, interpreter.EnumStreamItems, handle, categorize, maxSubmissionsPerPartition = 4,
                 statsInterval = statsInterval, stateInterval = stateInterval, logExternalStats = processor.DumpStats)
         
-type BatchingAsync =
+type BatchesAsync =
     /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
     /// Processing fans out as parallel Async computations (limited to max `degreeOfParallelism` concurrent tasks
     /// The messages in the batch emanate from a single partition and are all in sequence
     /// notably useful where there's an ability to share some processing cost across a batch of work by doing the processing in phases
     static member Start(config : KafkaConsumerConfig, degreeOfParallelism : int) =
-        let log = Log.ForContext<BatchingAsync>()
+        let log = Log.ForContext<BatchesAsync>()
         let dop = new SemaphoreSlim(degreeOfParallelism)
         let interpreter = MessageInterpreter()
         let handleBatch (msgs : ConsumeResult<_,_>[]) = async {

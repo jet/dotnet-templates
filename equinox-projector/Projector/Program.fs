@@ -66,7 +66,6 @@ module CmdParser =
         | [<AltCommandLine("-z"); Unique>] FromTail
         | [<AltCommandLine("-md"); Unique>] MaxDocuments of int
         | [<AltCommandLine "-r"; Unique>] MaxReadAhead of int
-        | [<AltCommandLine "-rw"; Unique>] MaxSubmissionsPerRange of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine("-l"); Unique>] LagFreqS of float
         | [<AltCommandLine("-v"); Unique>] Verbose
@@ -86,7 +85,6 @@ module CmdParser =
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
-                | MaxSubmissionsPerRange _ -> "Maximum number of batches to submit to the processor at any time. Default: 32"
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
                 | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
@@ -107,7 +105,6 @@ module CmdParser =
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
-        member __.MaxSubmissionsPerRange =  args.GetResult(MaxSubmissionsPerRange,32)
         member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,64)
         member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
@@ -122,7 +119,7 @@ module CmdParser =
             if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.LagFrequency,
-            (x.MaxReadAhead, x.MaxSubmissionsPerRange, x.ConcurrentStreamProcessors)
+            (x.MaxReadAhead, x.ConcurrentStreamProcessors)
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
@@ -205,18 +202,18 @@ let main argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.ChangeFeedVerbose
         let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-        let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxSubmissionsPerRange, maxConcurrentStreams) = args.BuildChangeFeedParams()
+        let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
         let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
 #if kafka
         let (broker,topic) = args.Target.BuildTargetParams()
-        let projector = Jet.Projection.Kafka.KafkaStreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, categorize, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., maxSubmissionsPerPartition=maxSubmissionsPerRange)
+        let projector = Jet.Projection.Kafka.KafkaStreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, categorize, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.)
 #else
         let project (_stream, span: Jet.Projection.Span) = async { 
             let r = Random()
             let ms = r.Next(1,span.events.Length * 10)
             do! Async.Sleep ms
             return span.events.Length }
-        let projector = Jet.Projection.Kafka.StreamsProjector.Start(Log.Logger, maxReadAhead, project, maxConcurrentStreams, categorize, TimeSpan.FromMinutes 1., , maxSubmissionsPerPartition=maxSubmissionsPerRange)
+        let projector = Jet.Projection.Kafka.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, project, categorize, TimeSpan.FromMinutes 1.)
 #endif
         run Log.Logger discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromTail, maxDocuments, lagFrequency)

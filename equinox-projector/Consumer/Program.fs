@@ -60,10 +60,10 @@ let main argv =
             let args = CmdParser.Arguments(parsed)
             Logging.initialize args.Verbose
             let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group)
-            //use c = BatchingSync.Start(cfg)
-            //use c = BatchingAsync.Start(cfg, args.MaxWriters)
-            //use c = Parallel.Start(cfg, args.MaxWriters)
-            use c = StreamSpan.Start(cfg, args.MaxWriters)
+            //use c = BatchesSync.Start(cfg)
+            //use c = BatchesAsync.Start(cfg, args.MaxWriters)
+            //use c = Messages.Start(cfg, args.MaxWriters)
+            use c = Streams.Start(cfg, args.MaxWriters)
             c.AwaitCompletion() |> Async.RunSynchronously
             0 
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

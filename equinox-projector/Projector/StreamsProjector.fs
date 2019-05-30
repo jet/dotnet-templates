@@ -118,7 +118,7 @@ module private Impl =
             PipelinedProjector.Start(log, pumpDispatcher, pumpScheduler, submitter.Pump(), startIngester)
 
 type StreamsProjector =
-    static member Start(log : ILogger, maxReadAhead, project, maxConcurrentStreams, categorize, ?statsInterval, ?stateInterval)
+    static member Start(log : ILogger, maxReadAhead, maxConcurrentStreams, project, categorize, ?statsInterval, ?stateInterval)
             : PipelinedProjector =
         let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
         let projectionStats = StreamScheduling.Stats<_,_>(log.ForContext<StreamScheduling.Stats<_,_>>(), statsInterval, stateInterval)
