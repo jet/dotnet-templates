@@ -99,7 +99,7 @@ type Processor() =
     let cats, keys = CatStats(), ConcurrentDictionary()
 
     member __.DumpStats(log : ILogger) =
-        log.Information("Favorited {f} Unfavorited {u} Saved {s} Cleared {c} Keys {keyCount} Categories {catCount}",
+        log.Information("Favorited {f} Unfavorited {u} Saved {s} Cleared {c} Keys {keyCount} Categories {@catCount}",
             favorited, unfavorited, saved, cleared, keys.Count, Seq.truncate 5 cats.StatsDescending)
         favorited <- 0; unfavorited <- 0; saved <- 0; cleared <- 0; cats.Clear(); keys.Clear()
     member __.Handle = function

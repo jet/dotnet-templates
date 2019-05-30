@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Consumer": {
+      "commandName": "Project",
+      "commandLineArgs": " -m .2 -g test1c -b shared.kafka.eastus2.qa.jet.network:9092 -t thor-ruben-test-p8"
+    }
+  }
+}
