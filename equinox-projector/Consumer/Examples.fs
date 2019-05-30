@@ -1,6 +1,5 @@
 ﻿namespace ProjectorTemplate.Consumer
 
-open Equinox.Projection.Codec
 open Newtonsoft.Json
 open Serilog
 open System
@@ -66,6 +65,9 @@ module EventParser =
 
 type Message = Faves of Favorites.Event | Saves of SavedForLater.Event | Category of name : string * count : int | Unclassified of messageKey : string 
 
+open Equinox.Projection.Codec
+open Jet.Projection
+
 // Example of filtering our relevant Events from the Kafka stream
 // NB if the percentage of relevant events is low, one may wish to adjust the projector to project only a subset
 type MessageInterpreter() =
@@ -82,7 +84,7 @@ type MessageInterpreter() =
 
     member __.EnumEvents(spanJson) =
         JsonConvert.DeserializeObject<RenderedSpan>(spanJson) |> RenderedSpan.enumEvents
-    member __.EnumStreamItems(KeyValue (streamName, spanJson)) : seq<Equinox.Projection.Buffering.StreamItem> =
+    member __.EnumStreamItems(KeyValue (streamName, spanJson)) : seq<StreamItem> =
         let span = JsonConvert.DeserializeObject<RenderedSpan>(spanJson)
         __.EnumEvents(spanJson) |> Seq.mapi (fun i x -> { stream = streamName; index = span.i + int64 i; event = x })
 
@@ -109,6 +111,7 @@ type Processor() =
 
 open Confluent.Kafka
 open Jet.ConfluentKafka.FSharp
+open Jet.Projection.Kafka
 
 type BatchingSync =
     /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
@@ -134,20 +137,20 @@ type Parallel =
         let handleMessage (KeyValue (streamName,eventsSpan)) = async {
             for x in interpreter.TryDecode(streamName,eventsSpan) do
                 processor.Handle x }
-        Equinox.Projection.Kafka.ParallelConsumer.Start(log, cfg, degreeOfParallelism, handleMessage, statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
+        ParallelConsumer.Start(log, cfg, degreeOfParallelism, handleMessage, statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
         
 type Ordered =
     static member Start(cfg: KafkaConsumerConfig, degreeOfParallelism: int) =
         let log = Log.ForContext<Ordered>()
         let interpreter, processor = MessageInterpreter(), Processor()
         let statsInterval, stateInterval = TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.
-        let handle (streamName : string, span : Equinox.Projection.Buffering.Span) = async {
+        let handle (streamName : string, span : Span) = async {
             for x in interpreter.Interpret(streamName, span.events) do
                 processor.Handle x
             return span.events.Length }
         let categorize (streamName : string) =
             streamName.Split([|'-';'_'|],2).[0]
-        Equinox.Projection.Kafka.OrderedConsumer.Start
+        OrderedConsumer.Start
             (   log, cfg, degreeOfParallelism, interpreter.EnumStreamItems, handle, categorize, maxSubmissionsPerPartition = 4,
                 statsInterval = statsInterval, stateInterval = stateInterval, logExternalStats = processor.DumpStats)
         

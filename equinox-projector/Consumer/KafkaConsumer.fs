@@ -1,10 +1,10 @@
-﻿namespace Equinox.Projection.Kafka
+﻿namespace Jet.Projection.Kafka
 
 open ProjectorTemplate.Consumer // AwaitTaskCorrect
 
 open Confluent.Kafka
-open Equinox.Projection
 open Jet.ConfluentKafka.FSharp
+open Jet.Projection
 open Serilog
 open System
 open System.Collections.Concurrent
@@ -62,7 +62,7 @@ module KafkaIngestion =
     /// Continuously polls across the assigned partitions, building spans; periodically (at intervals of `emitInterval`), `submit`s accummulated messages as
     ///   checkpointable Batches
     /// Pauses if in-flight upper threshold is breached until such time as it drops below that the lower limit
-    type IngestionEngine<'M>
+    type KafkaIngestionEngine<'M>
         (   log : ILogger, counter : Core.InFlightMessageCounter, consumer : IConsumer<_,_>, mapMessage : ConsumeResult<_,_> -> 'M, emit : Submission.Batch<'M>[] -> unit,
             emitInterval, statsInterval) =
         let acc = Dictionary()
@@ -89,7 +89,7 @@ module KafkaIngestion =
             match acc.Count with
             | 0 -> ()
             | partitionsWithMessagesThisInterval ->
-                let tmp = ResizeArray<Equinox.Projection.Submission.Batch<'M>>(partitionsWithMessagesThisInterval)
+                let tmp = ResizeArray<Submission.Batch<'M>>(partitionsWithMessagesThisInterval)
                 for KeyValue(partitionIndex,span) in acc do
                     let checkpoint () =
                         counter.Delta(-span.reservation) // counterbalance Delta(+) per ingest, above
@@ -196,8 +196,9 @@ module ParallelScheduling =
         let mutable cycles, processingDuration = 0, TimeSpan.Zero
         let startedBatches, completedBatches, startedItems, completedItems = PartitionStats(), PartitionStats(), PartitionStats(), PartitionStats()
         let dumpStats () =
-            let startedB, completedB = Array.ofSeq startedBatches.StatsDescending, Array.ofSeq completedBatches.StatsDescending
-            let startedI, completedI = Array.ofSeq startedItems.StatsDescending, Array.ofSeq completedItems.StatsDescending
+            let arr = Seq.map (|KeyValue|) >> Array.ofSeq 
+            let startedB, completedB = arr startedBatches.StatsDescending, arr completedBatches.StatsDescending
+            let startedI, completedI = arr startedItems.StatsDescending, arr completedItems.StatsDescending
             let totalItemsCompleted = Array.sumBy snd completedI
             let latencyMs = match totalItemsCompleted with 0L -> null | cnt -> box (processingDuration.TotalMilliseconds / float cnt)
             log.Information("Scheduler {cycles} cycles Started {startedBatches}b {startedItems}i Completed {completedBatches}b {completedItems}i latency {completedLatency:f1}ms Ready {readyitems} Waiting {waitingBatches}b",
@@ -304,7 +305,7 @@ type PipelinedConsumer private (inner : IConsumer<string, string>, task : Task<u
         let limiterLog = log.ForContext(Serilog.Core.Constants.SourceContextPropertyName, Core.Constants.messageCounterSourceContext)
         let limiter = new Core.InFlightMessageCounter(limiterLog, config.Buffering.minInFlightBytes, config.Buffering.maxInFlightBytes)
         let consumer = ConsumerBuilder.WithLogging(log, config) // teardown is managed by ingester.Pump()
-        let ingester = IngestionEngine<'M>(log, limiter, consumer, mapResult, submit, emitInterval = config.Buffering.maxBatchDelay, statsInterval = statsInterval)
+        let ingester = KafkaIngestionEngine<'M>(log, limiter, consumer, mapResult, submit, emitInterval = config.Buffering.maxBatchDelay, statsInterval = statsInterval)
         let cts = new CancellationTokenSource()
         let ct = cts.Token
         let tcs = new TaskCompletionSource<unit>()
@@ -357,7 +358,7 @@ type ParallelConsumer =
         let submitBatch (x : ParallelScheduling.Batch<_>) : int =
             scheduler.Submit x
             x.messages.Length
-        let submitter = Submission.SubmissionEngine(log, pumpInterval, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval)
+        let submitter = Submission.SubmissionEngine(log, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, pumpInterval)
         PipelinedConsumer.Start(log, config, mapResult, submitter.Submit, submitter.Pump(), scheduler.Pump, dispatcher.Pump(), statsInterval)
 
     /// Builds a processing pipeline per the `config` running up to `dop` instances of `handle` concurrently to maximize global throughput across partitions.
@@ -384,22 +385,20 @@ type OrderedConsumer =
         let dumpStreams (streams : StreamScheduling.StreamStates) log =
             logExternalStats |> Option.iter (fun f -> f log)
             streams.Dump(log, categorize)
-        let handle (x : Buffering.StreamSpan) = handle (x.stream, x.span)
-        let scheduler = StreamScheduling.Factory.Create(dispatcher, stats, handle, dumpStreams)
-        let mapBatch onCompletion (x : Submission.Batch<_>) : StreamScheduling.Batch =
+        let streamsScheduler = StreamScheduling.Factory.Create(dispatcher, stats, handle, dumpStreams)
+        let mapConsumedMessagesToStreamsBatch onCompletion (x : Submission.Batch<KeyValuePair<string,string>>) : StreamScheduling.StreamsBatch =
             let onCompletion () = x.onCompletion(); onCompletion()
-            StreamScheduling.Batch.Create(onCompletion, Seq.collect enumStreamItems x.messages)
-
-        let tryCompactQueue (queue : Queue<StreamScheduling.Batch>) =
+            StreamScheduling.StreamsBatch.Create(onCompletion, Seq.collect enumStreamItems x.messages) |> fst
+        let tryCompactQueue (queue : Queue<StreamScheduling.StreamsBatch>) =
             let mutable acc, worked = None, false
             for x in queue do
                 match acc with
                 | None -> acc <- Some x
                 | Some a -> if a.TryMerge x then worked <- true
             worked
-        let submitBatch (x : StreamScheduling.Batch) : int =
-            scheduler.Submit x
-            x.ItemCount
-        let submitter = Submission.SubmissionEngine(log, pumpInterval, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, tryCompactQueue)
+        let submitStreamsBatch (x : StreamScheduling.StreamsBatch) : int =
+            streamsScheduler.Submit x
+            x.RemainingStreamsCount
+        let submitter = Submission.SubmissionEngine(log, maxSubmissionsPerPartition, mapConsumedMessagesToStreamsBatch, submitStreamsBatch, statsInterval, pumpInterval, tryCompactQueue)
         let mapResult (x : Confluent.Kafka.ConsumeResult<string,string>) = KeyValuePair(x.Key,x.Value)
-        PipelinedConsumer.Start(log, config, mapResult, submitter.Submit, submitter.Pump(), scheduler.Pump, dispatcher.Pump(), statsInterval)
+        PipelinedConsumer.Start(log, config, mapResult, submitter.Submit, submitter.Pump(), streamsScheduler.Pump, dispatcher.Pump(), statsInterval)

@@ -1,4 +1,4 @@
-﻿namespace Equinox.Projection
+﻿namespace Jet.Projection
 
 open Serilog
 open System
@@ -6,6 +6,11 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Diagnostics
 open System.Threading
+
+/// Item from a reader as supplied to the `IIngester`
+type [<NoComparison>] StreamItem = { stream: string; index: int64; event: Equinox.Codec.IEvent<byte[]> }
+
+type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
 
 /// Gathers stats relating to how many items of a given category have been observed
 type CatStats() =
@@ -17,11 +22,7 @@ type CatStats() =
         | false, _ -> cats.[cat] <- weight
     member __.Any = cats.Count <> 0
     member __.Clear() = cats.Clear()
-#if NET461
-    member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortBy (fun (_,s) -> -s)
-#else
-    member __.StatsDescending = cats |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
-#endif
+    member __.StatsDescending = cats |> Seq.sortBy (fun x -> -x.Value)
 
 /// Gathers stats relating to how many items of a given partition have been observed
 type PartitionStats() =
@@ -32,11 +33,7 @@ type PartitionStats() =
         | true, catCount -> partitions.[partitionId] <- catCount + weight
         | false, _ -> partitions.[partitionId] <- weight
     member __.Clear() = partitions.Clear()
-#if NET461
-    member __.StatsDescending = partitions |> Seq.map (|KeyValue|) |> Seq.sortBy (fun (_,s) -> -s)
-#else
-    member __.StatsDescending = partitions |> Seq.map (|KeyValue|) |> Seq.sortByDescending snd
-#endif
+    member __.StatsDescending = partitions |> Seq.sortBy (fun x -> -x.Value)
 
 [<AutoOpen>]
 module private Impl =
@@ -91,12 +88,32 @@ module Progress =
             tmp.Sort(fun (_,_a) ((_,_b)) -> c.Compare(_a,_b))
             tmp |> Seq.map (fun ((s,_)) -> s)
 
+    /// Manages writing of progress
+    /// - Each write attempt is always of the newest token (each update is assumed to also count for all preceding ones)
+    /// - retries until success or a new item is posted
+    type Writer<'Res when 'Res: equality>(?period,?sleep) =
+        let writeInterval,sleepPeriod = defaultArg period (TimeSpan.FromSeconds 5.), int (defaultArg sleep (TimeSpan.FromMilliseconds 100.)).TotalMilliseconds
+        let due = intervalCheck writeInterval
+        let mutable committedEpoch = None
+        let mutable validatedPos = None
+        let result = Event<Choice<'Res,exn>>()
+        [<CLIEvent>] member __.Result = result.Publish
+        member __.Post(version,f) =
+            Volatile.Write(&validatedPos,Some (version,f))
+        member __.CommittedEpoch = Volatile.Read(&committedEpoch)
+        member __.Pump() = async {
+            let! ct = Async.CancellationToken
+            while not ct.IsCancellationRequested do
+                match Volatile.Read &validatedPos with
+                | Some (v,f) when Volatile.Read(&committedEpoch) <> Some v && due () ->
+                    try do! f
+                        Volatile.Write(&committedEpoch, Some v)
+                        result.Trigger (Choice1Of2 v)
+                    with e -> result.Trigger (Choice2Of2 e)
+                | _ -> do! Async.Sleep sleepPeriod }
+
 module Buffering =
 
-    /// Item from a reader as supplied to the `IIngester`
-    type [<NoComparison>] StreamItem = { stream: string; index: int64; event: Equinox.Codec.IEvent<byte[]> }
-
-    type [<NoComparison>] Span = { index: int64; events: Equinox.Codec.IEvent<byte[]>[] }
     module Span =
         let (|End|) (x : Span) = x.index + if x.events = null then 0L else x.events.LongLength
         let dropBeforeIndex min : Span -> Span = function
@@ -146,7 +163,6 @@ module Buffering =
             let trimmed = { x with events = x.events |> Array.takeWhile withinLimits }
             let stats = trimmed.events.Length, trimmed.events |> Seq.sumBy estimateBytesAsJsonUtf8
             stats, trimmed
-    type [<NoComparison>] StreamSpan = { stream: string; span: Span }
     type [<NoComparison>] StreamState = { isMalformed: bool; write: int64 option; queue: Span[] } with
         member __.Size =
             if __.queue = null then 0
@@ -222,18 +238,18 @@ module StreamScheduling =
                 update x.Key x.Value |> ignore
 
         let busy = HashSet<string>()
-        let pending trySlipstreamed (requestedOrder : string seq) : seq<int64 option*StreamSpan> = seq {
+        let pending trySlipstreamed (requestedOrder : string seq) : seq<int64 option*string*Span> = seq {
             let proposed = HashSet()
             for s in requestedOrder do
                 let state = states.[s]
                 if state.IsReady && not (busy.Contains s) then
                     proposed.Add s |> ignore
-                    yield state.write, { stream = s; span = state.queue.[0] }
+                    yield state.write, s, state.queue.[0]
             if trySlipstreamed then
                 // [lazily] Slipstream in futher events that have been posted to streams which we've already visited
                 for KeyValue(s,v) in states do
                     if v.IsReady && not (busy.Contains s) && proposed.Add s then
-                        yield v.write, { stream = s; span = v.queue.[0] } }
+                        yield v.write, s, v.queue.[0] }
         let markBusy stream = busy.Add stream |> ignore
         let markNotBusy stream = busy.Remove stream |> ignore
 
@@ -256,7 +272,7 @@ module StreamScheduling =
             markCompleted stream index
         member __.MarkFailed stream =
             markNotBusy stream
-        member __.Pending(trySlipstreamed, byQueuedPriority : string seq) : (int64 option * StreamSpan) seq =
+        member __.Pending(trySlipstreamed, byQueuedPriority : string seq) : (int64 option * string * Span) seq =
             pending trySlipstreamed byQueuedPriority
         member __.Dump(log : ILogger, categorize) =
             let mutable busyCount, busyB, ready, readyB, unprefixed, unprefixedB, malformed, malformedB, synced = 0, 0L, 0, 0L, 0, 0L, 0, 0L, 0
@@ -361,7 +377,7 @@ module StreamScheduling =
             dop.Release() |> ignore } 
         [<CLIEvent>] member __.Result = result.Publish
         member __.HasCapacity = dop.CurrentCount > 0
-        member __.State = maxDop-dop.CurrentCount,max 
+        member __.State = maxDop-dop.CurrentCount,maxDop
         member __.TryAdd(item) =
             if dop.Wait 0 then
                 work.Add(item)
@@ -373,23 +389,26 @@ module StreamScheduling =
                 Async.Start(dispatch item) }
 
     [<NoComparison>]
-    type Batch private (onCompletion, buffer, reqs) =
+    type StreamsBatch private (onCompletion, buffer, reqs) =
         let mutable buffer = Some buffer
-        static member Create (onCompletion, items : StreamItem seq) =
+        static member Create(onCompletion, items : StreamItem seq) =
             let buffer, reqs = Buffering.Streams(), Dictionary<string,int64>()
+            let mutable itemCount = 0
             for item in items do
+                itemCount <- itemCount + 1
                 buffer.Merge(item)
                 match reqs.TryGetValue(item.stream), item.index + 1L with
                 | (false, _), required -> reqs.[item.stream] <- required
                 | (true, actual), required when actual < required -> reqs.[item.stream] <- required
                 | (true,_), _ -> () // replayed same or earlier item
             reqs.TrimExcess()
-            Batch(onCompletion, buffer, reqs)
+            let batch = StreamsBatch(onCompletion, buffer, reqs)
+            batch,(batch.RemainingStreamsCount,itemCount)
         member __.OnCompletion = onCompletion
         member __.Reqs = reqs :> seq<KeyValuePair<string,int64>>
-        member __.ItemCount = reqs.Count
+        member __.RemainingStreamsCount = reqs.Count
         member __.TryTakeStreams() = let t = buffer in buffer <- None; t
-        member __.TryMerge(other : Batch) =
+        member __.TryMerge(other : StreamsBatch) =
             match buffer, other.TryTakeStreams() with
             | Some x, Some y -> x.Merge(y); true
             | _, x -> buffer <- x; false
@@ -399,11 +418,11 @@ module StreamScheduling =
     /// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
     /// c) submits work to the supplied Dispatcher (which it triggers pumping of)
     /// d) periodically reports state (with hooks for ingestion engines to report same)
-    type StreamSchedulingEngine<'R,'E>(dispatcher : Dispatcher<_>, stats : Stats<'R,'E>, project : int64 option * StreamSpan -> Async<Choice<_,_>>, interpretProgress, dumpStreams, ?maxBatches) =
+    type StreamSchedulingEngine<'R,'E>(dispatcher : Dispatcher<_>, stats : Stats<'R,'E>, project : int64 option * string * Span -> Async<Choice<_,_>>, interpretProgress, dumpStreams, ?maxBatches) =
         let sleepIntervalMs = 1
         let maxBatches = defaultArg maxBatches 4 
         let work = ConcurrentStack<InternalMessage<Choice<'R,'E>>>() // dont need them ordered so Queue is unwarranted; usage is cross-thread so Bag is not better
-        let pending = ConcurrentQueue<Batch>() // Queue as need ordering
+        let pending = ConcurrentQueue<StreamsBatch>() // Queue as need ordering
         let streams = StreamStates()
         let progressState = Progress.State()
 
@@ -433,7 +452,7 @@ module StreamScheduling =
                 let potential = streams.Pending(includeSlipstreamed, progressState.InScheduledOrder streams.QueueWeight)
                 let xs = potential.GetEnumerator()
                 while xs.MoveNext() && hasCapacity do
-                    let (_,{stream = s} : StreamSpan) as item = xs.Current
+                    let (_,s,_) as item = xs.Current
                     let succeeded = dispatcher.TryAdd(async { let! r = project item in return s, r })
                     if succeeded then streams.MarkBusy s
                     dispatched <- dispatched || succeeded // if we added any request, we'll skip sleeping
@@ -504,14 +523,14 @@ module StreamScheduling =
                 if not (stats.TryDumpState(dispatcherState,dumpStreams streams,(dt,ft,mt,it,st))) && not idle then
                     // 4. Do a minimal sleep so we don't run completely hot when empty (unless we did something non-trivial)
                     Thread.Sleep sleepIntervalMs } // Not Async.Sleep so we don't give up the thread
-        member __.Submit(x : Batch) =
+        member __.Submit(x : StreamsBatch) =
             pending.Enqueue(x)
 
     type Factory =
-        static member Create(dispatcher : Dispatcher<_>, stats : Stats<int64,exn>, handle : StreamSpan -> Async<int>, dumpStreams, ?maxBatches) : StreamSchedulingEngine<int64,exn> =
-            let project (_maybeWritePos, batch : StreamSpan) = async {
-                try let! count = handle batch
-                    return Choice1Of2 (batch.span.index + int64 count)
+        static member Create(dispatcher : Dispatcher<_>, stats : Stats<int64,exn>, handle : string*Span -> Async<int>, dumpStreams, ?maxBatches) : StreamSchedulingEngine<int64,exn> =
+            let project (_maybeWritePos, stream, span) = async {
+                try let! count = handle (stream,span)
+                    return Choice1Of2 (span.index + int64 count)
                 with e -> return Choice2Of2 e }
             let interpretProgress _streams _stream = function
                 | Choice1Of2 index -> Some index
@@ -535,8 +554,9 @@ module Submission =
     /// Holds the stream of incoming batches, grouping by partition
     /// Manages the submission of batches into the Scheduler in a fair manner
     type SubmissionEngine<'M,'B>
-        (   log : ILogger, pumpInterval : TimeSpan, maxSubmitsPerPartition, mapBatch: (unit -> unit) -> Batch<'M> -> 'B, submitBatch : 'B -> int, statsInterval,
+        (   log : ILogger, maxSubmitsPerPartition, mapBatch: (unit -> unit) -> Batch<'M> -> 'B, submitBatch : 'B -> int, statsInterval, ?pumpInterval : TimeSpan,
             ?tryCompactQueue) =
+        let pumpInterval = defaultArg pumpInterval (TimeSpan.FromMilliseconds 5.)
         let incoming = new BlockingCollection<Batch<'M>[]>(ConcurrentQueue())
         let buffer = Dictionary<int,PartitionQueue<'B>>()
         let mutable cycles, ingested, compacted = 0, 0, 0
@@ -604,7 +624,11 @@ module Submission =
 
                 maybeLogStats () }
 
-        /// Supplies an incoming Batch for holding and forwarding to scheduler at the right time
+        /// Supplies a set of Batches for holding and forwarding to scheduler at the right time
         member __.Submit(items : Batch<'M>[]) =
             Interlocked.Increment(&ingested) |> ignore
             incoming.Add items
+
+        /// Supplies an incoming Batch for holding and forwarding to scheduler at the right time
+        member __.Submit(batch : Batch<'M>) =
+            __.Submit(Array.singleton batch)

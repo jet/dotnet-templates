@@ -3,7 +3,8 @@
 open Equinox.Cosmos
 open Equinox.Store // Stopwatch.Time
 open Equinox.Cosmos.Projection
-open Equinox.Projection
+open Jet.Projection
+//open Jet.Projection.Buffering
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
 open Serilog
@@ -136,19 +137,16 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-let createRangeHandler (log : ILogger) (createIngester : ILogger -> IIngester<int64,'item>) (mapContent : Microsoft.Azure.Documents.Document seq -> 'item seq) () =
+let createRangeHandler (log : ILogger) (createIngester : ILogger -> Ingestion.Ingester<int*_,_>) mapContent () =
     let mutable rangeIngester = Unchecked.defaultof<_>
     let init rangeLog = async { rangeIngester <- createIngester rangeLog }
-    let ingest epoch checkpoint docs =
-        let items : 'item seq = mapContent docs
-        rangeIngester.Submit(epoch, checkpoint, items)
     let dispose () = rangeIngester.Stop()
     let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
     let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
         let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
         // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
-        let! pt, (cur,max) = ingest epoch (ctx.Checkpoint()) docs |> Stopwatch.Time
+        let! pt, (cur,max) = rangeIngester.Submit(epoch, ctx.Checkpoint(), (int ctx.PartitionKeyRangeId, mapContent docs)) |> Stopwatch.Time
         let age, readS, postS = DateTime.UtcNow - docs.[docs.Count-1].Timestamp, float sw.ElapsedMilliseconds / 1000., let e = pt.Elapsed in e.TotalSeconds
         log.Information("Read {token,9} age {age:dd\.hh\:mm\:ss} {count,4} docs {requestCharge,6:f1}RU {l,5:f1}s Ingest {pt:f3}s {cur}/{max}",
             epoch, age, docs.Count, ctx.FeedResponse.RequestCharge, readS, postS, cur, max)
@@ -194,14 +192,14 @@ let replaceLongDataWithNull (x : Equinox.Codec.IEvent<_[]>) =
     if x.Data.Length < 900_000 then x
     else Equinox.Codec.Core.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
 
-let hackDropBigBodies (e : Equinox.Projection.StreamItem) =
+let hackDropBigBodies (e : Equinox.Projection.StreamItem) : Jet.Projection.StreamItem =
     { stream = e.stream; index = e.index; event = replaceLongDataWithNull e.event }
 
-let mapContent (docs : Microsoft.Azure.Documents.Document seq) : StreamItem seq =
+let mapContent (docs : Microsoft.Azure.Documents.Document seq) : Jet.Projection.StreamItem seq =
     docs
     |> Seq.collect DocumentParser.enumEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent
-    //>> Seq.map hackDropBigBodies
+    |> Seq.map hackDropBigBodies
 
 [<EntryPoint>]
 let main argv =
@@ -212,16 +210,16 @@ let main argv =
         let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
 #if kafka
         let (broker,topic) = args.Target.BuildTargetParams()
-        let scheduler = KafkaSink.Scheduler.Start(Log.Logger, "ProjectorTemplate", broker, topic, maxConcurrentStreams, categorize, (TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.))
-        let createIngester rangeLog = ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize, TimeSpan.FromMinutes 10.)
+        let producer = Jet.Projection.Kafka.KafkaStreamProducer.Start(Log.Logger, "ProjectorTemplate", broker, topic, maxConcurrentStreams, categorize, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., maxSubmissionsPerPartition=maxSubmissionsPerRange)
+        let createIngester rangeLog = Jet.Projection.Ingestion.Ingester.Start(rangeLog, maxReadAhead, producer.Submit)
 #else
-        let project (batch : Buffer.StreamSpan) = async { 
+        let project (_stream, span: Jet.Projection.Span) = async { 
             let r = Random()
-            let ms = r.Next(1,batch.span.events.Length * 10)
+            let ms = r.Next(1,span.events.Length * 10)
             do! Async.Sleep ms
-            return batch.span.events.Length }
-        let scheduler = ProjectorSink.Scheduler.Start(Log.Logger, maxConcurrentStreams, project, categorize, TimeSpan.FromMinutes 1.)
-        let createIngester rangeLog = ProjectorSink.Ingester.Start (rangeLog, scheduler, maxReadAhead, maxSubmissionsPerRange, categorize)
+            return span.events.Length }
+        let projector = StreamProjectorSink.Start(Log.Logger, project, maxConcurrentStreams, categorize, TimeSpan.FromMinutes 1.)
+        let createIngester rangeLog = Jet.Projection.Ingestion.Ingester.Start (rangeLog, maxReadAhead, projector.Submit)
 #endif
         run Log.Logger discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromTail, maxDocuments, lagFrequency)

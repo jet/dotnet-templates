@@ -4,13 +4,16 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <WarningLevel>5</WarningLevel>
+    <DefineConstants>kafka_</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Consumer\Projection.fs" Link="Projection.fs" />
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="ProjectorSink.fs" />
+    <Compile Include="Ingestion.fs" />
+    <Compile Include="StreamProjectorSink.fs" />
     <!--#if (kafka)-->
-    <Compile Include="KafkaSink.fs" />
+    <Compile Include="KafkaProducer.fs" />
     <!--#endif-->
     <Compile Include="Program.fs" />
   </ItemGroup>
