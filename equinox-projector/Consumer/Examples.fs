@@ -84,7 +84,8 @@ type MessageInterpreter() =
 
     member __.EnumEvents(spanJson) =
         JsonConvert.DeserializeObject<RenderedSpan>(spanJson) |> RenderedSpan.enumEvents
-    member __.EnumStreamItems(KeyValue (streamName, spanJson)) : seq<StreamItem> =
+    member __.EnumStreamItems(KeyValue (streamName : string, spanJson)) : seq<StreamItem> =
+        if streamName.StartsWith("#serial") then Seq.empty else
         let span = JsonConvert.DeserializeObject<RenderedSpan>(spanJson)
         __.EnumEvents(spanJson) |> Seq.mapi (fun i x -> { stream = streamName; index = span.i + int64 i; event = x })
 
@@ -98,7 +99,8 @@ type Processor() =
     let cats, keys = CatStats(), ConcurrentDictionary()
 
     member __.DumpStats(log : ILogger) =
-        log.Information("Favorited {f} Unfavorited {u} Saved {s} Cleared {c}", favorited, unfavorited, saved, cleared)
+        log.Information("Favorited {f} Unfavorited {u} Saved {s} Cleared {c} Keys {keyCount} Categories {catCount}",
+            favorited, unfavorited, saved, cleared, keys.Count, Seq.truncate 5 cats.StatsDescending)
         favorited <- 0; unfavorited <- 0; saved <- 0; cleared <- 0; cats.Clear(); keys.Clear()
     member __.Handle = function
         | Faves (Favorites.Favorited _) -> Interlocked.Increment &favorited |> ignore

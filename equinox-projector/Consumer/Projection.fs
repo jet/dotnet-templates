@@ -608,7 +608,7 @@ module Submission =
                 if f pq.queue then
                     worked <- true
             if worked then compacted <- compacted + 1; true
-            else  false
+            else false
 
         /// Processing loop, continuously splitting `Submit`ted items into per-partition queues and ensuring enough items are provided to the Scheduler
         member __.Pump() = async {
@@ -620,6 +620,7 @@ module Submission =
                     propagated <- ingest items
                     while incoming.TryTake(&items) do
                         if ingest items then propagated <- true
+                else propagated <- propagate()
                 match propagated, tryCompactQueue with
                 | false, None -> Thread.Sleep 2
                 | false, Some f when not (compact f) -> Thread.Sleep 2

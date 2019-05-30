@@ -260,7 +260,7 @@ type KafkaPartitionMetrics =
 type ConsumerBuilder =
     static member WithLogging(log : ILogger, config, ?onRevoke) =
         if List.isEmpty config.topics then invalidArg "config" "must specify at least one topic"
-        log.Information("Consuming... {broker} {topics} {groupId} autoOffsetReset={autoOffsetReset} fetchMaxBytes={fetchMaxB} maxInFlight={maxInFlightGB}GB maxBatchSize={maxBatchB} maxBatchDelay={maxBatchDelay}s",
+        log.Information("Consuming... {broker} {topics} {groupId} autoOffsetReset={autoOffsetReset} fetchMaxBytes={fetchMaxB} maxInFlight={maxInFlightGB:n1}GB maxBatchSize={maxBatchB} maxBatchDelay={maxBatchDelay}s",
             config.inner.BootstrapServers, config.topics, config.inner.GroupId, (let x = config.inner.AutoOffsetReset in x.Value), config.inner.FetchMaxBytes,
             float config.buffering.maxInFlightBytes / 1024. / 1024. / 1024., config.buffering.maxBatchSize, (let t = config.buffering.maxBatchDelay in t.TotalSeconds))
         let consumer =
