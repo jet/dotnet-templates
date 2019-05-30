@@ -4,7 +4,6 @@ open Equinox.Cosmos
 open Equinox.Store // Stopwatch.Time
 open Equinox.Cosmos.Projection
 open Jet.Projection
-//open Jet.Projection.Buffering
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
 open Serilog
@@ -210,20 +209,18 @@ let main argv =
         let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
 #if kafka
         let (broker,topic) = args.Target.BuildTargetParams()
-        let producer = Jet.Projection.Kafka.KafkaStreamProducer.Start(Log.Logger, "ProjectorTemplate", broker, topic, maxConcurrentStreams, categorize, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., maxSubmissionsPerPartition=maxSubmissionsPerRange)
-        let createIngester rangeLog = Jet.Projection.Ingestion.Ingester.Start(rangeLog, maxReadAhead, producer.Submit)
+        let projector = Jet.Projection.Kafka.KafkaStreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, categorize, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., maxSubmissionsPerPartition=maxSubmissionsPerRange)
 #else
         let project (_stream, span: Jet.Projection.Span) = async { 
             let r = Random()
             let ms = r.Next(1,span.events.Length * 10)
             do! Async.Sleep ms
             return span.events.Length }
-        let projector = StreamProjectorSink.Start(Log.Logger, project, maxConcurrentStreams, categorize, TimeSpan.FromMinutes 1.)
-        let createIngester rangeLog = Jet.Projection.Ingestion.Ingester.Start (rangeLog, maxReadAhead, projector.Submit)
+        let projector = Jet.Projection.Kafka.StreamsProjector.Start(Log.Logger, maxReadAhead, project, maxConcurrentStreams, categorize, TimeSpan.FromMinutes 1., , maxSubmissionsPerPartition=maxSubmissionsPerRange)
 #endif
         run Log.Logger discovery connector.ConnectionPolicy source
             (aux, leaseId, startFromTail, maxDocuments, lagFrequency)
-            (createRangeHandler Log.Logger createIngester mapContent)
+            (createRangeHandler Log.Logger projector.StartIngester mapContent)
         |> Async.RunSynchronously
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

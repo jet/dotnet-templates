@@ -625,10 +625,10 @@ module Submission =
                 maybeLogStats () }
 
         /// Supplies a set of Batches for holding and forwarding to scheduler at the right time
-        member __.Submit(items : Batch<'M>[]) =
+        member __.Ingest(items : Batch<'M>[]) =
             Interlocked.Increment(&ingested) |> ignore
             incoming.Add items
 
         /// Supplies an incoming Batch for holding and forwarding to scheduler at the right time
-        member __.Submit(batch : Batch<'M>) =
-            __.Submit(Array.singleton batch)
+        member __.Ingest(batch : Batch<'M>) =
+            __.Ingest(Array.singleton batch)

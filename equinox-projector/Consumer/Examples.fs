@@ -116,7 +116,7 @@ open Jet.Projection.Kafka
 type BatchingSync =
     /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
     /// Processing runs as a single Async computation per batch, which can work well where parallism is not relevant
-    static member Start(cfg: KafkaConsumerConfig) =
+    static member Start(config : KafkaConsumerConfig) =
         let log = Log.ForContext<BatchingSync>()
         let interpreter = MessageInterpreter()
         let handleBatch (msgs : ConsumeResult<_,_>[]) = async {
@@ -125,23 +125,23 @@ type BatchingSync =
                 for x in interpreter.TryDecode(m.Key, m.Value) do
                     processor.Handle x
             processor.DumpStats log }
-        BatchedConsumer.Start(log, cfg, handleBatch)
+        BatchedConsumer.Start(log, config, handleBatch)
         
 type Parallel =
     /// Starts a consumer that consumes a topic in streamed mode
     /// StreamingConsumer manages the parallelism, spreading individual messages out to Async tasks
     /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
-    static member Start(cfg: KafkaConsumerConfig, degreeOfParallelism: int) =
+    static member Start(config : KafkaConsumerConfig, degreeOfParallelism : int) =
         let log = Log.ForContext<Parallel>()
         let interpreter, processor = MessageInterpreter(), Processor()
         let handleMessage (KeyValue (streamName,eventsSpan)) = async {
             for x in interpreter.TryDecode(streamName,eventsSpan) do
                 processor.Handle x }
-        ParallelConsumer.Start(log, cfg, degreeOfParallelism, handleMessage, statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
+        ParallelConsumer.Start(log, config, degreeOfParallelism, handleMessage, statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
         
-type Ordered =
-    static member Start(cfg: KafkaConsumerConfig, degreeOfParallelism: int) =
-        let log = Log.ForContext<Ordered>()
+type StreamSpan =
+    static member Start(config : KafkaConsumerConfig, degreeOfParallelism : int) =
+        let log = Log.ForContext<StreamSpan>()
         let interpreter, processor = MessageInterpreter(), Processor()
         let statsInterval, stateInterval = TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.
         let handle (streamName : string, span : Span) = async {
@@ -150,8 +150,8 @@ type Ordered =
             return span.events.Length }
         let categorize (streamName : string) =
             streamName.Split([|'-';'_'|],2).[0]
-        OrderedConsumer.Start
-            (   log, cfg, degreeOfParallelism, interpreter.EnumStreamItems, handle, categorize, maxSubmissionsPerPartition = 4,
+        StreamSpanConsumer.Start
+            (   log, config, degreeOfParallelism, interpreter.EnumStreamItems, handle, categorize, maxSubmissionsPerPartition = 4,
                 statsInterval = statsInterval, stateInterval = stateInterval, logExternalStats = processor.DumpStats)
         
 type BatchingAsync =
@@ -159,7 +159,7 @@ type BatchingAsync =
     /// Processing fans out as parallel Async computations (limited to max `degreeOfParallelism` concurrent tasks
     /// The messages in the batch emanate from a single partition and are all in sequence
     /// notably useful where there's an ability to share some processing cost across a batch of work by doing the processing in phases
-    static member Start(cfg: KafkaConsumerConfig, degreeOfParallelism: int) =
+    static member Start(config : KafkaConsumerConfig, degreeOfParallelism : int) =
         let log = Log.ForContext<BatchingAsync>()
         let dop = new SemaphoreSlim(degreeOfParallelism)
         let interpreter = MessageInterpreter()
@@ -170,4 +170,4 @@ type BatchingAsync =
                 |> Seq.map (fun x -> async { processor.Handle x } |> dop.Throttle)
                 |> Async.Parallel
             processor.DumpStats log }
-        BatchedConsumer.Start(log, cfg, handleBatch)
+        BatchedConsumer.Start(log, config, handleBatch)

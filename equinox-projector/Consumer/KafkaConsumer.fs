@@ -359,7 +359,7 @@ type ParallelConsumer =
             scheduler.Submit x
             x.messages.Length
         let submitter = Submission.SubmissionEngine(log, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, pumpInterval)
-        PipelinedConsumer.Start(log, config, mapResult, submitter.Submit, submitter.Pump(), scheduler.Pump, dispatcher.Pump(), statsInterval)
+        PipelinedConsumer.Start(log, config, mapResult, submitter.Ingest, submitter.Pump(), scheduler.Pump, dispatcher.Pump(), statsInterval)
 
     /// Builds a processing pipeline per the `config` running up to `dop` instances of `handle` concurrently to maximize global throughput across partitions.
     /// Processor pumps until `handle` yields a `Choice2Of2` or `Stop()` is requested.
@@ -370,7 +370,7 @@ type ParallelConsumer =
         ParallelConsumer.Start<KeyValuePair<string,string>>(log, config, maxDop, mapConsumeResult, handle >> Async.Catch,
             ?maxSubmissionsPerPartition=maxSubmissionsPerPartition, ?pumpInterval=pumpInterval, ?statsInterval=statsInterval, ?logExternalStats=logExternalStats)
 
-type OrderedConsumer =
+type StreamSpanConsumer =
     /// Builds a processing pipeline per the `config` running up to `dop` instances of `handle` concurrently to maximize global throughput across partitions.
     /// Processor pumps until `handle` yields a `Choice2Of2` or `Stop()` is requested.
     static member Start<'M>
@@ -401,4 +401,4 @@ type OrderedConsumer =
             x.RemainingStreamsCount
         let submitter = Submission.SubmissionEngine(log, maxSubmissionsPerPartition, mapConsumedMessagesToStreamsBatch, submitStreamsBatch, statsInterval, pumpInterval, tryCompactQueue)
         let mapResult (x : Confluent.Kafka.ConsumeResult<string,string>) = KeyValuePair(x.Key,x.Value)
-        PipelinedConsumer.Start(log, config, mapResult, submitter.Submit, submitter.Pump(), streamsScheduler.Pump, dispatcher.Pump(), statsInterval)
+        PipelinedConsumer.Start(log, config, mapResult, submitter.Ingest, submitter.Pump(), streamsScheduler.Pump, dispatcher.Pump(), statsInterval)

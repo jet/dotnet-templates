@@ -167,11 +167,11 @@ type Ingester<'Items,'Batch> private
     /// As range assignments get revoked, a user is expected to `Stop `the active processing thread for the Ingester before releasing references to it
     member __.Stop() = cts.Cancel()
 
-type Ingester =
+type StreamsIngester =
     static member Start(log, maxRead, submit, ?statsInterval, ?sleepInterval) =
         let makeBatch onCompletion (partitionId,items : StreamItem seq) =
             let items = Array.ofSeq items
             let streams = HashSet(seq { for x in items -> x.stream })
-            let batch : Submission.Batch<_> = { partitionId=partitionId; onCompletion=onCompletion; messages = items }
+            let batch : Submission.Batch<_> = { partitionId = partitionId; onCompletion = onCompletion; messages = items }
             batch,(streams.Count,items.Length)
         Ingester<int*StreamItem seq,Submission.Batch<StreamItem>>.Start(log, maxRead, makeBatch, submit, ?statsInterval = statsInterval, ?sleepInterval = sleepInterval)
