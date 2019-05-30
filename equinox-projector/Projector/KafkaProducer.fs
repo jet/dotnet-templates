@@ -3,10 +3,61 @@
 open Confluent.Kafka
 open Jet.ConfluentKafka.FSharp
 open Jet.Projection
+open Jet.Projection.Ingestion // AwaitTaskCorrect
 open Newtonsoft.Json
 open Serilog
 open System
 open System.Collections.Generic
+open System.Threading
+open System.Threading.Tasks
+
+type PipelinedProjector private (task : Task<unit>, triggerStop, startIngester) =
+
+    interface IDisposable with member __.Dispose() = __.Stop()
+
+    member __.StartIngester(rangeLog : ILogger) = startIngester rangeLog
+
+    /// Inspects current status of processing task
+    member __.Status = task.Status
+
+    /// Request cancellation of processing
+    member __.Stop() = triggerStop ()
+
+    /// Asynchronously awaits until consumer stops or a `handle` invocation yields a fault
+    member __.AwaitCompletion() = Async.AwaitTaskCorrect task
+
+    static member Start(log : Serilog.ILogger, pumpDispatcher, pumpScheduler, pumpSubmitter, startIngester) =
+        let cts = new CancellationTokenSource()
+        let ct = cts.Token
+        let tcs = new TaskCompletionSource<unit>()
+        let start name f =
+            let wrap (name : string) computation = async {
+                try do! computation
+                    log.Information("Exiting {name}", name)
+                with e -> log.Fatal(e, "Abend from {name}", name) }
+            Async.Start(wrap name f, ct)
+        // if scheduler encounters a faulted handler, we propagate that as the consumer's Result
+        let abend (exns : AggregateException) =
+            if tcs.TrySetException(exns) then log.Warning(exns, "Cancelling processing due to {count} faulted handlers", exns.InnerExceptions.Count)
+            else log.Information("Failed setting {count} exceptions", exns.InnerExceptions.Count)
+            // NB cancel needs to be after TSE or the Register(TSE) will win
+            cts.Cancel()
+        let machine = async {
+            // external cancellation should yield a success result
+            use _ = ct.Register(fun _ -> tcs.TrySetResult () |> ignore)
+            start "dispatcher" <| pumpDispatcher
+            // ... fault results from dispatched tasks result in the `machine` concluding with an exception
+            start "scheduler" <| pumpScheduler abend
+            start "submitter" <| pumpSubmitter
+
+            // await for either handler-driven abend or external cancellation via Stop()
+            do! Async.AwaitTaskCorrect tcs.Task
+        }
+        let task = Async.StartAsTask machine
+        let triggerStop () =
+            log.Information("Stopping")
+            cts.Cancel();  
+        new PipelinedProjector(task, triggerStop, startIngester)
 
 [<AutoOpen>]
 module private Impl =
@@ -46,92 +97,37 @@ module private Impl =
                 incr resultExnOther
                 log.Warning(exn,"Could not write {b:n0} bytes {e:n0}e in stream {stream}", bs, es, stream)
 
-    open System.Threading.Tasks
-    open Jet.Projection.Ingestion // AwaitTaskCorrect
-    open System.Threading
-
-    type PipelinedProjector private (task : Task<unit>, triggerStop, startIngester) =
-
-        interface IDisposable with member __.Dispose() = __.Stop()
-
-        member __.StartIngester(rangeLog : ILogger) = startIngester rangeLog
-
-        /// Inspects current status of processing task
-        member __.Status = task.Status
-
-        /// Request cancellation of processing
-        member __.Stop() = triggerStop ()
-
-        /// Asynchronously awaits until consumer stops or a `handle` invocation yields a fault
-        member __.AwaitCompletion() = Async.AwaitTaskCorrect task
-
-        static member Start(log : Serilog.ILogger, pumpDispatcher, pumpScheduler, pumpSubmitter, startIngester) =
-            let cts = new CancellationTokenSource()
-            let ct = cts.Token
-            let tcs = new TaskCompletionSource<unit>()
-            let start name f =
-                let wrap (name : string) computation = async {
-                    try do! computation
-                        log.Information("Exiting {name}", name)
-                    with e -> log.Fatal(e, "Abend from {name}", name) }
-                Async.Start(wrap name f, ct)
-            // if scheduler encounters a faulted handler, we propagate that as the consumer's Result
-            let abend (exns : AggregateException) =
-                if tcs.TrySetException(exns) then log.Warning(exns, "Cancelling processing due to {count} faulted handlers", exns.InnerExceptions.Count)
-                else log.Information("Failed setting {count} exceptions", exns.InnerExceptions.Count)
-                // NB cancel needs to be after TSE or the Register(TSE) will win
-                cts.Cancel()
-            let machine = async {
-                // external cancellation should yield a success result
-                use _ = ct.Register(fun _ -> tcs.TrySetResult () |> ignore)
-                start "dispatcher" <| pumpDispatcher
-                // ... fault results from dispatched tasks result in the `machine` concluding with an exception
-                start "scheduler" <| pumpScheduler abend
-                start "submitter" <| pumpSubmitter
-
-                // await for either handler-driven abend or external cancellation via Stop()
-                do! Async.AwaitTaskCorrect tcs.Task
-            }
-            let task = Async.StartAsTask machine
-            let triggerStop () =
-                log.Information("Stopping")
-                cts.Cancel();  
-            new PipelinedProjector(task, triggerStop, startIngester)
-
-    //type PipelinedStreamsProjector =
-    //    static member Start(log : Serilog.ILogger, pumpDispatcher, pumpScheduler, pumpSubmitter, startIngester, ?maxSubmissionsPerPartition) =
-    //        let maxSubmissionsPerPartition = defaultArg maxSubmissionsPerPartition 5
-    //        let submitter = Submission.SubmissionEngine<_,_>(log, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, tryCompactQueue=tryCompactQueue)
-    //        let startIngester rangeLog = Jet.Projection.Ingestion.StreamsIngester.Start(rangeLog, maxReadAhead, submitter.Ingest)
-    //        PipelinedProjector.Start(log, dispatcher.Pump(), streamScheduler.Pump, submitter.Pump(), startIngester)
+    type PipelinedStreamsProjector =
+        static member Start(log : Serilog.ILogger, pumpDispatcher, pumpScheduler, maxReadAhead, submitStreamsBatch, statsInterval, ?maxSubmissionsPerPartition) =
+            let maxSubmissionsPerPartition = defaultArg maxSubmissionsPerPartition 5
+            let mapBatch onCompletion (x : Submission.Batch<StreamItem>) : StreamScheduling.StreamsBatch =
+                let onCompletion () = x.onCompletion(); onCompletion()
+                StreamScheduling.StreamsBatch.Create(onCompletion, x.messages) |> fst
+            let submitBatch (x : StreamScheduling.StreamsBatch) : int =
+                submitStreamsBatch x
+                x.RemainingStreamsCount
+            let tryCompactQueue (queue : Queue<StreamScheduling.StreamsBatch>) =
+                let mutable acc, worked = None, false
+                for x in queue do
+                    match acc with
+                    | None -> acc <- Some x
+                    | Some a -> if a.TryMerge x then worked <- true
+                worked
+            let submitter = Submission.SubmissionEngine<_,_>(log, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, tryCompactQueue=tryCompactQueue)
+            let startIngester rangeLog = Jet.Projection.Ingestion.StreamsIngester.Start(rangeLog, maxReadAhead, submitter.Ingest)
+            PipelinedProjector.Start(log, pumpDispatcher, pumpScheduler, submitter.Pump(), startIngester)
 
 type StreamsProjector =
-    static member Start(log : Serilog.ILogger, maxReadAhead, project, maxConcurrentStreams, categorize, ?statsInterval, ?stateInterval, ?maxSubmissionsPerPartition)
+    static member Start(log : ILogger, maxReadAhead, project, maxConcurrentStreams, categorize, ?statsInterval, ?stateInterval)
             : PipelinedProjector =
         let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
         let projectionStats = StreamScheduling.Stats<_,_>(log.ForContext<StreamScheduling.Stats<_,_>>(), statsInterval, stateInterval)
         let dispatcher = StreamScheduling.Dispatcher<_>(maxConcurrentStreams)
         let streamScheduler = StreamScheduling.Factory.Create(dispatcher, projectionStats, project, fun s l -> s.Dump(l, categorize))
-        let mapBatch onCompletion (x : Submission.Batch<StreamItem>) : StreamScheduling.StreamsBatch =
-            let onCompletion () = x.onCompletion(); onCompletion()
-            StreamScheduling.StreamsBatch.Create(onCompletion, x.messages) |> fst
-        let submitBatch (x : StreamScheduling.StreamsBatch) : int =
-            streamScheduler.Submit x
-            x.RemainingStreamsCount
-        let tryCompactQueue (queue : Queue<StreamScheduling.StreamsBatch>) =
-            let mutable acc, worked = None, false
-            for x in queue do
-                match acc with
-                | None -> acc <- Some x
-                | Some a -> if a.TryMerge x then worked <- true
-            worked
-        let maxSubmissionsPerPartition = defaultArg maxSubmissionsPerPartition 5
-        let submitter = Submission.SubmissionEngine<_,_>(log, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, tryCompactQueue=tryCompactQueue)
-        let startIngester rangeLog = Jet.Projection.Ingestion.StreamsIngester.Start(rangeLog, maxReadAhead, submitter.Ingest)
-        PipelinedProjector.Start(log, dispatcher.Pump(), streamScheduler.Pump, submitter.Pump(), startIngester)
+        PipelinedStreamsProjector.Start(log, dispatcher.Pump(), streamScheduler.Pump, maxReadAhead, streamScheduler.Submit, statsInterval)
         
 type KafkaStreamsProjector =
-    static member Start(log : Serilog.ILogger, maxReadAhead, maxConcurrentStreams, clientId, broker, topic, categorize, ?statsInterval, ?stateInterval, ?maxSubmissionsPerPartition)
+    static member Start(log : ILogger, maxReadAhead, maxConcurrentStreams, clientId, broker, topic, categorize, ?statsInterval, ?stateInterval)
             : PipelinedProjector =
         let producerConfig = KafkaProducerConfig.Create(clientId, broker, Acks.Leader, compression = CompressionType.Lz4, maxInFlight = 1_000_000, linger = TimeSpan.Zero)
         let producer = KafkaProducer.Create(log, producerConfig, topic)
@@ -149,20 +145,4 @@ type KafkaStreamsProjector =
         let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
         let projectionAndKafkaStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, stateInterval)
         let streamScheduler = StreamScheduling.StreamSchedulingEngine<_,_>(dispatcher, projectionAndKafkaStats, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))
-        let mapBatch onCompletion (x : Submission.Batch<StreamItem>) : StreamScheduling.StreamsBatch =
-            let onCompletion () = x.onCompletion(); onCompletion()
-            StreamScheduling.StreamsBatch.Create(onCompletion, x.messages) |> fst
-        let submitBatch (x : StreamScheduling.StreamsBatch) : int =
-            streamScheduler.Submit x
-            x.RemainingStreamsCount
-        let tryCompactQueue (queue : Queue<StreamScheduling.StreamsBatch>) =
-            let mutable acc, worked = None, false
-            for x in queue do
-                match acc with
-                | None -> acc <- Some x
-                | Some a -> if a.TryMerge x then worked <- true
-            worked
-        let maxSubmissionsPerPartition = defaultArg maxSubmissionsPerPartition 5
-        let submitter = Submission.SubmissionEngine<_,_>(log, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, tryCompactQueue=tryCompactQueue)
-        let startIngester rangeLog = Jet.Projection.Ingestion.StreamsIngester.Start(rangeLog, maxReadAhead, submitter.Ingest)
-        PipelinedProjector.Start(log, dispatcher.Pump(), streamScheduler.Pump, submitter.Pump(), startIngester)
+        PipelinedStreamsProjector.Start(log, dispatcher.Pump(), streamScheduler.Pump, maxReadAhead, streamScheduler.Submit, statsInterval)
