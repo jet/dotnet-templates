@@ -42,7 +42,7 @@ module CmdParser =
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
         member __.Group = match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "EQUINOX_KAFKA_GROUP"
         member __.MaxWriters = match args.TryGetResult MaxDop with Some x -> x | None -> 128
-        member __.MaxInFlightBytes = (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 1.) * 1024. * 1024. *1024. |> int64
+        member __.MaxInFlightBytes = (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
         member __.Verbose = args.Contains Verbose
 
 module Logging =

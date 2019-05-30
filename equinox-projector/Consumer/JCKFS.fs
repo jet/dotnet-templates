@@ -260,9 +260,9 @@ type KafkaPartitionMetrics =
 type ConsumerBuilder =
     static member WithLogging(log : ILogger, config, ?onRevoke) =
         if List.isEmpty config.topics then invalidArg "config" "must specify at least one topic"
-        log.Information("Consuming... {broker} {topics} {groupId} autoOffsetReset={autoOffsetReset} fetchMaxBytes={fetchMaxB} maxInFlightBytes={maxInFlightB} maxBatchSize={maxBatchB} maxBatchDelay={maxBatchDelay}s",
+        log.Information("Consuming... {broker} {topics} {groupId} autoOffsetReset={autoOffsetReset} fetchMaxBytes={fetchMaxB} maxInFlight={maxInFlightGB}GB maxBatchSize={maxBatchB} maxBatchDelay={maxBatchDelay}s",
             config.inner.BootstrapServers, config.topics, config.inner.GroupId, (let x = config.inner.AutoOffsetReset in x.Value), config.inner.FetchMaxBytes,
-            config.buffering.maxInFlightBytes, config.buffering.maxBatchSize, (let t = config.buffering.maxBatchDelay in t.TotalSeconds))
+            float config.buffering.maxInFlightBytes / 1024. / 1024. / 1024., config.buffering.maxBatchSize, (let t = config.buffering.maxBatchDelay in t.TotalSeconds))
         let consumer =
             ConsumerBuilder<_,_>(config.inner)
                 .SetLogHandler(fun _c m -> log.Information("consumer_info|{message} level={level} name={name} facility={facility}", m.Message, m.Level, m.Name, m.Facility))
