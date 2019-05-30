@@ -19,6 +19,7 @@ module CmdParser =
         | [<AltCommandLine("-t"); Unique>] Topic of string
         | [<AltCommandLine("-g"); Unique>] Group of string
         | [<AltCommandLine("-w"); Unique>] MaxDop of int
+        | [<AltCommandLine("-m"); Unique>] MaxInflightGb of float
         | [<AltCommandLine("-v"); Unique>] Verbose
 
         interface IArgParserTemplate with
@@ -27,6 +28,7 @@ module CmdParser =
                 | Topic _ ->    "specify Kafka Topic name. (optional if environment variable EQUINOX_KAFKA_TOPIC specified)"
                 | Group _ ->    "specify Kafka Consumer Group Id. (optional if environment variable EQUINOX_KAFKA_GROUP specified)"
                 | MaxDop _ ->   "maximum number of streams to process in parallel"
+                | MaxInflightGb _ -> "maximum GB of data to read ahead"
                 | Verbose _ ->  "request verbose logging."
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -40,6 +42,7 @@ module CmdParser =
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
         member __.Group = match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "EQUINOX_KAFKA_GROUP"
         member __.MaxWriters = match args.TryGetResult MaxDop with Some x -> x | None -> 128
+        member __.MaxInFlightBytes = (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 1.) * 1024. * 1024. *1024. |> int64
         member __.Verbose = args.Contains Verbose
 
 module Logging =
@@ -59,7 +62,7 @@ let main argv =
     try try let parsed = CmdParser.parse argv
             let args = CmdParser.Arguments(parsed)
             Logging.initialize args.Verbose
-            let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group)
+            let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group, maxInFlightBytes = args.MaxInFlightBytes)
             //use c = BatchesSync.Start(cfg)
             //use c = BatchesAsync.Start(cfg, args.MaxWriters)
             //use c = Messages.Start(cfg, args.MaxWriters)
