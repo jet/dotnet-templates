@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <WarningLevel>5</WarningLevel>
-    <DefineConstants>kafka_</DefineConstants>
+    <DefineConstants>kafka</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

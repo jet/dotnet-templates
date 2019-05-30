@@ -22,7 +22,7 @@ type CatStats() =
         | false, _ -> cats.[cat] <- weight
     member __.Any = cats.Count <> 0
     member __.Clear() = cats.Clear()
-    member __.StatsDescending = cats |> Seq.sortBy (fun x -> -x.Value)
+    member __.StatsDescending = cats |> Seq.sortBy (fun x -> -x.Value) |> Seq.map (|KeyValue|)
 
 /// Gathers stats relating to how many items of a given partition have been observed
 type PartitionStats() =
@@ -33,7 +33,7 @@ type PartitionStats() =
         | true, catCount -> partitions.[partitionId] <- catCount + weight
         | false, _ -> partitions.[partitionId] <- weight
     member __.Clear() = partitions.Clear()
-    member __.StatsDescending = partitions |> Seq.sortBy (fun x -> -x.Value)
+    member __.StatsDescending = partitions |> Seq.sortBy (fun x -> -x.Value) |> Seq.map (|KeyValue|)
 
 [<AutoOpen>]
 module private Impl =
@@ -322,12 +322,12 @@ module StreamScheduling =
         let batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0
         let statsDue, stateDue = intervalCheck statsInterval, intervalCheck stateInterval
         let mutable dt,ft,it,st,mt = TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero
-        let dumpStats (used,maxDop) waitingBatches =
-            log.Information("Cycles {cycles}/{fullCycles} {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
-                !cycles, !fullCycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
+        let dumpStats (used,maxDop) batchesWaiting =
+            log.Information("Cycles {fullCycles}({cycles}) {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
+                !fullCycles, !cycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
             cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
             log.Information("Batches Waiting {batchesWaiting} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e)",
-                waitingBatches, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped)
+                batchesWaiting, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped)
             batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0
             log.Information("Scheduling Streams {mt:n1}s Batches {it:n1}s Dispatch {ft:n1}s Results {dt:n1}s Stats {st:n1}s",
                 mt.TotalSeconds, it.TotalSeconds, ft.TotalSeconds, dt.TotalSeconds, st.TotalSeconds)
@@ -343,10 +343,10 @@ module StreamScheduling =
                 incr resultCompleted
             | Result (_stream, Choice2Of2 _) ->
                 incr resultExn
-        member __.DumpStats((used,max), pendingCount) =
+        member __.DumpStats((used,max), batchesWaiting) =
             incr cycles
             if statsDue () then
-                dumpStats (used,max) pendingCount
+                dumpStats (used,max) batchesWaiting
                 __.DumpExtraStats()
         member __.TryDumpState(state,dump,(_dt,_ft,_mt,_it,_st)) =
             dt <- dt + _dt
@@ -411,7 +411,8 @@ module StreamScheduling =
         member __.TryMerge(other : StreamsBatch) =
             match buffer, other.TryTakeStreams() with
             | Some x, Some y -> x.Merge(y); true
-            | _, x -> buffer <- x; false
+            | Some _, None -> false
+            | None, x -> buffer <- x; false
 
     /// Consolidates ingested events into streams; coordinates dispatching of these to projector/ingester in the order implied by the submission order
     /// a) does not itself perform any reading activities
@@ -432,7 +433,9 @@ module StreamScheduling =
             let mutable worked, more = false, true
             while more do
                 let c = work.TryPopRange(workLocalBuffer)
-                if c = 0 (*&& work.IsEmpty*) then more <- false else worked <- true
+                if c = 0 (*&& work.IsEmpty*) then
+                    more <- false
+                else worked <- true
                 for i in 0..c-1 do
                     let x = workLocalBuffer.[i]
                     match x with
@@ -504,7 +507,7 @@ module StreamScheduling =
                         while more do
                             match pending.TryDequeue() with
                             | true, batch ->
-                                match batch.TryTakeStreams () with None -> () | Some s -> (fun () -> streams.InternalMerge(s)) |> accStopwatch <| fun t -> mt <- mt + t
+                                match batch.TryTakeStreams() with None -> () | Some s -> (fun () -> streams.InternalMerge(s)) |> accStopwatch <| fun t -> mt <- mt + t
                                 (fun () -> ingestPendingBatch stats.Handle (batch.OnCompletion, batch.Reqs)) |> accStopwatch <| fun t -> it <- it + t
                                 batchesTaken <- batchesTaken + 1
                                 more <- batchesTaken < maxBatches
@@ -564,7 +567,7 @@ module Submission =
         let dumpStats () =
             let waiting = seq { for x in buffer do if x.Value.queue.Count <> 0 then yield x.Key, x.Value.queue.Count } |> Seq.sortBy (fun (_,snd) -> -snd)
             log.Information("Submitter {cycles} cycles {compactions} compactions Ingested {ingested} Waiting {@waiting} Batches {@batches} Messages {@messages}",
-                cycles, ingested, compacted, waiting, submittedBatches.StatsDescending, submittedMessages.StatsDescending)
+                cycles, compacted, ingested, waiting, submittedBatches.StatsDescending, submittedMessages.StatsDescending)
             ingested <- 0; compacted <- 0; cycles <- 0; submittedBatches.Clear(); submittedMessages.Clear()
         let maybeLogStats =
             let due = intervalCheck statsInterval
@@ -595,17 +598,17 @@ module Submission =
                     match buffer.TryGetValue pid with
                     | false, _ -> let t = PartitionQueue<_>.Create(maxSubmitsPerPartition) in buffer.[pid] <- t; t
                     | true, pq -> pq
-                let mapped = mapBatch (fun () -> pq.submissions.Release |> ignore) batch
+                let mapped = mapBatch (fun () -> pq.submissions.Release() |> ignore) batch
                 pq.Append(mapped)
             propagate()
         /// We use timeslices where we're we've fully provisioned the scheduler to index any waiting Batches
         let compact f =
-            compacted <- compacted + 1
             let mutable worked = false
             for KeyValue(_,pq) in buffer do
                 if f pq.queue then
                     worked <- true
-            worked
+            if worked then compacted <- compacted + 1; true
+            else  false
 
         /// Processing loop, continuously splitting `Submit`ted items into per-partition queues and ensuring enough items are provided to the Scheduler
         member __.Pump() = async {

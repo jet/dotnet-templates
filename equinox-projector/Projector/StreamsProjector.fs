@@ -51,8 +51,7 @@ type PipelinedProjector private (task : Task<unit>, triggerStop, startIngester) 
             start "submitter" <| pumpSubmitter
 
             // await for either handler-driven abend or external cancellation via Stop()
-            do! Async.AwaitTaskCorrect tcs.Task
-        }
+            do! Async.AwaitTaskCorrect tcs.Task }
         let task = Async.StartAsTask machine
         let triggerStop () =
             log.Information("Stopping")

@@ -105,7 +105,7 @@ module CmdParser =
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
-        member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,64)
+        member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,1024)
         member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
         member x.BuildChangeFeedParams() =
@@ -210,7 +210,7 @@ let main argv =
 #else
         let project (_stream, span: Jet.Projection.Span) = async { 
             let r = Random()
-            let ms = r.Next(1,span.events.Length * 10)
+            let ms = r.Next(1,span.events.Length)
             do! Async.Sleep ms
             return span.events.Length }
         let projector = Jet.Projection.Kafka.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, project, categorize, TimeSpan.FromMinutes 1.)
