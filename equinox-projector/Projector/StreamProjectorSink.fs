@@ -8,10 +8,10 @@ type StreamProjectorSink =
     static member Start(log : Serilog.ILogger, project, maxConcurrentStreams, categorize, ?statsInterval, ?stateInterval, ?maxSubmissionsPerPartition)
             : Submission.SubmissionEngine<StreamItem,StreamScheduling.StreamsBatch> =
         let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
-        let maxSubmissionsPerPartition = defaultArg maxSubmissionsPerPartition 5
         let projectionStats = StreamScheduling.Stats<_,_>(log.ForContext<StreamScheduling.Stats<_,_>>(), statsInterval, stateInterval)
         let dispatcher = StreamScheduling.Dispatcher<_>(maxConcurrentStreams)
         let streamScheduler = StreamScheduling.Factory.Create(dispatcher, projectionStats, project, fun s l -> s.Dump(l, categorize))
+        // TODO pump
         let mapBatch onCompletion (x : Submission.Batch<StreamItem>) : StreamScheduling.StreamsBatch =
             let onCompletion () = x.onCompletion(); onCompletion()
             StreamScheduling.StreamsBatch.Create(onCompletion, x.messages) |> fst
@@ -25,4 +25,5 @@ type StreamProjectorSink =
                 | None -> acc <- Some x
                 | Some a -> if a.TryMerge x then worked <- true
             worked
+        let maxSubmissionsPerPartition = defaultArg maxSubmissionsPerPartition 5
         Submission.SubmissionEngine<_,_>(log, maxSubmissionsPerPartition, mapBatch, submitBatch, statsInterval, tryCompactQueue=tryCompactQueue)

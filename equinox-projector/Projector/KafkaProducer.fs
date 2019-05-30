@@ -65,6 +65,8 @@ type KafkaStreamProducer =
         let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
         let projectionAndKafkaStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, stateInterval)
         let streamScheduler = StreamScheduling.StreamSchedulingEngine<_,_>(dispatcher, projectionAndKafkaStats, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))
+        // TODO pump
+        // TODO delegate to StreamProjectorSink
         let mapBatch onCompletion (x : Submission.Batch<StreamItem>) : StreamScheduling.StreamsBatch =
             let onCompletion () = x.onCompletion(); onCompletion()
             StreamScheduling.StreamsBatch.Create(onCompletion, x.messages) |> fst
