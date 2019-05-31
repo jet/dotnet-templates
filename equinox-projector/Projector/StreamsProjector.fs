@@ -19,6 +19,8 @@ type PipelinedProjector private (task : Task<unit>, triggerStop, startIngester) 
 
     /// Inspects current status of processing task
     member __.Status = task.Status
+    /// After AwaitCompletion, can be used to infer whether exit was clean
+    member __.RanToCompletion = task.Status = TaskStatus.RanToCompletion 
 
     /// Request cancellation of processing
     member __.Stop() = triggerStop ()
@@ -122,12 +124,14 @@ type StreamsProjector =
         let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
         let projectionStats = StreamScheduling.Stats<_,_>(log.ForContext<StreamScheduling.Stats<_,_>>(), statsInterval, stateInterval)
         let dispatcher = StreamScheduling.Dispatcher<_>(maxConcurrentStreams)
-        let streamScheduler = StreamScheduling.Factory.Create(dispatcher, projectionStats, project, fun s l -> s.Dump(l, categorize))
+        let streamScheduler = StreamScheduling.StreamSchedulingEngine.Create(dispatcher, projectionStats, project, fun s l -> s.Dump(l, categorize))
         PipelinedStreamsProjector.Start(log, dispatcher.Pump(), streamScheduler.Pump, maxReadAhead, streamScheduler.Submit, statsInterval)
         
 type KafkaStreamsProjector =
     static member Start(log : ILogger, maxReadAhead, maxConcurrentStreams, clientId, broker, topic, categorize, ?statsInterval, ?stateInterval)
             : PipelinedProjector =
+        let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
+        let projectionAndKafkaStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, stateInterval)
         let producerConfig = KafkaProducerConfig.Create(clientId, broker, Acks.Leader, compression = CompressionType.Lz4, maxInFlight = 1_000_000, linger = TimeSpan.Zero)
         let producer = KafkaProducer.Create(log, producerConfig, topic)
         let attemptWrite (_writePos,stream,fullBuffer : Span) = async {
@@ -141,7 +145,5 @@ type KafkaStreamsProjector =
             | Choice1Of2 (i',_, _) -> Some i'
             | Choice2Of2 (_,_) -> None
         let dispatcher = StreamScheduling.Dispatcher<_>(maxConcurrentStreams)
-        let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
-        let projectionAndKafkaStats = Stats(log.ForContext<Stats>(), categorize, statsInterval, stateInterval)
         let streamScheduler = StreamScheduling.StreamSchedulingEngine<_,_>(dispatcher, projectionAndKafkaStats, attemptWrite, interpretWriteResultProgress, fun s l -> s.Dump(l, categorize))
         PipelinedStreamsProjector.Start(log, dispatcher.Pump(), streamScheduler.Pump, maxReadAhead, streamScheduler.Submit, statsInterval)

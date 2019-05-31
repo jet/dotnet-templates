@@ -70,7 +70,7 @@ module KafkaIngestion =
         let mutable intervalMsgs, intervalChars, totalMessages, totalChars = 0L, 0L, 0L, 0L
         let dumpStats () =
             totalMessages <- totalMessages + intervalMsgs; totalChars <- totalChars + intervalChars
-            log.Information("Ingested {msgs:n0} messages, {chars:n0} chars In-flight ~{inflightMb:n1}MB Total {totalMessages:n0} messages {totalChars:n0} chars",
+            log.Information("Ingested {msgs:n0}m, {chars:n0}c chars In-flight ~{inflightMb:n1}MB Σ {totalMessages:n0} messages {totalChars:n0} chars",
                 intervalMsgs, intervalChars, counter.InFlightMb, totalMessages, totalChars)
             intervalMsgs <- 0L; intervalChars <- 0L
         let maybeLogStats =
@@ -104,9 +104,11 @@ module KafkaIngestion =
             try while not ct.IsCancellationRequested do
                     match counter.IsOverLimitNow(), remainingIngestionWindow () with
                     | true, _ ->
-                        submit()
-                        maybeLogStats()
-                        counter.AwaitThreshold()
+                        let busyWork () =
+                            submit()
+                            maybeLogStats()
+                            Thread.Sleep 2 
+                        counter.AwaitThreshold busyWork
                     | false, None ->
                         submit()
                         maybeLogStats()
@@ -291,6 +293,8 @@ type PipelinedConsumer private (inner : IConsumer<string, string>, task : Task<u
     member __.Inner = inner
     /// Inspects current status of processing task
     member __.Status = task.Status
+    /// After AwaitCompletion, can be used to infer whether exit was clean
+    member __.RanToCompletion = task.Status = TaskStatus.RanToCompletion 
 
     /// Request cancellation of processing
     member __.Stop() = triggerStop ()
@@ -301,7 +305,9 @@ type PipelinedConsumer private (inner : IConsumer<string, string>, task : Task<u
     /// Builds a processing pipeline per the `config` running up to `dop` instances of `handle` concurrently to maximize global throughput across partitions.
     /// Processor pumps until `handle` yields a `Choice2Of2` or `Stop()` is requested.
     static member Start(log : ILogger, config : KafkaConsumerConfig, mapResult, submit, pumpSubmitter, pumpScheduler, pumpDispatcher, statsInterval) =
-
+        log.Information("Consuming... {broker} {topics} {groupId} autoOffsetReset {autoOffsetReset} fetchMaxBytes={fetchMaxB} maxInFlight={maxInFlightGB:n1}GB maxBatchDelay={maxBatchDelay}s",
+            config.Inner.BootstrapServers, config.Topics, config.Inner.GroupId, (let x = config.Inner.AutoOffsetReset in x.Value), config.Inner.FetchMaxBytes,
+            float config.Buffering.maxInFlightBytes / 1024. / 1024. / 1024., (let t = config.Buffering.maxBatchDelay in t.TotalSeconds))
         let limiterLog = log.ForContext(Serilog.Core.Constants.SourceContextPropertyName, Core.Constants.messageCounterSourceContext)
         let limiter = new Core.InFlightMessageCounter(limiterLog, config.Buffering.minInFlightBytes, config.Buffering.maxInFlightBytes)
         let consumer = ConsumerBuilder.WithLogging(log, config) // teardown is managed by ingester.Pump()
@@ -309,11 +315,16 @@ type PipelinedConsumer private (inner : IConsumer<string, string>, task : Task<u
         let cts = new CancellationTokenSource()
         let ct = cts.Token
         let tcs = new TaskCompletionSource<unit>()
+        let triggerStop () =
+            log.Information("Consuming ... Stopping {name}", consumer.Name)
+            cts.Cancel();  
         let start name f =
             let wrap (name : string) computation = async {
                 try do! computation
-                    log.Information("Exiting {name}", name)
-                with e -> log.Fatal(e, "Abend from {name}", name) }
+                    log.Information("Exiting pipeline component {name}", name)
+                with e ->
+                    log.Fatal(e, "Abend from pipeline component {name}", name)
+                    triggerStop() }
             Async.Start(wrap name f, ct)
         // if scheduler encounters a faulted handler, we propagate that as the consumer's Result
         let abend (exns : AggregateException) =
@@ -335,9 +346,6 @@ type PipelinedConsumer private (inner : IConsumer<string, string>, task : Task<u
             do! Async.AwaitTaskCorrect tcs.Task
         }
         let task = Async.StartAsTask machine
-        let triggerStop () =
-            log.Information("Consuming ... Stopping {name}", consumer.Name)
-            cts.Cancel();  
         new PipelinedConsumer(consumer, task, triggerStop)
 
 type ParallelConsumer =
@@ -385,7 +393,7 @@ type StreamsConsumer =
         let dumpStreams (streams : StreamScheduling.StreamStates) log =
             logExternalStats |> Option.iter (fun f -> f log)
             streams.Dump(log, categorize)
-        let streamsScheduler = StreamScheduling.Factory.Create(dispatcher, stats, handle, dumpStreams)
+        let streamsScheduler = StreamScheduling.StreamSchedulingEngine.Create(dispatcher, stats, handle, dumpStreams)
         let mapConsumedMessagesToStreamsBatch onCompletion (x : Submission.Batch<KeyValuePair<string,string>>) : StreamScheduling.StreamsBatch =
             let onCompletion () = x.onCompletion(); onCompletion()
             StreamScheduling.StreamsBatch.Create(onCompletion, Seq.collect enumStreamItems x.messages) |> fst

@@ -199,27 +199,36 @@ let mapContent (docs : Microsoft.Azure.Documents.Document seq) : Jet.Projection.
 
 [<EntryPoint>]
 let main argv =
-    try let args = CmdParser.parse argv
-        Logging.initialize args.Verbose args.ChangeFeedVerbose
-        let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-        let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
-        let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+    try try let args = CmdParser.parse argv
+            Logging.initialize args.Verbose args.ChangeFeedVerbose
+            let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
+            let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
+            let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
 #if kafka
-        let (broker,topic) = args.Target.BuildTargetParams()
-        let projector = Jet.Projection.Kafka.KafkaStreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, categorize, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.)
+            let (broker,topic) = args.Target.BuildTargetParams()
+            let projector =
+                Jet.Projection.Kafka.KafkaStreamsProjector.Start(
+                    Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic,
+                    categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
 #else
-        let project (_stream, span: Jet.Projection.Span) = async { 
-            let r = Random()
-            let ms = r.Next(1,span.events.Length)
-            do! Async.Sleep ms
-            return span.events.Length }
-        let projector = Jet.Projection.Kafka.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, project, categorize, TimeSpan.FromMinutes 1.)
+            let project (_stream, span: Jet.Projection.Span) = async { 
+                let r = Random()
+                let ms = r.Next(1,span.events.Length)
+                do! Async.Sleep ms
+                return span.events.Length }
+            let projector =
+                Jet.Projection.Kafka.StreamsProjector.Start(
+                    Log.Logger, maxReadAhead, maxConcurrentStreams, project,
+                    categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
 #endif
-        run Log.Logger discovery connector.ConnectionPolicy source
-            (aux, leaseId, startFromTail, maxDocuments, lagFrequency)
-            (createRangeHandler Log.Logger projector.StartIngester mapContent)
-        |> Async.RunSynchronously
-        0 
-    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-        | e -> eprintfn "%s" e.Message; 1
+            Async.Start(
+                run Log.Logger discovery connector.ConnectionPolicy source
+                    (aux, leaseId, startFromTail, maxDocuments, lagFrequency)
+                    (createRangeHandler Log.Logger projector.StartIngester mapContent))
+            Async.RunSynchronously(
+                projector.AwaitCompletion())
+            if projector.RanToCompletion then 0 else 1
+        with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+            | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
+            | e -> eprintfn "%s" e.Message; 1
+    finally Log.CloseAndFlush()

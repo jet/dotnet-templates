@@ -1,8 +1,8 @@
 ﻿module ProjectorTemplate.Consumer.Program
 
+open Jet.ConfluentKafka.FSharp
 open Serilog
 open System
-open Jet.ConfluentKafka.FSharp
 
 module CmdParser =
     open Argu
@@ -15,21 +15,21 @@ module CmdParser =
 
     [<NoEquality; NoComparison>]
     type Parameters =
+        | [<AltCommandLine("-g"); Unique>] Group of string
         | [<AltCommandLine("-b"); Unique>] Broker of string
         | [<AltCommandLine("-t"); Unique>] Topic of string
-        | [<AltCommandLine("-g"); Unique>] Group of string
         | [<AltCommandLine("-w"); Unique>] MaxDop of int
         | [<AltCommandLine("-m"); Unique>] MaxInflightGb of float
         | [<AltCommandLine("-v"); Unique>] Verbose
 
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Broker _ ->   "specify Kafka Broker, in host:port format. (optional if environment variable EQUINOX_KAFKA_BROKER specified)"
-                | Topic _ ->    "specify Kafka Topic name. (optional if environment variable EQUINOX_KAFKA_TOPIC specified)"
-                | Group _ ->    "specify Kafka Consumer Group Id. (optional if environment variable EQUINOX_KAFKA_GROUP specified)"
-                | MaxDop _ ->   "maximum number of streams to process in parallel"
-                | MaxInflightGb _ -> "maximum GB of data to read ahead"
-                | Verbose _ ->  "request verbose logging."
+                | Group _ ->            "specify Kafka Consumer Group Id. (optional if environment variable EQUINOX_KAFKA_GROUP specified)"
+                | Broker _ ->           "specify Kafka Broker, in host:port format. (optional if environment variable EQUINOX_KAFKA_BROKER specified)"
+                | Topic _ ->            "specify Kafka Topic name. (optional if environment variable EQUINOX_KAFKA_TOPIC specified)"
+                | MaxDop _ ->           "maximum number of streams to process in parallel"
+                | MaxInflightGb _ ->    "maximum GB of data to read ahead. Default: 0.5"
+                | Verbose _ ->          "request verbose logging."
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : ParseResults<Parameters> =
@@ -68,7 +68,7 @@ let main argv =
             //use c = Messages.Start(cfg, args.MaxWriters)
             use c = Streams.Start(cfg, args.MaxWriters)
             c.AwaitCompletion() |> Async.RunSynchronously
-            0 
+            if c.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
             // If the handler throws, we exit the app in order to let an orchesterator flag the failure

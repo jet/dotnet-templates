@@ -76,6 +76,7 @@ module Progress =
                 | _, _ -> ()
             trim ()
         member __.InScheduledOrder getStreamWeight =
+            trim ()
             let streams = HashSet()
             let tmp = ResizeArray(16384)
             let mutable batch = 0
@@ -212,9 +213,9 @@ module Buffering =
                 waitingStreams.Ingest(sprintf "%s@%dx%d" stream (defaultArg state.write 0L) state.queue.[0].events.Length, (sz + 512L) / 1024L)
                 waiting <- waiting + 1
                 waitingB <- waitingB + sz
-            if waiting <> 0 then log.Information("Streams Waiting {busy:n0}/{busyMb:n1}MB ", waiting, mb waitingB)
-            if waitingCats.Any then log.Information("Waiting Categories, events {@readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
-            if waitingCats.Any then log.Information("Waiting Streams, KB {@readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
+            if waiting <> 0 then log.Information(" Streams Waiting {busy:n0}/{busyMb:n1}MB ", waiting, mb waitingB)
+            if waitingCats.Any then log.Information(" Waiting Categories, events {@readyCats}", Seq.truncate 5 waitingCats.StatsDescending)
+            if waitingCats.Any then log.Information(" Waiting Streams, KB {@readyStreams}", Seq.truncate 5 waitingStreams.StatsDescending)
 
 module StreamScheduling =
 
@@ -301,11 +302,11 @@ module StreamScheduling =
                     readyB <- readyB + sz
             log.Information("Streams Synced {synced:n0} Active {busy:n0}/{busyMb:n1}MB Ready {ready:n0}/{readyMb:n1}MB Waiting {waiting}/{waitingMb:n1}MB Malformed {malformed}/{malformedMb:n1}MB",
                 synced, busyCount, mb busyB, ready, mb readyB, unprefixed, mb unprefixedB, malformed, mb malformedB)
-            if busyCats.Any then log.Information("Active Categories, events {@busyCats}", Seq.truncate 5 busyCats.StatsDescending)
-            if readyCats.Any then log.Information("Ready Categories, events {@readyCats}", Seq.truncate 5 readyCats.StatsDescending)
-            if readyCats.Any then log.Information("Ready Streams, KB {@readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
-            if unprefixedStreams.Any then log.Information("Waiting Streams, KB {@missingStreams}", Seq.truncate 3 unprefixedStreams.StatsDescending)
-            if malformedStreams.Any then log.Information("Malformed Streams, MB {@malformedStreams}", malformedStreams.StatsDescending)
+            if busyCats.Any then log.Information(" Active Categories, events {@busyCats}", Seq.truncate 5 busyCats.StatsDescending)
+            if readyCats.Any then log.Information(" Ready Categories, events {@readyCats}", Seq.truncate 5 readyCats.StatsDescending)
+            if readyCats.Any then log.Information(" Ready Streams, KB {@readyStreams}", Seq.truncate 5 readyStreams.StatsDescending)
+            if unprefixedStreams.Any then log.Information(" Waiting Streams, KB {@missingStreams}", Seq.truncate 3 unprefixedStreams.StatsDescending)
+            if malformedStreams.Any then log.Information(" Malformed Streams, MB {@malformedStreams}", malformedStreams.StatsDescending)
 
     /// Messages used internally by projector, including synthetic ones for the purposes of the `Stats` listeners
     [<NoComparison; NoEquality>]
@@ -323,13 +324,13 @@ module StreamScheduling =
         let statsDue, stateDue = intervalCheck statsInterval, intervalCheck stateInterval
         let mutable dt,ft,it,st,mt = TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero
         let dumpStats (used,maxDop) batchesWaiting =
-            log.Information("Cycles {fullCycles}({cycles}) {@states} Projecting {busy}/{processors} Completed {completed} Exceptions {exns}",
-                !fullCycles, !cycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
+            log.Information("Scheduler {cycles} cycles ({fullCycles} full) {@states} Running {busy}/{processors} Completed {completed} Exceptions {exns}",
+                !cycles, !fullCycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
             cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
-            log.Information("Batches Waiting {batchesWaiting} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e)",
+            log.Information(" Batches Waiting {batchesWaiting} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e)",
                 batchesWaiting, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped)
             batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0
-            log.Information("Scheduling Streams {mt:n1}s Batches {it:n1}s Dispatch {ft:n1}s Results {dt:n1}s Stats {st:n1}s",
+            log.Information(" Cpu Streams {mt:n1}s Batches {it:n1}s Dispatch {ft:n1}s Results {dt:n1}s Stats {st:n1}s",
                 mt.TotalSeconds, it.TotalSeconds, ft.TotalSeconds, dt.TotalSeconds, st.TotalSeconds)
             dt <- TimeSpan.Zero; ft <- TimeSpan.Zero; it <- TimeSpan.Zero; st <- TimeSpan.Zero; mt <- TimeSpan.Zero
         abstract member Handle : InternalMessage<Choice<'R,'E>> -> unit
@@ -419,9 +420,13 @@ module StreamScheduling =
     /// b) triggers synchronous callbacks as batches complete; writing of progress is managed asynchronously by the TrancheEngine(s)
     /// c) submits work to the supplied Dispatcher (which it triggers pumping of)
     /// d) periodically reports state (with hooks for ingestion engines to report same)
-    type StreamSchedulingEngine<'R,'E>(dispatcher : Dispatcher<_>, stats : Stats<'R,'E>, project : int64 option * string * Span -> Async<Choice<_,_>>, interpretProgress, dumpStreams, ?maxBatches) =
-        let sleepIntervalMs = 1
-        let maxBatches = defaultArg maxBatches 4 
+    type StreamSchedulingEngine<'R,'E>
+        (   dispatcher : Dispatcher<_>, stats : Stats<'R,'E>, project : int64 option * string * Span -> Async<Choice<_,_>>, interpretProgress, dumpStreams,
+            /// Tune number of batches to ingest at a time. Default 4
+            ?maxBatches,
+            /// Opt-in to allowing items to be processed independent of batch sequencing - requires upstream/projection function to be able to identify gaps
+            ?enableSlipstreaming) =
+        let sleepIntervalMs, maxBatches, slipstreamingEnabled = 2, defaultArg maxBatches 4, defaultArg enableSlipstreaming false
         let work = ConcurrentStack<InternalMessage<Choice<'R,'E>>>() // dont need them ordered so Queue is unwarranted; usage is cross-thread so Bag is not better
         let pending = ConcurrentQueue<StreamsBatch>() // Queue as need ordering
         let streams = StreamStates()
@@ -511,12 +516,14 @@ module StreamScheduling =
                                 (fun () -> ingestPendingBatch stats.Handle (batch.OnCompletion, batch.Reqs)) |> accStopwatch <| fun t -> it <- it + t
                                 batchesTaken <- batchesTaken + 1
                                 more <- batchesTaken < maxBatches
-                            | false,_ when batchesTaken <> 0 ->
+                            | false,_ when batchesTaken <> 0  ->
                                 more <- false
-                            | false,_ when batchesTaken = 0 ->
+                            | false,_ when (*batchesTaken = 0 && *)slipstreamingEnabled ->
                                 dispatcherState <- Slipstreaming
                                 more <- false
-                            | false,_ -> ()
+                            | false,_  ->
+                                remaining <- 0
+                                more <- false
                     | Slipstreaming -> // only do one round of slipstreaming
                         remaining <- 0
                     | Busy | Full -> failwith "Not handled here"
@@ -528,18 +535,19 @@ module StreamScheduling =
                     Thread.Sleep sleepIntervalMs } // Not Async.Sleep so we don't give up the thread
         member __.Submit(x : StreamsBatch) =
             pending.Enqueue(x)
-
-    type Factory =
-        static member Create(dispatcher : Dispatcher<_>, stats : Stats<int64,exn>, handle : string*Span -> Async<int>, dumpStreams, ?maxBatches) : StreamSchedulingEngine<int64,exn> =
-            let project (_maybeWritePos, stream, span) = async {
+    type StreamSchedulingEngine =
+        static member Create
+            (   dispatcher : Dispatcher<string*Choice<int64,exn>>, stats : Stats<int64,exn>, handle : string*Span -> Async<int>, dumpStreams,
+                ?maxBatches, ?enableSlipstreaming)
+            : StreamSchedulingEngine<int64,exn> =
+            let project (_maybeWritePos, stream, span) : Async<Choice<int64,exn>> = async {
                 try let! count = handle (stream,span)
                     return Choice1Of2 (span.index + int64 count)
                 with e -> return Choice2Of2 e }
-            let interpretProgress _streams _stream = function
+            let interpretProgress _streams _stream : Choice<int64,exn> -> Option<int64> = function
                 | Choice1Of2 index -> Some index
                 | Choice2Of2 _ -> None
-
-            StreamSchedulingEngine<int64,exn>(dispatcher, stats, project, interpretProgress, dumpStreams, ?maxBatches = maxBatches)
+            StreamSchedulingEngine(dispatcher, stats, project, interpretProgress, dumpStreams, ?maxBatches = maxBatches, ?enableSlipstreaming=enableSlipstreaming)
 
 /// Holds batches from the Ingestion pipe, feeding them continuously to the scheduler in an appropriate order
 module Submission =
@@ -566,8 +574,8 @@ module Submission =
         let submittedBatches,submittedMessages = PartitionStats(), PartitionStats()
         let dumpStats () =
             let waiting = seq { for x in buffer do if x.Value.queue.Count <> 0 then yield x.Key, x.Value.queue.Count } |> Seq.sortBy (fun (_,snd) -> -snd)
-            log.Information("Submitter {cycles} cycles {compactions} compactions Ingested {ingested} Waiting {@waiting} Batches {@batches} Messages {@messages}",
-                cycles, compacted, ingested, waiting, submittedBatches.StatsDescending, submittedMessages.StatsDescending)
+            log.Information("Submitter {cycles} cycles {ingested} accepted {compactions} compactions Holding {@waiting}", cycles, compacted, ingested, waiting)
+            log.Information(" Submitted Batches {@batches} Messages {@messages}", submittedBatches.StatsDescending, submittedMessages.StatsDescending)
             ingested <- 0; compacted <- 0; cycles <- 0; submittedBatches.Clear(); submittedMessages.Clear()
         let maybeLogStats =
             let due = intervalCheck statsInterval

@@ -174,17 +174,20 @@ module Core =
         member __.InFlightMb = float inFlightBytes / 1024. / 1024.
         member __.Delta(numBytes : int64) = Interlocked.Add(&inFlightBytes, numBytes) |> ignore
         member __.IsOverLimitNow() = Volatile.Read(&inFlightBytes) > maxInFlightBytes
-        member __.AwaitThreshold() =
+        member __.AwaitThreshold busyWork =
             if __.IsOverLimitNow() then
-                log.Information("Consumer reached in-flight message threshold, breaking off polling, bytes={max}", inFlightBytes)
+                log.Information("Consuming... breached in-flight message threshold (now ~{max:n0}B), quiescing until it drops to ~{min:n1}GB",
+                    inFlightBytes, float minInFlightBytes / 1024. / 1024. / 1024.)
                 while Volatile.Read(&inFlightBytes) > minInFlightBytes do
-                    Thread.Sleep 2 
+                    busyWork ()
                 log.Verbose "Consumer resuming polling"
 
 /// See https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md for documentation on the implications of specfic settings
 [<NoComparison>]
 type KafkaConsumerConfig = private { inner: ConsumerConfig; topics: string list; buffering: Core.ConsumerBufferingConfig } with
     member __.Buffering  = __.buffering
+    member __.Inner  = __.inner
+    member __.Topics = __.topics
 
     /// Builds a Kafka Consumer Config suitable for KafkaConsumer.Start*
     static member Create
@@ -207,16 +210,21 @@ type KafkaConsumerConfig = private { inner: ConsumerConfig; topics: string list;
             /// Postprocesses the ConsumerConfig after the rest of the rules have been applied
             ?customize,
 
-            (* Client side batching *)
+            (* Limiting of reading ahead to constrain memory consumption *)
+
+            /// Minimum total size of consumed messages in-memory for the consumer to attempt to fill. Default 2/3 of maxInFlightBytes.
+            ?minInFlightBytes,
+            /// Maximum total size of consumed messages in-memory before broker polling is throttled. Default 24MiB.
+            ?maxInFlightBytes,
+
+            (* Client side batching parameters*)
 
             /// Maximum number of messages to group per batch on consumer callbacks. Default 1000.
             ?maxBatchSize,
             /// Message batch linger time. Default 500ms.
-            ?maxBatchDelay,
-            /// Minimum total size of consumed messages in-memory for the consumer to attempt to fill. Default 16MiB.
-            ?minInFlightBytes,
-            /// Maximum total size of consumed messages in-memory before broker polling is throttled. Default 24MiB.
-            ?maxInFlightBytes) =
+            ?maxBatchDelay) =
+        let maxInFlightBytes = defaultArg maxInFlightBytes (16L * 1024L * 1024L)
+        let minInFlightBytes = defaultArg minInFlightBytes (maxInFlightBytes * 2L / 3L)
         let c =
             ConsumerConfig(
                 ClientId=clientId, BootstrapServers=Config.validateBrokerUri broker, GroupId=groupId,
@@ -234,10 +242,8 @@ type KafkaConsumerConfig = private { inner: ConsumerConfig; topics: string list;
         {   inner = c 
             topics = match Seq.toList topics with [] -> invalidArg "topics" "must be non-empty collection" | ts -> ts
             buffering = {
-                maxBatchSize = defaultArg maxBatchSize 1000
-                maxBatchDelay = defaultArg maxBatchDelay (TimeSpan.FromMilliseconds 500.)
-                minInFlightBytes = defaultArg minInFlightBytes (16L * 1024L * 1024L)
-                maxInFlightBytes = defaultArg maxInFlightBytes (24L * 1024L * 1024L) } }
+                maxBatchDelay = defaultArg maxBatchDelay (TimeSpan.FromMilliseconds 500.); maxBatchSize = defaultArg maxBatchSize 1000
+                minInFlightBytes = minInFlightBytes; maxInFlightBytes = maxInFlightBytes } }
 
 // Stats format: https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md
 type KafkaPartitionMetrics =
@@ -260,12 +266,9 @@ type KafkaPartitionMetrics =
 type ConsumerBuilder =
     static member WithLogging(log : ILogger, config, ?onRevoke) =
         if List.isEmpty config.topics then invalidArg "config" "must specify at least one topic"
-        log.Information("Consuming... {broker} {topics} {groupId} autoOffsetReset={autoOffsetReset} fetchMaxBytes={fetchMaxB} maxInFlight={maxInFlightGB:n1}GB maxBatchSize={maxBatchB} maxBatchDelay={maxBatchDelay}s",
-            config.inner.BootstrapServers, config.topics, config.inner.GroupId, (let x = config.inner.AutoOffsetReset in x.Value), config.inner.FetchMaxBytes,
-            float config.buffering.maxInFlightBytes / 1024. / 1024. / 1024., config.buffering.maxBatchSize, (let t = config.buffering.maxBatchDelay in t.TotalSeconds))
         let consumer =
             ConsumerBuilder<_,_>(config.inner)
-                .SetLogHandler(fun _c m -> log.Information("consumer_info|{message} level={level} name={name} facility={facility}", m.Message, m.Level, m.Name, m.Facility))
+                .SetLogHandler(fun _c m -> log.Information("Consuming... {message} level={level} name={name} facility={facility}", m.Message, m.Level, m.Name, m.Facility))
                 .SetErrorHandler(fun _c e -> log.Error("Consuming... Error reason={reason} code={code} broker={isBrokerError}", e.Reason, e.Code, e.IsBrokerError))
                 .SetStatisticsHandler(fun _c json -> 
                     // Stats format: https://github.com/edenhill/librdkafka/blob/master/STATISTICS.md
@@ -394,7 +397,7 @@ module private ConsumerImpl =
         // run the consumer
         let ct = cts.Token
         try while not ct.IsCancellationRequested do
-                counter.AwaitThreshold()
+                counter.AwaitThreshold(fun () -> Thread.Sleep 1)
                 try let message = consumer.Consume(ct) // NB TimeSpan overload yields AVEs on 1.0.0-beta2
                     if message <> null then
                         counter.Delta(+approximateMessageBytes message)
@@ -421,6 +424,7 @@ type BatchedConsumer private (log : ILogger, inner : IConsumer<string, string>, 
         cts.Cancel()
     /// Inspects current status of processing task
     member __.Status = task.Status
+    member __.RanToCompletion = task.Status = System.Threading.Tasks.TaskStatus.RanToCompletion 
     /// Asynchronously awaits until consumer stops or is faulted
     member __.AwaitCompletion() = Async.AwaitTaskCorrect task
 
@@ -429,10 +433,9 @@ type BatchedConsumer private (log : ILogger, inner : IConsumer<string, string>, 
     /// Completion of the `partitionHandler` saves the attained offsets so the auto-commit can mark progress; yielding an exception terminates the processing
     static member Start(log : ILogger, config : KafkaConsumerConfig, partitionHandler : ConsumeResult<string,string>[] -> Async<unit>) =
         if List.isEmpty config.topics then invalidArg "config" "must specify at least one topic"
-        log.Information("Consuming... {broker} {topics} {groupId} autoOffsetReset={autoOffsetReset} fetchMaxBytes={fetchMaxB} maxInFlightBytes={maxInFlightB} maxBatchSize={maxBatchB} maxBatchDelay={maxBatchDelay}s",
+        log.Information("Consuming... {broker} {topics} {groupId} autoOffsetReset={autoOffsetReset} fetchMaxBytes={fetchMaxB} maxInFlight={maxInFlightGB:n1}GB maxBatchDelay={maxBatchDelay}s maxBatchSize={maxBatchSize}",
             config.inner.BootstrapServers, config.topics, config.inner.GroupId, (let x = config.inner.AutoOffsetReset in x.Value), config.inner.FetchMaxBytes,
-            config.buffering.maxInFlightBytes, config.buffering.maxBatchSize, (let t = config.buffering.maxBatchDelay in t.TotalSeconds))
-
+            float config.buffering.maxInFlightBytes / 1024. / 1024. / 1024., (let t = config.buffering.maxBatchDelay in t.TotalSeconds), config.buffering.maxBatchSize)
         let partitionedCollection = new ConsumerImpl.PartitionedBlockingCollection<TopicPartition, ConsumeResult<string, string>>()
         let onRevoke (xs : seq<TopicPartitionOffset>) = 
             for x in xs do
