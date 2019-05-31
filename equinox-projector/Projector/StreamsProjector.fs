@@ -72,7 +72,7 @@ module private Impl =
         let mutable okEvents, okBytes, exnEvents, exnBytes = 0, 0L, 0, 0L
 
         override __.DumpExtraStats() =
-            log.Information("Completed {mb:n0}MB {completed:n0}r {streams:n0}s {events:n0}e ({ok:n0} ok)", mb okBytes, !resultOk, okStreams.Count, okEvents, !resultOk)
+            log.Information("Produced {mb:n0}MB {completed:n0}m {streams:n0}s {events:n0}e ({ok:n0} ok)", mb okBytes, !resultOk, okStreams.Count, okEvents, !resultOk)
             okStreams.Clear(); resultOk := 0; okEvents <- 0; okBytes <- 0L
             if !resultExnOther <> 0 then
                 log.Warning("Exceptions {mb:n0}MB {fails:n0}r {streams:n0}s {events:n0}e", mb exnBytes, !resultExnOther, failStreams.Count, exnEvents)

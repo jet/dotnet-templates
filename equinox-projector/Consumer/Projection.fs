@@ -326,7 +326,7 @@ module StreamScheduling =
             log.Information("Scheduler {cycles} cycles ({fullCycles} full) {@states} Running {busy}/{processors} Completed {completed} Exceptions {exns}",
                 !cycles, !fullCycles, states.StatsDescending, dispatchActive, dispatchMax, !resultCompleted, !resultExn)
             cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
-            log.Information(" Batches Waiting {batchesWaiting} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e)",
+            log.Information(" Batches Holding {batchesWaiting} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e)",
                 batchesWaiting, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped)
             batchesPended := 0; streamsPended := 0; eventsSkipped := 0; eventsPended := 0
             log.Information(" Cpu Streams {mt:n1}s Batches {it:n1}s Dispatch {ft:n1}s Results {dt:n1}s Stats {st:n1}s",
@@ -581,7 +581,7 @@ module Submission =
         let dumpStats () =
             let waiting = seq { for x in buffer do if x.Value.queue.Count <> 0 then yield x.Key, x.Value.queue.Count } |> Seq.sortBy (fun (_,snd) -> -snd)
             log.Information("Submitter {cycles} cycles {ingested} accepted {compactions} compactions Holding {@waiting}", cycles, ingested, compacted, waiting)
-            log.Information(" Pushed Batches {@batches} Messages {@messages}", submittedBatches.StatsDescending, submittedMessages.StatsDescending)
+            log.Information(" Submitted Batches {@batches} Messages {@messages}", submittedBatches.StatsDescending, submittedMessages.StatsDescending)
             ingested <- 0; compacted <- 0; cycles <- 0; submittedBatches.Clear(); submittedMessages.Clear()
         let maybeLogStats =
             let due = intervalCheck statsInterval
