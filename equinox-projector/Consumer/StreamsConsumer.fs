@@ -70,7 +70,7 @@ module KafkaIngestion =
         let mutable intervalMsgs, intervalChars, totalMessages, totalChars = 0L, 0L, 0L, 0L
         let dumpStats () =
             totalMessages <- totalMessages + intervalMsgs; totalChars <- totalChars + intervalChars
-            log.Information("Ingested {msgs:n0}m, {chars:n0}c chars In-flight ~{inflightMb:n1}MB Σ {totalMessages:n0} messages {totalChars:n0} chars",
+            log.Information("Ingested {msgs:n0}m, {chars:n0}c In-flight ~{inflightMb:n1}MB Σ {totalMessages:n0} messages, {totalChars:n0} chars",
                 intervalMsgs, intervalChars, counter.InFlightMb, totalMessages, totalChars)
             intervalMsgs <- 0L; intervalChars <- 0L
         let maybeLogStats =

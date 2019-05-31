@@ -168,13 +168,13 @@ module Buffering =
         member __.Size =
             if __.queue = null then 0
             else __.queue |> Seq.collect (fun x -> x.events) |> Seq.sumBy eventSize
+        member __.HasValid = __.queue <> null && not __.isMalformed
         member __.IsReady =
-            if __.queue = null || __.isMalformed then false
-            else
-                match __.write, Array.tryHead __.queue with
-                | Some w, Some { index = i } -> i = w
-                | None, _ -> true
-                | _ -> false
+            if not __.HasValid then false else
+
+            match __.write, Array.head __.queue with
+            | Some w, { index = i } -> i = w
+            | None, _ -> true
     module StreamState =
         let inline optionCombine f (r1: 'a option) (r2: 'a option) =
             match r1, r2 with
@@ -195,7 +195,6 @@ module Buffering =
             | true, current ->
                 let updated = StreamState.combine current state
                 states.[stream] <- updated
-
 
         member __.Merge(item : StreamItem) =
             merge item.stream { isMalformed = false; write = None; queue = [| { index = item.index; events = [| item.event |] } |] }
@@ -243,13 +242,13 @@ module StreamScheduling =
             let proposed = HashSet()
             for s in requestedOrder do
                 let state = states.[s]
-                if state.IsReady && not (busy.Contains s) then
+                if state.HasValid && not (busy.Contains s) then
                     proposed.Add s |> ignore
                     yield state.write, s, state.queue.[0]
             if trySlipstreamed then
-                // [lazily] Slipstream in futher events that have been posted to streams which we've already visited
+                // [lazily] Slipstream in further events that are not yet referenced by in-scope batches
                 for KeyValue(s,v) in states do
-                    if v.IsReady && not (busy.Contains s) && proposed.Add s then
+                    if v.HasValid && not (busy.Contains s) && proposed.Add s then
                         yield v.write, s, v.queue.[0] }
         let markBusy stream = busy.Add stream |> ignore
         let markNotBusy stream = busy.Remove stream |> ignore
@@ -323,9 +322,9 @@ module StreamScheduling =
         let batchesPended, streamsPended, eventsSkipped, eventsPended = ref 0, ref 0, ref 0, ref 0
         let statsDue, stateDue = intervalCheck statsInterval, intervalCheck stateInterval
         let mutable dt,ft,it,st,mt = TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero
-        let dumpStats (used,maxDop) batchesWaiting =
+        let dumpStats (dispatchActive,dispatchMax) batchesWaiting =
             log.Information("Scheduler {cycles} cycles ({fullCycles} full) {@states} Running {busy}/{processors} Completed {completed} Exceptions {exns}",
-                !cycles, !fullCycles, states.StatsDescending, used, maxDop, !resultCompleted, !resultExn)
+                !cycles, !fullCycles, states.StatsDescending, dispatchActive, dispatchMax, !resultCompleted, !resultExn)
             cycles := 0; fullCycles := 0; states.Clear(); resultCompleted := 0; resultExn:= 0
             log.Information(" Batches Waiting {batchesWaiting} Started {batches} ({streams:n0}s {events:n0}-{skipped:n0}e)",
                 batchesWaiting, !batchesPended, !streamsPended, !eventsSkipped + !eventsPended, !eventsSkipped)
@@ -366,21 +365,28 @@ module StreamScheduling =
         abstract DumpExtraStats : unit -> unit
         default __.DumpExtraStats () = ()
 
+    type Sem(max) =
+        let inner = new SemaphoreSlim(max)
+        member __.TryTake() = inner.Wait 0
+        member __.HasCapacity = inner.CurrentCount <> 0
+        member __.Release() = inner.Release() |> ignore
+        member __.State = max-inner.CurrentCount,max
+
     /// Coordinates the dispatching of work and emission of results, subject to the maxDop concurrent processors constraint
     type Dispatcher<'R>(maxDop) =
         // Using a Queue as a) the ordering is more correct, favoring more important work b) we are adding from many threads so no value in ConcurrentBag'sthread-affinity
         let work = new BlockingCollection<_>(ConcurrentQueue<_>()) 
         let result = Event<'R>()
-        let dop = new SemaphoreSlim(maxDop)
+        let dop = Sem maxDop
         let dispatch work = async {
             let! res = work
             result.Trigger res
-            dop.Release() |> ignore } 
+            dop.Release() } 
         [<CLIEvent>] member __.Result = result.Publish
-        member __.HasCapacity = dop.CurrentCount > 0
-        member __.State = maxDop-dop.CurrentCount,maxDop
+        member __.HasCapacity = dop.HasCapacity
+        member __.State = dop.State
         member __.TryAdd(item) =
-            if dop.Wait 0 then
+            if dop.TryTake() then
                 work.Add(item)
                 true
             else false
@@ -574,8 +580,8 @@ module Submission =
         let submittedBatches,submittedMessages = PartitionStats(), PartitionStats()
         let dumpStats () =
             let waiting = seq { for x in buffer do if x.Value.queue.Count <> 0 then yield x.Key, x.Value.queue.Count } |> Seq.sortBy (fun (_,snd) -> -snd)
-            log.Information("Submitter {cycles} cycles {ingested} accepted {compactions} compactions Holding {@waiting}", cycles, compacted, ingested, waiting)
-            log.Information(" Submitted Batches {@batches} Messages {@messages}", submittedBatches.StatsDescending, submittedMessages.StatsDescending)
+            log.Information("Submitter {cycles} cycles {ingested} accepted {compactions} compactions Holding {@waiting}", cycles, ingested, compacted, waiting)
+            log.Information(" Pushed Batches {@batches} Messages {@messages}", submittedBatches.StatsDescending, submittedMessages.StatsDescending)
             ingested <- 0; compacted <- 0; cycles <- 0; submittedBatches.Clear(); submittedMessages.Clear()
         let maybeLogStats =
             let due = intervalCheck statsInterval

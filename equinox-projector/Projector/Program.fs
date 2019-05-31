@@ -67,7 +67,7 @@ module CmdParser =
         | [<AltCommandLine("-md"); Unique>] MaxDocuments of int
         | [<AltCommandLine "-r"; Unique>] MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
-        | [<AltCommandLine("-l"); Unique>] LagFreqS of float
+        | [<AltCommandLine("-l"); Unique>] LagFreqM of float
         | [<AltCommandLine("-v"); Unique>] Verbose
         | [<AltCommandLine("-vc"); Unique>] ChangeFeedVerbose
 //#if kafka
@@ -86,7 +86,7 @@ module CmdParser =
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
-                | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
+                | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
 //#if kafka
@@ -106,7 +106,7 @@ module CmdParser =
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
         member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,1024)
-        member __.LagFrequency =            args.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
+        member __.LagFrequency =            args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with

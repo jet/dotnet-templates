@@ -93,7 +93,6 @@ type private Stats(log : ILogger, statsInterval : TimeSpan) =
 type Sem(max) =
     let inner = new SemaphoreSlim(max)
     member __.Await(ct : CancellationToken) = inner.WaitAsync(ct) |> Async.AwaitTaskCorrect
-    //member __.TryTake() = inner.Wait 0
     member __.Release() = inner.Release() |> ignore
     member __.State = max-inner.CurrentCount,max
 

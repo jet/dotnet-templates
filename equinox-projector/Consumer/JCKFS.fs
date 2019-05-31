@@ -176,7 +176,7 @@ module Core =
         member __.IsOverLimitNow() = Volatile.Read(&inFlightBytes) > maxInFlightBytes
         member __.AwaitThreshold busyWork =
             if __.IsOverLimitNow() then
-                log.Information("Consuming... breached in-flight message threshold (now ~{max:n0}B), quiescing until it drops to ~{min:n1}GB",
+                log.Information("Consuming... breached in-flight message threshold (now ~{max:n0}B), quiescing until it drops to < ~{min:n1}GB",
                     inFlightBytes, float minInFlightBytes / 1024. / 1024. / 1024.)
                 while Volatile.Read(&inFlightBytes) > minInFlightBytes do
                     busyWork ()
@@ -276,13 +276,14 @@ type ConsumerBuilder =
                     for t in stats.Item("topics").Children() do
                         if t.HasValues && config.topics |> Seq.exists (fun ct -> ct = t.First.Item("topic").ToString()) then
                             let topic, partitions = let tm = t.First in tm.Item("topic").ToString(), tm.Item("partitions").Children()
-                            let metrics = seq {
+                            let metrics = [|
                                 for tm in partitions do
                                     if tm.HasValues then
                                         let kpm = tm.First.ToObject<KafkaPartitionMetrics>()
                                         if kpm.partition <> -1 then
-                                            yield kpm }                
-                            log.Information("Consuming... Stats {topic:l} {@stats}", topic, metrics))
+                                            yield kpm |]
+                            let totalLag = metrics |> Array.sumBy (fun x -> x.consumerLag)
+                            log.Information("Consuming... Stats {topic:l} totalLag {totalLag} {@stats}", topic, totalLag, metrics))
                 .SetPartitionsAssignedHandler(fun _c xs ->
                     for topic,partitions in xs |> Seq.groupBy (fun p -> p.Topic) |> Seq.map (fun (t,ps) -> t, [| for p in ps -> let p = p.Partition in p.Value |]) do
                         log.Information("Consuming... Assigned {topic:l} {partitions}", topic, partitions))

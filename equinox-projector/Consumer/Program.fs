@@ -20,6 +20,7 @@ module CmdParser =
         | [<AltCommandLine("-t"); Unique>] Topic of string
         | [<AltCommandLine("-w"); Unique>] MaxDop of int
         | [<AltCommandLine("-m"); Unique>] MaxInflightGb of float
+        | [<AltCommandLine("-l"); Unique>] LagFreqM of float
         | [<AltCommandLine("-v"); Unique>] Verbose
 
         interface IArgParserTemplate with
@@ -27,8 +28,9 @@ module CmdParser =
                 | Group _ ->            "specify Kafka Consumer Group Id. (optional if environment variable EQUINOX_KAFKA_GROUP specified)"
                 | Broker _ ->           "specify Kafka Broker, in host:port format. (optional if environment variable EQUINOX_KAFKA_BROKER specified)"
                 | Topic _ ->            "specify Kafka Topic name. (optional if environment variable EQUINOX_KAFKA_TOPIC specified)"
-                | MaxDop _ ->           "maximum number of streams to process in parallel"
+                | MaxDop _ ->           "maximum number of items to process in parallel. Default: 1024"
                 | MaxInflightGb _ ->    "maximum GB of data to read ahead. Default: 0.5"
+                | LagFreqM _ ->         "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose _ ->          "request verbose logging."
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -38,12 +40,13 @@ module CmdParser =
         parser.ParseCommandLine argv
 
     type Arguments(args : ParseResults<Parameters>) =
-        member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
-        member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
-        member __.Group = match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "EQUINOX_KAFKA_GROUP"
-        member __.MaxWriters = match args.TryGetResult MaxDop with Some x -> x | None -> 128
-        member __.MaxInFlightBytes = (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
-        member __.Verbose = args.Contains Verbose
+        member __.Broker =              Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
+        member __.Topic =               match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
+        member __.Group =               match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "EQUINOX_KAFKA_GROUP"
+        member __.MaxDop =              match args.TryGetResult MaxDop with Some x -> x | None -> 1024
+        member __.MaxInFlightBytes =    (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
+        member __.LagFrequency =        args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member __.Verbose =             args.Contains Verbose
 
 module Logging =
     let initialize verbose =
@@ -62,13 +65,14 @@ let main argv =
     try try let parsed = CmdParser.parse argv
             let args = CmdParser.Arguments(parsed)
             Logging.initialize args.Verbose
-            let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group, maxInFlightBytes = args.MaxInFlightBytes)
-            //use c = BatchesSync.Start(cfg)
-            //use c = BatchesAsync.Start(cfg, args.MaxWriters)
-            //use c = Messages.Start(cfg, args.MaxWriters)
-            use c = Streams.Start(cfg, args.MaxWriters)
-            c.AwaitCompletion() |> Async.RunSynchronously
-            if c.RanToCompletion then 0 else 2
+            let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group,
+                        maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
+            //use consumer = BatchesSync.Start(cfg)
+            //use consumer = BatchesAsync.Start(cfg, args.MaxWriters)
+            //use consumer = Messages.Start(cfg, args.MaxWriters)
+            use consumer = Streams.Start(cfg, args.MaxDop)
+            consumer.AwaitCompletion() |> Async.RunSynchronously
+            if consumer.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
             // If the handler throws, we exit the app in order to let an orchesterator flag the failure
