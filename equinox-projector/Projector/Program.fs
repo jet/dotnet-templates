@@ -196,20 +196,15 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent
     |> Seq.map hackDropBigBodies
 
-type EventConvert =
-    static member ToCodecEvents (span: Propulsion.Streams.StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> = 
-        span.events |> Seq.map (fun e -> Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) :> _)
-
 [<EntryPoint>]
 let main argv =
     try try let args = CmdParser.parse argv
             Logging.initialize args.Verbose args.ChangeFeedVerbose
             let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
             let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
-            let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
 #if kafka
-#if nostreams
             let (broker,topic) = args.Target.BuildTargetParams()
+#if nostreams
             let nullMapping (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) : seq<Microsoft.Azure.Documents.Document> =
                 docs :> _
             let render (doc : Microsoft.Azure.Documents.Document) : string * string =
@@ -220,11 +215,13 @@ let main argv =
                     Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render, statsInterval=TimeSpan.FromMinutes 1.)
             let createObserver = createRangeHandler Log.Logger projector.StartIngester nullMapping
 #else
-            let (broker,topic) = args.Target.BuildTargetParams()
+            let toCodecEvents (span: Propulsion.Streams.StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> = 
+                span.events |> Seq.map (fun e -> Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) :> _)
             let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
-                let events = EventConvert.ToCodecEvents span
+                let events = toCodecEvents span
                 let rendered = Equinox.Projection.Codec.RenderedSpan.ofStreamSpan stream span.index events
                 Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
+            let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
             let projector =
                 Propulsion.Kafka.StreamsProducer.Start(
                     Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
@@ -237,8 +234,9 @@ let main argv =
                 let ms = r.Next(1,span.events.Length)
                 do! Async.Sleep ms
                 return span.events.Length }
+            let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
             let projector =
-                Propulsion.Streams.Projector.StreamsProjector.Start(
+                Propulsion.Streams.StreamsProjector.Start(
                     Log.Logger, maxReadAhead, maxConcurrentStreams, project,
                     categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
             let createObserver = createRangeHandler Log.Logger projector.StartIngester mapToStreamItems
