@@ -195,6 +195,10 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent
     |> Seq.map hackDropBigBodies
 
+#if kafka && nostreams
+type ExampleOutput = { Id : string }
+#endif
+
 [<EntryPoint>]
 let main argv =
     try try let args = CmdParser.parse argv
@@ -208,7 +212,7 @@ let main argv =
                 docs :> _
             let render (doc : Microsoft.Azure.Documents.Document) : string * string =
                 let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
-                equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject {| Id = documentId |}
+                equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject { Id = documentId }
             let projector =
                 Propulsion.Kafka.ParallelProducer.Start(
                     Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render, statsInterval=TimeSpan.FromMinutes 1.)

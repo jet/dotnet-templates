@@ -1,6 +1,5 @@
 ﻿module ProjectorTemplate.Consumer.Program
 
-open Jet.ConfluentKafka.FSharp
 open Serilog
 open System
 
@@ -65,7 +64,7 @@ let main argv =
     try try let parsed = CmdParser.parse argv
             let args = CmdParser.Arguments(parsed)
             Logging.initialize args.Verbose
-            let cfg = KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group,
+            let cfg = Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group,
                         maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
             //use consumer = BatchesSync.Start(cfg)
             //use consumer = BatchesAsync.Start(cfg, args.MaxWriters)
