@@ -8,14 +8,17 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ## [Unreleased]
 
+### NB `eqxsync` is due a major update, which will make it align with `eqxprojector`
+
 ### Added
 
-- `dotnet new eqxprojector -k`'s `Consumer` now offers a `StreamSpan`-based API consistent with how the default `dotnet new exqprojector` works [#24](https://github.com/jet/dotnet-templates/pull/24)
+- `eqxprojector -k`'s `Consumer` offers a `StreamSpan`-based API for ordered, de-deduplicated consumption without concurrent executions at stream level [#24](https://github.com/jet/dotnet-templates/pull/24)
+- `eqxprojector -k -n`'s `Producer` offers a parallel producer mode which runs all projections in parallel without constraints (or need to synthesize streams) [#24](https://github.com/jet/dotnet-templates/pull/24)
 
 ### Changed
 
-- eqxtestbed, eqxweb, eqxwebcs targets `Equinox 2.0.0-preview9`
-- `dotnet new eqxprojector -k`'s `Consumer` now targets `Jet.ConfluentKafka.FSharp`+`Propulsion.Kafka` v `1.0.0-rc13` [#24](https://github.com/jet/dotnet-templates/pull/24)
+- `eqxtestbed`, `eqxweb`, `eqxwebcs` now target `Equinox 2.0.0-preview9`
+- `eqxprojector` `-k` now targets `Jet.ConfluentKafka.FSharp`+`Propulsion.Kafka` v `1.0.0-rc13` [#24](https://github.com/jet/dotnet-templates/pull/24)
 
 ### Removed
 ### Fixed
@@ -97,7 +100,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
 [Unreleased]: https://github.com/jet/dotnet-templates/compare/2.2.2...HEAD
-[2.2.0]: https://github.com/jet/dotnet-templates/compare/2.1.2...2.2.2
+[2.2.2]: https://github.com/jet/dotnet-templates/compare/2.1.2...2.2.2
 [2.1.2]: https://github.com/jet/dotnet-templates/compare/2.0.0...2.1.2
 [2.0.0]: https://github.com/jet/dotnet-templates/compare/1.2.0...2.0.0
 [1.2.0]: https://github.com/jet/dotnet-templates/compare/1.1.1...1.2.0
