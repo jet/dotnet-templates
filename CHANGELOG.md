@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- eqxtestbed, eqxweb, eqxwebcs targets `Equinox 2.0.0-preview9`
+
 ### Removed
 ### Fixed
 
