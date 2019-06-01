@@ -15,11 +15,9 @@
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.4.0" />
     <PackageReference Include="Destructurama.FSharp.NetCore" Version="1.0.14" />
-    <PackageReference Include="Equinox.Codec" Version="2.0.0-preview8" />
-    <!--<PackageReference Include="Equinox.Projection" Version="2.0.0-preview8" />-->
-    <PackageReference Include="Equinox.Projection.Codec" Version="2.0.0-preview8" />
+    <PackageReference Include="Equinox.Projection.Codec" Version="2.0.0-preview9" />
     <PackageReference Include="Confluent.Kafka" Version="1.0.0" />
-    <!--<PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-rc11" />-->
+    <!--<PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-rc12" />-->
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
 

@@ -132,22 +132,21 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-let createRangeHandler (log : ILogger) (createIngester : ILogger -> Propulsion.Ingestion.Ingester<int*_,_>) mapContent () =
+let createRangeHandler (log : ILogger) (createIngester : ILogger * int -> Propulsion.Ingestion.Ingester<_,_>) mapContent () =
     let mutable rangeIngester = Unchecked.defaultof<_>
-    let init rangeLog = async { rangeIngester <- createIngester rangeLog }
+    let init rangeLog partitionId = rangeIngester <- createIngester (rangeLog, partitionId)
     let dispose () = rangeIngester.Stop()
     let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
     let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
         sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let epoch = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64
-        // Pass along the function that the coordinator will run to checkpoint past this batch when such progress has been achieved
-        let! pt, (cur,max) = rangeIngester.Submit(epoch, ctx.Checkpoint(), (int ctx.PartitionKeyRangeId, mapContent docs)) |> Stopwatch.Time
-        let age, readS, postS = DateTime.UtcNow - docs.[docs.Count-1].Timestamp, float sw.ElapsedMilliseconds / 1000., let e = pt.Elapsed in e.TotalSeconds
+        let epoch, age = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64, DateTime.UtcNow - docs.[docs.Count-1].Timestamp
+        let! pt, (cur,max) = rangeIngester.Submit(epoch, ctx.Checkpoint(), mapContent docs) |> Stopwatch.Time
+        let readS, postS = float sw.ElapsedMilliseconds / 1000., let e = pt.Elapsed in e.TotalSeconds
         log.Information("Read {token,9} age {age:dd\.hh\:mm\:ss} {count,4} docs {requestCharge,6:f1}RU {l,5:f1}s Ingest {pt:f3}s {cur}/{max}",
             epoch, age, docs.Count, ctx.FeedResponse.RequestCharge, readS, postS, cur, max)
         sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
     }
-    ChangeFeedObserver.Create(log, ingest, assign=init, dispose=dispose)
+    ChangeFeedObserver.Create(log, ingest, init=init, dispose=dispose)
  
 let run (log : ILogger) discovery connectionPolicy source
         (aux, leaseId, startFromTail, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
