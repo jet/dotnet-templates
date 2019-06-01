@@ -4,6 +4,7 @@
   "classifications": [
     "Equinox",
     "Event Sourcing",
+    "EventStore",
     "CosmosDb",
     "ChangeFeed"
   ],

@@ -7,6 +7,7 @@
     "CosmosDb",
     "ChangeFeed",
     "Kafka"
+    "Propulsion",
   ],
   "tags": {
     "language": "F#"
@@ -24,6 +25,13 @@
       "isRequired": false,
       "defaultValue": "false",
       "description": "Include a code projecting to, and consuming from Kafka."
+    },
+    "parallel": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Omit Stream abstractions from Kafka emission."
     }
   },
   "sources": [
@@ -33,7 +41,6 @@
           "condition": "(!kafka)",
           "exclude": [
             "**/Consumer/**/*",
-            "**/Projector/KafkaSink.fs",
             "equinox-projector-consumer.sln"
           ]
         },
