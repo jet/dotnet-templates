@@ -3,7 +3,6 @@
 open Equinox.Cosmos
 open Equinox.Store // Stopwatch.Time
 open Equinox.Cosmos.Projection
-open Jet.Projection
 open Microsoft.Azure.Documents.ChangeFeedProcessor
 open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
 open Serilog
@@ -133,7 +132,7 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-let createRangeHandler (log : ILogger) (createIngester : ILogger -> Ingestion.Ingester<int*_,_>) mapContent () =
+let createRangeHandler (log : ILogger) (createIngester : ILogger -> Propulsion.Ingestion.Ingester<int*_,_>) mapContent () =
     let mutable rangeIngester = Unchecked.defaultof<_>
     let init rangeLog = async { rangeIngester <- createIngester rangeLog }
     let dispose () = rangeIngester.Stop()
@@ -152,7 +151,7 @@ let createRangeHandler (log : ILogger) (createIngester : ILogger -> Ingestion.In
  
 let run (log : ILogger) discovery connectionPolicy source
         (aux, leaseId, startFromTail, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
-        createRangeProjector = async {
+        createObserver = async {
     let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
         log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortBy fst)
         return! Async.Sleep interval }
@@ -160,7 +159,7 @@ let run (log : ILogger) discovery connectionPolicy source
     let! _feedEventHost =
         ChangeFeedProcessor.Start
           ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, startFromTail = startFromTail,
-            createObserver = createRangeProjector, ?reportLagAndAwaitNextEstimation = maybeLogLag, ?maxDocuments = maybeLimitDocumentCount,
+            createObserver = createObserver, ?reportLagAndAwaitNextEstimation = maybeLogLag, ?maxDocuments = maybeLimitDocumentCount,
             leaseAcquireInterval = TimeSpan.FromSeconds 5., leaseRenewInterval = TimeSpan.FromSeconds 5., leaseTtl = TimeSpan.FromSeconds 10.)
     do! Async.AwaitKeyboardInterrupt() } // exiting will Cancel the child tasks, i.e. the _feedEventHost
 
@@ -185,17 +184,21 @@ module Logging =
             |> fun c -> c.CreateLogger()
 
 let replaceLongDataWithNull (x : Equinox.Codec.IEvent<_[]>) =
-    if x.Data.Length < 900_000 then x
-    else Equinox.Codec.Core.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
+    let data = if x.Data.Length < 900_000 then x.Data else null
+    Propulsion.Streams.Internal.EventData.Create(x.EventType,data,x.Meta,x.Timestamp)
 
-let hackDropBigBodies (e : Equinox.Projection.StreamItem) : Jet.Projection.StreamItem =
+let hackDropBigBodies (e : Equinox.Projection.StreamItem) : Propulsion.Streams.StreamItem<_> =
     { stream = e.stream; index = e.index; event = replaceLongDataWithNull e.event }
 
-let mapContent (docs : Microsoft.Azure.Documents.Document seq) : Jet.Projection.StreamItem seq =
+let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamItem<_> seq =
     docs
     |> Seq.collect DocumentParser.enumEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent
     |> Seq.map hackDropBigBodies
+
+type EventConvert =
+    static member ToCodecEvents (span: Propulsion.Streams.StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> = 
+        span.events |> Seq.map (fun e -> Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) :> _)
 
 [<EntryPoint>]
 let main argv =
@@ -205,26 +208,43 @@ let main argv =
             let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
             let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
 #if kafka
+#if nostreams
             let (broker,topic) = args.Target.BuildTargetParams()
+            let nullMapping (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) : seq<Microsoft.Azure.Documents.Document> =
+                docs :> _
+            let render (doc : Microsoft.Azure.Documents.Document) : string * string =
+                let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
+                equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject {| Id = documentId |}
             let projector =
-                Jet.Projection.Kafka.KafkaStreamsProjector.Start(
-                    Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic,
-                    categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+                Propulsion.Kafka.ParallelProducer.Start(
+                    Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render, statsInterval=TimeSpan.FromMinutes 1.)
+            let createObserver = createRangeHandler Log.Logger projector.StartIngester nullMapping
 #else
-            let project (_stream, span: Jet.Projection.Span) = async { 
+            let (broker,topic) = args.Target.BuildTargetParams()
+            let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
+                let events = EventConvert.ToCodecEvents span
+                let rendered = Equinox.Projection.Codec.RenderedSpan.ofStreamSpan stream span.index events
+                Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
+            let projector =
+                Propulsion.Kafka.StreamsProducer.Start(
+                    Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
+                    categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+            let createObserver = createRangeHandler Log.Logger projector.StartIngester mapToStreamItems
+#endif
+#else
+            let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async { 
                 let r = Random()
                 let ms = r.Next(1,span.events.Length)
                 do! Async.Sleep ms
                 return span.events.Length }
             let projector =
-                Jet.Projection.Kafka.StreamsProjector.Start(
+                Propulsion.Streams.Projector.StreamsProjector.Start(
                     Log.Logger, maxReadAhead, maxConcurrentStreams, project,
                     categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+            let createObserver = createRangeHandler Log.Logger projector.StartIngester mapToStreamItems
 #endif
             Async.Start(
-                run Log.Logger discovery connector.ConnectionPolicy source
-                    (aux, leaseId, startFromTail, maxDocuments, lagFrequency)
-                    (createRangeHandler Log.Logger projector.StartIngester mapContent))
+                run Log.Logger discovery connector.ConnectionPolicy source (aux, leaseId, startFromTail, maxDocuments, lagFrequency) createObserver)
             Async.RunSynchronously(
                 projector.AwaitCompletion())
             if projector.RanToCompletion then 0 else 1

@@ -4,15 +4,12 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
     <WarningLevel>5</WarningLevel>
-    <DefineConstants>kafka</DefineConstants>
+    <DefineConstants>kafka;nostreams</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Consumer\Projection.fs" Link="Projection.fs" />
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="Ingestion.fs" />
     <!--#if (kafka)-->
-    <Compile Include="StreamsProjector.fs" />
     <!--#endif-->
     <Compile Include="Program.fs" />
   </ItemGroup>
@@ -26,6 +23,10 @@
     <PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-rc11" />
     <!--#endif-->
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\confluent-kafka-fsharp\src\Propulsion.Kafka\Propulsion.Kafka.fsproj" />
   </ItemGroup>
 
 </Project>

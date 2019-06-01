@@ -8,9 +8,6 @@
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="JCKFS.fs" />
-    <Compile Include="Projection.fs" />
-    <Compile Include="StreamsConsumer.fs" />
     <Compile Include="Examples.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
@@ -24,6 +21,10 @@
     <PackageReference Include="Confluent.Kafka" Version="1.0.0" />
     <!--<PackageReference Include="Jet.ConfluentKafka.FSharp" Version="1.0.0-rc11" />-->
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\confluent-kafka-fsharp\src\Propulsion.Kafka\Propulsion.Kafka.fsproj" />
   </ItemGroup>
 
 </Project>

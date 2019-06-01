@@ -66,7 +66,15 @@ module EventParser =
 type Message = Faves of Favorites.Event | Saves of SavedForLater.Event | Category of name : string * count : int | Unclassified of messageKey : string 
 
 open Equinox.Projection.Codec
-open Jet.Projection
+open Propulsion.Streams
+
+type EventConvert =
+    static member ToEventData (x: RenderedEvent) = Internal.EventData.Create(x.c, x.d, x.m, x.t)
+    static member ToEventData (x: Equinox.Codec.IEvent<_>) = Internal.EventData.Create(x.EventType,x.Data,x.Meta,x.Timestamp)
+    static member ToStreamItems streamName (span: RenderedSpan) : seq<StreamItem<_>> = 
+        span |> RenderedSpan.enumEvents |> Seq.mapi (fun i e -> { stream = streamName; index = span.i + int64 i; event = EventConvert.ToEventData e })
+    static member ToCodecEvents (span: StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> = 
+        span.events |> Seq.map (fun e -> Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) :> _)
 
 // Example of filtering our relevant Events from the Kafka stream
 // NB if the percentage of relevant events is low, one may wish to adjust the projector to project only a subset
@@ -82,17 +90,14 @@ type MessageInterpreter() =
         | [| category; _ |] -> yield Category (category, Seq.length events)
         | _ -> yield Unclassified streamName }
 
-    member __.EnumEvents(spanJson) =
-        JsonConvert.DeserializeObject<RenderedSpan>(spanJson) |> RenderedSpan.enumEvents
-    member __.EnumStreamItems(KeyValue (streamName : string, spanJson)) : seq<StreamItem> =
-        if streamName.StartsWith("#serial") then Seq.empty else
+    member __.EnumStreamItems(KeyValue (streamName : string, spanJson)) : seq<StreamItem<_>> =
         let span = JsonConvert.DeserializeObject<RenderedSpan>(spanJson)
-        __.EnumEvents(spanJson) |> Seq.mapi (fun i x -> { stream = streamName; index = span.i + int64 i; event = x })
+        if streamName.StartsWith("#serial") then Seq.empty else EventConvert.ToStreamItems streamName span
 
     /// Handles various category / eventType / payload types as produced by Equinox.Tool
     member __.TryDecode(streamName, spanJson) = seq {
-        let events = __.EnumEvents(spanJson)
-        yield! __.Interpret(streamName, events) }
+        let span = JsonConvert.DeserializeObject<RenderedSpan>(spanJson)
+        yield! __.Interpret(streamName, RenderedSpan.enumEvents span) }
 
 type Processor() =
     let mutable favorited, unfavorited, saved, cleared = 0, 0, 0, 0 
@@ -113,7 +118,7 @@ type Processor() =
 
 open Confluent.Kafka
 open Jet.ConfluentKafka.FSharp
-open Jet.Projection.Kafka
+open Propulsion.Kafka
 
 type BatchesSync =
     /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
@@ -146,8 +151,8 @@ type Streams =
         let log = Log.ForContext<Streams>()
         let interpreter, processor = MessageInterpreter(), Processor()
         let statsInterval, stateInterval = TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.
-        let handle (streamName : string, span : Span) = async {
-            for x in interpreter.Interpret(streamName, span.events) do
+        let handle (streamName : string, span : StreamSpan<_>) = async {
+            for x in interpreter.Interpret(streamName, EventConvert.ToCodecEvents span) do
                 processor.Handle x
             return span.events.Length }
         let categorize (streamName : string) =
