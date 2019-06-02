@@ -1,14 +1,10 @@
 ﻿module ProjectorTemplate.Projector.Program
 
 open Equinox.Cosmos
-open Equinox.Store // Stopwatch.Time
 open Equinox.Cosmos.Projection
-open Microsoft.Azure.Documents.ChangeFeedProcessor
-open Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing
 open Serilog
 open System
-open System.Collections.Generic
-open System.Diagnostics
+open Propulsion.Cosmos
 
 module CmdParser =
     open Argu
@@ -64,7 +60,7 @@ module CmdParser =
         | [<AltCommandLine("-s"); Unique>] LeaseCollectionSuffix of string
         | [<AltCommandLine("-z"); Unique>] FromTail
         | [<AltCommandLine("-md"); Unique>] MaxDocuments of int
-        | [<AltCommandLine "-r"; Unique>] MaxReadAhead of int
+        | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine("-l"); Unique>] LagFreqM of float
         | [<AltCommandLine("-v"); Unique>] Verbose
@@ -83,7 +79,7 @@ module CmdParser =
                 | LeaseCollectionSuffix _ -> "specify Collection Name suffix for Leases collection (default: `-aux`)."
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
-                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
+                | MaxPendingBatches _ ->    "maximum number of batches to let processing get ahead of completion. Default: 64"
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
@@ -103,7 +99,7 @@ module CmdParser =
         member __.Verbose =                 args.Contains Verbose
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
-        member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
+        member __.MaxReadAhead =            args.GetResult(MaxPendingBatches,64)
         member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,1024)
         member __.LagFrequency =            args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
@@ -127,40 +123,10 @@ module CmdParser =
 //#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse argv : Arguments =
+    let parse argv =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
-
-let createRangeHandler (log : ILogger) (createIngester : ILogger * int -> Propulsion.Ingestion.Ingester<_,_>) mapContent () =
-    let mutable rangeIngester = Unchecked.defaultof<_>
-    let init rangeLog partitionId = rangeIngester <- createIngester (rangeLog, partitionId)
-    let dispose () = rangeIngester.Stop()
-    let sw = Stopwatch.StartNew() // we'll end up reporting the warmup/connect time on the first batch, but that's ok
-    let ingest (log : ILogger) (ctx : IChangeFeedObserverContext) (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) = async {
-        sw.Stop() // Stop the clock after ChangeFeedProcessor hands off to us
-        let epoch, age = ctx.FeedResponse.ResponseContinuation.Trim[|'"'|] |> int64, DateTime.UtcNow - docs.[docs.Count-1].Timestamp
-        let! pt, (cur,max) = rangeIngester.Submit(epoch, ctx.Checkpoint(), mapContent docs) |> Stopwatch.Time
-        let readS, postS = float sw.ElapsedMilliseconds / 1000., let e = pt.Elapsed in e.TotalSeconds
-        log.Information("Read {token,9} age {age:dd\.hh\:mm\:ss} {count,4} docs {requestCharge,6:f1}RU {l,5:f1}s Ingest {pt:f3}s {cur}/{max}",
-            epoch, age, docs.Count, ctx.FeedResponse.RequestCharge, readS, postS, cur, max)
-        sw.Restart() // restart the clock as we handoff back to the ChangeFeedProcessor
-    }
-    ChangeFeedObserver.Create(log, ingest, init=init, dispose=dispose)
- 
-let run (log : ILogger) discovery connectionPolicy source
-        (aux, leaseId, startFromTail, maybeLimitDocumentCount, lagReportFreq : TimeSpan option)
-        createObserver = async {
-    let logLag (interval : TimeSpan) (remainingWork : (int*int64) seq) = async {
-        log.Information("Backlog {backlog:n0} (by range: {@rangeLags})", remainingWork |> Seq.map snd |> Seq.sum, remainingWork |> Seq.sortBy fst)
-        return! Async.Sleep interval }
-    let maybeLogLag = lagReportFreq |> Option.map logLag
-    let! _feedEventHost =
-        ChangeFeedProcessor.Start
-          ( log, discovery, connectionPolicy, source, aux, leasePrefix = leaseId, startFromTail = startFromTail,
-            createObserver = createObserver, ?reportLagAndAwaitNextEstimation = maybeLogLag, ?maxDocuments = maybeLimitDocumentCount,
-            leaseAcquireInterval = TimeSpan.FromSeconds 5., leaseRenewInterval = TimeSpan.FromSeconds 5., leaseTtl = TimeSpan.FromSeconds 10.)
-    do! Async.AwaitKeyboardInterrupt() } // exiting will Cancel the child tasks, i.e. the _feedEventHost
 
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
@@ -199,56 +165,61 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
 type ExampleOutput = { Id : string }
 #endif
 
+let start (args : CmdParser.Arguments) =
+    Logging.initialize args.Verbose args.ChangeFeedVerbose
+    let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
+    let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
+#if kafka
+    let (broker,topic) = args.Target.BuildTargetParams()
+#if nostreams
+    let render (doc : Microsoft.Azure.Documents.Document) : string * string =
+        let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
+        equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject { Id = documentId }
+    let projector =
+        Propulsion.Kafka.ParallelProducer.Start(
+            Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render, statsInterval=TimeSpan.FromMinutes 1.)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
+#else
+    let toCodecEvents (span: Propulsion.Streams.StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> = 
+        span.events |> Seq.map (fun e -> Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) :> _)
+    let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
+        let events = toCodecEvents span
+        let rendered = Equinox.Projection.Codec.RenderedSpan.ofStreamSpan stream span.index events
+        Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
+    let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+    let projector =
+        Propulsion.Kafka.StreamsProducer.Start(
+            Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
+            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
+#endif
+#else
+    let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async { 
+        let r = Random()
+        let ms = r.Next(1,span.events.Length)
+        do! Async.Sleep ms
+        return span.events.Length }
+    let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+    let projector =
+        Propulsion.Streams.StreamsProjector.Start(
+            Log.Logger, maxReadAhead, maxConcurrentStreams, project,
+            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
+#endif
+    let runSourcePipeline =
+        CosmosSource.Run(
+            Log.Logger, discovery, connector.ConnectionPolicy, source,
+            aux, leaseId, startFromTail, createObserver,
+            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
+    runSourcePipeline, projector
+
 [<EntryPoint>]
 let main argv =
     try try let args = CmdParser.parse argv
-            Logging.initialize args.Verbose args.ChangeFeedVerbose
-            let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-            let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
-#if kafka
-            let (broker,topic) = args.Target.BuildTargetParams()
-#if nostreams
-            let nullMapping (docs : IReadOnlyList<Microsoft.Azure.Documents.Document>) : seq<Microsoft.Azure.Documents.Document> =
-                docs :> _
-            let render (doc : Microsoft.Azure.Documents.Document) : string * string =
-                let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
-                equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject { Id = documentId }
-            let projector =
-                Propulsion.Kafka.ParallelProducer.Start(
-                    Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render, statsInterval=TimeSpan.FromMinutes 1.)
-            let createObserver = createRangeHandler Log.Logger projector.StartIngester nullMapping
-#else
-            let toCodecEvents (span: Propulsion.Streams.StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> = 
-                span.events |> Seq.map (fun e -> Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) :> _)
-            let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
-                let events = toCodecEvents span
-                let rendered = Equinox.Projection.Codec.RenderedSpan.ofStreamSpan stream span.index events
-                Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
-            let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
-            let projector =
-                Propulsion.Kafka.StreamsProducer.Start(
-                    Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
-                    categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
-            let createObserver = createRangeHandler Log.Logger projector.StartIngester mapToStreamItems
-#endif
-#else
-            let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async { 
-                let r = Random()
-                let ms = r.Next(1,span.events.Length)
-                do! Async.Sleep ms
-                return span.events.Length }
-            let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
-            let projector =
-                Propulsion.Streams.StreamsProjector.Start(
-                    Log.Logger, maxReadAhead, maxConcurrentStreams, project,
-                    categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
-            let createObserver = createRangeHandler Log.Logger projector.StartIngester mapToStreamItems
-#endif
-            Async.Start(
-                run Log.Logger discovery connector.ConnectionPolicy source (aux, leaseId, startFromTail, maxDocuments, lagFrequency) createObserver)
-            Async.RunSynchronously(
-                projector.AwaitCompletion())
-            if projector.RanToCompletion then 0 else 1
+            let runSourcePipeline, projector = start args    
+            Async.Start <| runSourcePipeline
+            Async.RunSynchronously <| projector.AwaitCompletion()
+            if projector.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
             | e -> eprintfn "%s" e.Message; 1
