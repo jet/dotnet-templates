@@ -1,12 +1,11 @@
 ﻿module SyncTemplate.Program
 
 open Equinox.Cosmos
-open Equinox.Cosmos.Projection
 open Equinox.EventStore
-open Serilog
-open System
 open Propulsion.Cosmos
 open Propulsion.EventStore
+open Serilog
+open System
 
 module CmdParser =
     open Argu
@@ -286,22 +285,21 @@ module EventV0Parser =
     let (|StandardCodecEvent|) (x: EventV0) = Propulsion.Streams.Internal.EventData.Create(x.t, x.d, timestamp = x.c)
 
     /// We assume all Documents represent Events laid out as above
-    let parse (d : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamItem<_> =
+    let parse (d : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> =
         let (StandardCodecEvent e) as x = d.Cast<EventV0>()
         { stream = x.s; index = x.i; event = e } : _
 
-let transformV0 categorize catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamItem<_> seq = seq {
+let transformV0 categorize catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
     let streamName = (*if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+*)parsed.stream
     if catFilter (categorize streamName) then
         yield parsed }
 //#else
-let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamItem<_> seq = seq {
+let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     for { stream = s; index = i; event = e } in DocumentParser.enumEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter (categorize s) then
-            yield {
-                stream = s; index = i; event = Propulsion.Streams.Internal.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) } }
+            yield { stream = s; index = i; event = Propulsion.Streams.Internal.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) } }
 //#endif
 
 let start (args : CmdParser.Arguments) =

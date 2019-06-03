@@ -1,10 +1,9 @@
 ﻿module ProjectorTemplate.Projector.Program
 
 open Equinox.Cosmos
-open Equinox.Cosmos.Projection
+open Propulsion.Cosmos
 open Serilog
 open System
-open Propulsion.Cosmos
 
 module CmdParser =
     open Argu
@@ -148,14 +147,14 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let replaceLongDataWithNull (x : Equinox.Codec.IEvent<_[]>) =
-    let data = if x.Data.Length < 900_000 then x.Data else null
-    Propulsion.Streams.Internal.EventData.Create(x.EventType,data,x.Meta,x.Timestamp)
+let replaceLongDataWithNull (x : Propulsion.Streams.IEvent<byte[]>) : Propulsion.Streams.IEvent<_> =
+    if x.Data.Length < 900_000 then x
+    else Propulsion.Streams.Internal.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
 
-let hackDropBigBodies (e : Equinox.Projection.StreamItem) : Propulsion.Streams.StreamItem<_> =
+let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
     { stream = e.stream; index = e.index; event = replaceLongDataWithNull e.event }
 
-let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamItem<_> seq =
+let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
     docs
     |> Seq.collect DocumentParser.enumEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent
@@ -180,11 +179,8 @@ let start (args : CmdParser.Arguments) =
             Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
 #else
-    let toCodecEvents (span: Propulsion.Streams.StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> = 
-        span.events |> Seq.map (fun e -> Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) :> _)
     let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
-        let events = toCodecEvents span
-        let rendered = Equinox.Projection.Codec.RenderedSpan.ofStreamSpan stream span.index events
+        let rendered = Propulsion.Kafka.Codec.RenderedSpan.ofStreamSpan stream span
         Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
     let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
     let projector =

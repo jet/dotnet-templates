@@ -16,6 +16,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion", "..\..\conflue
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion.Cosmos", "..\..\confluent-kafka-fsharp\src\Propulsion.Cosmos\Propulsion.Cosmos.fsproj", "{EE4952C7-C420-4656-AD68-F10F199BFC3C}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion.Kafka", "..\..\confluent-kafka-fsharp\src\Propulsion.Kafka\Propulsion.Kafka.fsproj", "{7732E3DC-3EB1-4CD1-80E6-55617B080954}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,6 +40,10 @@ Global
 		{EE4952C7-C420-4656-AD68-F10F199BFC3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EE4952C7-C420-4656-AD68-F10F199BFC3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EE4952C7-C420-4656-AD68-F10F199BFC3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7732E3DC-3EB1-4CD1-80E6-55617B080954}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7732E3DC-3EB1-4CD1-80E6-55617B080954}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7732E3DC-3EB1-4CD1-80E6-55617B080954}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7732E3DC-3EB1-4CD1-80E6-55617B080954}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
