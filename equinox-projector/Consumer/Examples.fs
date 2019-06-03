@@ -65,16 +65,25 @@ module EventParser =
 
 type Message = Faves of Favorites.Event | Saves of SavedForLater.Event | Category of name : string * count : int | Unclassified of messageKey : string 
 
-open Equinox.Projection.Codec
-open Propulsion.Streams
+type EquinoxEvent =
+    static member Parse (x: Propulsion.Kafka.Codec.RenderedEvent) =
+        { new Equinox.Codec.IEvent<_> with
+            member __.EventType = x.c
+            member __.Data = x.d
+            member __.Meta = x.m
+            member __.Timestamp = x.t }
+    static member Parse (x: Propulsion.Streams.IEvent<_>) =
+        { new Equinox.Codec.IEvent<_> with
+            member __.EventType = x.EventType
+            member __.Data = x.Data
+            member __.Meta = x.Meta
+            member __.Timestamp = x.Timestamp }
 
-type EventConvert =
-    static member ToEventData (x: RenderedEvent) = Internal.EventData.Create(x.c, x.d, x.m, x.t)
-    static member ToEventData (x: Equinox.Codec.IEvent<_>) = Internal.EventData.Create(x.EventType,x.Data,x.Meta,x.Timestamp)
-    static member ToStreamItems streamName (span: RenderedSpan) : seq<StreamItem<_>> = 
-        span |> RenderedSpan.enumEvents |> Seq.mapi (fun i e -> { stream = streamName; index = span.i + int64 i; event = EventConvert.ToEventData e })
-    static member ToCodecEvents (span: StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> = 
-        span.events |> Seq.map (fun e -> Equinox.Codec.Core.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) :> _)
+type EquinoxSpan =
+    static member EnumCodecEvents (x: Propulsion.Kafka.Codec.RenderedSpan) : seq<Equinox.Codec.IEvent<_>> =
+       x.e |> Seq.map EquinoxEvent.Parse
+    static member EnumCodecEvents (x: Propulsion.Streams.StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> =
+       x.events |> Seq.map EquinoxEvent.Parse
 
 // Example of filtering our relevant Events from the Kafka stream
 // NB if the percentage of relevant events is low, one may wish to adjust the projector to project only a subset
@@ -90,14 +99,16 @@ type MessageInterpreter() =
         | [| category; _ |] -> yield Category (category, Seq.length events)
         | _ -> yield Unclassified streamName }
 
-    member __.EnumStreamItems(KeyValue (streamName : string, spanJson)) : seq<StreamItem<_>> =
-        let span = JsonConvert.DeserializeObject<RenderedSpan>(spanJson)
-        if streamName.StartsWith("#serial") then Seq.empty else EventConvert.ToStreamItems streamName span
+    member __.EnumStreamEvents(KeyValue (streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
+        if streamName.StartsWith("#serial") then Seq.empty else
+
+        let span = JsonConvert.DeserializeObject<Propulsion.Kafka.Codec.RenderedSpan>(spanJson)
+        Propulsion.Kafka.Codec.RenderedSpan.enumStreamEvents span
 
     /// Handles various category / eventType / payload types as produced by Equinox.Tool
     member __.TryDecode(streamName, spanJson) = seq {
-        let span = JsonConvert.DeserializeObject<RenderedSpan>(spanJson)
-        yield! __.Interpret(streamName, RenderedSpan.enumEvents span) }
+        let span = JsonConvert.DeserializeObject<Propulsion.Kafka.Codec.RenderedSpan>(spanJson)
+        yield! __.Interpret(streamName, EquinoxSpan.EnumCodecEvents span) }
 
 type Processor() =
     let mutable favorited, unfavorited, saved, cleared = 0, 0, 0, 0 
@@ -151,14 +162,14 @@ type Streams =
         let log = Log.ForContext<Streams>()
         let interpreter, processor = MessageInterpreter(), Processor()
         let statsInterval, stateInterval = TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.
-        let handle (streamName : string, span : StreamSpan<_>) = async {
-            for x in interpreter.Interpret(streamName, EventConvert.ToCodecEvents span) do
+        let handle (streamName : string, span : Propulsion.Streams.StreamSpan<_>) = async {
+            for x in interpreter.Interpret(streamName, EquinoxSpan.EnumCodecEvents span) do
                 processor.Handle x
             return span.events.Length }
         let categorize (streamName : string) =
             streamName.Split([|'-';'_'|],2).[0]
         StreamsConsumer.Start
-            (   log, config, degreeOfParallelism, interpreter.EnumStreamItems, handle, categorize, maxSubmissionsPerPartition = 4,
+            (   log, config, degreeOfParallelism, interpreter.EnumStreamEvents, handle, categorize, maxSubmissionsPerPartition = 4,
                 statsInterval = statsInterval, stateInterval = stateInterval, logExternalStats = processor.DumpStats)
         
 type BatchesAsync =

@@ -32,12 +32,6 @@ module CmdParser =
                 | LagFreqM _ ->         "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose _ ->          "request verbose logging."
 
-    /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse argv : ParseResults<Parameters> =
-        let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
-        parser.ParseCommandLine argv
-
     type Arguments(args : ParseResults<Parameters>) =
         member __.Broker =              Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
         member __.Topic =               match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
@@ -46,6 +40,12 @@ module CmdParser =
         member __.MaxInFlightBytes =    (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
         member __.LagFrequency =        args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.Verbose =             args.Contains Verbose
+
+    /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
+    let parse argv =
+        let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
+        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        parser.ParseCommandLine argv |> Arguments 
 
 module Logging =
     let initialize verbose =
@@ -59,18 +59,19 @@ module Logging =
                         else c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}|{Properties}{NewLine}{Exception}")
             |> fun c -> c.CreateLogger()
 
+let start (args : CmdParser.Arguments) =
+    Logging.initialize args.Verbose
+    let clientId, mem, stats = "ProjectorTemplate", args.MaxInFlightBytes, args.LagFrequency
+    let c = Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(clientId, args.Broker, [args.Topic], args.Group, maxInFlightBytes = mem, ?statisticsInterval = stats)
+    //BatchesSync.Start(c)
+    //BatchesAsync.Start(c, args.MaxWriters)
+    //Messages.Start(c, args.MaxWriters)
+    Streams.Start(c, args.MaxDop)
+
 [<EntryPoint>]
 let main argv =
-    try try let parsed = CmdParser.parse argv
-            let args = CmdParser.Arguments(parsed)
-            Logging.initialize args.Verbose
-            let cfg = Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create("ProjectorTemplate", args.Broker, [args.Topic], args.Group,
-                        maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-            //use consumer = BatchesSync.Start(cfg)
-            //use consumer = BatchesAsync.Start(cfg, args.MaxWriters)
-            //use consumer = Messages.Start(cfg, args.MaxWriters)
-            use consumer = Streams.Start(cfg, args.MaxDop)
-            consumer.AwaitCompletion() |> Async.RunSynchronously
+    try try use consumer = argv |> CmdParser.parse |> start
+            Async.RunSynchronously <| consumer.AwaitCompletion()
             if consumer.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1

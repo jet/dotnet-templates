@@ -1,8 +1,9 @@
 ﻿module SyncTemplate.Program
 
 open Equinox.Cosmos
-open Equinox.Cosmos.Projection
-open Equinox.EventStore2
+open Equinox.EventStore
+open Propulsion.Cosmos
+open Propulsion.EventStore
 open Serilog
 open System
 
@@ -18,46 +19,45 @@ module CmdParser =
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
-        | [<AltCommandLine "-S"; Unique>] LocalSeq
-        | [<AltCommandLine "-v"; Unique>] Verbose
         | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine "-mc"; Unique>] MaxConnections of int
-        | [<AltCommandLine "-mp"; Unique>] MaxProcessing of int
+        | [<AltCommandLine "-ms"; Unique>] MaxSubmit of int
         | [<AltCommandLine "-md"; Unique>] MaxDocuments of int
+        | [<AltCommandLine "-l"; Unique>] LagFreqM of float
+        | [<AltCommandLine "-S"; Unique>] LocalSeq
+        | [<AltCommandLine "-v"; Unique>] Verbose
         | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
-        | [<AltCommandLine "-l"; Unique>] LagFreqS of float
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Source of ParseResults<SourceParameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
-                | Verbose ->                "request Verbose Logging. Default: off"
                 | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 512"
                 | MaxConnections _ ->       "size of Sink connection pool to maintain. Default: 1"
-                | MaxPendingBatches _ ->    "maximum number of batches to let processing get ahead of completion. Default: 32"
-                | MaxProcessing _ ->        "maximum number of batches to submit concurrently. Default: 16"
-                | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
+                | MaxPendingBatches _ ->    "maximum number of batches to let processing get ahead of completion. Default: 16"
+                | MaxSubmit _ ->            "maximum number of batches to submit concurrently. Default: 8"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
-                | LagFreqS _ ->             "specify frequency to dump lag stats. Default: off"
+                | LagFreqM _ ->             "specify frequency (in minutes) to dump lag stats. Default: off"
+                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
+                | Verbose ->                "request Verbose Logging. Default: off"
+                | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | Source _ ->               "CosmosDb input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member __.Verbose =             a.Contains Verbose
         member __.MaxWriters =          a.GetResult(MaxWriters,1024)
         member __.ConnectionPoolSize =  a.GetResult(MaxConnections,1)
-        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,16)
-        member __.MaxProcessing =       a.GetResult(MaxProcessing,8)
-        member __.IngesterLogFreq =     TimeSpan.FromMinutes 2.
+        member __.MaxReadAhead =        a.GetResult(MaxPendingBatches,16)
+        member __.MaxProcessing =       a.GetResult(MaxSubmit,8)
         member __.StatsInterval =       TimeSpan.FromMinutes 1.
         member __.StatesInterval =      TimeSpan.FromMinutes 5.
         member __.VerboseConsole =      a.Contains ChangeFeedVerbose
         member __.LeaseId =             a.GetResult ConsumerGroupName
         member __.MaxDocuments =        a.TryGetResult MaxDocuments
-        member __.LagFrequency =        a.TryGetResult LagFreqS |> Option.map TimeSpan.FromSeconds
+        member __.LagFrequency =        a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member val Source : SourceArguments = SourceArguments(a.GetResult Source)
         member __.Sink : Choice<CosmosSinkArguments,EsSinkArguments> = __.Source.Sink
         member x.BuildChangeFeedParams() =
@@ -65,7 +65,7 @@ module CmdParser =
                 match a.GetResult(Source).TryGetResult LeaseCollectionSource with
                 | None ->     x.Source.Discovery, { database = x.Source.Database; collection = x.Source.Collection + "-aux" }
                 | Some sc ->  x.Source.Discovery, { database = x.Source.Database; collection = sc }
-            Log.Information("Max read backlog: {maxPending}, of which up to {maxProcessing} processing", x.MaxPendingBatches, x.MaxProcessing)
+            Log.Information("Max read backlog: {maxPending}, of which up to {maxProcessing} processing", x.MaxReadAhead, x.MaxProcessing)
             Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} with maximum document count limited to {maxDocuments}", x.LeaseId, db.database, db.collection, Option.toNullable x.MaxDocuments)
             if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
@@ -198,7 +198,8 @@ module CmdParser =
         member __.Retries =             a.GetResult(Retries,3)
         member __.Connect(log: ILogger, storeLog: ILogger, connectionStrategy, appName, connIndex) =
             let s (x : TimeSpan) = x.TotalSeconds
-            log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s __.Heartbeat, s __.Timeout, __.Retries)
+            log.Information("EventStore {host} Connection {connId} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
+                __.Host, connIndex, s __.Heartbeat, s __.Timeout, __.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string; "App", appName; "Conn", connIndex]
             GesConnector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
@@ -223,19 +224,20 @@ module Logging =
                         let cfpLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
             |> fun c -> let ingesterLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<Equinox.Projection.Scheduling.StreamStates>.FullName, ingesterLevel)
+                        c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamStates<_>>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
-                        c.MinimumLevel.Override(typeof<CosmosSink.Writer.Result>.FullName, generalLevel)
-                         .MinimumLevel.Override(typeof<EventStoreSink.Writer.Result>.FullName, generalLevel)
+                        c.MinimumLevel.Override(typeof<Propulsion.Cosmos.Internal.Writer.Result>.FullName, generalLevel)
+                         .MinimumLevel.Override(typeof<Propulsion.EventStore.Internal.Writer.Result>.FullName, generalLevel)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
                         let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                             a.Logger(fun l ->
-                                l.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.RuCounters.RuCounterSink()) |> ignore) |> ignore
+                                l.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
+                                 .WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
                             a.Logger(fun l ->
                                 let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
-                                let isWriterA = Filters.Matching.FromSource<EventStoreSink.Writer.Result>().Invoke
-                                let isWriterB = Filters.Matching.FromSource<CosmosSink.Writer.Result>().Invoke
+                                let isWriterA = Filters.Matching.FromSource<Propulsion.EventStore.Internal.Writer.Result>().Invoke
+                                let isWriterB = Filters.Matching.FromSource<Propulsion.Cosmos.Internal.Writer.Result>().Invoke
                                 let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
                                 let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                                 let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
@@ -247,42 +249,99 @@ module Logging =
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
-        Log.ForContext<Equinox.Projection.Scheduling.StreamStates>(), Log.ForContext<Core.CosmosContext>()
+        Log.ForContext<Propulsion.Streams.Scheduling.StreamStates<_>>(), Log.ForContext<Core.CosmosContext>()
+
+ //#if marveleqx
+[<RequireQualifiedAccess>]
+module EventV0Parser =
+    open Newtonsoft.Json
+
+    /// A single Domain Event as Written by internal Equinox versions
+    type [<NoEquality; NoComparison; JsonObject(ItemRequired=Required.Always)>]
+        EventV0 =
+        {   /// DocDb-mandated Partition Key, must be maintained within the document
+            s: string // "{streamName}"
+
+            /// Creation datetime (as opposed to system-defined _lastUpdated which is touched by triggers, replication etc.)
+            c: DateTimeOffset // ISO 8601
+
+            /// The Case (Event Type); used to drive deserialization
+            t: string // required
+
+            /// 'i' value for the Event
+            i: int64 // {index}
+
+            /// Event body, as UTF-8 encoded json ready to be injected into the Json being rendered for DocDb
+            [<JsonConverter(typeof<Equinox.Cosmos.Internal.Json.VerbatimUtf8JsonConverter>)>]
+            d: byte[] }
+
+    type Microsoft.Azure.Documents.Document with
+        member document.Cast<'T>() =
+            let tmp = new Microsoft.Azure.Documents.Document()
+            tmp.SetPropertyValue("content", document)
+            tmp.GetPropertyValue<'T>("content")
+
+    /// Maps fields in an Equinox V0 Event to the interface defined by the Propulsion.Streams library
+    let (|StandardCodecEvent|) (x: EventV0) = Propulsion.Streams.Internal.EventData.Create(x.t, x.d, timestamp = x.c)
+
+    /// We assume all Documents represent Events laid out as above
+    let parse (d : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> =
+        let (StandardCodecEvent e) as x = d.Cast<EventV0>()
+        { stream = x.s; index = x.i; event = e } : _
+
+let transformV0 categorize catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
+    let parsed = EventV0Parser.parse v0SchemaDocument
+    let streamName = (*if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+*)parsed.stream
+    if catFilter (categorize streamName) then
+        yield parsed }
+//#else
+let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
+    for { stream = s; index = i; event = e } in DocumentParser.enumEvents changeFeedDocument do
+        // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
+        if catFilter (categorize s) then
+            yield { stream = s; index = i; event = Propulsion.Streams.Internal.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) } }
+//#endif
+
+let start (args : CmdParser.Arguments) =
+    let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
+    let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
+    let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
+    let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+    let sink =
+        match args.Sink with
+        | Choice1Of2 cosmos ->
+            let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
+            let connect connIndex = async {
+                let! c = cosmos.Connect "SyncTemplate" connIndex
+                let lfc = storeLog.ForContext("ConnId", connIndex)
+                return Equinox.Cosmos.Core.CosmosContext(c, colls, lfc) }
+            let targets = Array.init args.ConnectionPoolSize connect |> Async.Parallel |> Async.RunSynchronously
+            CosmosSink.Start(log, args.MaxReadAhead, targets, args.MaxWriters, categorize, args.StatsInterval, args.StatesInterval, args.MaxProcessing)
+        | Choice2Of2 es ->
+            let connect connIndex = async {
+                let lfc = storeLog.ForContext("ConnId", connIndex)
+                let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, "SyncTemplate", connIndex)
+                return GesGateway(c, GesBatchingPolicy(Int32.MaxValue)) }
+            let targets = Array.init args.ConnectionPoolSize (string >> connect) |> Async.Parallel |> Async.RunSynchronously
+            EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, categorize, args.StatsInterval, args.StatesInterval, args.MaxProcessing)
+#if marveleqx
+    let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize catFilter))
+#else
+    let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter categorize catFilter))
+#endif
+    let runPipeline =
+        CosmosSource.Run(log, discovery, connectionPolicy, source,
+            aux, leaseId, startFromHere, createObserver,
+            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxDiscovery=auxDiscovery)
+    sink,runPipeline
 
 [<EntryPoint>]
 let main argv =
-    try let args = CmdParser.parse argv
-        let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
-        let discovery, source, connectionPolicy, catFilter = args.Source.BuildConnectionDetails()
-        let auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
-        let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
-        let createIngester scheduler rangeLog = ProjectorSink.Ingester.Start(rangeLog, scheduler, args.MaxPendingBatches, args.MaxProcessing, categorize, args.IngesterLogFreq)
-#if marveleqx
-        let createSyncHandler scheduler = CosmosSource.createRangeSyncHandler log (createIngester scheduler) (CosmosSource.transformV0 categorize catFilter)
-#else
-        let createSyncHandler scheduler = CosmosSource.createRangeSyncHandler log (createIngester scheduler) (CosmosSource.transformOrFilter categorize catFilter)
-#endif
-        let scheduler =
-            match args.Sink with
-            | Choice1Of2 cosmos ->
-                let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
-                let connect connIndex = async {
-                    let! c = cosmos.Connect "SyncTemplate" connIndex
-                    let lfc = storeLog.ForContext("ConnId", connIndex)
-                    return Equinox.Cosmos.Core.CosmosContext(c, colls, lfc) }
-                let targets = Array.init args.ConnectionPoolSize connect |> Async.Parallel |> Async.RunSynchronously
-                CosmosSink.Scheduler.Start(log, targets, args.MaxWriters, categorize, (args.StatsInterval, args.StatesInterval))
-            | Choice2Of2 es ->
-                let connect connIndex = async {
-                    let lfc = storeLog.ForContext("ConnId", connIndex)
-                    let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, "SyncTemplate", connIndex)
-                    return GesGateway(c, GesBatchingPolicy(Int32.MaxValue)) }
-                let targets = Array.init args.ConnectionPoolSize (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-                EventStoreSink.Scheduler.Start(log, storeLog, targets, args.MaxWriters, categorize, (args.StatsInterval, args.StatesInterval))
-        CosmosSource.run log (discovery, source) (auxDiscovery, aux) connectionPolicy (leaseId, startFromHere, maxDocuments, lagFrequency)
-            createSyncHandler scheduler
-        |> Async.RunSynchronously
-        0 
-    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | CmdParser.InvalidArguments msg -> eprintfn "%s" msg; 1
-        | e -> eprintfn "%s" e.Message; 1
+    try try let sink, runPipeline = CmdParser.parse argv |> start
+            runPipeline |> Async.Start
+            sink.AwaitCompletion() |> Async.RunSynchronously
+            if sink.RanToCompletion then 0 else 2
+        with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+            | CmdParser.InvalidArguments msg -> eprintfn "%s" msg; 1
+            | e -> eprintfn "%s" e.Message; 1
+    finally Log.CloseAndFlush()
