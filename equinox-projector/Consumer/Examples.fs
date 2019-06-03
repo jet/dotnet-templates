@@ -99,11 +99,11 @@ type MessageInterpreter() =
         | [| category; _ |] -> yield Category (category, Seq.length events)
         | _ -> yield Unclassified streamName }
 
-    member __.EnumStreamItems(KeyValue (streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
+    member __.EnumStreamEvents(KeyValue (streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         if streamName.StartsWith("#serial") then Seq.empty else
 
         let span = JsonConvert.DeserializeObject<Propulsion.Kafka.Codec.RenderedSpan>(spanJson)
-        Propulsion.Kafka.Codec.RenderedSpan.enumStreamItems span
+        Propulsion.Kafka.Codec.RenderedSpan.enumStreamEvents span
 
     /// Handles various category / eventType / payload types as produced by Equinox.Tool
     member __.TryDecode(streamName, spanJson) = seq {
@@ -169,7 +169,7 @@ type Streams =
         let categorize (streamName : string) =
             streamName.Split([|'-';'_'|],2).[0]
         StreamsConsumer.Start
-            (   log, config, degreeOfParallelism, interpreter.EnumStreamItems, handle, categorize, maxSubmissionsPerPartition = 4,
+            (   log, config, degreeOfParallelism, interpreter.EnumStreamEvents, handle, categorize, maxSubmissionsPerPartition = 4,
                 statsInterval = statsInterval, stateInterval = stateInterval, logExternalStats = processor.DumpStats)
         
 type BatchesAsync =

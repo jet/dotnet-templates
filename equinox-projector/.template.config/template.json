@@ -2,12 +2,13 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
-    "Equinox",
     "Event Sourcing",
+    "Equinox",
+    "Propulsion"
     "CosmosDb",
     "ChangeFeed",
-    "Kafka"
-    "Propulsion",
+    "ChangeFeedProcessor",
+    "Kafka",
   ],
   "tags": {
     "language": "F#"
@@ -26,7 +27,7 @@
       "defaultValue": "false",
       "description": "Include a code projecting to, and consuming from Kafka."
     },
-    "parallel": {
+    "parallelOnly": {
       "type": "parameter",
       "datatype": "bool",
       "isRequired": false,
