@@ -2,11 +2,13 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
-    "Equinox",
     "Event Sourcing",
+    "Equinox",
+    "Propulsion"
     "CosmosDb",
     "ChangeFeed",
-    "Kafka"
+    "ChangeFeedProcessor",
+    "Kafka",
   ],
   "tags": {
     "language": "F#"
@@ -24,6 +26,13 @@
       "isRequired": false,
       "defaultValue": "false",
       "description": "Include a code projecting to, and consuming from Kafka."
+    },
+    "parallelOnly": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Omit Stream abstractions from Kafka emission."
     }
   },
   "sources": [
@@ -33,7 +42,6 @@
           "condition": "(!kafka)",
           "exclude": [
             "**/Consumer/**/*",
-            "**/Projector/KafkaSink.fs",
             "equinox-projector-consumer.sln"
           ]
         },

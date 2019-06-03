@@ -2,11 +2,13 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
-    "Equinox",
     "Event Sourcing",
-    "EventStore",
+    "Equinox",
+    "Propulsion",
     "CosmosDb",
-    "ChangeFeed"
+    "EventStore",
+    "ChangeFeed",
+    "ChangeFeedProcessor"
   ],
   "tags": {
     "language": "F#"
