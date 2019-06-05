@@ -14,13 +14,13 @@ module CmdParser =
 
     [<NoEquality; NoComparison>]
     type Parameters =
-        | [<AltCommandLine("-g"); Unique>] Group of string
-        | [<AltCommandLine("-b"); Unique>] Broker of string
-        | [<AltCommandLine("-t"); Unique>] Topic of string
-        | [<AltCommandLine("-w"); Unique>] MaxDop of int
-        | [<AltCommandLine("-m"); Unique>] MaxInflightGb of float
-        | [<AltCommandLine("-l"); Unique>] LagFreqM of float
-        | [<AltCommandLine("-v"); Unique>] Verbose
+        | [<AltCommandLine "-g"; Unique>] Group of string
+        | [<AltCommandLine "-b"; Unique>] Broker of string
+        | [<AltCommandLine "-t"; Unique>] Topic of string
+        | [<AltCommandLine "-w"; Unique>] MaxDop of int
+        | [<AltCommandLine "-m"; Unique>] MaxInflightGb of float
+        | [<AltCommandLine "-l"; Unique>] LagFreqM of float
+        | [<AltCommandLine "-v"; Unique>] Verbose
 
         interface IArgParserTemplate with
             member a.Usage = a |> function

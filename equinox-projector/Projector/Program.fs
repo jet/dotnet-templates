@@ -16,23 +16,23 @@ module CmdParser =
 
     module Cosmos =
         type [<NoEquality; NoComparison>] Parameters =
-            | [<AltCommandLine("-m")>] ConnectionMode of Equinox.Cosmos.ConnectionMode
-            | [<AltCommandLine("-o")>] Timeout of float
-            | [<AltCommandLine("-r")>] Retries of int
-            | [<AltCommandLine("-rt")>] RetriesWaitTime of int
-            | [<AltCommandLine("-s")>] Connection of string
-            | [<AltCommandLine("-d")>] Database of string
-            | [<AltCommandLine("-c")>] Collection of string
+            | [<AltCommandLine "-s">] Connection of string
+            | [<AltCommandLine "-cm">] ConnectionMode of Equinox.Cosmos.ConnectionMode
+            | [<AltCommandLine "-d">] Database of string
+            | [<AltCommandLine "-c">] Collection of string
+            | [<AltCommandLine "-o">] Timeout of float
+            | [<AltCommandLine "-r">] Retries of int
+            | [<AltCommandLine "-rt">] RetriesWaitTime of int
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
-                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                    | Retries _ ->          "specify operation retries (default: 1)."
-                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                     | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
                     | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
                     | Database _ ->         "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
                     | Collection _ ->       "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION, test)."
+                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
+                    | Retries _ ->          "specify operation retries (default: 1)."
+                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
         type Arguments(a : ParseResults<Parameters>) =
             member __.Mode = a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
             member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
@@ -56,18 +56,18 @@ module CmdParser =
     type Parameters =
         (* ChangeFeed Args*)
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
-        | [<AltCommandLine("-s"); Unique>] LeaseCollectionSuffix of string
-        | [<AltCommandLine("-z"); Unique>] FromTail
-        | [<AltCommandLine("-md"); Unique>] MaxDocuments of int
+        | [<AltCommandLine "-as"; Unique>] LeaseCollectionSuffix of string
+        | [<AltCommandLine "-z"; Unique>] FromTail
+        | [<AltCommandLine "-m"; Unique>] MaxDocuments of int
         | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
-        | [<AltCommandLine("-l"); Unique>] LagFreqM of float
-        | [<AltCommandLine("-v"); Unique>] Verbose
-        | [<AltCommandLine("-vc"); Unique>] ChangeFeedVerbose
+        | [<AltCommandLine "-l"; Unique>] LagFreqM of float
+        | [<AltCommandLine "-v"; Unique>] Verbose
+        | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
 //#if kafka
         (* Kafka Args *)
-        | [<AltCommandLine("-b"); Unique>] Broker of string
-        | [<AltCommandLine("-t"); Unique>] Topic of string
+        | [<AltCommandLine "-b"; Unique>] Broker of string
+        | [<AltCommandLine "-t"; Unique>] Topic of string
 //#endif
         (* ChangeFeed Args *)
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
