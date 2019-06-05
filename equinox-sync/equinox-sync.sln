@@ -9,11 +9,11 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		README.md = README.md
 	EndProjectSection
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion", "..\..\confluent-kafka-fsharp\src\Propulsion\Propulsion.fsproj", "{5187E18B-7659-492D-8797-3B71AA2A4DC9}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion", "..\..\propulsion\src\Propulsion\Propulsion.fsproj", "{5187E18B-7659-492D-8797-3B71AA2A4DC9}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion.EventStore", "..\..\confluent-kafka-fsharp\src\Propulsion.EventStore\Propulsion.EventStore.fsproj", "{F124F25B-B0E1-483C-9CF4-EAF18820935A}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion.EventStore", "..\..\propulsion\src\Propulsion.EventStore\Propulsion.EventStore.fsproj", "{F124F25B-B0E1-483C-9CF4-EAF18820935A}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion.Cosmos", "..\..\confluent-kafka-fsharp\src\Propulsion.Cosmos\Propulsion.Cosmos.fsproj", "{AE6E974A-9B0A-4B31-9317-893401B360B3}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion.Cosmos", "..\..\propulsion\src\Propulsion.Cosmos\Propulsion.Cosmos.fsproj", "{AE6E974A-9B0A-4B31-9317-893401B360B3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

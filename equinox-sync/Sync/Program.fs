@@ -517,4 +517,4 @@ let main argv =
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.InvalidArguments msg -> eprintfn "%s" msg; 1
             | e -> eprintfn "%s" e.Message; 1
-    finally Log.CloseAndFlush()
+    finally Log.CloseAndFlush(
