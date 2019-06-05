@@ -20,13 +20,6 @@
   "preferNameDirectory": true,
 
   "symbols": {
-    "eventstore": {
-      "type": "parameter",
-      "datatype": "bool",
-      "isRequired": false,
-      "defaultValue": "false",
-      "description": "Use EventStore as a source; default: use a CosmosDb ChangeFeedProcessor as the source."
-    },
     "marveleqx": {
       "type": "parameter",
       "datatype": "bool",
