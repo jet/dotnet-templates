@@ -34,23 +34,22 @@ module CmdParser =
         | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] SrcEs of ParseResults<EsSourceParameters>
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
-                | ConsumerGroupName _ ->    "Projector consumer group name."
-                | MaxPendingBatches _ ->    "maximum number of batches to let processing get ahead of completion. Default: 16"
-                | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 512"
-                | MaxConnections _ ->       "size of Sink connection pool to maintain. Default: 1"
-                | MaxSubmit _ ->            "maximum number of batches to submit concurrently. Default: 8"
+            member a.Usage = a |> function
+                | ConsumerGroupName _ ->"Projector consumer group name."
+                | MaxPendingBatches _ ->"maximum number of batches to let processing get ahead of completion. Default: 16"
+                | MaxWriters _ ->       "maximum number of concurrent writes to target permitted. Default: 512"
+                | MaxConnections _ ->   "size of Sink connection pool to maintain. Default: 1"
+                | MaxSubmit _ ->        "maximum number of batches to submit concurrently. Default: 8"
 
-                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
-                | Verbose ->                "request Verbose Logging. Default: off"
-                | VerboseConsole ->         "request Verbose Console Logging. Default: off"
+                | LocalSeq ->           "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
+                | Verbose ->            "request Verbose Logging. Default: off"
+                | VerboseConsole ->     "request Verbose Console Logging. Default: off"
 
-                | CategoryBlacklist _ ->    "category whitelist"
-                | CategoryWhitelist _ ->    "category blacklist"
+                | CategoryBlacklist _ ->"category whitelist"
+                | CategoryWhitelist _ ->"category blacklist"
 
-                | SrcCosmos _ ->            "Cosmos input parameters."
-                | SrcEs _ ->                "EventStore input parameters."
+                | SrcCosmos _ ->        "Cosmos input parameters."
+                | SrcEs _ ->            "EventStore input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =   a.GetResult ConsumerGroupName
         member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
@@ -128,23 +127,22 @@ module CmdParser =
         | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] DstEs of ParseResults<EsSinkParameters>
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] DstCosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
-                | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
-                | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: off"
-                | LeaseCollection _ ->      "specify Collection Name for Leases collection (default: `sourcecollection` + `-aux`)."
+            member a.Usage = a |> function
+                | FromTail ->          "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | MaxDocuments _ ->    "maximum item count to request from feed. Default: unlimited"
+                | LagFreqM _ ->        "frequency (in minutes) to dump lag stats. Default: off"
+                | LeaseCollection _ -> "specify Collection Name for Leases collection (default: `sourcecollection` + `-aux`)."
 
-                | Connection _ ->           "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
-                | ConnectionMode _ ->       "override the connection mode (default: DirectTcp)."
-                | Database _ ->             "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
-                | Collection _ ->           "specify a collection name within `SourceDatabase`."
-                | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
-                | Retries _ ->              "specify operation retries (default: 1)."
-                | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-    
-                | DstEs _ ->                "EventStore Sink parameters."
-                | DstCosmos _ ->            "CosmosDb Sink parameters."
+                | Connection _ ->      "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
+                | ConnectionMode _ ->  "override the connection mode (default: DirectTcp)."
+                | Database _ ->        "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
+                | Collection _ ->      "specify a collection name within `SourceDatabase`."
+                | Timeout _ ->         "specify operation timeout in seconds (default: 5)."
+                | Retries _ ->         "specify operation retries (default: 1)."
+                | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
+
+                | DstEs _ ->           "EventStore Sink parameters."
+                | DstCosmos _ ->       "CosmosDb Sink parameters."
     and CosmosSourceArguments(a : ParseResults<CosmosSourceParameters>) =
         member __.FromTail =            a.Contains CosmosSourceParameters.FromTail
         member __.MaxDocuments =        a.TryGetResult MaxDocuments
@@ -197,30 +195,29 @@ module CmdParser =
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSinkParameters>
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
-                | FromTail ->               "Start the processing from the Tail"
-                | Gorge _ ->                "Request Parallel readers phase during initial catchup, running one chunk (256MB) apart. Default: off"
-                | StreamReaders _ ->        "number of concurrent readers that will fetch a missing stream when in tailing mode. Default: 1. TODO: IMPLEMENT!"
-                | Tail _ ->                 "attempt to read from tail at specified interval in Seconds. Default: 1"
-                | ForceRestart _ ->         "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
-                | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
-                | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
-                | Position _ ->             "EventStore $all Stream Position to commence from"
-                | Chunk _ ->                "EventStore $all Chunk to commence from"
-                | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
+            member a.Usage = a |> function
+                | FromTail ->           "Start the processing from the Tail"
+                | Gorge _ ->            "Request Parallel readers phase during initial catchup, running one chunk (256MB) apart. Default: off"
+                | StreamReaders _ ->    "number of concurrent readers that will fetch a missing stream when in tailing mode. Default: 1. TODO: IMPLEMENT!"
+                | Tail _ ->             "attempt to read from tail at specified interval in Seconds. Default: 1"
+                | ForceRestart _ ->     "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
+                | BatchSize _ ->        "maximum item count to request from feed. Default: 4096"
+                | MinBatchSize _ ->     "minimum item count to drop down to in reaction to read failures. Default: 512"
+                | Position _ ->         "EventStore $all Stream Position to commence from"
+                | Chunk _ ->            "EventStore $all Chunk to commence from"
+                | Percent _ ->          "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
 
-                | Verbose ->                "Include low level Store logging."
-                | Host _ ->                 "specify a DNS query, using Gossip-driven discovery against all A records returned (defaults: envvar:EQUINOX_ES_HOST, localhost)."
-                | Port _ ->                 "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
-                | Username _ ->             "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
-                | Password _ ->             "specify a Password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
-                | Timeout _ ->              "specify operation timeout in seconds (default: 20)."
-                | Retries _ ->              "specify operation retries (default: 3)."
-                | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds (default: 1.5)."
+                | Verbose ->            "Include low level Store logging."
+                | Host _ ->             "specify a DNS query, using Gossip-driven discovery against all A records returned (defaults: envvar:EQUINOX_ES_HOST, localhost)."
+                | Port _ ->             "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
+                | Username _ ->         "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
+                | Password _ ->         "specify a Password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
+                | Timeout _ ->          "specify operation timeout in seconds (default: 20)."
+                | Retries _ ->          "specify operation retries (default: 3)."
+                | HeartbeatTimeout _ -> "specify heartbeat timeout in seconds (default: 1.5)."
 
-                | Cosmos _ ->               "CosmosDb Sink parameters."
-                | Es _ ->                   "EventStore Sink parameters."
+                | Cosmos _ ->           "CosmosDb Sink parameters."
+                | Es _ ->               "EventStore Sink parameters."
     and EsSourceArguments(a : ParseResults<EsSourceParameters>) =
         member __.Gorge =               a.TryGetResult Gorge
         member __.StreamReaders =       a.GetResult(StreamReaders,1)
@@ -230,11 +227,11 @@ module CmdParser =
         member __.MinBatchSize =        a.GetResult(MinBatchSize,512)
         member __.StartPos =
             match a.TryGetResult Position, a.TryGetResult Chunk, a.TryGetResult Percent, a.Contains FromTail with
-            | Some p, _, _, _ ->   Absolute p
-            | _, Some c, _, _ ->   StartPos.Chunk c
-            | _, _, Some p, _ ->   Percentage p 
+            | Some p, _, _, _ ->        Absolute p
+            | _, Some c, _, _ ->        StartPos.Chunk c
+            | _, _, Some p, _ ->        Percentage p 
             | None, None, None, true -> StartPos.TailOrCheckpoint
-            | None, None, None, _ -> StartPos.StartOrCheckpoint
+            | None, None, None, _ ->    StartPos.StartOrCheckpoint
 
         member __.Host =                match a.TryGetResult EsSourceParameters.Host with Some x -> x | None -> envBackstop "Host"          "EQUINOX_ES_HOST"
         member __.Port =                match a.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
@@ -267,16 +264,15 @@ module CmdParser =
         | [<AltCommandLine("-r")>] Retries of int
         | [<AltCommandLine("-rt")>] RetriesWaitTime of int
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
-                | Connection _ ->           "specify a connection string for a Cosmos account (default: envvar:EQUINOX_COSMOS_CONNECTION)."
-                | Database _ ->             "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
-                | Collection _ ->           "specify a collection name for Cosmos account (default: envvar:EQUINOX_COSMOS_COLLECTION)."
-                | LeaseCollection _ ->      "specify Collection Name for Leases collection (default: `sourcecollection` + `-aux`)."
-                | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
-                | Retries _ ->              "specify operation retries (default: 0)."
-                | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-                | ConnectionMode _ ->       "override the connection mode (default: DirectTcp)."
+            member a.Usage = a |> function
+                | Connection _ ->      "specify a connection string for a Cosmos account (default: envvar:EQUINOX_COSMOS_CONNECTION)."
+                | Database _ ->        "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
+                | Collection _ ->      "specify a collection name for Cosmos account (default: envvar:EQUINOX_COSMOS_COLLECTION)."
+                | LeaseCollection _ -> "specify Collection Name for Leases collection (default: `sourcecollection` + `-aux`)."
+                | Timeout _ ->         "specify operation timeout in seconds (default: 5)."
+                | Retries _ ->         "specify operation retries (default: 0)."
+                | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
+                | ConnectionMode _ ->  "override the connection mode (default: DirectTcp)."
     and CosmosSinkArguments(a : ParseResults<CosmosSinkParameters>) =
         member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
@@ -308,16 +304,15 @@ module CmdParser =
         | [<AltCommandLine("-r")>] Retries of int
         | [<AltCommandLine("-oh")>] HeartbeatTimeout of float
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
-                | Verbose ->                "Include low level Store logging."
-                | Host _ ->                 "specify a DNS query, using Gossip-driven discovery against all A records returned (defaults: envvar:EQUINOX_ES_HOST, localhost)."
-                | Port _ ->                 "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
-                | Username _ ->             "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
-                | Password _ ->             "specify a password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
-                | Timeout _ ->              "specify operation timeout in seconds (default: 20)."
-                | Retries _ ->              "specify operation retries (default: 3)."
-                | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds (default: 1.5)."
+            member a.Usage = a |> function
+                | Verbose ->           "Include low level Store logging."
+                | Host _ ->            "specify a DNS query, using Gossip-driven discovery against all A records returned (defaults: envvar:EQUINOX_ES_HOST, localhost)."
+                | Port _ ->            "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
+                | Username _ ->        "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
+                | Password _ ->        "specify a password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
+                | Timeout _ ->         "specify operation timeout in seconds (default: 20)."
+                | Retries _ ->         "specify operation retries (default: 3)."
+                | HeartbeatTimeout _ ->"specify heartbeat timeout in seconds (default: 1.5)."
     and EsSinkArguments(a : ParseResults<EsSinkParameters>) =
         member __.Discovery =           match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host 
         member __.Host =                match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
@@ -415,11 +410,16 @@ module EventV0Parser =
             tmp.GetPropertyValue<'T>("content")
 
     /// Maps fields in an Equinox V0 Event to the interface defined by the Propulsion.Streams library
-    let (|StandardCodecEvent|) (x: EventV0) = Propulsion.Streams.Internal.EventData.Create(x.t, x.d, timestamp = x.c)
+    let (|PropulsionEvent|) (x: EventV0) =
+        { new Propulsion.Streams.IEvent<_> with
+            member __.EventType = x.t
+            member __.Data = x.d
+            member __.Meta = null
+            member __.Timestamp = x.c }
 
     /// We assume all Documents represent Events laid out as above
     let parse (d : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> =
-        let (StandardCodecEvent e) as x = d.Cast<EventV0>()
+        let (PropulsionEvent e) as x = d.Cast<EventV0>()
         { stream = x.s; index = x.i; event = e } : _
 
 let transformV0 categorize catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
@@ -429,10 +429,10 @@ let transformV0 categorize catFilter (v0SchemaDocument: Microsoft.Azure.Document
         yield parsed }
 //#else
 let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for { stream = s; index = i; event = e } in DocumentParser.enumEvents changeFeedDocument do
+    for { stream = s} as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter (categorize s) then
-            yield { stream = s; index = i; event = Propulsion.Streams.Internal.EventData.Create(e.EventType, e.Data, e.Meta, e.Timestamp) } }
+            yield e }
 //#endif
 
 let start (args : CmdParser.Arguments) =
@@ -501,7 +501,7 @@ let start (args : CmdParser.Arguments) =
                 || e.EventStreamId = "SkuFileUpload-778f1efeab214f5bab2860d1f802ef24"
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
                 || not (catFilter e.EventStreamId) -> None
-            | e -> e |> Propulsion.EventStore.Reader.toIngestionItem |> Some
+            | PropulsionStreamEvent e -> Some e
         let runPipeline =
             EventStoreSource.Run(
                 log, sink, checkpoints, connect, spec, categorize, tryMapEvent catFilter,

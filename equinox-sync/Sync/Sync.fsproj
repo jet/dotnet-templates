@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\confluent-kafka-fsharp\src\Propulsion.Cosmos\Propulsion.Cosmos.fsproj" />
     <ProjectReference Include="..\..\..\confluent-kafka-fsharp\src\Propulsion.EventStore\Propulsion.EventStore.fsproj" />
   </ItemGroup>
 
