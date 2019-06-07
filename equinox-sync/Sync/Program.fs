@@ -511,8 +511,8 @@ let start (args : CmdParser.Arguments) =
 
 [<EntryPoint>]
 let main argv =
-    try try let sink, runPipeline = CmdParser.parse argv |> start
-            runPipeline |> Async.Start
+    try try let sink, runSourcePipeline = CmdParser.parse argv |> start
+            runSourcePipeline |> Async.Start
             sink.AwaitCompletion() |> Async.RunSynchronously
             if sink.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
