@@ -156,7 +156,7 @@ let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Strea
 
 let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
     docs
-    |> Seq.collect DocumentParser.enumEvents
+    |> Seq.collect EquinoxCosmosParser.enumStreamEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent
     |> Seq.map hackDropBigBodies
 
