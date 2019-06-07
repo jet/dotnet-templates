@@ -489,8 +489,9 @@ let start (args : CmdParser.Arguments) =
         let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson
-                || e.EventStreamId.StartsWith("$") 
+                || e.EventStreamId.StartsWith "$"
                 || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
+                || e.EventStreamId.StartsWith "#serial"
                 || e.EventStreamId.StartsWith "marvel_bookmark"
                 || e.EventStreamId.EndsWith "_checkpoints"
                 || e.EventStreamId.EndsWith "_checkpoint"
