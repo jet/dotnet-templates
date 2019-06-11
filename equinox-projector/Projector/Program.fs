@@ -68,6 +68,7 @@ module CmdParser =
         (* Kafka Args *)
         | [<AltCommandLine "-b"; Unique>] Broker of string
         | [<AltCommandLine "-t"; Unique>] Topic of string
+        | [<AltCommandLine "-p"; Unique>] Producers of int
 //#endif
         (* ChangeFeed Args *)
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
@@ -86,6 +87,7 @@ module CmdParser =
 //#if kafka
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable EQUINOX_KAFKA_BROKER, if specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable EQUINOX_KAFKA_TOPIC, if specified)"
+                | Producers _ ->            "specify number of Kafka Producer instances to use. Default 1"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(args : ParseResults<Parameters>) =
@@ -118,7 +120,8 @@ module CmdParser =
     and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
-        member x.BuildTargetParams() = x.Broker, x.Topic
+        member __.Producers = args.GetResult(Producers,1)
+        member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
 //#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -169,7 +172,7 @@ let start (args : CmdParser.Arguments) =
     let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
-    let (broker,topic) = args.Target.BuildTargetParams()
+    let (broker,topic, producers) = args.Target.BuildTargetParams()
 #if nostreams
     let render (doc : Microsoft.Azure.Documents.Document) : string * string =
         let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
@@ -186,7 +189,8 @@ let start (args : CmdParser.Arguments) =
     let projector =
         Propulsion.Kafka.StreamsProducer.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
-            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.(*,
+            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.,
+            producerParallelism = producers(*,
             customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif
