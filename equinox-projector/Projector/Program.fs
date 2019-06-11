@@ -187,7 +187,7 @@ let start (args : CmdParser.Arguments) =
         Propulsion.Kafka.StreamsProducer.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
             categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.,
-            customize = fun c -> c.CompressionLevel <- Nullable 0(*; c.CompressionType <- Confluent.Kafka.CompressionType.None*))
+            customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Confluent.Kafka.CompressionType.None)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif
 #else
