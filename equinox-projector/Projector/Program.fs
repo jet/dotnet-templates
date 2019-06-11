@@ -186,7 +186,8 @@ let start (args : CmdParser.Arguments) =
     let projector =
         Propulsion.Kafka.StreamsProducer.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
-            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.,
+            customize = fun c -> c.CompressionLevel <- Nullable 0(*; c.CompressionType <- Confluent.Kafka.CompressionType.None*))
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif
 #else
@@ -218,5 +219,5 @@ let main argv =
             if projector.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-            | e -> eprintfn "%O" e; 1
+            | e -> eprintfn "%s" e.Message; 1
     finally Log.CloseAndFlush()
