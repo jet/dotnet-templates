@@ -148,7 +148,7 @@ module Logging =
             |> fun c -> c.CreateLogger()
 
 let replaceLongDataWithNull (x : Propulsion.Streams.IEvent<byte[]>) : Propulsion.Streams.IEvent<_> =
-    //if x.Data.Length < 900_000 then x
+    //if x.Data.Length < 900_000 then x else
     Propulsion.Streams.Internal.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
 
 let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
@@ -218,5 +218,5 @@ let main argv =
             if projector.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-            | e -> eprintfn "%s" e.Message; 1
+            | e -> eprintfn "%O" e; 1
     finally Log.CloseAndFlush()
