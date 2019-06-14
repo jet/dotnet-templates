@@ -14,16 +14,11 @@
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.4.0" />
     <PackageReference Include="Destructurama.FSharp.NetCore" Version="1.0.14" />
-    <!--<PackageReference Include="Propulsion.Cosmos" Version="1.0.1-rc2" />-->
+    <PackageReference Include="Propulsion.Cosmos" Version="1.0.1-rc3" />
     <!--#if (kafka)-->
-    <!--<PackageReference Include="Propulsion.Kafka" Version="1.0.1-rc2" />-->
+    <PackageReference Include="Propulsion.Kafka" Version="1.0.1-rc3" />
     <!--#endif-->
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\propulsion\src\Propulsion.Cosmos\Propulsion.Cosmos.fsproj" />
-    <ProjectReference Include="..\..\..\propulsion\src\Propulsion.Kafka\Propulsion.Kafka.fsproj" />
   </ItemGroup>
 
 </Project>

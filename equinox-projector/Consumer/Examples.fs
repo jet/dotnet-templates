@@ -66,7 +66,7 @@ module EventParser =
 type Message = Faves of Favorites.Event | Saves of SavedForLater.Event | Category of name : string * count : int | Unclassified of messageKey : string 
 
 type EquinoxEvent =
-    static member Parse (x: Propulsion.Kafka.Codec.RenderedEvent) =
+    static member Parse (x: Propulsion.Codec.NewtonsoftJson.RenderedEvent) =
         { new Equinox.Codec.IEvent<_> with
             member __.EventType = x.c
             member __.Data = x.d
@@ -80,7 +80,7 @@ type EquinoxEvent =
             member __.Timestamp = x.Timestamp }
 
 type EquinoxSpan =
-    static member EnumCodecEvents (x: Propulsion.Kafka.Codec.RenderedSpan) : seq<Equinox.Codec.IEvent<_>> =
+    static member EnumCodecEvents (x: Propulsion.Codec.NewtonsoftJson.RenderedSpan) : seq<Equinox.Codec.IEvent<_>> =
        x.e |> Seq.map EquinoxEvent.Parse
     static member EnumCodecEvents (x: Propulsion.Streams.StreamSpan<_>) : seq<Equinox.Codec.IEvent<_>> =
        x.events |> Seq.map EquinoxEvent.Parse
@@ -102,12 +102,12 @@ type MessageInterpreter() =
     member __.EnumStreamEvents(KeyValue (streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         if streamName.StartsWith("#serial") then Seq.empty else
 
-        let span = JsonConvert.DeserializeObject<Propulsion.Kafka.Codec.RenderedSpan>(spanJson)
-        Propulsion.Kafka.Codec.RenderedSpan.enumStreamEvents span
+        let span = JsonConvert.DeserializeObject<Propulsion.Codec.NewtonsoftJson.RenderedSpan>(spanJson)
+        Propulsion.Codec.NewtonsoftJson.RenderedSpan.enumStreamEvents span
 
     /// Handles various category / eventType / payload types as produced by Equinox.Tool
     member __.TryDecode(streamName, spanJson) = seq {
-        let span = JsonConvert.DeserializeObject<Propulsion.Kafka.Codec.RenderedSpan>(spanJson)
+        let span = JsonConvert.DeserializeObject<Propulsion.Codec.NewtonsoftJson.RenderedSpan>(spanJson)
         yield! __.Interpret(streamName, EquinoxSpan.EnumCodecEvents span) }
 
 type Processor() =

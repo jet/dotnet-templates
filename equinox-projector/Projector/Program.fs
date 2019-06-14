@@ -49,7 +49,7 @@ module CmdParser =
                     x.Mode, endpointUri, x.Database, x.Collection)
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
-                let connector = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
+                let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
                 discovery, connector, { database = x.Database; collection = x.Collection } 
 
     [<NoEquality; NoComparison>]
@@ -87,7 +87,7 @@ module CmdParser =
 //#if kafka
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable EQUINOX_KAFKA_BROKER, if specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable EQUINOX_KAFKA_TOPIC, if specified)"
-                | Producers _ ->            "specify number of Kafka Producer instances to use. Default 1"
+                | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(args : ParseResults<Parameters>) =
@@ -183,7 +183,7 @@ let start (args : CmdParser.Arguments) =
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
 #else
     let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
-        let rendered = Propulsion.Kafka.Codec.RenderedSpan.ofStreamSpan stream span
+        let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
         Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
     let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
     let projector =
