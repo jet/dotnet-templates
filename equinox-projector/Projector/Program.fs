@@ -182,19 +182,19 @@ let start (args : CmdParser.Arguments) =
             Log.Logger, "ProjectorTemplate", broker, topic, producerParallelism = producers(*,
             customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let projector =
-        Propulsion.Kafka.ParallelProducer.Start(maxReadAhead, maxConcurrentStreams, render, producers, statsInterval=TimeSpan.FromMinutes 1.)
+        Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producers, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
 #else
     let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
         let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
         Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
-    let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+    let categorize (streamName : string) = streamName.Split([|'-';'_'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
     let producers = 
         Propulsion.Kafka.Producers(
             Log.Logger, "ProjectorTemplate", broker, topic, producerParallelism = producers(*,
             customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let projector =
-        Propulsion.Kafka.StreamsProducer.Start(
+        Propulsion.Kafka.StreamsProducerSink.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, render, producers,
             categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
@@ -203,9 +203,8 @@ let start (args : CmdParser.Arguments) =
     let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async { 
         let r = Random()
         let ms = r.Next(1,span.events.Length)
-        do! Async.Sleep ms
-        return span.events.Length }
-    let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+        do! Async.Sleep ms }
+    let categorize (streamName : string) = streamName.Split([|'-';'_'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
     let projector =
         Propulsion.Streams.StreamsProjector.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, project,
