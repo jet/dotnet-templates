@@ -177,21 +177,26 @@ let start (args : CmdParser.Arguments) =
     let render (doc : Microsoft.Azure.Documents.Document) : string * string =
         let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
         equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject { Id = documentId }
+    let producers = 
+        Propulsion.Kafka.Producers(
+            Log.Logger, "ProjectorTemplate", broker, topic, producerParallelism = producers(*,
+            customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let projector =
-        Propulsion.Kafka.ParallelProducer.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render, statsInterval=TimeSpan.FromMinutes 1.)
+        Propulsion.Kafka.ParallelProducer.Start(maxReadAhead, maxConcurrentStreams, render, producers, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
 #else
     let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
         let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
         Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
     let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+    let producers = 
+        Propulsion.Kafka.Producers(
+            Log.Logger, "ProjectorTemplate", broker, topic, producerParallelism = producers(*,
+            customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let projector =
         Propulsion.Kafka.StreamsProducer.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
-            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.,
-            producerParallelism = producers(*,
-            customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
+            Log.Logger, maxReadAhead, maxConcurrentStreams, render, producers,
+            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif
 #else
