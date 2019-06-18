@@ -16,8 +16,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- `eqxtestbed`, `eqxweb`, `eqxwebcs` now target `Equinox 2.0.0-preview9`
-- `eqxprojector` `-k` now targets `Jet.ConfluentKafka.FSharp` + `Propulsion.Kafka` v `1.0.1-rc2` [#24](https://github.com/jet/dotnet-templates/pull/24)
+- `eqxtestbed`, `eqxweb`, `eqxwebcs` now target `Equinox 2.0.0-rc1`
+- `eqxprojector` `-k` now targets `Jet.ConfluentKafka.FSharp` + `Propulsion.Kafka` v `1.0.1-rc3` [#24](https://github.com/jet/dotnet-templates/pull/24)
 - `eqxsync` now targets `Propulsion.Cosmos`,`Propulsion.EventStore` v `1.0.1-rc2` [#24](https://github.com/jet/dotnet-templates/pull/24)
 
 ### Removed

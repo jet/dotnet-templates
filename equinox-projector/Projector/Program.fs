@@ -49,7 +49,7 @@ module CmdParser =
                     x.Mode, endpointUri, x.Database, x.Collection)
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
-                let connector = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
+                let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
                 discovery, connector, { database = x.Database; collection = x.Collection } 
 
     [<NoEquality; NoComparison>]
@@ -68,6 +68,7 @@ module CmdParser =
         (* Kafka Args *)
         | [<AltCommandLine "-b"; Unique>] Broker of string
         | [<AltCommandLine "-t"; Unique>] Topic of string
+        | [<AltCommandLine "-p"; Unique>] Producers of int
 //#endif
         (* ChangeFeed Args *)
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
@@ -86,6 +87,7 @@ module CmdParser =
 //#if kafka
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable EQUINOX_KAFKA_BROKER, if specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable EQUINOX_KAFKA_TOPIC, if specified)"
+                | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(args : ParseResults<Parameters>) =
@@ -118,7 +120,8 @@ module CmdParser =
     and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
         member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
-        member x.BuildTargetParams() = x.Broker, x.Topic
+        member __.Producers = args.GetResult(Producers,1)
+        member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
 //#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -148,8 +151,8 @@ module Logging =
             |> fun c -> c.CreateLogger()
 
 let replaceLongDataWithNull (x : Propulsion.Streams.IEvent<byte[]>) : Propulsion.Streams.IEvent<_> =
-    if x.Data.Length < 900_000 then x
-    else Propulsion.Streams.Internal.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
+    //if x.Data.Length < 900_000 then x else
+    Propulsion.Streams.Internal.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
 
 let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
     { stream = e.stream; index = e.index; event = replaceLongDataWithNull e.event }
@@ -169,33 +172,39 @@ let start (args : CmdParser.Arguments) =
     let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
-    let (broker,topic) = args.Target.BuildTargetParams()
+    let (broker,topic, producers) = args.Target.BuildTargetParams()
 #if nostreams
     let render (doc : Microsoft.Azure.Documents.Document) : string * string =
         let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
         equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject { Id = documentId }
+    let producers = 
+        Propulsion.Kafka.Producers(
+            Log.Logger, "ProjectorTemplate", broker, topic, producerParallelism = producers(*,
+            customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let projector =
-        Propulsion.Kafka.ParallelProducer.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render, statsInterval=TimeSpan.FromMinutes 1.)
+        Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producers, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
 #else
     let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
-        let rendered = Propulsion.Kafka.Codec.RenderedSpan.ofStreamSpan stream span
+        let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
         Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
-    let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+    let categorize (streamName : string) = streamName.Split([|'-';'_'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
+    let producers = 
+        Propulsion.Kafka.Producers(
+            Log.Logger, "ProjectorTemplate", broker, topic, producerParallelism = producers(*,
+            customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let projector =
-        Propulsion.Kafka.StreamsProducer.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, "ProjectorTemplate", broker, topic, render,
-            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+        Propulsion.Kafka.StreamsProducerSink.Start(
+            Log.Logger, maxReadAhead, maxConcurrentStreams, render, producers,
+            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif
 #else
     let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async { 
         let r = Random()
         let ms = r.Next(1,span.events.Length)
-        do! Async.Sleep ms
-        return span.events.Length }
-    let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+        do! Async.Sleep ms }
+    let categorize (streamName : string) = streamName.Split([|'-';'_'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
     let projector =
         Propulsion.Streams.StreamsProjector.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, project,
