@@ -110,8 +110,11 @@ module CmdParser =
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration().Destructure.FSharpTypes()
     let c = if verbose then c.MinimumLevel.Debug() else c
+//#if eventStore
+    let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
+//#endif
 //#if cosmos
-    let c = c.WriteTo.Sink(Storage.Cosmos.RuCounterSink())
+    let c = c.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink())
 //#endif
     let c = c.WriteTo.Console((if verbose && verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning), theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
     let c = match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
@@ -155,12 +158,18 @@ module LoadTest =
         for r in results do
             resultFile.Information("Aggregate: {aggregate}", r)
         log.Information("Run completed; Current memory allocation: {bytes:n2} MiB", (GC.GetTotalMemory(true) |> float) / 1024./1024.)
-//#if cosmos
+//#if cosmos || eventStore
 
         match storeConfig with
+//#if cosmos
         | Storage.StorageConfig.Cosmos _ ->
-            Storage.Cosmos.dumpStats duration log
-//#if eventStore || memory
+            Equinox.Cosmos.Store.Log.InternalMetrics.dump log
+//#endif
+//#if eventStore
+        | Storage.StorageConfig.Es _ ->
+            Equinox.EventStore.Log.InternalMetrics.dump log
+//#endif
+//#if memory
         | _ -> ()
 //#endif
 //#endif
@@ -168,8 +177,11 @@ module LoadTest =
 let createDomainLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
     let c = if verbose then c.MinimumLevel.Debug() else c
+//#if eventStore
+    let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
+//#endif
 //#if cosmos
-    let c = c.WriteTo.Sink(Storage.Cosmos.RuCounterSink())
+    let c = c.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink())
 //#endif
     let c = c.WriteTo.Console((if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information), theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
     let c = match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)

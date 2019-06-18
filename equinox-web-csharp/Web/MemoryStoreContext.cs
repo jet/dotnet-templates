@@ -23,7 +23,7 @@ namespace TodoBackendTemplate
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> compact = null)
         {
-            var resolver = new MemoryResolver<TEvent, TState>(_store, FuncConvert.FromFunc(fold), initial);
+            var resolver = new Resolver<TEvent, TState>(_store, FuncConvert.FromFunc(fold), initial);
             return target => resolver.Resolve.Invoke(target);
         }
 

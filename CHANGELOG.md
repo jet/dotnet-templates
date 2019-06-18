@@ -11,6 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - `eqxprojector -k`'s `Consumer` offers a `StreamSpan`-based API for ordered, de-deduplicated consumption without concurrent executions at stream level [#24](https://github.com/jet/dotnet-templates/pull/24)
+- `eqxprojector -k`'s `Consumer` summarizes processing outcomes in example using new support for same in `Propulsion.Kafka` [#25](https://github.com/jet/dotnet-templates/pull/25)
 - `eqxprojector -k -n`'s `Producer` offers a parallel producer mode which runs all projections in parallel without constraints (or need to synthesize streams) [#24](https://github.com/jet/dotnet-templates/pull/24)
 - `eqxsync` has EventStore Sink support via `cosmos` ... `es` commandline option [#23](https://github.com/jet/dotnet-templates/pull/23)
 
@@ -18,7 +19,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - `eqxtestbed`, `eqxweb`, `eqxwebcs` now target `Equinox 2.0.0-rc1`
 - `eqxprojector` `-k` now targets `Jet.ConfluentKafka.FSharp` + `Propulsion.Kafka` v `1.0.1-rc3` [#24](https://github.com/jet/dotnet-templates/pull/24)
-- `eqxsync` now targets `Propulsion.Cosmos`,`Propulsion.EventStore` v `1.0.1-rc2` [#24](https://github.com/jet/dotnet-templates/pull/24)
+- `eqxsync` now targets `Propulsion.Cosmos`,`Propulsion.EventStore` v `1.0.1-rc3` [#24](https://github.com/jet/dotnet-templates/pull/24)
 
 ### Removed
 ### Fixed
