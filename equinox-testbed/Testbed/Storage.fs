@@ -11,10 +11,10 @@ type StorageConfig =
     | Memory of Equinox.MemoryStore.VolatileStore
 //#endif
 //#if eventStore
-    | Es of Equinox.EventStore.GesGateway * Equinox.EventStore.CachingStrategy option * unfolds: bool
+    | Es of Equinox.EventStore.Context * Equinox.EventStore.CachingStrategy option * unfolds: bool
 //#endif
 //#if cosmos
-    | Cosmos of Equinox.Cosmos.CosmosGateway * Equinox.Cosmos.CachingStrategy * unfolds: bool * databaseId: string * collectionId: string
+    | Cosmos of Equinox.Cosmos.Gateway * Equinox.Cosmos.CachingStrategy * unfolds: bool * databaseId: string * collectionId: string
 //#endif
     
 //#if (memoryStore || (!cosmos && !eventStore))
@@ -72,14 +72,14 @@ module Cosmos =
     open Equinox.Cosmos
     open Serilog
 
-    let private createGateway connection maxItems = CosmosGateway(connection, CosmosBatchingPolicy(defaultMaxItems=maxItems))
+    let private createGateway connection maxItems = Gateway(connection, BatchingPolicy(defaultMaxItems=maxItems))
     let private context (log: ILogger, storeLog: ILogger) (a : Arguments) =
         let (Discovery.UriAndKey (endpointUri,_)) as discovery = a.Connection|> Discovery.FromConnectionString
         log.Information("CosmosDb {mode} {connection} Database {database} Collection {collection}",
             a.Mode, endpointUri, a.Database, a.Collection)
         Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
             (let t = a.Timeout in t.TotalSeconds), a.Retries, a.MaxRetryWaitTime)
-        let connector = CosmosConnector(a.Timeout, a.Retries, a.MaxRetryWaitTime, storeLog, mode=a.Mode)
+        let connector = Connector(a.Timeout, a.Retries, a.MaxRetryWaitTime, storeLog, mode=a.Mode)
         discovery, a.Database, a.Collection, connector
     let config (log: ILogger, storeLog) (cache, unfolds, batchSize) info =
         let discovery, dbName, collName, connector = context (log, storeLog) info
@@ -90,69 +90,6 @@ module Cosmos =
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else CachingStrategy.NoCaching
         StorageConfig.Cosmos (createGateway conn batchSize, cacheStrategy, unfolds, dbName, collName)
-
-    open Serilog.Events
-    open Equinox.Cosmos.Store
-
-    let inline (|Stats|) ({ interval = i; ru = ru }: Log.Measurement) = ru, let e = i.Elapsed in int64 e.TotalMilliseconds
-
-    let (|CosmosReadRc|CosmosWriteRc|CosmosResyncRc|CosmosResponseRc|) = function
-        | Log.Tip (Stats s)
-        | Log.TipNotFound (Stats s)
-        | Log.TipNotModified (Stats s)
-        | Log.Query (_,_, (Stats s)) -> CosmosReadRc s
-        // slices are rolled up into batches so be sure not to double-count
-        | Log.Response (_,(Stats s)) -> CosmosResponseRc s
-        | Log.SyncSuccess (Stats s)
-        | Log.SyncConflict (Stats s) -> CosmosWriteRc s
-        | Log.SyncResync (Stats s) -> CosmosResyncRc s
-    let (|SerilogScalar|_|) : LogEventPropertyValue -> obj option = function
-        | (:? ScalarValue as x) -> Some x.Value
-        | _ -> None
-    let (|CosmosMetric|_|) (logEvent : LogEvent) : Log.Event option =
-        match logEvent.Properties.TryGetValue("cosmosEvt") with
-        | true, SerilogScalar (:? Log.Event as e) -> Some e
-        | _ -> None
-    type RuCounter =
-        { mutable rux100: int64; mutable count: int64; mutable ms: int64 }
-        static member Create() = { rux100 = 0L; count = 0L; ms = 0L }
-        member __.Ingest (ru, ms) =
-            System.Threading.Interlocked.Increment(&__.count) |> ignore
-            System.Threading.Interlocked.Add(&__.rux100, int64 (ru*100.)) |> ignore
-            System.Threading.Interlocked.Add(&__.ms, ms) |> ignore
-    type RuCounterSink() =
-        static member val Read = RuCounter.Create()
-        static member val Write = RuCounter.Create()
-        static member val Resync = RuCounter.Create()
-        interface Serilog.Core.ILogEventSink with
-            member __.Emit logEvent = logEvent |> function
-                | CosmosMetric (CosmosReadRc stats) -> RuCounterSink.Read.Ingest stats
-                | CosmosMetric (CosmosWriteRc stats) -> RuCounterSink.Write.Ingest stats
-                | CosmosMetric (CosmosResyncRc stats) -> RuCounterSink.Resync.Ingest stats
-                | _ -> ()
-
-    let dumpStats duration (log: Serilog.ILogger) =
-        let stats =
-          [ "Read", RuCounterSink.Read
-            "Write", RuCounterSink.Write
-            "Resync", RuCounterSink.Resync ]
-        let mutable totalCount, totalRc, totalMs = 0L, 0., 0L
-        let logActivity name count rc lat =
-            log.Information("{name}: {count:n0} requests costing {ru:n0} RU (average: {avg:n2}); Average latency: {lat:n0}ms",
-                name, count, rc, (if count = 0L then Double.NaN else rc/float count), (if count = 0L then Double.NaN else float lat/float count))
-        for name, stat in stats do
-            let ru = float stat.rux100 / 100.
-            totalCount <- totalCount + stat.count
-            totalRc <- totalRc + ru
-            totalMs <- totalMs + stat.ms
-            logActivity name stat.count ru stat.ms
-        logActivity "TOTAL" totalCount totalRc totalMs
-        let measures : (string * (TimeSpan -> float)) list =
-          [ "s", fun x -> x.TotalSeconds
-            "m", fun x -> x.TotalMinutes
-            "h", fun x -> x.TotalHours ]
-        let logPeriodicRate name count ru = log.Information("rp{name} {count:n0} = ~{ru:n0} RU", name, count, ru)
-        for uom, f in measures do let d = f duration in if d <> 0. then logPeriodicRate uom (float totalCount/d |> int64) (totalRc/d)
 
 //#endif
 //#if eventStore
@@ -192,12 +129,12 @@ module EventStore =
         member __.ConcurrentOperationsLimit = a.GetResult(ConcurrentOperationsLimit,5000)
 
     let private connect (log: Serilog.ILogger) (dnsQuery, heartbeatTimeout, col) (username, password) (operationTimeout, operationRetries) =
-        GesConnector(username, password, reqTimeout=operationTimeout, reqRetries=operationRetries,
+        Connector(username, password, reqTimeout=operationTimeout, reqRetries=operationRetries,
                 heartbeatTimeout=heartbeatTimeout, concurrentOperationsLimit = col,
                 log=(if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
                 tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
             .Establish("TestbedTemplate", Discovery.GossipDns dnsQuery, ConnectionStrategy.ClusterTwinPreferSlaveReads)
-    let private createGateway connection batchSize = GesGateway(connection, GesBatchingPolicy(maxBatchSize = batchSize))
+    let private createContext connection batchSize = Context(connection, BatchingPolicy(maxBatchSize = batchSize))
     let config (log: Serilog.ILogger, storeLog) (cache, unfolds, batchSize) (args : ParseResults<Parameters>) =
         let a = Arguments(args)
         let (timeout, retries) as operationThrottling = a.Timeout, a.Retries
@@ -211,5 +148,5 @@ module EventStore =
                 let c = Caching.Cache("TestbedTemplate", sizeMb = 50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
             else None
-        StorageConfig.Es ((createGateway conn batchSize), cacheStrategy, unfolds)
+        StorageConfig.Es ((createContext conn batchSize), cacheStrategy, unfolds)
 //#endif

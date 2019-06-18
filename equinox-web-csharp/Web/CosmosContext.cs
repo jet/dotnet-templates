@@ -34,7 +34,7 @@ namespace TodoBackendTemplate
     {
         readonly Caching.Cache _cache;
 
-        CosmosStore _store;
+        Context _store;
         readonly Func<Task> _connect;
 
         public CosmosContext(CosmosConfig config)
@@ -47,21 +47,21 @@ namespace TodoBackendTemplate
             {
                 var gateway = await Connect("App", config.Mode, discovery, timeout, retriesOn429Throttling,
                     (int)timeout.TotalSeconds);
-                var collectionMapping = new CosmosCollections(config.Database, config.Collection);
+                var collectionMapping = new Collections(config.Database, config.Collection);
 
-                _store = new CosmosStore(gateway, collectionMapping);
+                _store = new Context(gateway, collectionMapping);
             };
         }
 
         internal override async Task Connect() => await _connect();
 
-        static async Task<CosmosGateway> Connect(string appName, ConnectionMode mode, Discovery discovery, TimeSpan operationTimeout,
+        static async Task<Gateway> Connect(string appName, ConnectionMode mode, Discovery discovery, TimeSpan operationTimeout,
             int maxRetryForThrottling, int maxRetryWaitSeconds)
         {
             var log = Log.ForContext<CosmosContext>();
-            var c = new CosmosConnector(operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds, log, mode: mode);
+            var c = new Connector(operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds, log, mode: mode);
             var conn = await FSharpAsync.StartAsTask(c.Connect(appName, discovery), null, null);
-            return new CosmosGateway(conn, new CosmosBatchingPolicy(defaultMaxItems: 500));
+            return new Gateway(conn, new BatchingPolicy(defaultMaxItems: 500));
         }
 
         public override Func<Target,Equinox.Store.IStream<TEvent, TState>> Resolve<TEvent, TState>(
@@ -79,7 +79,7 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new CosmosResolver<TEvent, TState>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy);
+            var resolver = new Resolver<TEvent, TState>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy);
             return t => resolver.Resolve.Invoke(t);
         }
     }

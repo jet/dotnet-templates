@@ -63,10 +63,10 @@ let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose
     let clientId, mem, stats = "ProjectorTemplate", args.MaxInFlightBytes, args.LagFrequency
     let c = Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(clientId, args.Broker, [args.Topic], args.Group, maxInFlightBytes = mem, ?statisticsInterval = stats)
-    //BatchesSync.Start(c)
-    //BatchesAsync.Start(c, args.MaxWriters)
-    //Messages.Start(c, args.MaxWriters)
-    Streams.Start(c, args.MaxDop)
+    //Messages.BatchesSync.Start(c)
+    //Messages.BatchesAsync.Start(c, args.MaxDop)
+    //Messages.Parallel.Start(c, args.MaxDop)
+    Streams.start(c, args.MaxDop)
 
 [<EntryPoint>]
 let main argv =

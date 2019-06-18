@@ -68,7 +68,7 @@ module CmdParser =
             | _ -> raise (InvalidArguments "Must specify one of cosmos or es for Src")
 
         member __.StatsInterval =       TimeSpan.FromMinutes 1.
-        member __.StatesInterval =      TimeSpan.FromMinutes 5.
+        member __.StateInterval =      TimeSpan.FromMinutes 5.
         member __.CategoryFilterFunction : string -> bool =
             match a.GetResults CategoryBlacklist, a.GetResults CategoryWhitelist with
             | [], [] ->     Log.Information("Not filtering by category"); fun _ -> true 
@@ -163,7 +163,7 @@ module CmdParser =
                 x.Mode, endpointUri, x.Database, x.Collection)
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
-            let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
+            let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; collection = x.Collection }, c.ConnectionPolicy
 
         member val Sink =
@@ -246,7 +246,7 @@ module CmdParser =
             log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s __.Heartbeat, s __.Timeout, __.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
-            GesConnector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
+            Connector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
                 .Establish("SyncTemplate", __.Discovery, connectionStrategy) |> Async.RunSynchronously
         member __.CheckpointInterval =  TimeSpan.FromHours 1.
 
@@ -286,13 +286,13 @@ module CmdParser =
         /// Connect with the provided parameters and/or environment variables
         member x.Connect
             /// Connection/Client identifier for logging purposes
-            appName connIndex : Async<CosmosConnection> =
+            appName connIndex : Async<Equinox.Cosmos.Connection> =
             let (Discovery.UriAndKey (endpointUri,_masterKey)) as discovery = x.Discovery
             Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Collection {collection}",
                 x.Mode, endpointUri, x.Database, x.Collection)
             Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
-            let c = CosmosConnector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
+            let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             c.Connect(sprintf "App=%s Conn=%d" appName connIndex, discovery)
     and [<NoEquality; NoComparison>] EsSinkParameters =
         | [<AltCommandLine("-v")>] Verbose
@@ -328,7 +328,7 @@ module CmdParser =
                 __.Host, connIndex, s __.Heartbeat, s __.Timeout, __.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string; "App", appName; "Conn", connIndex]
-            GesConnector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
+            Connector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
                 .Establish("SyncTemplate", __.Discovery, connectionStrategy)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -362,7 +362,7 @@ module Logging =
                                 l.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
                                  .WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
                             a.Logger(fun l ->
-                                let isEqx = Filters.Matching.FromSource<Core.CosmosContext>().Invoke
+                                let isEqx = Filters.Matching.FromSource<Core.Context>().Invoke
                                 let isWriterA = Filters.Matching.FromSource<Propulsion.EventStore.Internal.Writer.Result>().Invoke
                                 let isWriterB = Filters.Matching.FromSource<Propulsion.Cosmos.Internal.Writer.Result>().Invoke
                                 let isCp = Filters.Matching.FromSource<Checkpoint.CheckpointSeries>().Invoke
@@ -377,7 +377,7 @@ module Logging =
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
-        Log.ForContext<Propulsion.Streams.Scheduling.StreamStates<_>>(), Log.ForContext<Core.CosmosContext>()
+        Log.ForContext<Propulsion.Streams.Scheduling.StreamStates<_>>(), Log.ForContext<Core.Context>()
 
  //#if marveleqx
 [<RequireQualifiedAccess>]
@@ -441,21 +441,21 @@ let start (args : CmdParser.Arguments) =
     let maybeDstCosmos, sink  =
         match args.Sink with
         | Choice1Of2 cosmos ->
-            let colls = CosmosCollections(cosmos.Database, cosmos.Collection)
+            let colls = Collections(cosmos.Database, cosmos.Collection)
             let connect connIndex = async {
                 let! c = cosmos.Connect "SyncTemplate" connIndex
                 let lfc = storeLog.ForContext("ConnId", connIndex)
-                return c, Equinox.Cosmos.Core.CosmosContext(c, colls, lfc) }
+                return c, Equinox.Cosmos.Core.Context(c, colls, lfc) }
             let all = Array.init args.MaxConnections connect |> Async.Parallel |> Async.RunSynchronously
-            let mainConn, targets = CosmosGateway(fst all.[0], CosmosBatchingPolicy()), Array.map snd all
-            Some (mainConn,colls), CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StatesInterval, args.MaxSubmit)
+            let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
+            Some (mainConn,colls), CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = storeLog.ForContext("ConnId", connIndex)
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, "SyncTemplate", connIndex)
-                return GesGateway(c, GesBatchingPolicy(Int32.MaxValue)) }
+                return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            None, EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StatesInterval, args.MaxSubmit)
+            None, EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
     let catFilter = args.CategoryFilterFunction
     match args.SourceParams() with
     | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency) ->
@@ -477,14 +477,14 @@ let start (args : CmdParser.Arguments) =
             
         let connect () = let c = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
         let resolveCheckpointStream =
-            let store = Equinox.Cosmos.CosmosStore(mainConn, colls)
+            let context = Equinox.Cosmos.Context(mainConn, colls)
             let settings = Newtonsoft.Json.JsonSerializerSettings()
             let codec = Equinox.Codec.NewtonsoftJson.Json.Create settings
             let caching =
                 let c = Equinox.Cosmos.Caching.Cache("SyncTemplate", sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
-            Equinox.Cosmos.CosmosResolver(store, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
+            Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with

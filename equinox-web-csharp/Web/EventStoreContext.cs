@@ -30,26 +30,26 @@ namespace TodoBackendTemplate
     {
         readonly Caching.Cache _cache;
 
-        GesGateway _gateway;
+        Context _connection;
         readonly Func<Task> _connect;
 
         public EventStoreContext(EventStoreConfig config)
         {
             _cache = new Caching.Cache("Es", config.CacheMb);
-            _connect = async () => _gateway = await Connect(config);
+            _connect = async () => _connection = await Connect(config);
         }
 
         internal override async Task Connect() => await _connect();
 
-        static async Task<GesGateway> Connect(EventStoreConfig config)
+        static async Task<Context> Connect(EventStoreConfig config)
         {
             var log = Logger.NewSerilogNormal(Serilog.Log.ForContext<EventStoreContext>());
-            var c = new GesConnector(config.Username, config.Password, reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
+            var c = new Connector(config.Username, config.Password, reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
 
             var conn = await FSharpAsync.StartAsTask(
                 c.Establish("Twin", Discovery.NewGossipDns(config.Host), ConnectionStrategy.ClusterTwinPreferSlaveReads),
                 null, null);
-            return new GesGateway(conn, new GesBatchingPolicy(maxBatchSize: 500));
+            return new Context(conn, new BatchingPolicy(maxBatchSize: 500));
         }
 
         public override Func<Target,IStream<TEvent, TState>> Resolve<TEvent, TState>(
@@ -66,7 +66,7 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new GesResolver<TEvent, TState>(_gateway, codec, FuncConvert.FromFunc(fold),
+            var resolver = new Resolver<TEvent, TState>(_connection, codec, FuncConvert.FromFunc(fold),
                 initial, cacheStrategy, accessStrategy);
             return t => resolver.Resolve.Invoke(t);
         }
