@@ -4,11 +4,16 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 ## Available Templates
 
-- [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project.
-- [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project _ported to C#_.
-- [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic.
-- [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models, using different stores and/or store configuration parameters.
-- [`eqxsync`](equinox-sync/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor that traverses each document in a source store, filtering/enriching/mapping those to Events to be written (consistently) into an `Equinox.Cosmos` store with optimized throughput.
+## [Equinox](https://github.com/jet/equinox)-focused
+
+- [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox).
+- [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
+- [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox](https://github.com/jet/equinox), using different stores and/or store configuration parameters.
+
+## [Propulsion](https://github.com/jet/propulsion)-focused
+
+- [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic using [`Propulsion.Cosmos` and `Propulsion.Kafka`](https://github.com/jet/propulsion).
+- [`eqxsync`](equinox-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore`](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
 ## How to use
 
