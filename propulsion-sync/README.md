@@ -1,17 +1,17 @@
-# Equinox Sync template
+# Propulsion Sync template
 
 This project was generated using:
 
 //#if marveleqx
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new eqxsync -m # -m - include Marvel V0 import logic
+    dotnet new proSync -m # -m - include Marvel V0 import logic
 
 //#else
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -m to include Marvel V0 import logic
-    dotnet new eqxsync # use --help to see options
+    dotnet new proSync # use --help to see options
 
 //#endif
 
@@ -37,32 +37,32 @@ This project was generated using:
         # default name is "($EQUINOX_COSMOS_COLLECTION)-aux"
         eqx initaux -ru 400 cosmos
 
-3. To run an instance of the Sync tool feeding into CosmosDb
+3. To run an instance of the Sync tool feeding into CosmosDb:
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
         # `defaultSync` defines the Projector Group identity ('LeaseId') - each id has separated state in the aux collection
         # `-md 1000` sets the change feed item count limit to 1000
         # `cosmos` specifies the destination (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
-        # `source -s connection -d database -c collection` specifies the input datasource
+        # `cosmos -s connection -d database -c collection` specifies the input datasource
 
         $env:EQUINOX_COSMOS_CONNECTION_SOURCE="AccountEndpoint=https://....;AccountKey=....=;" # or use -s # or defaults to EQUINOX_COSMOS_CONNECTION
         $env:EQUINOX_COSMOS_DATABASE_SOURCE="input-database" # or use -d # or defaults to EQUINOX_COSMOS_DATABASE
         $env:EQUINOX_COSMOS_COLLECTION_SOURCE="input_collection" # or use -c # NB DOES NOT HAVE A DEFAULT VALUE
 
-        dotnet run -p Sync -- defaultSync `
-            source -s $env:EQUINOX_COSMOS_CONNECTION_SOURCE -d $env:EQUINOX_COSMOS_DATABASE_SOURCE -c $env:EQUINOX_COSMOS_COLLECTION_SOURCE `
+        dotnet run -- defaultSync `
+            cosmos -s $env:EQUINOX_COSMOS_CONNECTION_SOURCE -d $env:EQUINOX_COSMOS_DATABASE_SOURCE -c $env:EQUINOX_COSMOS_COLLECTION_SOURCE `
             cosmos # Can add overrides for destination here
 
-4. To run an instance of the Sync tool feeding into EventStore
+4. To run an instance of the Sync tool feeding into EventStore:
 
         # (this is in addition to details in step 3 above)
 		# `es` specifies the destination (if you have specified 3x EQUINOX_EVENTSTORE_* environment vars, no arguments are needed)
-        # `source -s connection -d database -c collection` specifies the input datasource
+        # `cosmos -s connection -d database -c collection` specifies the input datasource
 
 		$env:EQUINOX_ES_USERNAME="admin" # or use -u
 		$env:EQUINOX_ES_PASSWORD="changeit" # or use -p
 		$env:EQUINOX_ES_HOST="localhost" # or use -g
 
-        dotnet run -p Sync -- defaultSync `
-            source -s $env:EQUINOX_COSMOS_CONNECTION_SOURCE -d $env:EQUINOX_COSMOS_DATABASE_SOURCE -c $env:EQUINOX_COSMOS_COLLECTION_SOURCE `
+        dotnet run -- defaultSync `
+            cosmos -s $env:EQUINOX_COSMOS_CONNECTION_SOURCE -d $env:EQUINOX_COSMOS_DATABASE_SOURCE -c $env:EQUINOX_COSMOS_COLLECTION_SOURCE `
             es  # Can add overrides for destination here

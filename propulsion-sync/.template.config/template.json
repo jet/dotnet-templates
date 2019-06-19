@@ -2,20 +2,19 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
-    "Event Sourcing",
-    "Equinox",
     "Propulsion",
+    "Equinox",
     "CosmosDb",
-    "EventStore",
     "ChangeFeed",
-    "ChangeFeedProcessor"
+    "ChangeFeedProcessor",
+    "EventStore"
   ],
   "tags": {
     "language": "F#"
   },
-  "identity": "Equinox.Template.Sync",
-  "name": "Equinox Store Sync System",
-  "shortName": "eqxsync",
+  "identity": "Propulsion.Template.Sync",
+  "name": "Propulsion Sync tool",
+  "shortName": "proSync",
   "sourceName": "SyncTemplate",
   "preferNameDirectory": true,
 
@@ -28,4 +27,4 @@
       "description": "Include example code to transform from the Equinox V0 (internal) schema to that of `Equinox.Cosmos`"
     }
   }
-}
+}s
