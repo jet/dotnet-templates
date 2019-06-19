@@ -10,10 +10,17 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 ## [Propulsion](https://github.com/jet/propulsion) related
 
-- [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)); Optional projection to Apache Kafka and associated consumer logic using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
-- [`eqxsync`](equinox-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore`](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
+- [`proProjector`](propulsion-projector/README.md) - Boilerplate for an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
 
-## Walkthroughs
+  `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
+  `-p` shows parallel consumption mode (where source is not stream-oriented; i.e. is not from `Equinox.Cosmos`)
+
+- [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion). (typically consuming from an app produced with `dotnet new proProjector -k`)
+
+- [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
+
+## Walkthrough
+
 As dictated by [the design of dotnet's templating mechanism](https://github.com/dotnet/templating/), consumption is ultimately via the .NET Core SDK's `dotnet new` CLI facility and/or associated facilities in Visual Studio, Rider etc.
 
 To use from the command line, the outline is:
@@ -34,10 +41,15 @@ To use from the command line, the outline is:
     # see readme.md in the generated code for further instructions regarding the TodoBackend the above -t switch above triggers the inclusion of
     start readme.md
 
-    # ... to add a Projector and a Consumer
+    # ... to add a Projector
     md -p ../tools/My.Tools.Projector | Set-Location
     # (-k emits to Kafka and hence implies having a Consumer)
-    dotnet new eqxprojector -k
+    dotnet new proProjector -k
+    start README.md
+
+    # ... to add a Consumer (proProjector -k emits to Kafka and hence implies having a Consumer)
+    md -p ../../My.Consumer | Set-Location
+    dotnet new proConsumer -k
     start README.md
 
     # ... to add a Testbed
@@ -55,7 +67,7 @@ To use from the command line, the outline is:
 	# ... to add a Sync tool
     md -p ../tools/My.Tools.Sync | Set-Location
 	# (-m includes an example of how to upconvert from similar event-sourced representations in an existing store)
-	dotnet new eqxsync -m
+	dotnet new proSync -m
 	start Sync/README.md
 
 ## CONTRIBUTING
