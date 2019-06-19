@@ -173,7 +173,7 @@ let start (args : CmdParser.Arguments) =
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
     let (broker,topic, producers) = args.Target.BuildTargetParams()
-#if nostreams
+#if parallelOnly
     let render (doc : Microsoft.Azure.Documents.Document) : string * string =
         let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
         equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject { Id = documentId }

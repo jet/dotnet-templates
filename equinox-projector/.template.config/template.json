@@ -4,11 +4,11 @@
   "classifications": [
     "Event Sourcing",
     "Equinox",
-    "Propulsion"
+    "Propulsion",
     "CosmosDb",
     "ChangeFeed",
     "ChangeFeedProcessor",
-    "Kafka",
+    "Kafka"
   ],
   "tags": {
     "language": "F#"

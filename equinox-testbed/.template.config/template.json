@@ -5,7 +5,7 @@
     "Equinox",
     "Event Sourcing",
     "CosmosDb",
-	"EventStore"
+	  "EventStore"
   ],
   "tags": {
     "language": "F#"
