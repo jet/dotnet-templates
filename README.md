@@ -1,22 +1,19 @@
 # Jet `dotnet new` Templates [![Build Status](https://dev.azure.com/jet-opensource/opensource/_apis/build/status/jet.dotnet-templates?branchName=master)](https://dev.azure.com/jet-opensource/opensource/_build/latest?definitionId=9?branchName=master) [![release](https://img.shields.io/github/release/jet/dotnet-templates.svg)](https://github.com/jet/dotnet-templates/releases) [![NuGet](https://img.shields.io/nuget/vpre/Equinox.Templates.svg?logo=nuget)](https://www.nuget.org/packages/Equinox.Templates) [![license](https://img.shields.io/github/license/jet/dotnet-templates.svg)](LICENSE) ![code size](https://img.shields.io/github/languages/code-size/jet/dotnet-templates.svg) [<img src="https://img.shields.io/badge/slack-DDD--CQRS--ES%20%23equinox-yellow.svg?logo=slack">](https://t.co/MRxpx0rLH2)
 
-This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-new) templates. While that's presently just for [Equinox](https://github.com/jet/equinox), over time the intention is to add templates for other systems where relevant.
+This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-new) templates.
 
-## Available Templates
+## [Equinox](https://github.com/jet/equinox) related
 
-## [Equinox](https://github.com/jet/equinox)-focused
-
-- [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox).
-- [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
+- [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox).
+- [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
 - [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox](https://github.com/jet/equinox), using different stores and/or store configuration parameters.
 
-## [Propulsion](https://github.com/jet/propulsion)-focused
+## [Propulsion](https://github.com/jet/propulsion) related
 
-- [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor, with optional projection to Apache Kafka and associated consumer logic using [`Propulsion.Cosmos` and `Propulsion.Kafka`](https://github.com/jet/propulsion).
+- [`eqxprojector`](equinox-projector/README.md) - Boilerplate for a CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)); Optional projection to Apache Kafka and associated consumer logic using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
 - [`eqxsync`](equinox-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore`](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
-## How to use
-
+## Walkthroughs
 As dictated by [the design of dotnet's templating mechanism](https://github.com/dotnet/templating/), consumption is ultimately via the .NET Core SDK's `dotnet new` CLI facility and/or associated facilities in Visual Studio, Rider etc.
 
 To use from the command line, the outline is:
