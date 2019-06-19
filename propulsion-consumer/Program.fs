@@ -1,4 +1,4 @@
-﻿module ProjectorTemplate.Consumer.Program
+﻿module ConsumerTemplate.Program
 
 open Serilog
 open System

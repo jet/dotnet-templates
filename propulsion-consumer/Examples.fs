@@ -1,7 +1,7 @@
-﻿namespace ProjectorTemplate.Consumer
+﻿namespace ConsumerTemplate
 
 open Newtonsoft.Json
-open ProjectorTemplate.Consumer.Codec
+open ConsumerTemplate.Codec
 open Serilog
 open System
 open System.Collections.Concurrent

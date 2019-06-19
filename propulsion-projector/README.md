@@ -1,19 +1,19 @@
 //#if kafka
-# Equinox Projector + Consumer
+# Propulsion CosmosDb -> Kafka Projector
 //#else
-# Equinox Projector (without consumer)
+# Propulsion CosmosDb Projector (without Kafka emission)
 //#endif
 
 This project was generated using:
 //#if kafka
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new eqxprojector -k # -k => include projection logic and consumer
+    dotnet new proProjector -k # -k => include Kafka projection logic
 //#else
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    # add -k to add Kafka Projection logic and consumer
-    dotnet new eqxprojector # use --help to see options
+    # add -k to add Kafka Projection logic
+    dotnet new proProjector # use --help to see options
 //#endif
 
 ## Usage instructions
@@ -49,21 +49,11 @@ This project was generated using:
         # `-md 1000` sets the change feed maximum document limit to 1000
         # `-t topic0` identifies the Kafka topic to which the Projector should write
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
-        dotnet run -p Projector -- default -md 1000 -t topic0 cosmos
+        dotnet run -- default -md 1000 -t topic0 cosmos
 
         # (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
 
-3. To run an instance of the Consumer:
-
-        $env:EQUINOX_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
-        $env:EQUINOX_KAFKA_TOPIC="topic0" # or use -t
-        $env:EQUINOX_KAFKA_GROUP="group0" # or use -g
-
-        # `-t topic0` identifies the Kafka topic from which the consumers should read
-        # `-g group0` identifies the Kafka consumer group among which the consumption is to be spread
-        dotnet run -p Consumer -- -t topic0 -g group0
-
-        # (you can run as many instances as there are partitions configured for the topic on the broker)
+3. To create a Consumer, use `dotnet new proConsumer`
 //#else
 
 2. To run an instance of the Projector:
@@ -73,7 +63,7 @@ This project was generated using:
         # `default` defines the Projector Group identity - each id has separated state in the aux collection (aka LeaseId)
         # `-m 1000` sets the max batch size to 1000
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
-        dotnet run -p Projector -- default -m 1000 cosmos
+        dotnet run -- default -m 1000 cosmos
 
         # NB (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
 //#endif

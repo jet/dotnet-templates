@@ -1,4 +1,4 @@
-﻿module ProjectorTemplate.Projector.Program
+﻿module ProjectorTemplate.Program
 
 open Equinox.Cosmos
 open Propulsion.Cosmos
@@ -70,7 +70,7 @@ module CmdParser =
         | [<AltCommandLine "-t"; Unique>] Topic of string
         | [<AltCommandLine "-p"; Unique>] Producers of int
 //#endif
-        (* ChangeFeed Args *)
+        (* Cosmos Source Args *)
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
         interface IArgParserTemplate with
             member a.Usage =

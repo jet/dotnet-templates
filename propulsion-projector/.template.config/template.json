@@ -13,9 +13,9 @@
   "tags": {
     "language": "F#"
   },
-  "identity": "Equinox.Template.Projector",
-  "name": "Equinox Projector (with optional consumer)",
-  "shortName": "eqxprojector",
+  "identity": "Propulsion.Template.Projector",
+  "name": "Propulsion Projector",
+  "shortName": "proProjector",
   "sourceName": "ProjectorTemplate",
   "preferNameDirectory": true,
 
@@ -34,24 +34,5 @@
       "defaultValue": "false",
       "description": "Omit Stream abstractions from Kafka emission."
     }
-  },
-  "sources": [
-    {
-      "modifiers": [
-        {
-          "condition": "(!kafka)",
-          "exclude": [
-            "**/Consumer/**/*",
-            "equinox-projector-consumer.sln"
-          ]
-        },
-        {
-          "condition": "(kafka)",
-          "exclude": [
-            "equinox-projector.sln"
-          ]
-        }
-      ]
-    }
-  ]
+  }
 }

@@ -1,4 +1,4 @@
-﻿namespace ProjectorTemplate.Consumer.Codec
+﻿namespace ConsumerTemplate.Codec
 
 open Serilog
 open System

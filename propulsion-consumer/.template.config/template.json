@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Event Sourcing",
+    "Equinox",
+    "Propulsion",
+    "Kafka"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Propulsion.Template.Consumer",
+  "name": "Propulsion Kafka Consumer",
+  "shortName": "proConsumer",
+  "sourceName": "ConsumerTemplate",
+  "preferNameDirectory": true
+}
