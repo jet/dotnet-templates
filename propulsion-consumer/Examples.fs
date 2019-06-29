@@ -153,34 +153,13 @@ module Streams =
 /// When using parallel or batch processing, items are not grouped by stream and the concurrency management is different
 module Messages =
     
-    // We'll use the same event parsing logic, though it works a little different
+    // We'll use the same event parsing logic, though it works a little differently
     open Streams
 
-    type Message = Faves of Favorites.Event | Saves of SavedForLater.Event | OtherCat of name : string * count : int | Unclassified of messageKey : string 
-
-    type MessageInterpreter() =
-        let log = Log.ForContext<MessageInterpreter>()
-
-        /// Handles various category / eventType / payload types as produced by Equinox.Tool
-        member __.Interpret(streamName, events) = seq {
-            let tryDecode  f = tryDecode f log streamName
-            match streamName with
-            | Category (Favorites.CategoryId,_) -> yield! events |> Seq.choose (tryDecode Favorites.codec >> Option.map Faves)
-            | Category (SavedForLater.CategoryId,_) -> yield! events |> Seq.choose (tryDecode SavedForLater.codec >> Option.map Saves)
-            | Category (other,_) -> yield OtherCat (other, Seq.length events)
-            | _ -> yield Unclassified streamName }
-
-        //member __.EnumStreamEvents(KeyValue (streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-
-        //    let span = JsonConvert.DeserializeObject<Propulsion.Kafka.Codec.RenderedSpan>(spanJson)
-        //    Propulsion.Kafka.Codec.RenderedSpan.enumStreamEvents span
-
-        member __.TryDecode(streamName : string, spanJson) = seq {
-            if streamName.StartsWith("#serial") then () else
-            let span = JsonConvert.DeserializeObject<Propulsion.Codec.NewtonsoftJson.RenderedSpan>(spanJson)
-            yield! __.Interpret(streamName, span.Events) }
+    type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name : string * count : int | Unclassified of messageKey : string 
 
     type Processor() =
+        let log = Log.ForContext<Processor>()
         let mutable favorited, unfavorited, saved, removed, cleared = 0, 0, 0, 0, 0
         let cats, keys = CatStats(), ConcurrentDictionary()
 
@@ -189,45 +168,54 @@ module Messages =
                 favorited, unfavorited, saved, removed, cleared, keys.Count, Seq.truncate 5 cats.StatsDescending)
             favorited <- 0; unfavorited <- 0; saved <- 0; removed <- 0; cleared <- 0; cats.Clear(); keys.Clear()
 
-        // NB outcomes will arrive concurrently, care is required
-        member __.Handle = function
-            | Faves (Favorites.Favorited _) -> Interlocked.Increment &favorited |> ignore
-            | Faves (Favorites.Unfavorited _) -> Interlocked.Increment &unfavorited |> ignore
-            | Saves (SavedForLater.Added e) -> Interlocked.Add(&saved,e.skus.Length) |> ignore
-            | Saves (SavedForLater.Removed e) -> Interlocked.Add(&cleared,e.skus.Length) |> ignore
-            | Saves (SavedForLater.Merged e) -> Interlocked.Add(&saved,e.items.Length) |> ignore
-            | Saves (SavedForLater.Cleared) -> Interlocked.Increment(&cleared) |> ignore
-            | OtherCat (cat,count) -> lock cats <| fun () -> cats.Ingest(cat, int64 count)
-            | Unclassified messageKey -> keys.TryAdd(messageKey, ()) |> ignore
+        /// Handles various category / eventType / payload types as produced by Equinox.Tool
+        member private __.Interpret(streamName : string, spanJson : string) : seq<Message> = seq {
+            if streamName.StartsWith("#serial") then () else
+
+            let tryDecode f = tryDecode f log streamName
+            let span = JsonConvert.DeserializeObject<Propulsion.Codec.NewtonsoftJson.RenderedSpan>(spanJson)
+            match streamName with
+            | Category (Favorites.CategoryId,_) -> yield! span.Events |> Seq.choose (tryDecode Favorites.codec >> Option.map Fave)
+            | Category (SavedForLater.CategoryId,_) -> yield! span.Events |> Seq.choose (tryDecode SavedForLater.codec >> Option.map Save)
+            | Category (otherCategoryName,_) -> yield OtherCat (otherCategoryName, Seq.length span.e)
+            | _ -> yield Unclassified streamName }
+
+        // NB can be called in parallel, so must be thread-safe
+        member __.Handle(streamName : string, spanJson : string) =
+            for x in __.Interpret(streamName, spanJson) do
+                match x with
+                | Fave (Favorites.Favorited _) -> Interlocked.Increment &favorited |> ignore
+                | Fave (Favorites.Unfavorited _) -> Interlocked.Increment &unfavorited |> ignore
+                | Save (SavedForLater.Added e) -> Interlocked.Add(&saved,e.skus.Length) |> ignore
+                | Save (SavedForLater.Removed e) -> Interlocked.Add(&cleared,e.skus.Length) |> ignore
+                | Save (SavedForLater.Merged e) -> Interlocked.Add(&saved,e.items.Length) |> ignore
+                | Save (SavedForLater.Cleared) -> Interlocked.Increment(&cleared) |> ignore
+                | OtherCat (cat,count) -> lock cats <| fun () -> cats.Ingest(cat, int64 count)
+                | Unclassified messageKey -> keys.TryAdd(messageKey, ()) |> ignore
+
+    type Parallel =
+        /// Starts a consumer that consumes a topic in streamed mode
+        /// StreamingConsumer manages the parallelism, spreading individual messages out to Async tasks
+        /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
+        static member Start(config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, degreeOfParallelism : int) =
+            let log, processor = Log.ForContext<Parallel>(), Processor()
+            let handleMessage (KeyValue (streamName,eventsSpan)) = async { processor.Handle(streamName, eventsSpan) }
+            Propulsion.Kafka.ParallelConsumer.Start(
+                log, config, degreeOfParallelism, handleMessage,
+                statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
 
     type BatchesSync =
         /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
         /// Processing runs as a single Async computation per batch, which can work well where parallism is not relevant
         static member Start(config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) =
             let log = Log.ForContext<BatchesSync>()
-            let interpreter = MessageInterpreter()
             let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_,_>[]) = async {
                 let processor = Processor()
                 for m in msgs do
-                    for x in interpreter.TryDecode(m.Key, m.Value) do
-                        processor.Handle x
+                    processor.Handle(m.Key, m.Value)
                 processor.DumpStats log }
             Jet.ConfluentKafka.FSharp.BatchedConsumer.Start(log, config, handleBatch)
     
-    type Parallel =
-        /// Starts a consumer that consumes a topic in streamed mode
-        /// StreamingConsumer manages the parallelism, spreading individual messages out to Async tasks
-        /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
-        static member Start(config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, degreeOfParallelism : int) =
-            let log = Log.ForContext<Parallel>()
-            let interpreter, processor = MessageInterpreter(), Processor()
-            let handleMessage (KeyValue (streamName,eventsSpan)) = async {
-                for x in interpreter.TryDecode(streamName,eventsSpan) do
-                    processor.Handle x }
-            Propulsion.Kafka.ParallelConsumer.Start(
-                log, config, degreeOfParallelism, handleMessage,
-                statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
-
     type BatchesAsync =
         /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
         /// Processing fans out as parallel Async computations (limited to max `degreeOfParallelism` concurrent tasks
@@ -236,12 +224,8 @@ module Messages =
         static member Start(config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, degreeOfParallelism : int) =
             let log = Log.ForContext<BatchesAsync>()
             let dop = new SemaphoreSlim(degreeOfParallelism)
-            let interpreter = MessageInterpreter()
             let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_,_>[]) = async {
                 let processor = Processor()
-                let! _ =
-                    seq { for x in msgs do yield! interpreter.TryDecode(x.Key, x.Value) }
-                    |> Seq.map (fun x -> async { processor.Handle x } |> dop.Throttle)
-                    |> Async.Parallel
+                let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(m.Key, m.Value) } |> dop.Throttle })
                 processor.DumpStats log }
             Jet.ConfluentKafka.FSharp.BatchedConsumer.Start(log, config, handleBatch)

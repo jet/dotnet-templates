@@ -4,7 +4,7 @@ open Serilog
 open System
 
 [<AutoOpen>]
-module Codec =
+module EventMapper =
     let parse(x : Propulsion.Streams.IEvent<'T>) =
         { new Equinox.Codec.IEvent<_> with
             member __.EventType = x.EventType
@@ -21,14 +21,14 @@ module Codec =
         | x -> x
 
     type Propulsion.Streams.StreamSpan<'T> with
-        // Enumerate the events we've been presented from this stream
-        member __.Events : (Equinox.Codec.IEvent<_>) [] =
-            __.events |> Array.map parse
+        /// Enumerate the buffered, deduplicated Events from this Stream that we've been presented to handle
+        member streamSpan.Events : Equinox.Codec.IEvent<'T> [] =
+            streamSpan.events |> Array.map parse
 
-    // Enumerate the events in this message
     type Propulsion.Codec.NewtonsoftJson.RenderedSpan with
-        member __.Events =
-            __.e |> Array.map parse
+        /// Enumerate the consecutive span of Events captured within this message
+        member renderedSpan.Events : Equinox.Codec.IEvent<byte[]> [] =
+            renderedSpan.e |> Array.map parse
 
 [<AutoOpen>]
 module StreamNameParser = 
