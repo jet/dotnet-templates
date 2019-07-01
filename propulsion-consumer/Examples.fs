@@ -2,17 +2,20 @@
 
 open Newtonsoft.Json
 open ConsumerTemplate.Codec
+open FSharp.UMX
 open Serilog
 open System
 open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Threading
 
-/// When processing streamwise, the handler is passed deduplicated spans of events per stream, with a guarantee of max 1
-/// in-flight request per stream, which allows one to avoid having to consider any explicit concurrency management
-module Streams =
+/// This more advanced sample shows processing >1 category of events, and maintaining derived state based on it
+// When processing streamwise, the handler is passed deduplicated spans of events per stream, with a guarantee of max 1
+// in-flight request per stream, which allows one to avoid having to consider any explicit concurrency management
+module MultiStreams =
 
-    type SkuId = string
+    [<Measure>] type skuId // See https://github.com/fsprojects/FSharp.UMX
+    type SkuId = string<skuId> // Only significant at compile time - serializers etc. just see a string
 
     let settings = JsonSerializerSettings()
 
@@ -33,7 +36,7 @@ module Streams =
             | Added of Added
             /// Clearing of the list
             | Cleared
-            interface TypeShape.UnionContract.IUnionContract
+            interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
         let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
         let tryDecode = tryDecode codec
         let [<Literal>] CategoryId = "SavedForLater"
@@ -46,7 +49,7 @@ module Streams =
         type Event =
             | Favorited         of Favorited
             | Unfavorited       of Unfavorited
-            interface TypeShape.UnionContract.IUnionContract
+            interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
         let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
         let tryDecode = tryDecode codec
         let [<Literal>] CategoryId = "Favorites"
@@ -58,14 +61,14 @@ module Streams =
         let log = Log.ForContext<InMemoryHandler>()
 
         // events are handled concurrently across streams. Only a single Handle call will be in progress at any time per stream
-        let faves,saves = ConcurrentDictionary<string, HashSet<_>>(), ConcurrentDictionary<string,string list>()
+        let faves,saves = ConcurrentDictionary<string, HashSet<SkuId>>(), ConcurrentDictionary<string,SkuId list>()
 
+        // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
         let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|UnknownMessage|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
-            // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
             let map f = span.Events |> Array.choose (f log streamName)
             match category streamName with
             | Category (Favorites.CategoryId, id) ->
-                let s = match faves.TryGetValue id with true, value -> value | false, _ -> new HashSet<string>()
+                let s = match faves.TryGetValue id with true, value -> value | false, _ -> new HashSet<SkuId>()
                 FavoritesEvents (id, s, map Favorites.tryDecode)
             | Category (SavedForLater.CategoryId, id) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
@@ -85,7 +88,7 @@ module Streams =
                 faves.[id] <- Array.fold folder s xs
                 return Faves xs.Length
             | SavedForLaterEvents (id, s, xs) ->
-                let remove (skus : string seq) (s : _ list) =
+                let remove (skus : SkuId seq) (s : _ list) =
                     let removing = (HashSet skus).Contains
                     s |> List.where (not << removing)
                 let add skus (s : _ list) =
@@ -140,10 +143,10 @@ module Streams =
             logExternalState=handler.DumpState)
 
 /// When using parallel or batch processing, items are not grouped by stream but there are no constraints on the concurrency
-module Messages =
+module MultiMessages =
     
     // We'll use the same event parsing logic, though it works a little differently
-    open Streams
+    open MultiStreams
 
     type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name : string * count : int | Unclassified of messageKey : string 
 
