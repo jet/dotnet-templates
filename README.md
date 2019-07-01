@@ -49,7 +49,7 @@ To use from the command line, the outline is:
 
     # ... to add a Consumer (proProjector -k emits to Kafka and hence implies having a Consumer)
     md -p ../../My.Consumer | Set-Location
-    dotnet new proConsumer -k
+    dotnet new proConsumer
     start README.md
 
     # ... to add a Testbed
