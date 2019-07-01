@@ -16,12 +16,17 @@ The `Unreleased` section name is replaced by the expected version of next releas
 <a name="3.0.3"></a>
 ## [3.0.3] - 2019-07-02
 
+### Added
+
+- Add `Publisher.fs` sample to `proConsumer`
+- Simplify `proConsumer` `Examples.fs`
+
 ### Changed
 
 - Target `Equinox`.* `2.0.0-rc2`, `Propulsion`.* `1.0.1-rc5`
 
-<a name="3.0.0"></a>
-## [3.0.0] - 2019-06-19
+<a name="3.0.2"></a>
+## [3.0.2] - 2019-06-19
 
 ### Added
 
@@ -116,8 +121,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.0.0...HEAD
-[3.0.0]: https://github.com/jet/dotnet-templates/compare/2.2.2...3.0.0
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.0.3...HEAD
+[3.0.3]: https://github.com/jet/dotnet-templates/compare/3.0.2...3.0.3
+[3.0.2]: https://github.com/jet/dotnet-templates/compare/2.2.2...3.0.2
 [2.2.2]: https://github.com/jet/dotnet-templates/compare/2.1.2...2.2.2
 [2.1.2]: https://github.com/jet/dotnet-templates/compare/2.0.0...2.1.2
 [2.0.0]: https://github.com/jet/dotnet-templates/compare/1.2.0...2.0.0
