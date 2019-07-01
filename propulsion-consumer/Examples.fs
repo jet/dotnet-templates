@@ -8,19 +8,8 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Threading
 
-/// Gathers stats relating to how many items of a given category have been observed
-type CatStats() =
-    let partitions = Dictionary<string,int64>()
-    member __.Ingest(cat,?weight) = 
-        let weight = defaultArg weight 1L
-        match partitions.TryGetValue cat with
-        | true, catCount -> partitions.[cat] <- catCount + weight
-        | false, _ -> partitions.[cat] <- weight
-    member __.Clear() = partitions.Clear()
-    member __.StatsDescending = partitions |> Seq.map (|KeyValue|) |> Seq.sortBy (fun (_,s) -> -s)
-
-/// When processing streamwise, he handler is passed deduplicates spans of events per stream, with a guarantee of max 1
-/// in-flight request per stream
+/// When processing streamwise, the handler is passed deduplicated spans of events per stream, with a guarantee of max 1
+/// in-flight request per stream, which allows one to avoid having to consider any explicit concurrency management
 module Streams =
 
     type SkuId = string
@@ -150,7 +139,7 @@ module Streams =
             enumStreamEvents, handler.Handle, stats, category,
             logExternalState=handler.DumpState)
 
-/// When using parallel or batch processing, items are not grouped by stream and the concurrency management is different
+/// When using parallel or batch processing, items are not grouped by stream but there are no constraints on the concurrency
 module Messages =
     
     // We'll use the same event parsing logic, though it works a little differently
@@ -161,8 +150,12 @@ module Messages =
     type Processor() =
         let log = Log.ForContext<Processor>()
         let mutable favorited, unfavorited, saved, removed, cleared = 0, 0, 0, 0, 0
-        let cats, keys = CatStats(), ConcurrentDictionary()
+        let cats, keys = Propulsion.Streams.Internal.CatStats(), ConcurrentDictionary()
 
+        // `BatchedConsumer` holds a `Processor` instance per in-flight batch (there will likely be a batch in flight per partition assigned to this consumer)
+        //   and waits for the work to complete before calling this
+        // `ParallelScheduler` ensures that only one call to `logExternalStats` will take place at a time, but it's highly likely that the execution will
+        //   overlap with a call to `Handle` (which makes for a slight race condition between the capturing of the values in the log statement and the resetting)
         member __.DumpStats(log : ILogger) =
             log.Information("Favorited {f} Unfavorited {u} Saved {s} Removed {r} Cleared {c} Keys {keyCount} Categories {@catCount}",
                 favorited, unfavorited, saved, removed, cleared, keys.Count, Seq.truncate 5 cats.StatsDescending)
