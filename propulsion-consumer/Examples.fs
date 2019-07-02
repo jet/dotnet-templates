@@ -1,8 +1,5 @@
 ﻿namespace ConsumerTemplate
 
-open Newtonsoft.Json
-open ConsumerTemplate.Codec
-open FSharp.UMX
 open Serilog
 open System
 open System.Collections.Concurrent
@@ -14,10 +11,11 @@ open System.Threading
 // in-flight request per stream, which allows one to avoid having to consider any explicit concurrency management
 module MultiStreams =
 
-    [<Measure>] type skuId // See https://github.com/fsprojects/FSharp.UMX
+    open FSharp.UMX // See https://github.com/fsprojects/FSharp.UMX
+    [<Measure>] type skuId 
     type SkuId = string<skuId> // Only significant at compile time - serializers etc. just see a string
 
-    let settings = JsonSerializerSettings()
+    let settings = Newtonsoft.Json.JsonSerializerSettings()
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module SavedForLater =
@@ -38,7 +36,7 @@ module MultiStreams =
             | Cleared
             interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
         let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
-        let tryDecode = tryDecode codec
+        let tryDecode = StreamsEventParser.tryDecode codec
         let [<Literal>] CategoryId = "SavedForLater"
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
@@ -51,7 +49,7 @@ module MultiStreams =
             | Unfavorited       of Unfavorited
             interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
         let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
-        let tryDecode = tryDecode codec
+        let tryDecode = StreamsEventParser.tryDecode codec
         let [<Literal>] CategoryId = "Favorites"
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int | OtherMessage of string
@@ -65,15 +63,15 @@ module MultiStreams =
 
         // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
         let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|UnknownMessage|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
-            let map f = span.Events |> Array.choose (f log streamName)
+            let decode tryDecode = span |> Seq.choose (StreamsEventParser.toCodecEvent >> tryDecode log streamName) |> Array.ofSeq
             match category streamName with
             | Category (Favorites.CategoryId, id) ->
                 let s = match faves.TryGetValue id with true, value -> value | false, _ -> new HashSet<SkuId>()
-                FavoritesEvents (id, s, map Favorites.tryDecode)
+                FavoritesEvents (id, s, decode Favorites.tryDecode)
             | Category (SavedForLater.CategoryId, id) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
-                SavedForLaterEvents (id, s, map SavedForLater.tryDecode)
-            | Category (categoryName, _) -> OtherCategory (categoryName, Array.length span.events)
+                SavedForLaterEvents (id, s, decode SavedForLater.tryDecode)
+            | Category (categoryName, _) -> OtherCategory (categoryName, Seq.length span.events)
             | Unknown streamName -> UnknownMessage streamName
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
@@ -129,17 +127,15 @@ module MultiStreams =
                     Seq.truncate 5 otherCats.StatsDescending, Seq.truncate 5 otherKeys.StatsDescending)
                 otherCats.Clear(); otherKeys.Clear()
 
-    let private enumStreamEvents(KeyValue (streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        if streamName.StartsWith("#serial") then Seq.empty else
-        let span = JsonConvert.DeserializeObject<Propulsion.Codec.NewtonsoftJson.RenderedSpan>(spanJson)
-        Propulsion.Codec.NewtonsoftJson.RenderedSpan.enumStreamEvents span
+    let private parseStreamEvents(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
+        Propulsion.Codec.NewtonsoftJson.RenderedSpan.parseStreamEvents(spanJson)
 
     let start (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, degreeOfParallelism : int) =
         let log, handler = Log.ForContext<InMemoryHandler>(), InMemoryHandler()
         let stats = Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
         Propulsion.Kafka.StreamsConsumer.Start(
             log, config, degreeOfParallelism,
-            enumStreamEvents, handler.Handle, stats, category,
+            parseStreamEvents, handler.Handle, stats, category,
             logExternalState=handler.DumpState)
 
 /// When using parallel or batch processing, items are not grouped by stream but there are no constraints on the concurrency
@@ -165,14 +161,12 @@ module MultiMessages =
             favorited <- 0; unfavorited <- 0; saved <- 0; removed <- 0; cleared <- 0; cats.Clear(); keys.Clear()
 
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
-        member private __.Interpret(streamName : string, spanJson : string) : seq<Message> = seq {
-            if streamName.StartsWith("#serial") then () else
-
-            let tryDecode f = tryDecode f log streamName
-            let span = JsonConvert.DeserializeObject<Propulsion.Codec.NewtonsoftJson.RenderedSpan>(spanJson)
+        member private __.Interpret(streamName : string, spanJson) : seq<Message> = seq {
+            let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse(spanJson)
+            let decode tryDecode wrap = span |> Seq.choose (StreamsEventParser.toCodecEvent >> tryDecode log streamName >> Option.map wrap)
             match streamName with
-            | Category (Favorites.CategoryId,_) -> yield! span.Events |> Seq.choose (tryDecode Favorites.codec >> Option.map Fave)
-            | Category (SavedForLater.CategoryId,_) -> yield! span.Events |> Seq.choose (tryDecode SavedForLater.codec >> Option.map Save)
+            | Category (Favorites.CategoryId,_) -> yield! decode Favorites.tryDecode Fave
+            | Category (SavedForLater.CategoryId,_) -> yield! decode SavedForLater.tryDecode Save
             | Category (otherCategoryName,_) -> yield OtherCat (otherCategoryName, Seq.length span.e)
             | _ -> yield Unclassified streamName }
 

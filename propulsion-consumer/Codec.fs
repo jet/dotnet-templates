@@ -1,16 +1,19 @@
-﻿namespace ConsumerTemplate.Codec
+﻿namespace ConsumerTemplate
 
 open Serilog
 open System
 
-[<AutoOpen>]
-module EventMapper =
-    let parse(x : Propulsion.Streams.IEvent<'T>) =
+module StreamsEventParser =
+
+    /// Adapts a pending event record to the canonical event record interface specified by `Equinox.Codec`
+    let toCodecEvent (x : Propulsion.Streams.IEvent<'T>) =
         { new Equinox.Codec.IEvent<_> with
             member __.EventType = x.EventType
             member __.Data = x.Data
             member __.Meta = x.Meta
             member __.Timestamp = x.Timestamp }
+
+    /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
     let tryDecode (codec : Equinox.Codec.IUnionEncoder<_,_>) (log : ILogger) (stream : string) (x : Equinox.Codec.IEvent<byte[]>) =
         match codec.TryDecode x with
         | None ->
@@ -20,19 +23,9 @@ module EventMapper =
             None
         | x -> x
 
-    type Propulsion.Streams.StreamSpan<'T> with
-        /// Enumerate the buffered, deduplicated Events from this Stream that we've been presented to handle
-        member streamSpan.Events : Equinox.Codec.IEvent<'T> [] =
-            streamSpan.events |> Array.map parse
-
-    type Propulsion.Codec.NewtonsoftJson.RenderedSpan with
-        /// Enumerate the consecutive span of Events captured within this message
-        member renderedSpan.Events : Equinox.Codec.IEvent<byte[]> [] =
-            renderedSpan.e |> Array.map parse
-
 [<AutoOpen>]
 module StreamNameParser = 
-    let private catSeparators = [|'-';'_'|]
+    let private catSeparators = [|'-'|]
     let private split (streamName : string) = streamName.Split(catSeparators, 2, StringSplitOptions.RemoveEmptyEntries)
     let category (streamName : string) = let fragments = split streamName in fragments.[0]
     let (|Category|Unknown|) (streamName : string) =
