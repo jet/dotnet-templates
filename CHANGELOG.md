@@ -13,10 +13,12 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
-<a name="3.0.1"></a>
-## [3.0.1] - 2019-07-01
+<a name="3.0.3"></a>
+## [3.0.3] - 2019-07-02
 
-- Target `Equinox`.* `2.0.0-rc2`, `Propulsion`.* `1.0.1-rc4`
+### Changed
+
+- Target `Equinox`.* `2.0.0-rc2`, `Propulsion`.* `1.0.1-rc5`
 
 <a name="3.0.0"></a>
 ## [3.0.0] - 2019-06-19
