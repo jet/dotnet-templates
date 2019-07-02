@@ -85,8 +85,8 @@ module CmdParser =
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
 //#if kafka
-                | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable EQUINOX_KAFKA_BROKER, if specified)"
-                | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable EQUINOX_KAFKA_TOPIC, if specified)"
+                | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable PROPULSION_KAFKA_BROKER, if specified)"
+                | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
                 | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
@@ -118,8 +118,8 @@ module CmdParser =
             (x.MaxReadAhead, x.ConcurrentStreamProcessors)
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
-        member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
-        member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
+        member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
         member __.Producers = args.GetResult(Producers,1)
         member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
 //#endif

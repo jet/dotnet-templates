@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- `EQUINOX_KAFKA_`* -> `PROPULSION_KAFKA_`*
+
 ### Removed
 ### Fixed
 

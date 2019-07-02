@@ -11,9 +11,9 @@ This project was generated using:
 
 1. To run an instance of the Consumer:
 
-        $env:EQUINOX_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
-        $env:EQUINOX_KAFKA_TOPIC="topic0" # or use -t
-        $env:EQUINOX_KAFKA_GROUP="group0" # or use -g
+        $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
+        $env:PROPULSION_KAFKA_TOPIC="topic0" # or use -t
+        $env:PROPULSION_KAFKA_GROUP="group0" # or use -g
 
         # `-t topic0` identifies the Kafka topic from which the consumers should read
         # `-g group0` identifies the Kafka consumer group among which the consumption is to be spread

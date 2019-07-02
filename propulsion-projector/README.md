@@ -43,7 +43,7 @@ This project was generated using:
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
 
-        $env:EQUINOX_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
+        $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
 
         # `default` defines the Projector Group identity - each id has separated state in the aux collection (aka LeaseId)
         # `-md 1000` sets the change feed maximum document limit to 1000

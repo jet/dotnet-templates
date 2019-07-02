@@ -24,18 +24,18 @@ module CmdParser =
 
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Group _ ->            "specify Kafka Consumer Group Id. (optional if environment variable EQUINOX_KAFKA_GROUP specified)"
-                | Broker _ ->           "specify Kafka Broker, in host:port format. (optional if environment variable EQUINOX_KAFKA_BROKER specified)"
-                | Topic _ ->            "specify Kafka Topic name. (optional if environment variable EQUINOX_KAFKA_TOPIC specified)"
+                | Group _ ->            "specify Kafka Consumer Group Id. (optional if environment variable PROPULSION_KAFKA_GROUP specified)"
+                | Broker _ ->           "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
+                | Topic _ ->            "specify Kafka Topic name. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
                 | MaxDop _ ->           "maximum number of items to process in parallel. Default: 1024"
                 | MaxInflightGb _ ->    "maximum GB of data to read ahead. Default: 0.5"
                 | LagFreqM _ ->         "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose _ ->          "request verbose logging."
 
     type Arguments(args : ParseResults<Parameters>) =
-        member __.Broker =              Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "EQUINOX_KAFKA_BROKER")
-        member __.Topic =               match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "EQUINOX_KAFKA_TOPIC"
-        member __.Group =               match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "EQUINOX_KAFKA_GROUP"
+        member __.Broker =              Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic =               match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
+        member __.Group =               match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "PROPULSION_KAFKA_GROUP"
         member __.MaxDop =              match args.TryGetResult MaxDop with Some x -> x | None -> 1024
         member __.MaxInFlightBytes =    (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
         member __.LagFrequency =        args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
