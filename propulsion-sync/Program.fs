@@ -4,6 +4,9 @@ open Equinox.Cosmos
 open Equinox.EventStore
 open Propulsion.Cosmos
 open Propulsion.EventStore
+#if kafka
+open Propulsion.Kafka
+#endif
 open Serilog
 open System
 
@@ -263,16 +266,22 @@ module CmdParser =
         | [<AltCommandLine("-o")>] Timeout of float
         | [<AltCommandLine("-r")>] Retries of int
         | [<AltCommandLine("-rt")>] RetriesWaitTime of int
+#if kafka
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
+#endif
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Connection _ ->      "specify a connection string for a Cosmos account (default: envvar:EQUINOX_COSMOS_CONNECTION)."
                 | Database _ ->        "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
                 | Collection _ ->      "specify a collection name for Cosmos account (default: envvar:EQUINOX_COSMOS_COLLECTION)."
-                | LeaseCollection _ -> "specify Collection Name for Leases collection (default: `sourcecollection` + `-aux`)."
+                | LeaseCollection _ -> "specify Collection Name (in this [target] Database) for Leases collection (default: `sourcecollection` + `-aux`)."
                 | Timeout _ ->         "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->         "specify operation retries (default: 0)."
                 | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                 | ConnectionMode _ ->  "override the connection mode (default: DirectTcp)."
+#if kafka
+                | Kafka _ ->           "specify Kafka target for non-Synced categories (default: None)"
+#endif
     and CosmosSinkArguments(a : ParseResults<CosmosSinkParameters>) =
         member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
@@ -294,6 +303,12 @@ module CmdParser =
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             c.Connect(sprintf "App=%s Conn=%d" appName connIndex, discovery)
+#if kafka
+        member val KafkaSink =
+            match a.TryGetSubCommand() with
+            | Some (Kafka kafka) -> Some (KafkaSinkArguments kafka)
+            | _ -> None
+#endif
     and [<NoEquality; NoComparison>] EsSinkParameters =
         | [<AltCommandLine("-v")>] Verbose
         | [<AltCommandLine("-h")>] Host of string
@@ -330,6 +345,22 @@ module CmdParser =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string; "App", appName; "Conn", connIndex]
             Connector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
                 .Establish("SyncTemplate", __.Discovery, connectionStrategy)
+#if kafka
+    and [<NoEquality; NoComparison>] KafkaSinkParameters =
+        | [<AltCommandLine "-b"; Unique>] Broker of string
+        | [<AltCommandLine "-t"; Unique>] Topic of string
+        | [<AltCommandLine "-p"; Unique>] Producers of int
+        interface IArgParserTemplate with
+            member a.Usage = a |> function
+            | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable PROPULSION_KAFKA_BROKER, if specified)"
+            | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
+            | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
+    and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
+        member __.Broker = Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic = match a.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
+        member __.Producers = a.GetResult(Producers,1)
+        member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
+#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : Arguments =
@@ -448,7 +479,21 @@ let start (args : CmdParser.Arguments) =
                 return c, Equinox.Cosmos.Core.Context(c, colls, lfc) }
             let all = Array.init args.MaxConnections connect |> Async.Parallel |> Async.RunSynchronously
             let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
-            Some (mainConn,colls), CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+#if kafka
+            Some (mainConn,colls),
+            match cosmos.KafkaSink with
+            | Some kafka ->
+                let (broker,topic, producers) = kafka.BuildTargetParams()
+                let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
+                    let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
+                    Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
+                let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
+                Propulsion.Kafka.StreamsProducerSink.Start(
+                    Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer,
+                    categorize, statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10.)
+            | None ->
+#endif
+            CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = storeLog.ForContext("ConnId", connIndex)

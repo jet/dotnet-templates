@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `propulsion-sync`: Support emission of select events direct to Kafka
+
 ### Changed
 
 - Target `Propulsion`.* `1.0.1-rc7`
