@@ -185,10 +185,12 @@ let start (args : CmdParser.Arguments) =
         Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producer, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
 #else
+    let serializerSettings = Newtonsoft.Json.JsonSerializerSettings()
     let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
         let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
-        Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
-    let categorize (streamName : string) = streamName.Split([|'-';'_'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
+        Newtonsoft.Json.JsonConvert.SerializeObject(rendered, typeof<Propulsion.Codec.NewtonsoftJson.RenderedSpan>, serializerSettings)
+    let categorize (streamName : string) =
+        streamName.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
     let producer = 
         Propulsion.Kafka.Producer(
             Log.Logger, "ProjectorTemplate", broker, topic, degreeOfParallelism = producers(*,

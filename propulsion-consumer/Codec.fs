@@ -3,7 +3,7 @@
 open Serilog
 open System
 
-module StreamsEventParser =
+module EventCodec =
 
     /// Adapts a pending event record to the canonical event record interface specified by `Equinox.Codec`
     let toCodecEvent (x : Propulsion.Streams.IEvent<'T>) =

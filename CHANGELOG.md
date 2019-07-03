@@ -17,6 +17,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
+- Removed reliance on `IEnumerable<IEvent>` in `RenderedSpan` and `StreamSpan`
+
 <a name="3.0.3"></a>
 ## [3.0.3] - 2019-07-02
 
