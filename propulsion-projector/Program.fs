@@ -206,7 +206,7 @@ let start (args : CmdParser.Arguments) =
         let r = Random()
         let ms = r.Next(1,span.events.Length)
         do! Async.Sleep ms }
-    let categorize (streamName : string) = streamName.Split([|'-';'_'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
+    let categorize (streamName : string) = streamName.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
     let projector =
         Propulsion.Streams.StreamsProjector.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, project,

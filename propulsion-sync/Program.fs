@@ -437,7 +437,7 @@ let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.
 
 let start (args : CmdParser.Arguments) =
     let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
-    let categorize (streamName : string) = streamName.Split([|'-';'_'|],2).[0]
+    let categorize (streamName : string) = streamName.Split([|'-'|],2).[0]
     let maybeDstCosmos, sink  =
         match args.Sink with
         | Choice1Of2 cosmos ->
