@@ -21,7 +21,7 @@
     <PackageReference Include="Equinox.Codec" Version="2.0.0-rc2" />
     <PackageReference Include="FSharp.UMX" Version="1.0.0-preview-001" />
     <PackageReference Include="Jet.JsonNet.Converters" Version="0.2.2" />
-    <PackageReference Include="Propulsion.Kafka" Version="1.0.1-rc5" />
+    <PackageReference Include="Propulsion.Kafka" Version="1.0.1-rc6" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
 

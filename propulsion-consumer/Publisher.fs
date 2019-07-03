@@ -71,7 +71,7 @@ module Processor =
 
     type Outcome = Processed of confirmed: int * rejected: int
 
-    type Handler(log, producers : Propulsion.Kafka.Producers) =
+    type Handler(log, producer : Propulsion.Kafka.Producer) =
         let render (x : Output.Event) : string =
             let encoded = Output.codec.Encode x
             let enveloped = EventEncoder.ofEvent encoded
@@ -81,11 +81,11 @@ module Processor =
             match x with
             | Input.InventoryReservationConfirmed e ->
                 let msg : Output.Event = Output.Confirmation { reservationId = e.reservationId }
-                let! _ = producers.ProduceAsync(%e.reservationId, render msg)
+                let! _ = producer.ProduceAsync(%e.reservationId, render msg)
                 return 1, 0
             | Input.InventoryReservationRejected e ->
                 let msg : Output.Event = Output.Rejection { reservationId = e.reservationId; reason = e.reason }
-                let! _ = producers.ProduceAsync(%e.reservationId, render msg)
+                let! _ = producer.ProduceAsync(%e.reservationId, render msg)
                 return 0, 1
         }
 
@@ -119,16 +119,16 @@ module Processor =
 
     let log = Log.ForContext<Handler>()
 
-    let startConsumer (consumerConfig : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, producers, degreeOfParallelism : int) =
-        let handler, stats = Handler(log, producers), Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
+    let startConsumer (consumerConfig : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, producer, degreeOfParallelism : int) =
+        let handler, stats = Handler(log, producer), Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
         Propulsion.Kafka.StreamsConsumer.Start(
             log, consumerConfig, degreeOfParallelism,
             enumStreamEvents, handler.Handle, stats, StreamNameParser.category,
-            logExternalState = producers.DumpStats)
+            logExternalState = producer.DumpStats)
     
     let start maxInflightBytes lagFrequency maxDop broker sourceTopics consumerGroup targetTopic =
         let clientId, mem, statsFreq = "InventoryConfirmRejectProjection", maxInflightBytes, lagFrequency
         let c = Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(clientId, broker, sourceTopics, consumerGroup, maxInFlightBytes = mem, ?statisticsInterval = statsFreq)
-        let p = Propulsion.Kafka.Producers(log, clientId, broker, targetTopic)
+        let p = Propulsion.Kafka.Producer(log, clientId, broker, targetTopic)
    
         startConsumer(c, p, maxDop)

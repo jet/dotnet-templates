@@ -177,25 +177,25 @@ let start (args : CmdParser.Arguments) =
     let render (doc : Microsoft.Azure.Documents.Document) : string * string =
         let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
         equinoxPartition,Newtonsoft.Json.JsonConvert.SerializeObject { Id = documentId }
-    let producers = 
-        Propulsion.Kafka.Producers(
-            Log.Logger, "ProjectorTemplate", broker, topic, producerParallelism = producers(*,
+    let producer = 
+        Propulsion.Kafka.Producer(
+            Log.Logger, "ProjectorTemplate", broker, topic, degreeOfParallelism = producers(*,
             customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let projector =
-        Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producers, statsInterval=TimeSpan.FromMinutes 1.)
+        Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producer, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
 #else
     let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
         let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
         Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
     let categorize (streamName : string) = streamName.Split([|'-';'_'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
-    let producers = 
-        Propulsion.Kafka.Producers(
-            Log.Logger, "ProjectorTemplate", broker, topic, producerParallelism = producers(*,
+    let producer = 
+        Propulsion.Kafka.Producer(
+            Log.Logger, "ProjectorTemplate", broker, topic, degreeOfParallelism = producers(*,
             customize = fun c -> c.CompressionLevel <- Nullable 0; c.CompressionType <- Nullable Confluent.Kafka.CompressionType.None*))
     let projector =
         Propulsion.Kafka.StreamsProducerSink.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, render, producers,
+            Log.Logger, maxReadAhead, maxConcurrentStreams, render, producer,
             categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif

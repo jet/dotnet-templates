@@ -11,6 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 ### Changed
 
+- Target `Propulsion`.* `1.0.1-rc6`
 - `EQUINOX_KAFKA_`* -> `PROPULSION_KAFKA_`*
 
 ### Removed
