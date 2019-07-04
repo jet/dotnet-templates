@@ -195,8 +195,8 @@ module CmdParser =
         | [<AltCommandLine("-u")>] Username of string
         | [<AltCommandLine("-p")>] Password of string
 
-        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSinkParameters>
-        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosSinkParameters>
+        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*)>] Es of ParseResults<EsSinkParameters>
+        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*)>] Cosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | FromTail ->           "Start the processing from the Tail"
@@ -267,7 +267,7 @@ module CmdParser =
         | [<AltCommandLine("-r")>] Retries of int
         | [<AltCommandLine("-rt")>] RetriesWaitTime of int
 #if kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
+        | [<CliPrefix(CliPrefix.None); Unique>] Kafka of ParseResults<KafkaSinkParameters>
 #endif
         interface IArgParserTemplate with
             member a.Usage = a |> function
