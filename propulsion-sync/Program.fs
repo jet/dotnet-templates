@@ -553,12 +553,23 @@ let start (args : CmdParser.Arguments) =
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
+        let withNullData (e : Propulsion.Streams.IEvent<_>) =
+            { new Propulsion.Streams.IEvent<_> with
+                member __.EventType = e.EventType
+                member __.Data = null
+                member __.Meta = e.Meta
+                member __.Timestamp = e.Timestamp }
         let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$"
                 || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
                 || not (streamFilter e.EventStreamId)  -> None
-            | PropulsionStreamEvent e -> Some e
+            | PropulsionStreamEvent e ->
+                if e.event.Data.Length > 1_000_000 then
+                    Log.Error("replacing {stream} event index {index} with `null` Data due to length of {len}MB",
+                        e.stream, e.index, Propulsion.EventStore.Reader.mb e.event.Data.Length)
+                    Some { e with event = withNullData e.event }
+                else Some e
         let runPipeline =
             EventStoreSource.Run(
                 log, sink, checkpoints, connect, spec, categorize, tryMapEvent streamFilter,
