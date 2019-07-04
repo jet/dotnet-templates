@@ -496,7 +496,7 @@ let start (args : CmdParser.Arguments) =
                     Propulsion.Kafka.StreamsProducerSink.Start(
                         Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer,
                         categorize, statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10.),
-                    fun sn -> isLong sn || args.CategoryFilterFunction sn
+                    fun sn -> isLong sn || isWhitelisted sn
                 | None ->
 #endif
                 CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
