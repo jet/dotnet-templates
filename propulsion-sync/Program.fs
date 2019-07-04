@@ -352,9 +352,9 @@ module CmdParser =
         | [<AltCommandLine "-p"; Unique>] Producers of int
         interface IArgParserTemplate with
             member a.Usage = a |> function
-            | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable PROPULSION_KAFKA_BROKER, if specified)"
-            | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
-            | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
+                | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable PROPULSION_KAFKA_BROKER, if specified)"
+                | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
+                | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
     and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
         member __.Broker = Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
         member __.Topic = match a.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
