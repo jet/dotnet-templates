@@ -508,8 +508,8 @@ let start (args : CmdParser.Arguments) =
                         Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
                     let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
                     Propulsion.Kafka.StreamsProducerSink.Start(
-                        Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer,
-                        categorize, statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10.),
+                        Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer, categorize,
+                        statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10., maxBytes=900_000),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
