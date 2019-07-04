@@ -485,6 +485,46 @@ let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.
             yield e }
 //#endif
 
+module _T =
+    open Propulsion
+    type StreamsProducerSink =
+        static member Start
+            (   log : ILogger, maxReadAhead, maxConcurrentStreams, render, producer : Producer, categorize,
+                ?statsInterval, ?stateInterval, ?idleDelay,
+                // Default 1 MiB
+                ?maxBytes,
+                // Default 16384
+                ?maxEvents)
+            : ProjectorPipeline<_> =
+            let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
+            let stats = StreamsProducerStats(log.ForContext<StreamsProducerStats>(), statsInterval, stateInterval)
+            let attemptWrite (_writePos,stream,fullBuffer : Streams.StreamSpan<_>) = async {
+                let maxEvents, maxBytes = defaultArg maxEvents 16384, defaultArg maxBytes 1024*1024 - (*fudge*)4096
+                let (eventCount,bytesCount),span = Streams.Buffering.StreamSpan.slice (maxEvents,maxBytes) fullBuffer
+                let sw = System.Diagnostics.Stopwatch.StartNew()
+                let spanJson :string = render (stream, span)
+                let jsonElapsed = sw.Elapsed
+                match spanJson.Length with
+                | x when x > 512*1024 && log.IsEnabled(Serilog.Events.LogEventLevel.Debug) -> log.Debug("Message on {stream} had length {length}", stream, x)
+                | _ -> ()
+                try do! Bindings.produceAsync producer.ProduceAsync (stream,spanJson)
+                    return Choice1Of2 (span.index + int64 eventCount,(eventCount,bytesCount),jsonElapsed)
+                with e -> return Choice2Of2 ((eventCount,bytesCount),e) }
+            let interpretWriteResultProgress _streams (stream : string) = function
+                | Choice1Of2 (i',_,_) -> Some i'
+                | Choice2Of2 ((eventCount,bytesCount),exn : exn) ->
+                    log.Warning(exn,"Writing   {events:n0}e {bytes:n0}b for {stream} failed, retrying", eventCount, bytesCount, stream)
+                    None
+            let dispatcher = Streams.Scheduling.Dispatcher<_>(maxConcurrentStreams)
+            let streamScheduler =
+                Streams.Scheduling.StreamSchedulingEngine<OkResult<TimeSpan>,FailResult>
+                    (   dispatcher, stats, attemptWrite, interpretWriteResultProgress,
+                        (fun s l ->
+                            s.Dump(l, Streams.Buffering.StreamState.eventsSize, categorize)
+                            producer.DumpStats l),
+                        ?idleDelay=idleDelay)
+            Streams.Projector.StreamsProjectorPipeline.Start(log, dispatcher.Pump(), streamScheduler.Pump, maxReadAhead, streamScheduler.Submit, statsInterval)
+
 let start (args : CmdParser.Arguments) =
     let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
     let categorize (streamName : string) = streamName.Split([|'-'|],2).[0]
@@ -507,7 +547,7 @@ let start (args : CmdParser.Arguments) =
                         let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
                         Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
                     let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
-                    Propulsion.Kafka.StreamsProducerSink.Start(
+                    _T.StreamsProducerSink.Start(
                         Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer, categorize,
                         statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10., maxBytes=900_000),
                     args.CategoryFilterFunction(longOnly=true)
@@ -565,7 +605,7 @@ let start (args : CmdParser.Arguments) =
                 || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
                 || not (streamFilter e.EventStreamId)  -> None
             | PropulsionStreamEvent e ->
-                if e.event.Data.Length > 1_000_000 then
+                if Propulsion.EventStore.Reader.payloadBytes x > 1_000_000 then
                     Log.Error("replacing {stream} event index {index} with `null` Data due to length of {len}MB",
                         e.stream, e.index, Propulsion.EventStore.Reader.mb e.event.Data.Length)
                     Some { e with event = withNullData e.event }
