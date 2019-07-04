@@ -469,7 +469,7 @@ let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.
 let start (args : CmdParser.Arguments) =
     let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
     let categorize (streamName : string) = streamName.Split([|'-'|],2).[0]
-    let maybeDstCosmos, sink  =
+    let maybeDstCosmos, sink, catFilter =
         match args.Sink with
         | Choice1Of2 cosmos ->
             let colls = Collections(cosmos.Database, cosmos.Collection)
@@ -479,29 +479,39 @@ let start (args : CmdParser.Arguments) =
                 return c, Equinox.Cosmos.Core.Context(c, colls, lfc) }
             let all = Array.init args.MaxConnections connect |> Async.Parallel |> Async.RunSynchronously
             let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
+            let sink, catFilter =
+                let isLong (streamName : string) =
+                    streamName.StartsWith "Inventory-" // Too long
+                    || streamName.StartsWith "InventoryCount-" // No Longer used
+                    || streamName.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
+                let isWhitelisted = args.CategoryFilterFunction
 #if kafka
-            Some (mainConn,colls),
-            match cosmos.KafkaSink with
-            | Some kafka ->
-                let (broker,topic, producers) = kafka.BuildTargetParams()
-                let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
-                    let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
-                    Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
-                let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
-                Propulsion.Kafka.StreamsProducerSink.Start(
-                    Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer,
-                    categorize, statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10.)
-            | None ->
+                match cosmos.KafkaSink with
+                | Some kafka ->
+                    let (broker,topic, producers) = kafka.BuildTargetParams()
+                    let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
+                        let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
+                        Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
+                    let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
+                    Propulsion.Kafka.StreamsProducerSink.Start(
+                        Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer,
+                        categorize, statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10.),
+                    fun sn -> isLong sn || args.CategoryFilterFunction sn
+                | None ->
 #endif
-            CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+                CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
+                fun sn -> not (isLong sn) || isWhitelisted sn
+            Some (mainConn,colls),sink, catFilter
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = storeLog.ForContext("ConnId", connIndex)
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, "SyncTemplate", connIndex)
                 return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            None, EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
-    let catFilter = args.CategoryFilterFunction
+
+            None,
+            EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
+            args.CategoryFilterFunction
     match args.SourceParams() with
     | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency) ->
         let discovery, source, connectionPolicy = srcC.BuildConnectionDetails()
@@ -540,9 +550,6 @@ let start (args : CmdParser.Arguments) =
                 || e.EventStreamId.StartsWith "marvel_bookmark"
                 || e.EventStreamId.EndsWith "_checkpoints"
                 || e.EventStreamId.EndsWith "_checkpoint"
-                || e.EventStreamId.StartsWith "Inventory-" // Too long
-                || e.EventStreamId.StartsWith "InventoryCount-" // No Longer used
-                || e.EventStreamId.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
                 || e.EventStreamId = "SkuFileUpload-534e4362c641461ca27e3d23547f0852"
                 || e.EventStreamId = "SkuFileUpload-778f1efeab214f5bab2860d1f802ef24"
                 || e.EventStreamId = "PurchaseOrder-5791" // item too large
