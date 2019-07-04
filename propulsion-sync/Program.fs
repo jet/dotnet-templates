@@ -72,9 +72,28 @@ module CmdParser =
 
         member __.StatsInterval =       TimeSpan.FromMinutes 1.
         member __.StateInterval =      TimeSpan.FromMinutes 5.
-        member __.CategoryFilterFunction : string -> bool =
+        member __.CategoryFilterFunction(?excludeLong, ?longOnly): string -> bool =
+            let isLong (streamName : string) =
+                streamName.StartsWith "Inventory-" // Too long
+                || streamName.StartsWith "InventoryCount-" // No Longer used
+                || streamName.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
+            let excludeLong = defaultArg excludeLong true
             match a.GetResults CategoryBlacklist, a.GetResults CategoryWhitelist with
-            | [], [] ->     Log.Information("Not filtering by category"); fun _ -> true 
+            | [], [] when longOnly = Some true ->
+                Log.Information("Only including long streams")
+                isLong
+            | [], [] ->
+                let black = set [
+                    "SkuFileUpload-534e4362c641461ca27e3d23547f0852"
+                    "SkuFileUpload-778f1efeab214f5bab2860d1f802ef24"
+                    "PurchaseOrder-5791" ]
+                let isCheckpoint (streamName : string) =
+                    streamName.EndsWith "_checkpoint"
+                    || streamName.EndsWith "_checkpoints"
+                    || streamName.StartsWith "#serial"
+                    || streamName.StartsWith "marvel_bookmark"
+                Log.Information("Using well-known stream blacklist {black} excluding checkpoints and #serial streams, excluding long streams: {excludeLong}", black, excludeLong)
+                fun x -> not (black.Contains x) && (not << isCheckpoint) x && (not excludeLong || (not << isLong) x)
             | bad, [] ->    let black = Set.ofList bad in Log.Warning("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
             | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
             | _, _ -> raise (InvalidArguments "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
@@ -469,7 +488,7 @@ let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.
 let start (args : CmdParser.Arguments) =
     let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
     let categorize (streamName : string) = streamName.Split([|'-'|],2).[0]
-    let maybeDstCosmos, sink, catFilter =
+    let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
         | Choice1Of2 cosmos ->
             let colls = Collections(cosmos.Database, cosmos.Collection)
@@ -479,12 +498,7 @@ let start (args : CmdParser.Arguments) =
                 return c, Equinox.Cosmos.Core.Context(c, colls, lfc) }
             let all = Array.init args.MaxConnections connect |> Async.Parallel |> Async.RunSynchronously
             let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
-            let sink, catFilter =
-                let isLong (streamName : string) =
-                    streamName.StartsWith "Inventory-" // Too long
-                    || streamName.StartsWith "InventoryCount-" // No Longer used
-                    || streamName.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
-                let isWhitelisted = args.CategoryFilterFunction
+            let sink, streamFilter =
 #if kafka
                 match cosmos.KafkaSink with
                 | Some kafka ->
@@ -496,29 +510,27 @@ let start (args : CmdParser.Arguments) =
                     Propulsion.Kafka.StreamsProducerSink.Start(
                         Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer,
                         categorize, statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10.),
-                    fun sn -> isLong sn || isWhitelisted sn
+                    args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
                 CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
-                fun sn -> not (isLong sn) || isWhitelisted sn
-            Some (mainConn,colls),sink, catFilter
+                args.CategoryFilterFunction(excludeLong=true)
+            Some (mainConn,colls),sink,streamFilter
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = storeLog.ForContext("ConnId", connIndex)
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, "SyncTemplate", connIndex)
                 return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-
-            None,
-            EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
-            args.CategoryFilterFunction
+            let sink = EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+            None,sink,args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency) ->
         let discovery, source, connectionPolicy = srcC.BuildConnectionDetails()
 #if marveleqx
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize catFilter))
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize streamFilter))
 #else
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter categorize args.CategoryFilterFunction))
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter categorize streamFilter))
 #endif
         let runPipeline =
             CosmosSource.Run(log, discovery, connectionPolicy, source,
@@ -541,23 +553,15 @@ let start (args : CmdParser.Arguments) =
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
-        let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
+        let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
-            | e when not e.IsJson
-                || e.EventStreamId.StartsWith "$"
+            | e when not e.IsJson || e.EventStreamId.StartsWith "$"
                 || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
-                || e.EventStreamId.StartsWith "#serial"
-                || e.EventStreamId.StartsWith "marvel_bookmark"
-                || e.EventStreamId.EndsWith "_checkpoints"
-                || e.EventStreamId.EndsWith "_checkpoint"
-                || e.EventStreamId = "SkuFileUpload-534e4362c641461ca27e3d23547f0852"
-                || e.EventStreamId = "SkuFileUpload-778f1efeab214f5bab2860d1f802ef24"
-                || e.EventStreamId = "PurchaseOrder-5791" // item too large
-                || not (catFilter e.EventStreamId) -> None
+                || not (streamFilter e.EventStreamId)  -> None
             | PropulsionStreamEvent e -> Some e
         let runPipeline =
             EventStoreSource.Run(
-                log, sink, checkpoints, connect, spec, categorize, tryMapEvent catFilter,
+                log, sink, checkpoints, connect, spec, categorize, tryMapEvent streamFilter,
                 args.MaxPendingBatches, args.StatsInterval)
         sink, runPipeline
 
