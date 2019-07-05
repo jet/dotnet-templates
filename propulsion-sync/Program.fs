@@ -500,7 +500,7 @@ let start (args : CmdParser.Arguments) =
             let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
             let sink, streamFilter =
 #if kafka
-                let maxBytes = 900_000
+                let maxEvents, maxBytes = 100_000, 900_000
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let (broker,topic, producers) = kafka.BuildTargetParams()
@@ -510,7 +510,7 @@ let start (args : CmdParser.Arguments) =
                     let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
                     StreamsProducerSink.Start(
                         Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer, categorize,
-                        statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10., maxBytes=maxBytes),
+                        statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 1., maxBytes=maxBytes, maxEvents=maxEvents),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
