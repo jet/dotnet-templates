@@ -524,7 +524,7 @@ module _T =
                             s.Dump(l, Streams.Buffering.StreamState.eventsSize, categorize)
                             producer.DumpStats l),
                         ?idleDelay=idleDelay)
-            Streams.Projector.StreamsProjectorPipeline.Start(log, dispatcher.Pump(), streamScheduler.Pump, maxReadAhead, streamScheduler.Submit, statsInterval)
+            Streams.Projector.StreamsProjectorPipeline.Start(log, dispatcher.Pump(), streamScheduler.Pump, maxReadAhead, streamScheduler.Submit, statsInterval, maxSubmissionsPerPartition=1024)
 
 let start (args : CmdParser.Arguments) =
     let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
