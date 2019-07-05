@@ -7,7 +7,8 @@
     "CosmosDb",
     "ChangeFeed",
     "ChangeFeedProcessor",
-    "EventStore"
+    "EventStore",
+    "Kafka"
   ],
   "tags": {
     "language": "F#"
@@ -19,6 +20,13 @@
   "preferNameDirectory": true,
 
   "symbols": {
+    "kafka": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Include example code to selectively emit to Kafka."
+    },
     "marveleqx": {
       "type": "parameter",
       "datatype": "bool",

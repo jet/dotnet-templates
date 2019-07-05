@@ -4,6 +4,9 @@ open Equinox.Cosmos
 open Equinox.EventStore
 open Propulsion.Cosmos
 open Propulsion.EventStore
+#if kafka
+open Propulsion.Kafka
+#endif
 open Serilog
 open System
 
@@ -69,9 +72,28 @@ module CmdParser =
 
         member __.StatsInterval =       TimeSpan.FromMinutes 1.
         member __.StateInterval =      TimeSpan.FromMinutes 5.
-        member __.CategoryFilterFunction : string -> bool =
+        member __.CategoryFilterFunction(?excludeLong, ?longOnly): string -> bool =
+            let isLong (streamName : string) =
+                streamName.StartsWith "Inventory-" // Too long
+                || streamName.StartsWith "InventoryCount-" // No Longer used
+                || streamName.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
+            let excludeLong = defaultArg excludeLong true
             match a.GetResults CategoryBlacklist, a.GetResults CategoryWhitelist with
-            | [], [] ->     Log.Information("Not filtering by category"); fun _ -> true 
+            | [], [] when longOnly = Some true ->
+                Log.Information("Only including long streams")
+                isLong
+            | [], [] ->
+                let black = set [
+                    "SkuFileUpload-534e4362c641461ca27e3d23547f0852"
+                    "SkuFileUpload-778f1efeab214f5bab2860d1f802ef24"
+                    "PurchaseOrder-5791" ]
+                let isCheckpoint (streamName : string) =
+                    streamName.EndsWith "_checkpoint"
+                    || streamName.EndsWith "_checkpoints"
+                    || streamName.StartsWith "#serial"
+                    || streamName.StartsWith "marvel_bookmark"
+                Log.Information("Using well-known stream blacklist {black} excluding checkpoints and #serial streams, excluding long streams: {excludeLong}", black, excludeLong)
+                fun x -> not (black.Contains x) && (not << isCheckpoint) x && (not excludeLong || (not << isLong) x)
             | bad, [] ->    let black = Set.ofList bad in Log.Warning("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
             | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
             | _, _ -> raise (InvalidArguments "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
@@ -263,16 +285,22 @@ module CmdParser =
         | [<AltCommandLine("-o")>] Timeout of float
         | [<AltCommandLine("-r")>] Retries of int
         | [<AltCommandLine("-rt")>] RetriesWaitTime of int
+#if kafka
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
+#endif
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Connection _ ->      "specify a connection string for a Cosmos account (default: envvar:EQUINOX_COSMOS_CONNECTION)."
                 | Database _ ->        "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
                 | Collection _ ->      "specify a collection name for Cosmos account (default: envvar:EQUINOX_COSMOS_COLLECTION)."
-                | LeaseCollection _ -> "specify Collection Name for Leases collection (default: `sourcecollection` + `-aux`)."
+                | LeaseCollection _ -> "specify Collection Name (in this [target] Database) for Leases collection (default: `sourcecollection` + `-aux`)."
                 | Timeout _ ->         "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->         "specify operation retries (default: 0)."
                 | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
                 | ConnectionMode _ ->  "override the connection mode (default: DirectTcp)."
+#if kafka
+                | Kafka _ ->           "specify Kafka target for non-Synced categories (default: None)"
+#endif
     and CosmosSinkArguments(a : ParseResults<CosmosSinkParameters>) =
         member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
@@ -294,6 +322,12 @@ module CmdParser =
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             c.Connect(sprintf "App=%s Conn=%d" appName connIndex, discovery)
+#if kafka
+        member val KafkaSink =
+            match a.TryGetSubCommand() with
+            | Some (Kafka kafka) -> Some (KafkaSinkArguments kafka)
+            | _ -> None
+#endif
     and [<NoEquality; NoComparison>] EsSinkParameters =
         | [<AltCommandLine("-v")>] Verbose
         | [<AltCommandLine("-h")>] Host of string
@@ -330,6 +364,22 @@ module CmdParser =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string; "App", appName; "Conn", connIndex]
             Connector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
                 .Establish("SyncTemplate", __.Discovery, connectionStrategy)
+#if kafka
+    and [<NoEquality; NoComparison>] KafkaSinkParameters =
+        | [<AltCommandLine "-b"; Unique>] Broker of string
+        | [<AltCommandLine "-t"; Unique>] Topic of string
+        | [<AltCommandLine "-p"; Unique>] Producers of int
+        interface IArgParserTemplate with
+            member a.Usage = a |> function
+                | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable PROPULSION_KAFKA_BROKER, if specified)"
+                | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
+                | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
+    and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
+        member __.Broker = Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic = match a.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
+        member __.Producers = a.GetResult(Producers,1)
+        member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
+#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : Arguments =
@@ -438,7 +488,7 @@ let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.
 let start (args : CmdParser.Arguments) =
     let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
     let categorize (streamName : string) = streamName.Split([|'-'|],2).[0]
-    let maybeDstCosmos, sink  =
+    let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
         | Choice1Of2 cosmos ->
             let colls = Collections(cosmos.Database, cosmos.Collection)
@@ -448,22 +498,40 @@ let start (args : CmdParser.Arguments) =
                 return c, Equinox.Cosmos.Core.Context(c, colls, lfc) }
             let all = Array.init args.MaxConnections connect |> Async.Parallel |> Async.RunSynchronously
             let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
-            Some (mainConn,colls), CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+            let sink, streamFilter =
+#if kafka
+                let maxEvents, maxBytes = 100_000, 900_000
+                match cosmos.KafkaSink with
+                | Some kafka ->
+                    let (broker,topic, producers) = kafka.BuildTargetParams()
+                    let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
+                        let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
+                        Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
+                    let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
+                    StreamsProducerSink.Start(
+                        Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer, categorize,
+                        statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 1., maxBytes=maxBytes, maxEvents=maxEvents),
+                    args.CategoryFilterFunction(longOnly=true)
+                | None ->
+#endif
+                CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
+                args.CategoryFilterFunction(excludeLong=true)
+            Some (mainConn,colls),sink,streamFilter
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = storeLog.ForContext("ConnId", connIndex)
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, "SyncTemplate", connIndex)
                 return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            None, EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
-    let catFilter = args.CategoryFilterFunction
+            let sink = EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+            None,sink,args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency) ->
         let discovery, source, connectionPolicy = srcC.BuildConnectionDetails()
 #if marveleqx
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize catFilter))
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize streamFilter))
 #else
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter categorize args.CategoryFilterFunction))
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter categorize streamFilter))
 #endif
         let runPipeline =
             CosmosSource.Run(log, discovery, connectionPolicy, source,
@@ -486,26 +554,26 @@ let start (args : CmdParser.Arguments) =
             let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
-        let tryMapEvent catFilter (x : EventStore.ClientAPI.ResolvedEvent) =
+        let withNullData (e : Propulsion.Streams.IEvent<_>) =
+            { new Propulsion.Streams.IEvent<_> with
+                member __.EventType = e.EventType
+                member __.Data = null
+                member __.Meta = e.Meta
+                member __.Timestamp = e.Timestamp }
+        let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
-            | e when not e.IsJson
-                || e.EventStreamId.StartsWith "$"
+            | e when not e.IsJson || e.EventStreamId.StartsWith "$"
                 || e.EventType.StartsWith("compacted",StringComparison.OrdinalIgnoreCase)
-                || e.EventStreamId.StartsWith "#serial"
-                || e.EventStreamId.StartsWith "marvel_bookmark"
-                || e.EventStreamId.EndsWith "_checkpoints"
-                || e.EventStreamId.EndsWith "_checkpoint"
-                || e.EventStreamId.StartsWith "Inventory-" // Too long
-                || e.EventStreamId.StartsWith "InventoryCount-" // No Longer used
-                || e.EventStreamId.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
-                || e.EventStreamId = "SkuFileUpload-534e4362c641461ca27e3d23547f0852"
-                || e.EventStreamId = "SkuFileUpload-778f1efeab214f5bab2860d1f802ef24"
-                || e.EventStreamId = "PurchaseOrder-5791" // item too large
-                || not (catFilter e.EventStreamId) -> None
-            | PropulsionStreamEvent e -> Some e
+                || not (streamFilter e.EventStreamId)  -> None
+            | PropulsionStreamEvent e ->
+                if Propulsion.EventStore.Reader.payloadBytes x > 1_000_000 then
+                    Log.Error("replacing {stream} event index {index} with `null` Data due to length of {len}MB",
+                        e.stream, e.index, Propulsion.EventStore.Reader.mb e.event.Data.Length)
+                    Some { e with event = withNullData e.event }
+                else Some e
         let runPipeline =
             EventStoreSource.Run(
-                log, sink, checkpoints, connect, spec, categorize, tryMapEvent catFilter,
+                log, sink, checkpoints, connect, spec, categorize, tryMapEvent streamFilter,
                 args.MaxPendingBatches, args.StatsInterval)
         sink, runPipeline
 
