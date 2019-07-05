@@ -499,13 +499,14 @@ module _T =
             let statsInterval, stateInterval = defaultArg statsInterval (TimeSpan.FromMinutes 5.), defaultArg stateInterval (TimeSpan.FromMinutes 5.)
             let stats = StreamsProducerStats(log.ForContext<StreamsProducerStats>(), statsInterval, stateInterval)
             let attemptWrite (_writePos,stream,fullBuffer : Streams.StreamSpan<_>) = async {
-                let maxEvents, maxBytes = defaultArg maxEvents 16384, defaultArg maxBytes 1024*1024 - (*fudge*)4096
+                let maxEvents, maxBytes = defaultArg maxEvents 16384, (defaultArg maxBytes 1024*1024) - (*fudge*)4096
                 let (eventCount,bytesCount),span = Streams.Buffering.StreamSpan.slice (maxEvents,maxBytes) fullBuffer
                 let sw = System.Diagnostics.Stopwatch.StartNew()
-                let spanJson :string = render (stream, span)
+                let spanJson : string = render (stream, span)
                 let jsonElapsed = sw.Elapsed
                 match spanJson.Length with
-                | x when x > 512*1024 && log.IsEnabled(Serilog.Events.LogEventLevel.Debug) -> log.Debug("Message on {stream} had length {length}", stream, x)
+                | x when x > maxBytes (*&& log.IsEnabled(Serilog.Events.LogEventLevel.Debug *) ->
+                    log.Warning("Message on {stream} had String.Length {length} using {events}/{availableEvents}", stream, x, span.events.Length,fullBuffer.events.Length)
                 | _ -> ()
                 try do! Bindings.produceAsync producer.ProduceAsync (stream,spanJson)
                     return Choice1Of2 (span.index + int64 eventCount,(eventCount,bytesCount),jsonElapsed)
@@ -540,6 +541,7 @@ let start (args : CmdParser.Arguments) =
             let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
             let sink, streamFilter =
 #if kafka
+                let maxBytes = 900_000
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let (broker,topic, producers) = kafka.BuildTargetParams()
@@ -549,7 +551,7 @@ let start (args : CmdParser.Arguments) =
                     let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
                     _T.StreamsProducerSink.Start(
                         Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer, categorize,
-                        statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10., maxBytes=900_000),
+                        statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 10., maxBytes=maxBytes),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
