@@ -9,15 +9,22 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="3.1.0"></a>
+## [3.1.0] - 2019-07-05
+
+### Added
 
 - `propulsion-sync`: Support emission of select events direct to Kafka [#26](https://github.com/jet/dotnet-templates/pull/26)
 
 ### Changed
 
-- Target `Propulsion`.* `1.0.1-rc7`
+- Target `Propulsion`.* `1.0.1-rc8`
 - `EQUINOX_KAFKA_`* -> `PROPULSION_KAFKA_`*
 
-### Removed
 ### Fixed
 
 - Removed reliance on `IEnumerable<IEvent>` in `RenderedSpan` and `StreamSpan`
@@ -130,7 +137,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.0.3...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.1.0...HEAD
+[3.1.0]: https://github.com/jet/dotnet-templates/compare/3.0.3...3.1.0
 [3.0.3]: https://github.com/jet/dotnet-templates/compare/3.0.2...3.0.3
 [3.0.2]: https://github.com/jet/dotnet-templates/compare/2.2.2...3.0.2
 [2.2.2]: https://github.com/jet/dotnet-templates/compare/2.1.2...2.2.2
