@@ -10,7 +10,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
-- `propulsion-sync`: Support emission of select events direct to Kafka
+- `propulsion-sync`: Support emission of select events direct to Kafka [#26](https://github.com/jet/dotnet-templates/pull/26)
 
 ### Changed
 
