@@ -32,8 +32,8 @@ module MemoryStore =
 module Cosmos =
     let envBackstop msg key =
         match Environment.GetEnvironmentVariable key with
-        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argment or via the %s environment variable" msg key)
-        | x -> x 
+        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
+        | x -> x
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine("-vs")>] VerboseStore

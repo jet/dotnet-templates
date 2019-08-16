@@ -105,7 +105,7 @@ module CmdParser =
 #endif
 #if cosmos
             | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, cosmos")
-#endif            
+#endif
 
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration().Destructure.FSharpTypes()

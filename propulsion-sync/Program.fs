@@ -16,8 +16,8 @@ module CmdParser =
     exception InvalidArguments of string
     let envBackstop msg key =
         match Environment.GetEnvironmentVariable key with
-        | null -> raise <| InvalidArguments (sprintf "Please provide a %s, either as an argment or via the %s environment variable" msg key)
-        | x -> x 
+        | null -> raise <| InvalidArguments (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
+        | x -> x
 
     [<NoEquality; NoComparison>]
     type Parameters =

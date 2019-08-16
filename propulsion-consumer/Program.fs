@@ -9,8 +9,8 @@ module CmdParser =
     exception MissingArg of string
     let envBackstop msg key =
         match Environment.GetEnvironmentVariable key with
-        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argment or via the %s environment variable" msg key)
-        | x -> x 
+        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
+        | x -> x
 
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -45,7 +45,7 @@ module CmdParser =
     let parse argv =
         let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
-        parser.ParseCommandLine argv |> Arguments 
+        parser.ParseCommandLine argv |> Arguments
 
 module Logging =
     let initialize verbose =

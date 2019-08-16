@@ -11,8 +11,8 @@ module CmdParser =
     exception MissingArg of string
     let envBackstop msg key =
         match Environment.GetEnvironmentVariable key with
-        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argment or via the %s environment variable" msg key)
-        | x -> x 
+        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
+        | x -> x
 
     module Cosmos =
         type [<NoEquality; NoComparison>] Parameters =
@@ -50,7 +50,7 @@ module CmdParser =
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
                 let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-                discovery, connector, { database = x.Database; collection = x.Collection } 
+                discovery, connector, { database = x.Database; collection = x.Collection }
 
     [<NoEquality; NoComparison>]
     type Parameters =

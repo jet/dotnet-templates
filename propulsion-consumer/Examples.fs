@@ -144,7 +144,7 @@ module MultiMessages =
     // We'll use the same event parsing logic, though it works a little differently
     open MultiStreams
 
-    type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name : string * count : int | Unclassified of messageKey : string 
+    type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name : string * count : int | Unclassified of messageKey : string
 
     type Processor() =
         let log = Log.ForContext<Processor>()

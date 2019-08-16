@@ -123,7 +123,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 <a name="1.1.1"></a>
 ## [1.1.1] - 2019-01-17
 
-### Added 
+### Added
 
 - C# port of template - `dotnet new eqxwebcs`, prompting cleanup work in [jet/equinox#81](https://github.com/jet/equinox/pull/81) [#5](https://github.com/jet/dotnet-templates/pull/5)
 

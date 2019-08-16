@@ -54,7 +54,7 @@ This project was generated using:
         dotnet tool install -g Equinox.Tool # only needed once
         eqx init -ru 1000 cosmos
 
-    The commandline `dotnet run -p Testbed -- run cosmos -help` shows the various connection options available when using CosmosDb. Running without any arguments will use the environment variables as above. While it's possible to run against the CosmosDb simulator, there's not much to be learned over what one can learn from using `Equinox.MemoryStore`. In general, if the transactions are small and you don't saturate the network bandwidth, you should be able to achieve 100s of rps even if you're not in the same Region. Running in the same data center as the CosmosDb instance, 1000s of rps should be attainable. 
+    The commandline `dotnet run -p Testbed -- run cosmos -help` shows the various connection options available when using CosmosDb. Running without any arguments will use the environment variables as above. While it's possible to run against the CosmosDb simulator, there's not much to be learned over what one can learn from using `Equinox.MemoryStore`. In general, if the transactions are small and you don't saturate the network bandwidth, you should be able to achieve 100s of rps even if you're not in the same Region. Running in the same data center as the CosmosDb instance, 1000s of rps should be attainable.
 
         # Run with caching and unfolds against CosmosDb, 100 rps
         dotnet run -p Testbed -- run -C - U -d 2 -f 100 cosmos
