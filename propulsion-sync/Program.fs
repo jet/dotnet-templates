@@ -108,24 +108,24 @@ module CmdParser =
                 let disco, db =
                     match srcC.Sink with
                     | Choice1Of2 dstC ->
-                        match srcC.LeaseCollection, dstC.LeaseCollection with
-                        | None, None ->     srcC.Discovery, { database = srcC.Database; collection = srcC.Collection + "-aux" }
-                        | Some sc, None ->  srcC.Discovery, { database = srcC.Database; collection = sc }
-                        | None, Some dc ->  dstC.Discovery, { database = dstC.Database; collection = dc }
+                        match srcC.LeaseContainer, dstC.LeaseContainer with
+                        | None, None ->     srcC.Discovery, { database = srcC.Database; container = srcC.Container + "-aux" }
+                        | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
+                        | None, Some dc ->  dstC.Discovery, { database = dstC.Database; container = dc }
                         | Some _, Some _ -> raise (InvalidArguments "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
                     | Choice2Of2 _dstE ->
-                        let lc = match srcC.LeaseCollection with Some sc -> sc | None -> srcC.Collection + "-aux"
-                        srcC.Discovery, { database = srcC.Database; collection = lc }
+                        let lc = match srcC.LeaseContainer with Some sc -> sc | None -> srcC.Container + "-aux"
+                        srcC.Discovery, { database = srcC.Database; container = lc }
                 Log.Information("Max read backlog: {maxPending}", x.MaxPendingBatches)
-                Log.Information("Processing Lease {leaseId} in Database {db} Collection {coll} with maximum document count limited to {maxDocuments}",
-                    x.ConsumerGroupName, db.database, db.collection, srcC.MaxDocuments)
+                Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
+                    x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
                 Choice1Of2 (srcC, disco, db, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
             | Choice2Of2 srcE ->
                 let startPos = srcE.StartPos
-                Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Collection {coll}",
-                    x.ConsumerGroupName, startPos, srcE.ForceRestart, srcE.Sink.Database, srcE.Sink.Collection)
+                Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Container {container}",
+                    x.ConsumerGroupName, startPos, srcE.ForceRestart, srcE.Sink.Database, srcE.Sink.Container)
                 Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxPendingBatches} uncommitted batches ahead",
                     srcE.MinBatchSize, srcE.StartingBatchSize, x.MaxPendingBatches)
                 Choice2Of2 (srcE,
@@ -141,7 +141,7 @@ module CmdParser =
         | [<AltCommandLine "-s">] Connection of string
         | [<AltCommandLine "-cm">] ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-d">] Database of string
-        | [<AltCommandLine "-c"; Unique(*Mandatory is not supported*)>] Collection of string
+        | [<AltCommandLine "-c"; Unique(*Mandatory is not supported*)>] Container of string
         | [<AltCommandLine "-o">] Timeout of float
         | [<AltCommandLine "-r">] Retries of int
         | [<AltCommandLine "-rt">] RetriesWaitTime of int
@@ -153,12 +153,12 @@ module CmdParser =
                 | FromTail ->          "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->    "maximum item count to request from feed. Default: unlimited"
                 | LagFreqM _ ->        "frequency (in minutes) to dump lag stats. Default: off"
-                | LeaseCollection _ -> "specify Collection Name for Leases collection (default: `sourcecollection` + `-aux`)."
+                | LeaseContainer _ ->  "specify Container Name for Leases container (default: `sourceContainer` + `-aux`)."
 
                 | Connection _ ->      "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
-                | ConnectionMode _ ->  "override the connection mode (default: DirectTcp)."
+                | ConnectionMode _ ->  "override the connection mode (default: Direct)."
                 | Database _ ->        "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
-                | Collection _ ->      "specify a collection name within `SourceDatabase`."
+                | Container _ ->       "specify a container name within `SourceDatabase`."
                 | Timeout _ ->         "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->         "specify operation retries (default: 1)."
                 | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
@@ -169,24 +169,24 @@ module CmdParser =
         member __.FromTail =            a.Contains CosmosSourceParameters.FromTail
         member __.MaxDocuments =        a.TryGetResult MaxDocuments
         member __.LagFrequency =        a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member __.LeaseCollection =     a.TryGetResult CosmosSourceParameters.LeaseCollection
+        member __.LeaseContainer =      a.TryGetResult CosmosSourceParameters.LeaseContainer
 
         member __.Connection =          match a.TryGetResult CosmosSourceParameters.Connection   with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Discovery =           Discovery.FromConnectionString __.Connection
-        member __.Mode =                a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Mode =                a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Database =            match a.TryGetResult CosmosSourceParameters.Database     with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Collection =          a.GetResult CosmosSourceParameters.Collection
+        member __.Container =          a.GetResult CosmosSourceParameters.Container
         member __.Timeout =             a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(CosmosSourceParameters.Retries, 1)
         member __.MaxRetryWaitTime =    a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5)
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,_)) as discovery = x.Discovery
-            Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Collection {collection}",
-                x.Mode, endpointUri, x.Database, x.Collection)
+            Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
+                x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; collection = x.Collection }, c.ConnectionPolicy
+            discovery, { database = x.Database; container = x.Container }, c.ConnectionPolicy
 
         member val Sink =
             match a.TryGetSubCommand() with
@@ -280,8 +280,8 @@ module CmdParser =
         | [<AltCommandLine("-s")>] Connection of string
         | [<AltCommandLine("-cm")>] ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine("-d")>] Database of string
-        | [<AltCommandLine("-c")>] Collection of string
-        | [<AltCommandLine "-a"; Unique>] LeaseCollection of string
+        | [<AltCommandLine("-c")>] Container of string
+        | [<AltCommandLine "-a"; Unique>] LeaseContainer of string
         | [<AltCommandLine("-o")>] Timeout of float
         | [<AltCommandLine("-r")>] Retries of int
         | [<AltCommandLine("-rt")>] RetriesWaitTime of int
@@ -292,21 +292,21 @@ module CmdParser =
             member a.Usage = a |> function
                 | Connection _ ->      "specify a connection string for a Cosmos account (default: envvar:EQUINOX_COSMOS_CONNECTION)."
                 | Database _ ->        "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
-                | Collection _ ->      "specify a collection name for Cosmos account (default: envvar:EQUINOX_COSMOS_COLLECTION)."
-                | LeaseCollection _ -> "specify Collection Name (in this [target] Database) for Leases collection (default: `sourcecollection` + `-aux`)."
+                | Container _ ->       "specify a Container name for Cosmos account (default: envvar:EQUINOX_COSMOS_CONTAINER)."
+                | LeaseContainer _ ->  "specify Container Name (in this [target] Database) for Leases container (default: `sourceContainer` + `-aux`)."
                 | Timeout _ ->         "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->         "specify operation retries (default: 0)."
                 | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-                | ConnectionMode _ ->  "override the connection mode (default: DirectTcp)."
+                | ConnectionMode _ ->  "override the connection mode (default: Direct)."
 #if kafka
                 | Kafka _ ->           "specify Kafka target for non-Synced categories (default: None)"
 #endif
     and CosmosSinkArguments(a : ParseResults<CosmosSinkParameters>) =
         member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.DirectTcp)
+        member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Discovery =           Discovery.FromConnectionString __.Connection
         member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
+        member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
         member __.LeaseCollection =     a.TryGetResult LeaseCollection
         member __.Timeout =             a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(CosmosSinkParameters.Retries, 0)
@@ -316,8 +316,8 @@ module CmdParser =
             /// Connection/Client identifier for logging purposes
             appName connIndex : Async<Equinox.Cosmos.Connection> =
             let (Discovery.UriAndKey (endpointUri,_masterKey)) as discovery = x.Discovery
-            Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Collection {collection}",
-                x.Mode, endpointUri, x.Database, x.Collection)
+            Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Container {container}",
+                x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
@@ -437,7 +437,7 @@ module EventV0Parser =
     /// A single Domain Event as Written by internal Equinox versions
     type [<NoEquality; NoComparison; JsonObject(ItemRequired=Required.Always)>]
         EventV0 =
-        {   /// DocDb-mandated Partition Key, must be maintained within the document
+        {   /// CosmosDB-mandated Partition Key, must be maintained within the document
             s: string // "{streamName}"
 
             /// Creation datetime (as opposed to system-defined _lastUpdated which is touched by triggers, replication etc.)
@@ -449,7 +449,7 @@ module EventV0Parser =
             /// 'i' value for the Event
             i: int64 // {index}
 
-            /// Event body, as UTF-8 encoded json ready to be injected into the Json being rendered for DocDb
+            /// Event body, as UTF-8 encoded json ready to be injected into the Json being rendered for CosmosDB
             [<JsonConverter(typeof<Equinox.Cosmos.Internal.Json.VerbatimUtf8JsonConverter>)>]
             d: byte[] }
 
@@ -491,11 +491,11 @@ let start (args : CmdParser.Arguments) =
     let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
         | Choice1Of2 cosmos ->
-            let colls = Collections(cosmos.Database, cosmos.Collection)
+            let containers = Containers(cosmos.Database, cosmos.Container)
             let connect connIndex = async {
                 let! c = cosmos.Connect "SyncTemplate" connIndex
                 let lfc = storeLog.ForContext("ConnId", connIndex)
-                return c, Equinox.Cosmos.Core.Context(c, colls, lfc) }
+                return c, Equinox.Cosmos.Core.Context(c, containers, lfc) }
             let all = Array.init args.MaxConnections connect |> Async.Parallel |> Async.RunSynchronously
             let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
             let sink, streamFilter =
@@ -516,7 +516,7 @@ let start (args : CmdParser.Arguments) =
 #endif
                 CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
                 args.CategoryFilterFunction(excludeLong=true)
-            Some (mainConn,colls),sink,streamFilter
+            Some (mainConn,containers),sink,streamFilter
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = storeLog.ForContext("ConnId", connIndex)
@@ -541,11 +541,11 @@ let start (args : CmdParser.Arguments) =
     | Choice2Of2 (srcE,spec) ->
         match maybeDstCosmos with
         | None -> failwith "ES->ES checkpointing E_NOTIMPL"
-        | Some (mainConn,colls) -> 
+        | Some (mainConn,containers) -> 
             
         let connect () = let c = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
         let resolveCheckpointStream =
-            let context = Equinox.Cosmos.Context(mainConn, colls)
+            let context = Equinox.Cosmos.Context(mainConn, containers)
             let settings = Newtonsoft.Json.JsonSerializerSettings()
             let codec = Equinox.Codec.NewtonsoftJson.Json.Create settings
             let caching =

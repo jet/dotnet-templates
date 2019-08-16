@@ -30,7 +30,7 @@ module MultiStreams =
             | Merged of Merged
             /// Removal of a set of skus
             | Removed of Removed
-            /// Addition of a collection of skus to the list
+            /// Addition of a set of skus to the [head of the] list
             | Added of Added
             /// Clearing of the list
             | Cleared

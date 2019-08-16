@@ -22,7 +22,7 @@ module Storage =
         | ES of host: string * username: string * password: string * cacheMb: int
 //#endif
 //#if cosmos
-        | DocDb of mode: Equinox.Cosmos.ConnectionMode * connectionStringWithUriAndKey: string * database: string * collection: string * cacheMb: int
+        | Cosmos of mode: Equinox.Cosmos.ConnectionMode * connectionStringWithUriAndKey: string * database: string * container: string * cacheMb: int
 //#endif
 
     /// Holds an initialized/customized/configured of the store as defined by the `Config`
@@ -83,13 +83,13 @@ module Storage =
             Instance.EventStore (conn, cache)
 //#endif
 //#if cosmos
-        | Config.DocDb (mode, connectionString, database, collection, cache) ->
+        | Config.Cosmos (mode, connectionString, database, container, cache) ->
             let cache = Cosmos.mkCache cache
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
             let gateway = Cosmos.connect "App" (mode, Equinox.Cosmos.Discovery.FromConnectionString connectionString) (timeout, retriesOn429Throttling, int timeout.TotalSeconds)
-            let collectionMapping = Equinox.Cosmos.Collections(database, collection)
-            let context = Equinox.Cosmos.Context(gateway, collectionMapping)
+            let containers = Equinox.Cosmos.Containers(database, container)
+            let context = Equinox.Cosmos.Context(gateway, containers)
             Instance.CosmosStore (context, cache)
 //#endif
 
@@ -200,26 +200,26 @@ type Startup() =
 //#if cosmos
         // AZURE COSMOSDB: Events are stored in an Azure CosmosDb Account (using the SQL API)
         // Provisioning Steps:
-        // 1) Set the 3x environment variables EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABASE, EQUINOX_COSMOS_COLLECTION
-        // 2) Provision a collection using the following command sequence:
+        // 1) Set the 3x environment variables EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABASE, EQUINOX_COSMOS_CONTAINER
+        // 2) Provision a container using the following command sequence:
         //     dotnet tool install -g Equinox.Cli
-        //     Equinox.Cli init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_COLLECTION
+        //     Equinox.Cli init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
         let storeConfig = 
-            let connectionVar, databaseVar, collectionVar = "EQUINOX_COSMOS_CONNECTION", "EQUINOX_COSMOS_DATABASE", "EQUINOX_COSMOS_COLLECTION"
+            let connectionVar, databaseVar, containerVar = "EQUINOX_COSMOS_CONNECTION", "EQUINOX_COSMOS_DATABASE", "EQUINOX_COSMOS_CONTAINER"
             let read key = Environment.GetEnvironmentVariable key |> Option.ofObj
-            match read connectionVar, read databaseVar, read collectionVar with
-            | Some connection, Some database, Some collection ->
-                let connMode = Equinox.Cosmos.ConnectionMode.DirectTcp // Best perf - select one of the others iff using .NETCore on linux or encounter firewall issues
-                Storage.Config.DocDb (connMode, connection, database, collection, cacheMb) 
+            match read connectionVar, read databaseVar, read containerVar with
+            | Some connection, Some database, Some container ->
+                let connMode = Equinox.Cosmos.ConnectionMode.Direct // Best perf - select one of the others iff using .NETCore on linux or encounter firewall issues
+                Storage.Config.Cosmos (connMode, connection, database, container, cacheMb) 
 //#if cosmosSimulator
-            | None, Some database, Some collection ->
+            | None, Some database, Some container ->
                 // alternately, you can feed in this connection string in as a parameter externally and remove this special casing
                 let wellKnownConnectionStringForCosmosDbSimulator =
                     "AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
-                Storage.Config.DocDb (Equinox.Cosmos.ConnectionMode.DirectTcp, wellKnownConnectionStringForCosmosDbSimulator, database, collection, cacheMb)
+                Storage.Config.Cosmos (Equinox.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
 //#endif
             | _ ->
-                failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar collectionVar
+                failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar containerVar
 
 //#endif
 #if (memoryStore && !cosmos && !eventStore)
