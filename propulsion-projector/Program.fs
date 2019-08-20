@@ -96,7 +96,7 @@ module CmdParser =
         member val Target = TargetInfo args
 //#endif
         member __.LeaseId =                 args.GetResult ConsumerGroupName
-        member __.Suffix =                  args.GetResult(LeaseCollectionSuffix,"-aux")
+        member __.Suffix =                  args.GetResult(LeaseContainerSuffix,"-aux")
         member __.Verbose =                 args.Contains Verbose
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
@@ -118,8 +118,8 @@ module CmdParser =
             (x.MaxReadAhead, x.ConcurrentStreamProcessors)
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
-        member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
+        member __.Broker    = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic     =     match args.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
         member __.Producers = args.GetResult(Producers,1)
         member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
 //#endif
