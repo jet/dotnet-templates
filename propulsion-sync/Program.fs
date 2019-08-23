@@ -120,7 +120,7 @@ module CmdParser =
                 Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                     x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-                srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
+                srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
                 Choice1Of2 (srcC, disco, db, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
             | Choice2Of2 srcE ->
                 let startPos = srcE.StartPos
@@ -251,13 +251,13 @@ module CmdParser =
             match a.TryGetResult Position, a.TryGetResult Chunk, a.TryGetResult Percent, a.Contains FromTail with
             | Some p, _, _, _ ->        Absolute p
             | _, Some c, _, _ ->        StartPos.Chunk c
-            | _, _, Some p, _ ->        Percentage p 
+            | _, _, Some p, _ ->        Percentage p
             | None, None, None, true -> StartPos.TailOrCheckpoint
             | None, None, None, _ ->    StartPos.StartOrCheckpoint
 
         member __.Host =                match a.TryGetResult EsSourceParameters.Host with Some x -> x | None -> envBackstop "Host"          "EQUINOX_ES_HOST"
         member __.Port =                match a.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
-        member __.Discovery =           match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host 
+        member __.Discovery =           match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
         member __.User =                match a.TryGetResult EsSourceParameters.Username with Some x -> x | None -> envBackstop "Username"  "EQUINOX_ES_USERNAME"
         member __.Password =            match a.TryGetResult EsSourceParameters.Password with Some x -> x | None -> envBackstop "Password"  "EQUINOX_ES_PASSWORD"
         member __.Timeout =             a.GetResult(EsSourceParameters.Timeout,20.) |> TimeSpan.FromSeconds
@@ -348,7 +348,7 @@ module CmdParser =
                 | Retries _ ->         "specify operation retries (default: 3)."
                 | HeartbeatTimeout _ ->"specify heartbeat timeout in seconds (default: 1.5)."
     and EsSinkArguments(a : ParseResults<EsSinkParameters>) =
-        member __.Discovery =           match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host 
+        member __.Discovery =           match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
         member __.Host =                match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
         member __.Port =                match a.TryGetResult Port       with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
         member __.User =                match a.TryGetResult Username   with Some x -> x | None -> envBackstop "Username"   "EQUINOX_ES_USERNAME"
@@ -541,8 +541,8 @@ let start (args : CmdParser.Arguments) =
     | Choice2Of2 (srcE,spec) ->
         match maybeDstCosmos with
         | None -> failwith "ES->ES checkpointing E_NOTIMPL"
-        | Some (mainConn,containers) -> 
-            
+        | Some (mainConn,containers) ->
+
         let connect () = let c = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
         let resolveCheckpointStream =
             let context = Equinox.Cosmos.Context(mainConn, containers)
@@ -551,7 +551,7 @@ let start (args : CmdParser.Arguments) =
             let caching =
                 let c = Equinox.Cosmos.Caching.Cache("SyncTemplate", sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.Snapshot (Checkpoint.Folds.isOrigin, Checkpoint.Folds.unfold)
+            let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let withNullData (e : Propulsion.Streams.IEvent<_>) =
