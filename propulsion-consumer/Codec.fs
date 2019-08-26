@@ -3,10 +3,10 @@
 open Serilog
 open System
 
-module EventCodec =
+module StreamCodec =
 
     /// Adapts a pending event record to the canonical event record interface specified by `Equinox.Codec`
-    let toCodecEvent (x : Propulsion.Streams.IEvent<'T>) =
+    let private toCodecEvent (x : Propulsion.Streams.IEvent<'T>) =
         { new Equinox.Codec.IEvent<_> with
             member __.EventType = x.EventType
             member __.Data = x.Data
@@ -14,8 +14,8 @@ module EventCodec =
             member __.Timestamp = x.Timestamp }
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : Equinox.Codec.IUnionEncoder<_,_>) (log : ILogger) (stream : string) (x : Equinox.Codec.IEvent<byte[]>) =
-        match codec.TryDecode x with
+    let tryDecode (codec : Equinox.Codec.IUnionEncoder<_,_>) (log : ILogger) (stream : string) (x : Propulsion.Streams.IEvent<byte[]>) =
+        match toCodecEvent x |> codec.TryDecode with
         | None ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
                 log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
