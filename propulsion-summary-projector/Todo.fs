@@ -48,13 +48,13 @@ type Service(handlerLog, resolve, ?maxAttempts) =
     /// Maps a ClientId to Handler for the relevant stream
     let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
 
-    /// Establish the present state of the Stream, project from that as specified by `projection`
-    let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
-        stream.QueryEx projection
+    /// Establish the present state of the Stream, project from that as specified by `projection` (using QueryEx so we can determine the version in effect)
+    let queryEx (Stream stream) (projection : Folds.State -> 't) : Async<int64*'t> =
+        stream.QueryEx(fun v s -> v, projection s)
 
     /// Load and render the state
-    member __.Query clientId (render : (int64 * Folds.State) -> 'res) : Async<'res> =
-        query clientId render
+    member __.QueryWithVersion clientId (render : Folds.State -> 'res) : Async<int64*'res> =
+        queryEx clientId render
 
 module Summary =
 
@@ -76,5 +76,5 @@ module Summary =
             completed = item.completed }
 
     /// List all open items
-    let summarize (service : Service) clientId : Async<SummaryEvent> =
-            service.Query clientId (fun (version,state) -> Summary { items = [| for x in state.items -> render x |]})
+    let summarize (service : Service) clientId : Async<int64*SummaryEvent> =
+            service.QueryWithVersion clientId (fun state -> Summary { items = [| for x in state.items -> render x |]})

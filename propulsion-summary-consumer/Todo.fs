@@ -37,11 +37,11 @@ module Commands =
     type Command =
         | Consume of version: int64 * Events.SummaryData
 
-    let interpret command (state : Folds.State) =
+    let decide command (state : Folds.State) =
         match command with
         | Consume (version,value) ->
-            if state.version <= version then [] else
-            [Events.Ingested {| version = version; value = value |}]
+            if state.version <= version then false,[] else
+            true,[Events.Ingested {| version = version; value = value |}]
 
 let [<Literal>]categoryId = "TodoSummary"
 
@@ -50,8 +50,8 @@ type Item = { id: int; order: int; title: string; completed: bool }
 type Service(handlerLog, resolve, ?maxAttempts) =
     let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toStringN clientId)
     let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
-    let execute (Stream stream) command : Async<unit> =
-        stream.Transact(Commands.interpret command)
+    let execute (Stream stream) command : Async<bool> =
+        stream.Transact(Commands.decide command)
     let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
         stream.Query projection
     let render : Folds.State -> Item[] = function
@@ -63,9 +63,8 @@ type Service(handlerLog, resolve, ?maxAttempts) =
                     completed = x.completed } |]
         | _ -> [||]
 
-    member __.Ingest clientId (version,value) =
+    member __.Ingest clientId (version,value) : Async<bool> =
         execute clientId <| Commands.Consume (version,value)
 
-    /// Read most recent projected state
     member __.Read clientId: Async<Item[]> =
         query clientId render

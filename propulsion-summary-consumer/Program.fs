@@ -1,8 +1,8 @@
 ﻿module ConsumerTemplate.Program
 
+open Equinox.Cosmos
 open Serilog
 open System
-open Equinox.Cosmos
 
 module CmdParser =
     open Argu
@@ -16,9 +16,9 @@ module CmdParser =
     module Cosmos =
         type [<NoEquality; NoComparison>] Parameters =
             | [<AltCommandLine "-s">] Connection of string
-            | [<AltCommandLine "-cm">] ConnectionMode of Equinox.Cosmos.ConnectionMode
+            | [<AltCommandLine "-cm">] ConnectionMode of ConnectionMode
             | [<AltCommandLine "-d">] Database of string
-            | [<AltCommandLine "-c">] Collection of string
+            | [<AltCommandLine "-c">] Container of string
             | [<AltCommandLine "-o">] Timeout of float
             | [<AltCommandLine "-r">] Retries of int
             | [<AltCommandLine "-rt">] RetriesWaitTime of int
@@ -27,29 +27,29 @@ module CmdParser =
                     match a with
                     | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
                     | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
-                    | Database _ ->         "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
-                    | Collection _ ->       "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION, test)."
+                    | Database _ ->         "specify a database name for Cosmos store (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
+                    | Container _ ->        " specify a container name for Cosmos store (defaults: envvar:EQUINOX_COSMOS_CONTAINER)."
                     | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
                     | Retries _ ->          "specify operation retries (default: 1)."
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
         type Arguments(a : ParseResults<Parameters>) =
-            member __.Mode = a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
+            member __.Mode = a.GetResult(ConnectionMode,ConnectionMode.Direct)
             member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
             member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-            member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
+            member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
 
             member __.Timeout = a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
             member __.Retries = a.GetResult(Retries, 1)
             member __.MaxRetryWaitTime = a.GetResult(RetriesWaitTime, 5)
 
-            member x.BuildConnectionDetails() =
+            member x.Connect(clientId) = async {
                 let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
-                Log.Information("CosmosDb {mode} {endpointUri} Database {database} Collection {collection}.",
-                    x.Mode, endpointUri, x.Database, x.Collection)
+                Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
+                    x.Mode, endpointUri, x.Database, x.Container)
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
-                let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-                (discovery, connector, x.Database, x.Collection)
+                let! connection = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode).Connect(clientId,discovery)
+                return Context(connection, x.Database, x.Container) }
 
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -101,16 +101,14 @@ module Logging =
                         else c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}|{Properties}{NewLine}{Exception}")
             |> fun c -> c.CreateLogger()
 
-module TodoSummaryRepository =
-    let serializationSettings = Newtonsoft.Json.JsonSerializerSettings()
-    let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.NewtonsoftJson.Json.Create<'Union>(serializationSettings)
+module Repository =
     let codec = genCodec<Todo.Events.Event>()
     let cache = Caching.Cache ("ConsumerTemplate", 10)
     let resolve context =
         // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
-        let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Todo.Folds.isOrigin,Todo.Folds.transmute)
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-        Equinox.Cosmos.Resolver(context, codec, Todo.Folds.fold, Todo.Folds.initial, cacheStrategy, accessStrategy).Resolve
+        let accessStrategy = AccessStrategy.RollingUnfolds (Todo.Folds.isOrigin,Todo.Folds.transmute)
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+        Resolver(context, codec, Todo.Folds.fold, Todo.Folds.initial, cacheStrategy, accessStrategy).Resolve
 
 module Summary =
 
@@ -124,54 +122,54 @@ module Summary =
     type SummaryEvent =
         | Summary   of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
-    let serializationSettings = Newtonsoft.Json.JsonSerializerSettings()
-    let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.NewtonsoftJson.Json.Create<'Union>(serializationSettings)
     let codec = genCodec<SummaryEvent>()
+
+[<RequireQualifiedAccess>]
+type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of count : int
+
+type Stats(log, ?statsInterval, ?stateInterval) =
+    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
+
+    let mutable (ok, na, redundant) = 0, 0, 0
+
+    override __.HandleOk res = res |> function
+        | Outcome.Ok count -> ok <- ok + 1; redundant <- redundant + count - 1
+        | Outcome.Skipped count -> redundant <- redundant + count
+        | Outcome.NoRelevantEvents count -> na <- na + count
+
+    override __.DumpStats () =
+        if ok <> 0 || na <> 0 || redundant <> 0 then
+            log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
+            ok <- 0; na <- 0 ; redundant <- 0
 
 let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose
-    let discovery, connector, database, collection = args.Cosmos.BuildConnectionDetails()
-    let (broker,topic) = args.Broker, args.Topic
-    let connection = Async.RunSynchronously <| connector.Connect("ProjectorTemplate",discovery)
-    let context = Context(Gateway(connection, BatchingPolicy()), Containers(database,collection))
-    let service = Todo.Service(Log.ForContext<Todo.Service>(), TodoSummaryRepository.resolve context)
+    let context = args.Cosmos.Connect("ProjectorTemplate") |> Async.RunSynchronously
+    let service = Todo.Service(Log.ForContext<Todo.Service>(), Repository.resolve context)
     let (|ClientId|) (value : string) = ClientId.parse value
-    let (|DecodeNewest|_|) (codec : Equinox.Codec.IUnionEncoder<_,_>) (span : Propulsion.Streams.StreamSpan<_>) =
-        span.events
-        |> Seq.mapi (fun i x -> span.index + int64 i, EventCodec.toCodecEvent x)
-        |> Seq.rev
-        |> Seq.tryPick (fun (v,e) -> match codec.TryDecode e with Some d -> Some (v,d) | None -> None)
+    let (|DecodeNewest|_|) (codec : Equinox.Codec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) =
+        StreamCodec.tryPickNewest Log.Logger codec (stream,span)
     let map : Summary.SummaryEvent -> Todo.Events.SummaryData = function
         | Summary.Summary x ->
             { items =
                 [| for x in x.items ->
-                    { id = x.id; order = x.order; title = x.title; completed = x.completed }
-            |]}
-    let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<unit> = async {
-        match stream, span with
-        | Category ("TodoSummary", ClientId clientId), (DecodeNewest Summary.codec (version,summary)) ->
-            do! service.Ingest clientId (version,map summary)
-        | _ -> () // TODO log about getting an unexpected event
+                    { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
+    let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+        match stream, (stream,span) with
+        | Category ("TodoSummary", ClientId clientId), DecodeNewest Summary.codec (version,summary) ->
+            match! service.Ingest clientId (version,map summary) with
+            | true -> return Outcome.Ok span.events.Length
+            | false -> return Outcome.Skipped span.events.Length
+        | _ -> return Outcome.NoRelevantEvents span.events.Length
     }
-    let categorize = id
-    let projector =
-        Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, mapStreamChangesToKafkaMessage, producer, categorize, statsInterval=TimeSpan.FromMinutes 1.)
-    let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
-    let runSourcePipeline =
-        CosmosSource.Run(
-            Log.Logger, discovery, connector.ClientOptions, source,
-            aux, leaseId, startFromTail, createObserver,
-            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-    runSourcePipeline, projector
-
-let start (args : CmdParser.Arguments) =
-    Logging.initialize args.VerboseC:\Users\f0f00db\Projects\dotnet-templates\propulsion-summary-consumer\Program.fs
-    let clientId, mem, stats = "ProjectorTemplate", args.MaxInFlightBytes, args.LagFrequency
-    let c = Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(clientId, args.Broker, [args.Topic], args.Group, maxInFlightBytes = mem, ?statisticsInterval = stats)
-    //MultiMessages.BatchesSync.Start(c)
-    //MultiMessages.BatchesAsync.Start(c, args.MaxDop)
-    //NultiMessages.Parallel.Start(c, args.MaxDop)
-    MultiStreams.start(c, args.MaxDop)
+    let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
+        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parseStreamSummaries(spanJson)
+    let config =
+        Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
+            "ConsumerTemplate", args.Broker, [args.Topic], args.Group,
+            maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
+    let stats = Stats(Log.Logger)
+    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, args.MaxDop, parseStreamSummaries, ingestIncomingSummaryMessage, stats, category)
 
 [<EntryPoint>]
 let main argv =
