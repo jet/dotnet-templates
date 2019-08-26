@@ -17,10 +17,10 @@
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.4.0" />
     <PackageReference Include="Destructurama.FSharp.NetCore" Version="1.0.14" />
-    <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc3" />
-    <PackageReference Include="Equinox.EventStore" Version="2.0.0-rc3" />
-    <PackageReference Include="Equinox.MemoryStore" Version="2.0.0-rc3" />
-    <PackageReference Include="Equinox.Tools.TestHarness" Version="2.0.0-rc3" />
+    <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc4" />
+    <PackageReference Include="Equinox.EventStore" Version="2.0.0-rc4" />
+    <PackageReference Include="Equinox.MemoryStore" Version="2.0.0-rc4" />
+    <PackageReference Include="Equinox.Tools.TestHarness" Version="2.0.0-rc4" />
     <PackageReference Include="FSharp.UMX" Version="1.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="2.1.1" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />

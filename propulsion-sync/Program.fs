@@ -112,7 +112,7 @@ module CmdParser =
                         | None, None ->     srcC.Discovery, { database = srcC.Database; container = srcC.Container + "-aux" }
                         | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
                         | None, Some dc ->  dstC.Discovery, { database = dstC.Database; container = dc }
-                        | Some _, Some _ -> raise (InvalidArguments "LeaseCollectionSource and LeaseCollectionDestination are mutually exclusive - can only store in one database")
+                        | Some _, Some _ -> raise (InvalidArguments "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
                     | Choice2Of2 _dstE ->
                         let lc = match srcC.LeaseContainer with Some sc -> sc | None -> srcC.Container + "-aux"
                         srcC.Discovery, { database = srcC.Database; container = lc }
@@ -136,7 +136,7 @@ module CmdParser =
         | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-m"; Unique>] MaxDocuments of int
         | [<AltCommandLine "-l"; Unique>] LagFreqM of float
-        | [<AltCommandLine "-a"; Unique>] LeaseCollection of string
+        | [<AltCommandLine "-a"; Unique>] LeaseContainer of string
 
         | [<AltCommandLine "-s">] Connection of string
         | [<AltCommandLine "-cm">] ConnectionMode of Equinox.Cosmos.ConnectionMode
@@ -186,7 +186,7 @@ module CmdParser =
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; container = x.Container }, c.ConnectionPolicy
+            discovery, { database = x.Database; container = x.Container }, c.ClientOptions
 
         member val Sink =
             match a.TryGetSubCommand() with
@@ -307,7 +307,7 @@ module CmdParser =
         member __.Discovery =           Discovery.FromConnectionString __.Connection
         member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
         member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
-        member __.LeaseCollection =     a.TryGetResult LeaseCollection
+        member __.LeaseContainer =      a.TryGetResult LeaseContainer
         member __.Timeout =             a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(CosmosSinkParameters.Retries, 0)
         member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
@@ -527,14 +527,14 @@ let start (args : CmdParser.Arguments) =
             None,sink,args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency) ->
-        let discovery, source, connectionPolicy = srcC.BuildConnectionDetails()
+        let discovery, source, clientOptions = srcC.BuildConnectionDetails()
 #if marveleqx
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize streamFilter))
 #else
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter categorize streamFilter))
 #endif
         let runPipeline =
-            CosmosSource.Run(log, discovery, connectionPolicy, source,
+            CosmosSource.Run(log, discovery, clientOptions, source,
                 aux, leaseId, startFromHere, createObserver,
                 ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxDiscovery=auxDiscovery)
         sink,runPipeline
@@ -551,7 +551,8 @@ let start (args : CmdParser.Arguments) =
             let caching =
                 let c = Equinox.Cosmos.Caching.Cache("SyncTemplate", sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
+            let transmute' e s = let e,u = Checkpoint.Folds.transmute e s in e,List.singleton u // TODO fix at source
+            let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, transmute')
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let withNullData (e : Propulsion.Streams.IEvent<_>) =

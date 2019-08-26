@@ -215,7 +215,7 @@ let start (args : CmdParser.Arguments) =
 #endif
     let runSourcePipeline =
         CosmosSource.Run(
-            Log.Logger, discovery, connector.ConnectionPolicy, source,
+            Log.Logger, discovery, connector.ClientOptions, source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     runSourcePipeline, projector
