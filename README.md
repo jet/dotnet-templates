@@ -19,6 +19,10 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 ## Templates combining usage of Equinox and Propulsion
 
+- [`summaryProjector`](propulsion-summary-projector/README.md) - Boilerplate for an Azure CosmosDb ChangeFeedProcessor generating versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed from an `Equinox.Cosmos` store using `Propulsion.Cosmos`.
+
+- [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new summaryProjector`)
+
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
 ## Walkthrough
@@ -52,6 +56,16 @@ To use from the command line, the outline is:
     # ... to add a Consumer (proProjector -k emits to Kafka and hence implies having a Consumer)
     md -p ../Consumer | Set-Location
     dotnet new proConsumer
+    start README.md
+
+    # ... to add a Summary Projector
+    md -p ../SummaryProjector | Set-Location
+    dotnet new summaryProjector
+    start README.md
+
+    # ... to add a Summary Consumer (ingesting output from `summaryProjector`)
+    md -p ../SummaryConsumer | Set-Location
+    dotnet new summaryConsumer
     start README.md
 
     # ... to add a Testbed

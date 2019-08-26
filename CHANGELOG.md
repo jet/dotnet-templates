@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `summaryProjector`, `summaryConsumer` templates providing a baseline for projecting summaries between autonomous bounded contexts: [#29](https://github.com/jet/dotnet-templates/pull/29) [@fnipo](https://github.com/fnipo)
+
 ### Changed
 ### Removed
 ### Fixed

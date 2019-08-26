@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="README.md" />
     <Compile Include="Codec.fs" />
     <Compile Include="ClientId.fs" />
     <Compile Include="Todo.fs" />
-    <None Include="README.md" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
