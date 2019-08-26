@@ -6,16 +6,14 @@
     "Equinox",
     "Propulsion",
     "CosmosDb",
-    "ChangeFeed",
-    "ChangeFeedProcessor",
     "Kafka"
   ],
   "tags": {
     "language": "F#"
   },
-  "identity": "Propulsion.Template.SummaryProjector",
-  "name": "Propulsion/Equinox Summary Projector",
-  "shortName": "summaryProjector",
-  "sourceName": "ProjectorTemplate",
+  "identity": "Propulsion.Template.SummaryConsumer",
+  "name": "Propulsion/Equinox Summary Consumer",
+  "shortName": "summaryConsumer",
+  "sourceName": "ConsumerTemplate",
   "preferNameDirectory": true
 }
