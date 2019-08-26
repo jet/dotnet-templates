@@ -61,10 +61,11 @@ module Logging =
 
 let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose
-    let c = Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
-        "ConsumerTemplate",
-        args.Broker, [args.Topic], args.Group,
-        maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
+    let c =
+        Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
+            "ConsumerTemplate",
+            args.Broker, [args.Topic], args.Group,
+            maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     //MultiMessages.BatchesSync.Start(c)
     //MultiMessages.BatchesAsync.Start(c, args.MaxDop)
     //NultiMessages.Parallel.Start(c, args.MaxDop)

@@ -17,6 +17,8 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 - [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion). (typically consuming from an app produced with `dotnet new proProjector -k`)
 
+## Templates combining usage of Equinox and Propulsion
+
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
 ## Walkthrough
@@ -42,18 +44,18 @@ To use from the command line, the outline is:
     start readme.md
 
     # ... to add a Projector
-    md -p ../tools/My.Tools.Projector | Set-Location
+    md -p ../Projector | Set-Location
     # (-k emits to Kafka and hence implies having a Consumer)
     dotnet new proProjector -k
     start README.md
 
     # ... to add a Consumer (proProjector -k emits to Kafka and hence implies having a Consumer)
-    md -p ../../My.Consumer | Set-Location
+    md -p ../Consumer | Set-Location
     dotnet new proConsumer
     start README.md
 
     # ... to add a Testbed
-    md -p ../tools/My.Tools.Testbed | Set-Location
+    md -p ../My.Tools.Testbed | Set-Location
     # -e -c # add EventStore and CosmosDb suppport to got with the default support for MemoryStore
     dotnet new eqxtestbed -c -e
     start README.md
@@ -65,10 +67,10 @@ To use from the command line, the outline is:
     dotnet run -p Testbed -- run -d 2 cosmos
 
 	# ... to add a Sync tool
-    md -p ../tools/My.Tools.Sync | Set-Location
+    md -p ../My.Tools.Sync | Set-Location
 	# (-m includes an example of how to upconvert from similar event-sourced representations in an existing store)
 	dotnet new proSync -m
-	start Sync/README.md
+	start README.md
 
 ## CONTRIBUTING
 
