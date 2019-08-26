@@ -14,19 +14,19 @@ namespace TodoBackendTemplate
     public class CosmosConfig
     {
         public CosmosConfig(ConnectionMode mode, string connectionStringWithUriAndKey, string database,
-            string collection, int cacheMb)
+            string container, int cacheMb)
         {
             Mode = mode;
             ConnectionStringWithUriAndKey = connectionStringWithUriAndKey;
             Database = database;
-            Collection = collection;
+            Container = container;
             CacheMb = cacheMb;
         }
 
         public ConnectionMode Mode { get; }
         public string ConnectionStringWithUriAndKey { get; }
         public string Database { get; }
-        public string Collection { get; }
+        public string Container { get; }
         public int CacheMb { get; }
     }
 
@@ -47,9 +47,9 @@ namespace TodoBackendTemplate
             {
                 var gateway = await Connect("App", config.Mode, discovery, timeout, retriesOn429Throttling,
                     (int)timeout.TotalSeconds);
-                var collectionMapping = new Collections(config.Database, config.Collection);
+                var containers = new Containers(config.Database, config.Container);
 
-                _store = new Context(gateway, collectionMapping);
+                _store = new Context(gateway, containers);
             };
         }
 

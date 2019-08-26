@@ -1,4 +1,5 @@
-﻿module ConsumerTemplate.Publisher
+﻿// TODO replace with summary-projector template
+module ConsumerTemplate.Publisher
 
 open FSharp.UMX
 open Newtonsoft.Json
@@ -36,7 +37,7 @@ module Input =
         interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
 
     let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(serializerSettings)
-    let tryDecode = EventCodec.tryDecode codec
+    let tryDecode = StreamCodec.tryDecode codec
     let [<Literal>] CategoryId = "Inventory"
 
 module Output =
@@ -91,7 +92,7 @@ module Processor =
 
         member __.Handle(streamName : string, span : Propulsion.Streams.StreamSpan<_>) = async {
             let mutable confirms, rejects = 0, 0
-            for x in span.events |> Seq.choose (EventCodec.toCodecEvent >> Input.tryDecode log streamName) do
+            for x in span.events |> Seq.choose (Input.tryDecode log streamName) do
                 let! c, r = emit x
                 confirms <- confirms + c; rejects <- rejects + r
             return Processed (confirms, rejects)

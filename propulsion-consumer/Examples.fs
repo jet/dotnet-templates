@@ -30,13 +30,13 @@ module MultiStreams =
             | Merged of Merged
             /// Removal of a set of skus
             | Removed of Removed
-            /// Addition of a collection of skus to the list
+            /// Addition of a set of skus to the [head of the] list
             | Added of Added
             /// Clearing of the list
             | Cleared
             interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
         let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
-        let tryDecode = EventCodec.tryDecode codec
+        let tryDecode = StreamCodec.tryDecode codec
         let [<Literal>] CategoryId = "SavedForLater"
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
@@ -49,7 +49,7 @@ module MultiStreams =
             | Unfavorited       of Unfavorited
             interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
         let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
-        let tryDecode = EventCodec.tryDecode codec
+        let tryDecode = StreamCodec.tryDecode codec
         let [<Literal>] CategoryId = "Favorites"
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int | OtherMessage of string
@@ -63,7 +63,7 @@ module MultiStreams =
 
         // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
         let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|UnknownMessage|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
-            let decode tryDecode = span.events |> Seq.choose (EventCodec.toCodecEvent >> tryDecode log streamName) |> Array.ofSeq
+            let decode tryDecode = span.events |> Seq.choose (tryDecode log streamName) |> Array.ofSeq
             match category streamName with
             | Category (Favorites.CategoryId, id) ->
                 let s = match faves.TryGetValue id with true, value -> value | false, _ -> new HashSet<SkuId>()
@@ -163,7 +163,7 @@ module MultiMessages =
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
         member private __.Interpret(streamName : string, spanJson) : seq<Message> = seq {
             let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse(spanJson)
-            let decode tryDecode wrap = span.e |> Seq.choose (EventCodec.toCodecEvent >> tryDecode log streamName >> Option.map wrap)
+            let decode tryDecode wrap = span.e |> Seq.choose (tryDecode log streamName >> Option.map wrap)
             match streamName with
             | Category (Favorites.CategoryId,_) -> yield! decode Favorites.tryDecode Fave
             | Category (SavedForLater.CategoryId,_) -> yield! decode SavedForLater.tryDecode Save

@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Target `Propulsion`.* `1.0.1`, `Equinox`.* `2.0.0-rc4` (handling name changes, esp wrt Collection->Container terminology) 
+
 ### Removed
 ### Fixed
 

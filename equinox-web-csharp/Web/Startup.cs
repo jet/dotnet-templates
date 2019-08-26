@@ -74,21 +74,21 @@ namespace TodoBackendTemplate.Web
 #if cosmos
             // AZURE COSMOSDB: Events are stored in an Azure CosmosDb Account (using the SQL API)
             // Provisioning Steps:
-            // 1) Set the 3x environment variables EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABASE, EQUINOX_COSMOS_COLLECTION
-            // 2) Provision a collection using the following command sequence:
+            // 1) Set the 3x environment variables EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABASE, EQUINOX_COSMOS_CONTAINER
+            // 2) Provision a container using the following command sequence:
             //     dotnet tool install -g Equinox.Cli
-            //     Equinox.Cli init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_COLLECTION
+            //     Equinox.Cli init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
             const string connVar = "EQUINOX_COSMOS_CONNECTION";
             var conn = Environment.GetEnvironmentVariable(connVar);
             const string dbVar = "EQUINOX_COSMOS_DATABASE";
             var db = Environment.GetEnvironmentVariable(dbVar);
-            const string collVar = "EQUINOX_COSMOS_COLLECTION";
-            var coll = Environment.GetEnvironmentVariable(collVar);
-            if (conn == null || db == null || coll == null)
+            const string containerVar = "EQUINOX_COSMOS_CONTAINER";
+            var container = Environment.GetEnvironmentVariable(containerVar);
+            if (conn == null || db == null || container == null)
                 throw new Exception(
-                    $"Event Storage subsystem requires the following Environment Variables to be specified: {connVar} {dbVar}, {collVar}");
-            var connMode = Equinox.Cosmos.ConnectionMode.DirectTcp;
-            var config = new CosmosConfig(connMode, conn, db, coll, cacheMb);
+                    $"Event Storage subsystem requires the following Environment Variables to be specified: {connVar} {dbVar}, {containerVar}");
+            var connMode = Equinox.Cosmos.ConnectionMode.Direct;
+            var config = new CosmosConfig(connMode, conn, db, container, cacheMb);
             return new CosmosContext(config);
 #endif
 #if (!cosmos && !eventStore)

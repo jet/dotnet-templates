@@ -19,7 +19,7 @@ module CmdParser =
             | [<AltCommandLine "-s">] Connection of string
             | [<AltCommandLine "-cm">] ConnectionMode of Equinox.Cosmos.ConnectionMode
             | [<AltCommandLine "-d">] Database of string
-            | [<AltCommandLine "-c">] Collection of string
+            | [<AltCommandLine "-c">] Container of string
             | [<AltCommandLine "-o">] Timeout of float
             | [<AltCommandLine "-r">] Retries of int
             | [<AltCommandLine "-rt">] RetriesWaitTime of int
@@ -27,17 +27,17 @@ module CmdParser =
                 member a.Usage =
                     match a with
                     | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
-                    | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
-                    | Database _ ->         "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
-                    | Collection _ ->       "specify a collection name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_COLLECTION, test)."
+                    | ConnectionMode _ ->   "override the connection mode (default: Direct)."
+                    | Database _ ->         "specify a database name for store (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
+                    | Container _ ->        "specify a container name for store (defaults: envvar:EQUINOX_COSMOS_CONTAINER, test)."
                     | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
                     | Retries _ ->          "specify operation retries (default: 1)."
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
         type Arguments(a : ParseResults<Parameters>) =
-            member __.Mode = a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.DirectTcp)
+            member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
             member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
             member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-            member __.Collection =          match a.TryGetResult Collection  with Some x -> x | None -> envBackstop "Collection" "EQUINOX_COSMOS_COLLECTION"
+            member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
 
             member __.Timeout = a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
             member __.Retries = a.GetResult(Retries, 1)
@@ -45,18 +45,18 @@ module CmdParser =
 
             member x.BuildConnectionDetails() =
                 let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
-                Log.Information("CosmosDb {mode} {endpointUri} Database {database} Collection {collection}.",
-                    x.Mode, endpointUri, x.Database, x.Collection)
+                Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
+                    x.Mode, endpointUri, x.Database, x.Container)
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
                 let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-                discovery, connector, { database = x.Database; collection = x.Collection }
+                discovery, connector, { database = x.Database; container = x.Container }
 
     [<NoEquality; NoComparison>]
     type Parameters =
         (* ChangeFeed Args*)
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
-        | [<AltCommandLine "-as"; Unique>] LeaseCollectionSuffix of string
+        | [<AltCommandLine "-as"; Unique>] LeaseContainerSuffix of string
         | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-m"; Unique>] MaxDocuments of int
         | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
@@ -76,7 +76,7 @@ module CmdParser =
             member a.Usage =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | LeaseCollectionSuffix _ -> "specify Collection Name suffix for Leases collection (default: `-aux`)."
+                | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container (default: `-aux`)."
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | MaxPendingBatches _ ->    "maximum number of batches to let processing get ahead of completion. Default: 64"
@@ -96,30 +96,30 @@ module CmdParser =
         member val Target = TargetInfo args
 //#endif
         member __.LeaseId =                 args.GetResult ConsumerGroupName
-        member __.Suffix =                  args.GetResult(LeaseCollectionSuffix,"-aux")
+        member __.Suffix =                  args.GetResult(LeaseContainerSuffix,"-aux")
         member __.Verbose =                 args.Contains Verbose
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.MaxReadAhead =            args.GetResult(MaxPendingBatches,64)
         member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,1024)
         member __.LagFrequency =            args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member __.AuxCollectionName =       __.Cosmos.Collection + __.Suffix
+        member __.AuxContainerName =       __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
             | None ->
-                Log.Information("Processing {leaseId} in {auxCollName} without document count limit (<= {maxPending} pending) using {dop} processors",
-                    x.LeaseId, x.AuxCollectionName, x.MaxReadAhead, x.ConcurrentStreamProcessors)
+                Log.Information("Processing {leaseId} in {auxContainerName} without document count limit (<= {maxPending} pending) using {dop} processors",
+                    x.LeaseId, x.AuxContainerName, x.MaxReadAhead, x.ConcurrentStreamProcessors)
             | Some lim ->
-                Log.Information("Processing {leaseId} in {auxCollName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors",
-                    x.LeaseId, x.AuxCollectionName, lim, x.MaxReadAhead, x.ConcurrentStreamProcessors)
+                Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors",
+                    x.LeaseId, x.AuxContainerName, lim, x.MaxReadAhead, x.ConcurrentStreamProcessors)
             if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
-            { database = x.Cosmos.Database; collection = x.AuxCollectionName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.LagFrequency,
+            { database = x.Cosmos.Database; container = x.AuxContainerName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.LagFrequency,
             (x.MaxReadAhead, x.ConcurrentStreamProcessors)
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
-        member __.Broker = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic = match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
+        member __.Broker    = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic     =     match args.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
         member __.Producers = args.GetResult(Producers,1)
         member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
 //#endif
@@ -215,7 +215,7 @@ let start (args : CmdParser.Arguments) =
 #endif
     let runSourcePipeline =
         CosmosSource.Run(
-            Log.Logger, discovery, connector.ConnectionPolicy, source,
+            Log.Logger, discovery, connector.ClientOptions, source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     runSourcePipeline, projector

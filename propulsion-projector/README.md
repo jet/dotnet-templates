@@ -22,15 +22,15 @@ This project was generated using:
 
         $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
         $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
-        $env:EQUINOX_COSMOS_COLLECTION="equinox-test" # or use - c
+        $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use - c
 
-1. Use the `eqx` tool to initialize and then run some transactions in a CosmosDb collection
+1. Use the `eqx` tool to initialize and then run some transactions in a CosmosDb container
 
         dotnet tool install -g Equinox.Tool # only needed once
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
 
-        # generate a cosmos collection to store events in
+        # generate a cosmos container to store events in
         eqx init -ru 1000 cosmos
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
@@ -45,7 +45,7 @@ This project was generated using:
 
         $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
 
-        # `default` defines the Projector Group identity - each id has separated state in the aux collection (aka LeaseId)
+        # `default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
         # `-md 1000` sets the change feed maximum document limit to 1000
         # `-t topic0` identifies the Kafka topic to which the Projector should write
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
@@ -60,7 +60,7 @@ This project was generated using:
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
 
-        # `default` defines the Projector Group identity - each id has separated state in the aux collection (aka LeaseId)
+        # `default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
         # `-m 1000` sets the max batch size to 1000
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         dotnet run -- default -m 1000 cosmos
