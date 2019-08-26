@@ -1,4 +1,5 @@
-﻿module ConsumerTemplate.Publisher
+﻿// TODO replace with summary-projector template
+module ConsumerTemplate.Publisher
 
 open FSharp.UMX
 open Newtonsoft.Json
