@@ -6,7 +6,7 @@ open System
 module Guid =
     let inline toStringN (x : Guid) = x.ToString "N"
 
-/// CartId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
+/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =

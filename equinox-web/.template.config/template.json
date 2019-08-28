@@ -62,7 +62,8 @@
           "condition": "(!todos)",
           "exclude": [
             "*/Controllers/**/*",
-            "**/TodosService.fs",
+            "**/Ids.fs",
+            "**/Todo.fs",
             "README.md"
           ]
         },
