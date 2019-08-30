@@ -34,9 +34,9 @@ module CmdParser =
 
     type Arguments(args : ParseResults<Parameters>) =
         member __.Broker =              Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic =               match args.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
-        member __.Group =               match args.TryGetResult Group with Some x -> x | None -> envBackstop "Group" "PROPULSION_KAFKA_GROUP"
-        member __.MaxDop =              match args.TryGetResult MaxDop with Some x -> x | None -> 1024
+        member __.Topic =                   match args.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
+        member __.Group =                   match args.TryGetResult Group  with Some x -> x | None -> envBackstop "Group" "PROPULSION_KAFKA_GROUP"
+        member __.MaxDop =                  match args.TryGetResult MaxDop with Some x -> x | None -> 1024
         member __.MaxInFlightBytes =    (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
         member __.LagFrequency =        args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.Verbose =             args.Contains Verbose

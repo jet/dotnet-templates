@@ -1,13 +1,11 @@
 using Equinox;
 using Equinox.Cosmos;
-using Equinox.Codec.NewtonsoftJson;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Equinox.Codec;
 
 namespace TodoBackendTemplate
 {
@@ -65,7 +63,7 @@ namespace TodoBackendTemplate
         }
 
         public override Func<Target,Equinox.Store.IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            IUnionEncoder<TEvent, byte[]> codec,
+            FsCodec.IUnionEncoder<TEvent, byte[]> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,

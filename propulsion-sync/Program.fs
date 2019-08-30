@@ -175,7 +175,7 @@ module CmdParser =
         member __.Discovery =           Discovery.FromConnectionString __.Connection
         member __.Mode =                a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Database =            match a.TryGetResult CosmosSourceParameters.Database     with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Container =          a.GetResult CosmosSourceParameters.Container
+        member __.Container =           a.GetResult CosmosSourceParameters.Container
         member __.Timeout =             a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(CosmosSourceParameters.Retries, 1)
         member __.MaxRetryWaitTime =    a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5)
@@ -375,10 +375,10 @@ module CmdParser =
                 | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
                 | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
     and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
-        member __.Broker = Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic = match a.TryGetResult Topic with Some x -> x | None -> envBackstop "Topic" "PROPULSION_KAFKA_TOPIC"
-        member __.Producers = a.GetResult(Producers,1)
-        member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
+        member __.Broker =                  Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic =                       match a.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
+        member __.Producers =               a.GetResult(Producers,1)
+        member x.BuildTargetParams() =      x.Broker, x.Topic, x.Producers
 #endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -450,8 +450,13 @@ module EventV0Parser =
             i: int64 // {index}
 
             /// Event body, as UTF-8 encoded json ready to be injected into the Json being rendered for CosmosDB
-            [<JsonConverter(typeof<Equinox.Cosmos.Internal.Json.VerbatimUtf8JsonConverter>)>]
+            [<JsonConverter(typeof<FsCodec.NewtonsoftJson.VerbatimUtf8JsonConverter>)>]
             d: byte[] }
+        interface FsCodec.IEvent<byte[]> with
+            member x.EventType = x.t
+            member x.Data = x.d
+            member __.Meta = null
+            member x.Timestamp = x.c
 
     type Microsoft.Azure.Documents.Document with
         member document.Cast<'T>() =
@@ -459,18 +464,10 @@ module EventV0Parser =
             tmp.SetPropertyValue("content", document)
             tmp.GetPropertyValue<'T>("content")
 
-    /// Maps fields in an Equinox V0 Event to the interface defined by the Propulsion.Streams library
-    let (|PropulsionEvent|) (x: EventV0) =
-        { new Propulsion.Streams.IEvent<_> with
-            member __.EventType = x.t
-            member __.Data = x.d
-            member __.Meta = null
-            member __.Timestamp = x.c }
-
     /// We assume all Documents represent Events laid out as above
     let parse (d : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> =
-        let (PropulsionEvent e) as x = d.Cast<EventV0>()
-        { stream = x.s; index = x.i; event = e } : _
+        let e = d.Cast<EventV0>()
+        { stream = e.s; index = e.i; event = e } : _
 
 let transformV0 categorize catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
@@ -504,9 +501,10 @@ let start (args : CmdParser.Arguments) =
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let (broker,topic, producers) = kafka.BuildTargetParams()
-                    let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) =
-                        let rendered = Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream span
-                        Newtonsoft.Json.JsonConvert.SerializeObject(rendered)
+                    let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) = async {
+                        return span
+                            |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
+                            |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize }
                     let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
                     StreamsProducerSink.Start(
                         Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer, categorize,
@@ -546,8 +544,7 @@ let start (args : CmdParser.Arguments) =
         let connect () = let c = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
         let resolveCheckpointStream =
             let context = Equinox.Cosmos.Context(mainConn, containers)
-            let settings = Newtonsoft.Json.JsonSerializerSettings()
-            let codec = Equinox.Codec.NewtonsoftJson.Json.Create settings
+            let codec = FsCodec.NewtonsoftJson.Codec.Create()
             let caching =
                 let c = Equinox.Cosmos.Caching.Cache("SyncTemplate", sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
@@ -555,12 +552,8 @@ let start (args : CmdParser.Arguments) =
             let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, transmute')
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
-        let withNullData (e : Propulsion.Streams.IEvent<_>) =
-            { new Propulsion.Streams.IEvent<_> with
-                member __.EventType = e.EventType
-                member __.Data = null
-                member __.Meta = e.Meta
-                member __.Timestamp = e.Timestamp }
+        let withNullData (e : FsCodec.IEvent<_>) : FsCodec.IEvent<_> =
+            FsCodec.Core.EventData.Create(e.EventType, null, e.Meta, e.Timestamp) :> _
         let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$"

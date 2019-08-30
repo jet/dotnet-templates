@@ -95,15 +95,10 @@ module Storage =
 
 /// Dependency Injection wiring for services using Equinox
 module Services =
-    /// Allows one to hook in any JsonConverters etc
-    let serializationSettings = Newtonsoft.Json.JsonSerializerSettings()
-
-    /// Automatically generates a Union Codec based using the scheme described in https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
-    let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.NewtonsoftJson.Json.Create<'Union>(serializationSettings)
     /// Builds a Stream Resolve function appropriate to the store being used
     type StreamResolver(storage : Storage.Instance) =
         member __.Resolve
-            (   codec : Equinox.Codec.IUnionEncoder<'event,byte[]>,
+            (   codec : FsCodec.IUnionEncoder<'event,byte[]>,
                 fold: ('state -> 'event seq -> 'state),
                 initial: 'state,
                 snapshot: (('event -> bool) * ('state -> 'event))) =
@@ -129,17 +124,15 @@ module Services =
     type ServiceBuilder(resolver: StreamResolver, handlerLog : ILogger) =
 //#if todos
          member __.CreateTodosService() =
-            let codec = genCodec<Todo.Events.Event>()
             let fold, initial = Todo.Folds.fold, Todo.Folds.initial
             let snapshot = Todo.Folds.isOrigin, Todo.Folds.compact
-            Todo.Service(handlerLog, resolver.Resolve(codec,fold,initial,snapshot))
+            Todo.Service(handlerLog, resolver.Resolve(Todo.Events.codec,fold,initial,snapshot))
 //#endif
 //#if aggregate
          member __.CreateAggregateService() =
-            let codec = genCodec<Aggregate.Events.Event>()
             let fold, initial = Aggregate.Folds.fold, Aggregate.Folds.initial
             let snapshot = Aggregate.Folds.isOrigin, Aggregate.Folds.compact
-            Aggregate.Service(handlerLog, resolver.Resolve(codec,fold,initial,snapshot))
+            Aggregate.Service(handlerLog, resolver.Resolve(Aggregate.Events.codec,fold,initial,snapshot))
 //#endif
 //#if (!aggregate && !todos)
         // TODO implement Service builders, e.g. 

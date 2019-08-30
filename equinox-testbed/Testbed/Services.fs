@@ -17,6 +17,7 @@ module Domain =
                 | Favorited                             of Favorited
                 | Unfavorited                           of Unfavorited
                 interface TypeShape.UnionContract.IUnionContract
+            let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
         module Folds =
             type State = Events.Favorited []
@@ -81,12 +82,9 @@ module Domain =
             
 open Microsoft.Extensions.DependencyInjection
 
-let serializationSettings = Newtonsoft.Json.JsonSerializerSettings()
-let genCodec<'Union when 'Union :> TypeShape.UnionContract.IUnionContract>() = Equinox.Codec.NewtonsoftJson.Json.Create<'Union>(serializationSettings)
-
 type StreamResolver(storage) =
     member __.Resolve
-        (   codec : Equinox.Codec.IUnionEncoder<'event,byte[]>,
+        (   codec : FsCodec.IUnionEncoder<'event,byte[]>,
             fold: ('state -> 'event seq -> 'state),
             initial: 'state,
             snapshot: (('event -> bool) * ('state -> 'event))) =
@@ -111,10 +109,9 @@ type ServiceBuilder(storageConfig, handlerLog) =
      let resolver = StreamResolver(storageConfig)
 
      member __.CreateFavoritesService() =
-        let codec = genCodec<Domain.Favorites.Events.Event>()
         let fold, initial = Domain.Favorites.Folds.fold, Domain.Favorites.Folds.initial
         let snapshot = Domain.Favorites.Folds.isOrigin,Domain.Favorites.Folds.compact
-        Domain.Favorites.Service(handlerLog, resolver.Resolve(codec,fold,initial,snapshot))
+        Domain.Favorites.Service(handlerLog, resolver.Resolve(Domain.Favorites.Events.codec,fold,initial,snapshot))
 
 let register (services : IServiceCollection, storageConfig, handlerLog) =
     let regF (factory : IServiceProvider -> 'T) = services.AddSingleton<'T>(fun (sp: IServiceProvider) -> factory sp) |> ignore

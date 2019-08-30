@@ -6,6 +6,28 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Threading
 
+module StreamCodec =
+
+    /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
+    let tryDecode (codec : FsCodec.IUnionEncoder<_,_>) (log : ILogger) (stream : string) (x : FsCodec.IEvent<byte[]>) =
+        match codec.TryDecode x with
+        | None ->
+            if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
+                log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
+                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, stream)
+            None
+        | x -> x
+
+[<AutoOpen>]
+module StreamNameParser =
+    let private catSeparators = [|'-'|]
+    let private split (streamName : string) = streamName.Split(catSeparators, 2, StringSplitOptions.RemoveEmptyEntries)
+    let category (streamName : string) = let fragments = split streamName in fragments.[0]
+    let (|Category|Unknown|) (streamName : string) =
+        match split streamName with
+        | [| category; id |] -> Category (category, id)
+        | _ -> Unknown streamName
+
 /// This more advanced sample shows processing >1 category of events, and maintaining derived state based on it
 // When processing streamwise, the handler is passed deduplicated spans of events per stream, with a guarantee of max 1
 // in-flight request per stream, which allows one to avoid having to consider any explicit concurrency management
@@ -14,8 +36,6 @@ module MultiStreams =
     open FSharp.UMX // See https://github.com/fsprojects/FSharp.UMX
     [<Measure>] type skuId 
     type SkuId = string<skuId> // Only significant at compile time - serializers etc. just see a string
-
-    let settings = Newtonsoft.Json.JsonSerializerSettings()
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module SavedForLater =
@@ -34,8 +54,8 @@ module MultiStreams =
             | Added of Added
             /// Clearing of the list
             | Cleared
-            interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
-        let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
+            interface TypeShape.UnionContract.IUnionContract
+        let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
         let tryDecode = StreamCodec.tryDecode codec
         let [<Literal>] CategoryId = "SavedForLater"
 
@@ -47,8 +67,8 @@ module MultiStreams =
         type Event =
             | Favorited         of Favorited
             | Unfavorited       of Unfavorited
-            interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
-        let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(settings)
+            interface TypeShape.UnionContract.IUnionContract
+        let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
         let tryDecode = StreamCodec.tryDecode codec
         let [<Literal>] CategoryId = "Favorites"
 

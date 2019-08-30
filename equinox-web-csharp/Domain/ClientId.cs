@@ -28,8 +28,5 @@ namespace TodoBackendTemplate
 
         public override object ConvertFrom(ITypeDescriptorContext context, CultureInfo culture, object value) =>
             value is string s ? ClientId.Parse(s) : base.ConvertFrom(context, culture, value);
-
-        public override object ConvertTo(ITypeDescriptorContext context, CultureInfo culture, object value, Type destinationType) =>
-            base.ConvertTo(context, culture, value, destinationType);
     }
 }

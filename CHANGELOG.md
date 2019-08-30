@@ -12,9 +12,12 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - Target `Propulsion`.* `1.0.1`, `Equinox`.* `2.0.0-rc4` (handling name changes, esp wrt Collection->Container terminology) [#28](https://github.com/jet/dotnet-templates/pull/28)
+- Target `Propulsion`.* `1.1.0`, `Equinox`.* `2.0.0-rc5`, `FsCodec`.* `1.0.0-rc1`, simplifying Codec logic
 
 ### Removed
 ### Fixed
+
+- Removed various over-complex elements of samples
 
 <a name="3.1.0"></a>
 ## [3.1.0] - 2019-07-05

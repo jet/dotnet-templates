@@ -1,7 +1,6 @@
 using Equinox;
 using Equinox.MemoryStore;
 using Equinox.Store;
-using Equinox.Codec;
 using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
@@ -17,7 +16,7 @@ namespace TodoBackendTemplate
             _store = store;
 
         public override Func<Target,IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            IUnionEncoder<TEvent, byte[]> codec,
+            FsCodec.IUnionEncoder<TEvent, byte[]> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,

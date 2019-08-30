@@ -15,6 +15,7 @@ module Events =
         /// For EventStore, AccessStrategy.RollingSnapshots embeds these events every `batchSize` events
         | Compacted of {| nextId: int; items: ItemData[] |}
         interface TypeShape.UnionContract.IUnionContract
+    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Folds =

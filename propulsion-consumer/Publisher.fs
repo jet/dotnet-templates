@@ -14,9 +14,7 @@ open System
 type ReservationId = string<reservationId>
 type SkuId = string<skuId>
 
-let serializerSettings = JsonSerializerSettings()
-
-[<JsonConverter(typeof<Newtonsoft.Json.Converters.FSharp.TypeSafeEnumConverter>)>]
+[<JsonConverter(typeof<FsCodec.NewtonsoftJson.TypeSafeEnumConverter>)>]
 type ReservationRejectionReason =
     | LocationNotFound
     | NotEnoughInventory
@@ -36,7 +34,7 @@ module Input =
         | InventoryReservationRejected of InventoryReservationRejected
         interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
 
-    let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(serializerSettings)
+    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let tryDecode = StreamCodec.tryDecode codec
     let [<Literal>] CategoryId = "Inventory"
 
@@ -51,7 +49,7 @@ module Output =
         | Rejection of ReservationRejection
         | Confirmation of ReservationConfirmation
         interface TypeShape.UnionContract.IUnionContract // see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
-    let codec = Equinox.Codec.NewtonsoftJson.Json.Create<Event>(serializerSettings)
+    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 [<AutoOpen>]
 module EventEncoder =
@@ -62,9 +60,9 @@ module EventEncoder =
             c: string
 
             /// Event body, as UTF-8 encoded json ready to be injected directly into the Json being rendered
-            [<Newtonsoft.Json.JsonConverter(typeof<Propulsion.Codec.NewtonsoftJson.VerbatimUtf8JsonConverter>)>]
+            [<Newtonsoft.Json.JsonConverter(typeof<FsCodec.NewtonsoftJson.VerbatimUtf8JsonConverter>)>]
             d: byte[] }
-    let ofEvent (x:  Equinox.Codec.IEvent<_>) =
+    let ofEvent (x:  FsCodec.IEvent<_>) =
         {   c = x.EventType
             d = x.Data }
 

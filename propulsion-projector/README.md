@@ -26,7 +26,7 @@ This project was generated using:
 
 1. Use the `eqx` tool to initialize and then run some transactions in a CosmosDb container
 
-        dotnet tool install -g Equinox.Tool # only needed once
+        dotnet tool install -g Equinox.Tool --version 2.0.0-rc* # only needed once
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
 

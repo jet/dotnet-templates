@@ -11,7 +11,7 @@ namespace TodoBackendTemplate
     public abstract class EquinoxContext
     {
         public abstract Func<Target,Equinox.Store.IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            Equinox.Codec.IUnionEncoder<TEvent, byte[]> codec,
+            FsCodec.IUnionEncoder<TEvent, byte[]> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
@@ -22,20 +22,18 @@ namespace TodoBackendTemplate
 
     public static class EquinoxCodec
     {
-        static readonly JsonSerializerSettings _defaultSerializationSettings = new Newtonsoft.Json.JsonSerializerSettings();
-        
-        public static Equinox.Codec.IUnionEncoder<TEvent, byte[]> Create<TEvent>(
+        public static FsCodec.IUnionEncoder<TEvent, byte[]> Create<TEvent>(
             Func<TEvent, Tuple<string,byte[]>> encode,
             Func<string, byte[], TEvent> tryDecode,
             JsonSerializerSettings settings = null) where TEvent: class
         {
-            return Equinox.Codec.Custom.Create<TEvent>(
+            return FsCodec.Codec.Create<TEvent>(
                 FuncConvert.FromFunc(encode),
                 FuncConvert.FromFunc((Func<Tuple<string, byte[]>, FSharpOption<TEvent>>) TryDecodeImpl));
             FSharpOption<TEvent> TryDecodeImpl(Tuple<string, byte[]> encoded) => OptionModule.OfObj(tryDecode(encoded.Item1, encoded.Item2));
         }
 
-        public static Equinox.Codec.IUnionEncoder<TEvent, byte[]> Create<TEvent>(JsonSerializerSettings settings = null) where TEvent: UnionContract.IUnionContract =>
-            Equinox.Codec.NewtonsoftJson.Json.Create<TEvent>(settings ?? _defaultSerializationSettings);
+        public static FsCodec.IUnionEncoder<TEvent, byte[]> Create<TEvent>(JsonSerializerSettings settings = null) where TEvent: UnionContract.IUnionContract =>
+            FsCodec.NewtonsoftJson.Codec.Create<TEvent>(settings);
     } 
 }
