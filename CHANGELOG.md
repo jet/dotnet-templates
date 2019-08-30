@@ -10,11 +10,17 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+### Removed
+### Fixed
+
+<a name="3.2.0"></a>
+## [3.2.0] - 2019-08-31
+
+### Changed
 
 - Target `Propulsion`.* `1.0.1`, `Equinox`.* `2.0.0-rc4` (handling name changes, esp wrt Collection->Container terminology) [#28](https://github.com/jet/dotnet-templates/pull/28)
 - Target `Propulsion`.* `1.1.0`, `Equinox`.* `2.0.0-rc5`, `FsCodec`.* `1.0.0-rc1`, simplifying Codec logic
 
-### Removed
 ### Fixed
 
 - Removed various over-complex elements of samples
@@ -143,7 +149,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.1.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.2.0...HEAD
+[3.2.0]: https://github.com/jet/dotnet-templates/compare/3.1.0...3.2.0
 [3.1.0]: https://github.com/jet/dotnet-templates/compare/3.0.3...3.1.0
 [3.0.3]: https://github.com/jet/dotnet-templates/compare/3.0.2...3.0.3
 [3.0.2]: https://github.com/jet/dotnet-templates/compare/2.2.2...3.0.2
