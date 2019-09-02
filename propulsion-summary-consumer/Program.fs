@@ -101,79 +101,25 @@ module Logging =
                         else c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}|{Properties}{NewLine}{Exception}")
             |> fun c -> c.CreateLogger()
 
-module Repository =
-    let codec = genCodec<Todo.Events.Event>()
-    let cache = Caching.Cache ("ConsumerTemplate", 10)
-    let resolve context =
-        // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
-        let accessStrategy = AccessStrategy.RollingUnfolds (Todo.Folds.isOrigin,Todo.Folds.transmute)
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-        Resolver(context, codec, Todo.Folds.fold, Todo.Folds.initial, cacheStrategy, accessStrategy).Resolve
+let [<Literal>] appName = "ConsumerTemplate"
 
-module Summary =
+module TodoRepository =
+    let cache = Caching.Cache (appName, 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
+    let createService context = Todo.Service(Log.ForContext<Todo.Service>(), Todo.resolve cache context)
 
-    /// A single Item in the Todo List
-    type ItemInfo = { id: int; order: int; title: string; completed: bool }
-
-    /// All data summarized for Summary Event Stream
-    type SummaryInfo = { items : ItemInfo[] }
-
-    /// Events we emit to third parties (kept here for ease of comparison, can be moved elsewhere in a larger app)
-    type SummaryEvent =
-        | Summary   of SummaryInfo
-        interface TypeShape.UnionContract.IUnionContract
-    let codec = genCodec<SummaryEvent>()
-
-[<RequireQualifiedAccess>]
-type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of count : int
-
-type Stats(log, ?statsInterval, ?stateInterval) =
-    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
-
-    let mutable (ok, na, redundant) = 0, 0, 0
-
-    override __.HandleOk res = res |> function
-        | Outcome.Ok count -> ok <- ok + 1; redundant <- redundant + count - 1
-        | Outcome.Skipped count -> redundant <- redundant + count
-        | Outcome.NoRelevantEvents count -> na <- na + count
-
-    override __.DumpStats () =
-        if ok <> 0 || na <> 0 || redundant <> 0 then
-            log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
-            ok <- 0; na <- 0 ; redundant <- 0
-
-let start (args : CmdParser.Arguments) =
+let startConsumer (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose
-    let context = args.Cosmos.Connect("ProjectorTemplate") |> Async.RunSynchronously
-    let service = Todo.Service(Log.ForContext<Todo.Service>(), Repository.resolve context)
-    let (|ClientId|) (value : string) = ClientId.parse value
-    let (|DecodeNewest|_|) (codec : Equinox.Codec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) =
-        StreamCodec.tryPickNewest Log.Logger codec (stream,span)
-    let map : Summary.SummaryEvent -> Todo.Events.SummaryData = function
-        | Summary.Summary x ->
-            { items =
-                [| for x in x.items ->
-                    { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
-    let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
-        match stream, (stream,span) with
-        | Category ("TodoSummary", ClientId clientId), DecodeNewest Summary.codec (version,summary) ->
-            match! service.Ingest clientId (version,map summary) with
-            | true -> return Outcome.Ok span.events.Length
-            | false -> return Outcome.Skipped span.events.Length
-        | _ -> return Outcome.NoRelevantEvents span.events.Length
-    }
-    let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parseStreamSummaries(spanJson)
+    let context = args.Cosmos.Connect(appName) |> Async.RunSynchronously
+    let service = TodoRepository.createService context
     let config =
         Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
-            "ConsumerTemplate", args.Broker, [args.Topic], args.Group,
+            appName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    let stats = Stats(Log.Logger)
-    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, args.MaxDop, parseStreamSummaries, ingestIncomingSummaryMessage, stats, category)
+    Ingester.startConsumer config Log.Logger service args.MaxDop
 
 [<EntryPoint>]
 let main argv =
-    try try use consumer = argv |> CmdParser.parse |> start
+    try try use consumer = argv |> CmdParser.parse |> startConsumer
             Async.RunSynchronously <| consumer.AwaitCompletion()
             if consumer.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

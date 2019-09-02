@@ -1,5 +1,7 @@
 ﻿module ProjectorTemplate.Todo
 
+open System
+
 // NB - these types and names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
@@ -16,6 +18,7 @@ module Events =
         /// For Cosmos, AccessStrategy.Snapshot maintains this as an event in the `u`nfolds list in the Tip-document
         | Snapshot of {| nextId: int; items: ItemData[] |}
         interface TypeShape.UnionContract.IUnionContract
+    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Folds =
@@ -36,16 +39,16 @@ module Folds =
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
     let isOrigin = function Events.Cleared _ | Events.Snapshot _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-    let compact state = Events.Snapshot {| nextId = state.nextId; items = Array.ofList state.items |}
+    let snapshot state = Events.Snapshot {| nextId = state.nextId; items = Array.ofList state.items |}
 
 let [<Literal>]categoryId = "Todos"
 
-/// Defines operations that a Controller can perform on a Todo List
+/// Defines operations that a Controller or Projector can perform on a Todo List
 type Service(handlerLog, resolve, ?maxAttempts) =
     /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toStringN clientId)
+    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toString clientId)
 
-    /// Maps a ClientId to Handler for the relevant stream
+    /// Maps a ClientId to a Stream for the relevant stream
     let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
 
     /// Establish the present state of the Stream, project from that as specified by `projection` (using QueryEx so we can determine the version in effect)
@@ -53,28 +56,13 @@ type Service(handlerLog, resolve, ?maxAttempts) =
         stream.QueryEx(fun v s -> v, projection s)
 
     /// Load and render the state
-    member __.QueryWithVersion clientId (render : Folds.State -> 'res) : Async<int64*'res> =
+    member __.QueryWithVersion(clientId, render : Folds.State -> 'res) : Async<int64*'res> =
         queryEx clientId render
 
-module Summary =
+open Equinox.Cosmos
 
-    /// A single Item in the Todo List
-    type ItemInfo = { id: int; order: int; title: string; completed: bool }
-
-    /// All data summarized for Summary Event Stream
-    type SummaryInfo = { items : ItemInfo[] }
-
-    /// Events we emit to third parties (kept here for ease of comparison, can be moved elsewhere in a larger app)
-    type SummaryEvent =
-        | Summary   of SummaryInfo
-        interface TypeShape.UnionContract.IUnionContract
-
-    let render (item: Events.ItemData) : ItemInfo =
-        {   id = item.id
-            order = item.order
-            title = item.title
-            completed = item.completed }
-
-    /// List all open items
-    let summarize (service : Service) clientId : Async<int64*SummaryEvent> =
-            service.QueryWithVersion clientId (fun state -> Summary { items = [| for x in state.items -> render x |]})
+module Repository =
+    let resolve cache context =
+        let accessStrategy = AccessStrategy.Snapshot (Folds.isOrigin,Folds.snapshot)
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve

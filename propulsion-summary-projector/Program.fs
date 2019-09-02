@@ -147,46 +147,32 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
     docs
     |> Seq.collect EquinoxCosmosParser.enumStreamEvents
 
+let [<Literal>] appName = "ProjectorTemplate"
+
 module Repository =
-    let codec = genCodec<Todo.Events.Event>()
-    let cache = Caching.Cache ("ProjectorTemplate", 10)
-    let resolve context =
-        let accessStrategy = AccessStrategy.Snapshot (Todo.Folds.isOrigin,Todo.Folds.compact)
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-        Resolver(context, codec, Todo.Folds.fold, Todo.Folds.initial, cacheStrategy, accessStrategy).Resolve
+    let cache = Caching.Cache (appName, 10)
+    let resolve context = Todo.Repository.resolve cache context
+    let createService context = Todo.Service(Log.ForContext<Todo.Service>(), resolve context)
 
 let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose args.ChangeFeedVerbose
     let (broker,topic, producers) = args.Target.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, "ProjectorTemplate", broker, topic, degreeOfParallelism = producers)
+    let produce =
+        fun (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) ->
+            producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x) |> Async.Ignore
 
     let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-    let connection = Async.RunSynchronously <| connector.Connect("ProjectorTemplate",discovery)
-    let context = Context(connection, source.database, source.container)
-    let service = Todo.Service(Log.ForContext<Todo.Service>(), Repository.resolve context)
-    let (|ClientId|) (value : string) = ClientId.parse value
-    let impliesSummaryUpdateNecessary = function
-        | Todo.Events.Snapshot _ -> false
-        | _ -> true
-    let (|Decode|) (codec : Equinox.Codec.IUnionEncoder<_,_>) stream (span : Propulsion.Streams.StreamSpan<_>) =
-        span.events |> Seq.choose (StreamCodec.tryDecodeSpan codec Log.Logger stream)
-    let summaryCodec = genCodec<Todo.Summary.SummaryEvent>()
-    let handleAccumulatedEvents (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64> = async {
-        match stream, span with
-        | Category (Todo.categoryId, ClientId clientId), (Decode Repository.codec stream events)
-                when events |> Seq.exists impliesSummaryUpdateNecessary ->
-            let! version', summary = Todo.Summary.summarize service clientId
-            let rendered : RenderedSummary = summary |> StreamCodec.encodeSummary summaryCodec stream version'
-            let! _ = producer.ProduceAsync(stream,Newtonsoft.Json.JsonConvert.SerializeObject rendered)
-            return version'
-        | _ ->
-            return span.index + span.events.LongLength
-    }
+    let handleStreamEvents =
+        let connection = Async.RunSynchronously <| connector.Connect("ProjectorTemplate",discovery)
+        let context = Context(connection, source.database, source.container)
+        let service = Repository.createService context
+        Producer.handleAccumulatedEvents produce service
 
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
     let projector =
         Propulsion.Streams.Sync.StreamsSync.Start(
-             Log.Logger, maxReadAhead, maxConcurrentStreams, handleAccumulatedEvents, category,
+             Log.Logger, maxReadAhead, maxConcurrentStreams, handleStreamEvents, category,
              statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
     let runSourcePipeline =

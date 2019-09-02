@@ -1,5 +1,7 @@
 ﻿module ConsumerTemplate.Todo
 
+open System
+
 // NB - these types and names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
@@ -9,16 +11,17 @@ module Events =
     type Event =
         | Ingested of {| version: int64; value : SummaryData |}
         interface TypeShape.UnionContract.IUnionContract
+    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 module Folds =
 
     type State = { version : int64; value : Events.SummaryData option }
     let initial = { version = -1L; value = None }
-    let evolve s = function
+    let evolve _state = function
         | Events.Ingested e -> { version = e.version; value = Some e.value }
     let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
     let isOrigin = function _ -> true
-    // A `transmute` function gets presented with:
+    // A `transmute` function gets presented with:XX
     // a) events a command decided to generate (in it's `interpret`)
     // b) the state after applying them
     // and is expected to return:
@@ -43,28 +46,38 @@ module Commands =
             if state.version <= version then false,[] else
             true,[Events.Ingested {| version = version; value = value |}]
 
+type Item = { id: int; order: int; title: string; completed: bool }
+let render : Folds.State -> Item[] = function
+    | { value = Some { items = xs} } ->
+        [| for x in xs ->
+            {   id = x.id
+                order = x.order
+                title = x.title
+                completed = x.completed } |]
+    | _ -> [||]
+
 let [<Literal>]categoryId = "TodoSummary"
 
-type Item = { id: int; order: int; title: string; completed: bool }
-
+/// To defines the operations that the Read side of a Control and/or the Ingester can perform on the aggregate
 type Service(handlerLog, resolve, ?maxAttempts) =
     let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toStringN clientId)
     let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
     let execute (Stream stream) command : Async<bool> =
         stream.Transact(Commands.decide command)
+
     let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
         stream.Query projection
-    let render : Folds.State -> Item[] = function
-        | { value = Some { items = xs} } ->
-            [| for x in xs ->
-                {   id = x.id
-                    order = x.order
-                    title = x.title
-                    completed = x.completed } |]
-        | _ -> [||]
 
-    member __.Ingest clientId (version,value) : Async<bool> =
+    member __.Ingest(clientId,(version,value)) : Async<bool> =
         execute clientId <| Commands.Consume (version,value)
 
     member __.Read clientId: Async<Item[]> =
         query clientId render
+
+open Equinox.Cosmos // Everything until now is independent of a concrete store
+
+let resolve cache context =
+    // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
+    let accessStrategy = AccessStrategy.RollingUnfolds (Folds.isOrigin, Folds.transmute)
+    let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+    Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
