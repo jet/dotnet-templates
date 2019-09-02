@@ -17,16 +17,6 @@ module StreamCodec =
     let encodeSummary (codec : FsCodec.IUnionEncoder<_,_>) stream version x : Propulsion.Codec.NewtonsoftJson.RenderedSummary =
        x |> codec.Encode |> Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version
 
-module Guid =
-    let inline toStringN (x : Guid) = x.ToString "N"
-
-/// CartId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
-type ClientId = Guid<clientId>
-and [<Measure>] clientId
-module ClientId =
-    let toString (value : ClientId) : string = Guid.toStringN %value
-    let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
-
 [<AutoOpen>]
 module StreamNameParser =
     let private catSeparators = [|'-'|]
@@ -36,3 +26,14 @@ module StreamNameParser =
         match split streamName with
         | [| category; id |] -> Category (category, id)
         | _ -> Unknown streamName
+
+
+module Guid =
+    let inline toStringN (x : Guid) = x.ToString "N"
+
+/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
+type ClientId = Guid<clientId>
+and [<Measure>] clientId
+module ClientId =
+    let toString (value : ClientId) : string = Guid.toStringN %value
+    let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw

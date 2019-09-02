@@ -2,7 +2,7 @@
 
 open System
 
-// NB - these types and names reflect the actual storage formats and hence need to be versioned with care
+// NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
     /// Information we retain per Todo List entry
@@ -40,16 +40,18 @@ module Folds =
     let isOrigin = function Events.Cleared _ | Events.Snapshot _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
     let snapshot state = Events.Snapshot {| nextId = state.nextId; items = Array.ofList state.items |}
+    /// Allows us to slkip producing summaries for events that we know won't result in an externally discernable change to the summary output
+    let impliesStateChange = function Events.Snapshot _ -> false | _ -> true
 
 let [<Literal>]categoryId = "Todos"
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
-type Service(handlerLog, resolve, ?maxAttempts) =
+type Service(log, resolve, ?maxAttempts) =
     /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
     let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toString clientId)
 
     /// Maps a ClientId to a Stream for the relevant stream
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
+    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
 
     /// Establish the present state of the Stream, project from that as specified by `projection` (using QueryEx so we can determine the version in effect)
     let queryEx (Stream stream) (projection : Folds.State -> 't) : Async<int64*'t> =
@@ -59,7 +61,7 @@ type Service(handlerLog, resolve, ?maxAttempts) =
     member __.QueryWithVersion(clientId, render : Folds.State -> 'res) : Async<int64*'res> =
         queryEx clientId render
 
-open Equinox.Cosmos
+open Equinox.Cosmos // Everything until now is independent of a concrete store
 
 module Repository =
     let resolve cache context =

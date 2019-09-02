@@ -1,8 +1,8 @@
-﻿module ConsumerTemplate.Todo
+﻿module ConsumerTemplate.TodoSummary
 
 open System
 
-// NB - these types and names reflect the actual storage formats and hence need to be versioned with care
+// NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
     type ItemData = { id: int; order: int; title: string; completed: bool }
@@ -58,17 +58,18 @@ let render : Folds.State -> Item[] = function
 
 let [<Literal>]categoryId = "TodoSummary"
 
-/// To defines the operations that the Read side of a Control and/or the Ingester can perform on the aggregate
-type Service(handlerLog, resolve, ?maxAttempts) =
+/// To defines the operations that the Read side of a Controller and/or the Ingester can perform on the aggregate
+type Service(log, resolve, ?maxAttempts) =
     let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toStringN clientId)
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
+    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
+
     let execute (Stream stream) command : Async<bool> =
         stream.Transact(Commands.decide command)
 
     let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
         stream.Query projection
 
-    member __.Ingest(clientId,(version,value)) : Async<bool> =
+    member __.Ingest(clientId, version, value) : Async<bool> =
         execute clientId <| Commands.Consume (version,value)
 
     member __.Read clientId: Async<Item[]> =

@@ -105,7 +105,7 @@ let [<Literal>] appName = "ConsumerTemplate"
 
 module TodoRepository =
     let cache = Caching.Cache (appName, 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
-    let createService context = Todo.Service(Log.ForContext<Todo.Service>(), Todo.resolve cache context)
+    let createService context = TodoSummary.Service(Log.ForContext<TodoSummary.Service>(), TodoSummary.resolve cache context)
 
 let startConsumer (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose
@@ -115,7 +115,7 @@ let startConsumer (args : CmdParser.Arguments) =
         Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
             appName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    Ingester.startConsumer config Log.Logger service args.MaxDop
+    SummaryIngester.startConsumer config Log.Logger service args.MaxDop
 
 [<EntryPoint>]
 let main argv =
@@ -124,7 +124,7 @@ let main argv =
             if consumer.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-            // If the handler throws, we exit the app in order to let an orchesterator flag the failure
+            // If the handler throws, we exit the app in order to let an orchestrator flag the failure
             | e -> Log.Fatal(e, "Exiting"); 1
     // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()

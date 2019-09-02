@@ -1,4 +1,6 @@
-module ConsumerTemplate.Ingester
+/// Follows a feed of updates, holding the most recently observed one
+/// Each update recieved is take to completely supersede all previous updates
+module ConsumerTemplate.SummaryIngester
 
 open System
 open System.Runtime.Serialization
@@ -13,7 +15,7 @@ module TodoUpdates =
     type SummaryInfo = { items : ItemInfo[] }
 
     type Message =
-        | [<DataMember(Name="TodoSummaryV1")>] Summary of SummaryInfo
+        | [<DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Message>()
     let [<Literal>] categoryId = "TodoSummary"
@@ -36,19 +38,19 @@ type Stats(log, ?statsInterval, ?stateInterval) =
             log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
             ok <- 0; na <- 0 ; redundant <- 0
 
-let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log : Serilog.ILogger) (service : Todo.Service) maxDop =
+let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log : Serilog.ILogger) (service : TodoSummary.Service) maxDop =
     let (|ClientId|) (value : string) = ClientId.parse value
     let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) =
-        StreamCodec.tryPickNewest log codec (stream,span)
-    let map : TodoUpdates.Message -> Todo.Events.SummaryData = function
+        StreamCodec.tryPickBack log codec (stream,span)
+    let map : TodoUpdates.Message -> TodoSummary.Events.SummaryData = function
         | TodoUpdates.Summary x ->
             { items =
                 [| for x in x.items ->
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         match stream, (stream,span) with
-        | Category (TodoUpdates.categoryId, ClientId clientId), DecodeNewest TodoUpdates.codec (version,summary) ->
-            match! service.Ingest(clientId,(version,map summary)) with
+        | Category (TodoUpdates.categoryId, ClientId clientId), DecodeNewest TodoUpdates.codec (version,update) ->
+            match! service.Ingest(clientId,version,map update) with
             | true -> return Outcome.Ok span.events.Length
             | false -> return Outcome.Skipped span.events.Length
         | _ -> return Outcome.NoRelevantEvents span.events.Length

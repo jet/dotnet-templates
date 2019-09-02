@@ -1,7 +1,6 @@
 ﻿module ProjectorTemplate.Program
 
 open Equinox.Cosmos
-open Propulsion.Codec.NewtonsoftJson
 open Propulsion.Cosmos
 open Serilog
 open System
@@ -151,17 +150,16 @@ let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose args.ChangeFeedVerbose
     let (broker,topic, producers) = args.Target.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic, degreeOfParallelism = producers)
-    let produce =
-        fun (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) ->
-            producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x) |> Async.Ignore
+    let produce (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
+        producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 
     let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
     let handleStreamEvents =
-        let connection = Async.RunSynchronously <| connector.Connect("ProjectorTemplate",discovery)
-        let context = Context(connection, source.database, source.container)
         let cache = Caching.Cache (appName, 10)
+        let connection = Async.RunSynchronously <| connector.Connect(appName, discovery)
+        let context = Context(connection, source.database, source.container)
         let service = Todo.Repository.createService cache context
-        Producer.handleAccumulatedEvents produce service
+        Producer.handleAccumulatedEvents service produce
 
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
     let projector =
