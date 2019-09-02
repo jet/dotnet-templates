@@ -66,3 +66,4 @@ module Repository =
         let accessStrategy = AccessStrategy.Snapshot (Folds.isOrigin,Folds.snapshot)
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
+    let createService cache context = Service(Serilog.Log.ForContext<Service>(), resolve cache context)

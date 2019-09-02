@@ -123,8 +123,6 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-// Illustrates how to emit direct to the Console using Serilog
-// Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
 module Logging =
     let initialize verbose changeLogVerbose =
         Log.Logger <-
@@ -149,15 +147,10 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
 
 let [<Literal>] appName = "ProjectorTemplate"
 
-module Repository =
-    let cache = Caching.Cache (appName, 10)
-    let resolve context = Todo.Repository.resolve cache context
-    let createService context = Todo.Service(Log.ForContext<Todo.Service>(), resolve context)
-
 let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose args.ChangeFeedVerbose
     let (broker,topic, producers) = args.Target.BuildTargetParams()
-    let producer = Propulsion.Kafka.Producer(Log.Logger, "ProjectorTemplate", broker, topic, degreeOfParallelism = producers)
+    let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic, degreeOfParallelism = producers)
     let produce =
         fun (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) ->
             producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x) |> Async.Ignore
@@ -166,7 +159,8 @@ let start (args : CmdParser.Arguments) =
     let handleStreamEvents =
         let connection = Async.RunSynchronously <| connector.Connect("ProjectorTemplate",discovery)
         let context = Context(connection, source.database, source.container)
-        let service = Repository.createService context
+        let cache = Caching.Cache (appName, 10)
+        let service = Todo.Repository.createService cache context
         Producer.handleAccumulatedEvents produce service
 
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
