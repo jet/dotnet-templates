@@ -78,7 +78,7 @@ let main argv =
             if consumer.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-            // If the handler throws, we exit the app in order to let an orchesterator flag the failure
+            // If the handler throws, we exit the app in order to let an orchestrator flag the failure
             | e -> Log.Fatal(e, "Exiting"); 1
     // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()

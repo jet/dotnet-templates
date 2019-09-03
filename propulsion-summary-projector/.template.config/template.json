@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @fnipo",
+  "classifications": [
+    "Event Sourcing",
+    "Equinox",
+    "Propulsion",
+    "CosmosDb",
+    "ChangeFeed",
+    "ChangeFeedProcessor",
+    "Kafka"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Propulsion.Template.SummaryProjector",
+  "name": "Propulsion/Equinox Summary Projector",
+  "shortName": "summaryProjector",
+  "sourceName": "ProjectorTemplate",
+  "preferNameDirectory": true
+}
