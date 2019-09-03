@@ -1,9 +1,8 @@
-/// Follows a feed of updates, holding the most recently observed one
-/// Each update recieved is take to completely supersede all previous updates
+/// Follows a feed of updates, holding the most recently observed one; each update recieved is intended to completely supersede all previous updates
+/// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previus message
 module ConsumerTemplate.SummaryIngester
 
 open System
-open System.Runtime.Serialization
 
 /// Defines the contract we share with the SummaryProjector's published feed
 module TodoUpdates =
@@ -15,7 +14,7 @@ module TodoUpdates =
     type SummaryInfo = { items : ItemInfo[] }
 
     type Message =
-        | [<DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
+        | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Message>()
     let [<Literal>] categoryId = "TodoSummary"
@@ -23,6 +22,7 @@ module TodoUpdates =
 [<RequireQualifiedAccess>]
 type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of count : int
 
+/// Gathers stats based on the outcome of each Span processed for emission at intervals controlled by `StreamsConsumer`
 type Stats(log, ?statsInterval, ?stateInterval) =
     inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 
@@ -38,15 +38,17 @@ type Stats(log, ?statsInterval, ?stateInterval) =
             log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
             ok <- 0; na <- 0 ; redundant <- 0
 
+/// Starts a processing loop accumulating messages by stream - each time we only take the latest event as previous ones are superseded by definition
 let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log : Serilog.ILogger) (service : TodoSummary.Service) maxDop =
-    let (|ClientId|) (value : string) = ClientId.parse value
-    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) =
-        StreamCodec.tryPickBack log codec (stream,span)
+    // map from external contract to internal contract defined by the aggregate
     let map : TodoUpdates.Message -> TodoSummary.Events.SummaryData = function
         | TodoUpdates.Summary x ->
             { items =
                 [| for x in x.items ->
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
+    let (|ClientId|) (value : string) = ClientId.parse value
+    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) : (int64 * 'summary) option =
+        StreamCodec.tryPickBack log codec (stream,span)
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         match stream, (stream,span) with
         | Category (TodoUpdates.categoryId, ClientId clientId), DecodeNewest TodoUpdates.codec (version,update) ->

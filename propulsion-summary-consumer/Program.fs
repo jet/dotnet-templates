@@ -38,9 +38,9 @@ module CmdParser =
             member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
             member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
 
-            member __.Timeout = a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
-            member __.Retries = a.GetResult(Retries, 1)
-            member __.MaxRetryWaitTime = a.GetResult(RetriesWaitTime, 5)
+            member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+            member __.Retries =             a.GetResult(Retries, 1)
+            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
 
             member x.Connect(clientId) = async {
                 let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
@@ -103,14 +103,11 @@ module Logging =
 
 let [<Literal>] appName = "ConsumerTemplate"
 
-module TodoRepository =
-    let cache = Caching.Cache (appName, 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
-    let createService context = TodoSummary.Service(Log.ForContext<TodoSummary.Service>(), TodoSummary.resolve cache context)
-
 let startConsumer (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose
     let context = args.Cosmos.Connect(appName) |> Async.RunSynchronously
-    let service = TodoRepository.createService context
+    let cache = Caching.Cache (appName, 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
+    let service = TodoSummary.Repository.createService cache context
     let config =
         Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
             appName, args.Broker, [args.Topic], args.Group,

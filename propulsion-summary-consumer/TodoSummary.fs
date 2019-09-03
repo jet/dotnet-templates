@@ -1,7 +1,5 @@
 ﻿module ConsumerTemplate.TodoSummary
 
-open System
-
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
@@ -58,7 +56,7 @@ let render : Folds.State -> Item[] = function
 
 let [<Literal>]categoryId = "TodoSummary"
 
-/// To defines the operations that the Read side of a Controller and/or the Ingester can perform on the aggregate
+/// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
 type Service(log, resolve, ?maxAttempts) =
     let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toStringN clientId)
     let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
@@ -75,10 +73,11 @@ type Service(log, resolve, ?maxAttempts) =
     member __.Read clientId: Async<Item[]> =
         query clientId render
 
-open Equinox.Cosmos // Everything until now is independent of a concrete store
-
-let resolve cache context =
-    // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
-    let accessStrategy = AccessStrategy.RollingUnfolds (Folds.isOrigin, Folds.transmute)
-    let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-    Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
+module Repository =
+    open Equinox.Cosmos // Everything until now is independent of a concrete store
+    let private resolve cache context =
+        // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
+        let accessStrategy = AccessStrategy.RollingUnfolds (Folds.isOrigin, Folds.transmute)
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
+    let createService cache context = Service(Serilog.Log.ForContext<Service>(), resolve cache context)

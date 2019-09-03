@@ -1,7 +1,5 @@
 ﻿module ProjectorTemplate.Todo
 
-open System
-
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
@@ -61,11 +59,10 @@ type Service(log, resolve, ?maxAttempts) =
     member __.QueryWithVersion(clientId, render : Folds.State -> 'res) : Async<int64*'res> =
         queryEx clientId render
 
-open Equinox.Cosmos // Everything until now is independent of a concrete store
-
 module Repository =
-    let resolve cache context =
+    open Equinox.Cosmos // Everything until now is independent of a concrete store
+    let private resolve cache context =
         let accessStrategy = AccessStrategy.Snapshot (Folds.isOrigin,Folds.snapshot)
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
     let createService cache context = Service(Serilog.Log.ForContext<Service>(), resolve cache context)

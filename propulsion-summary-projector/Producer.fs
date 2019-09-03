@@ -1,6 +1,5 @@
+/// Emits summaries based on an aggregate's folded state as prompted by observing events indicative of state changes in the change feed
 module ProjectorTemplate.Producer
-
-open System.Runtime.Serialization
 
 module Contract =
 
@@ -12,7 +11,7 @@ module Contract =
 
     /// Events we emit to third parties (kept here for ease of comparison, can be moved elsewhere in a larger app)
     type SummaryEvent =
-        | [<DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
+        | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<SummaryEvent>()
 
