@@ -10,11 +10,15 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
-
-- Target FsCodec 1.0.0-rc2, Equinox 2.0.0-rc6, Propulsion 1.0.2-alpha.0.1
-
 ### Removed
 ### Fixed
+
+<a name="3.3.1"></a>
+## [3.3.1] - 2019-09-08
+
+### Changed
+
+- Target FsCodec 1.0.0-rc2, Equinox 2.0.0-rc6, Propulsion 1.0.2-alpha.0.1
 
 <a name="3.3.0"></a>
 ## [3.3.0] - 2019-09-03
@@ -159,7 +163,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.3.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.3.1...HEAD
+[3.3.1]: https://github.com/jet/dotnet-templates/compare/3.3.0...3.3.1
 [3.3.0]: https://github.com/jet/dotnet-templates/compare/3.2.0...3.3.0
 [3.2.0]: https://github.com/jet/dotnet-templates/compare/3.1.0...3.2.0
 [3.1.0]: https://github.com/jet/dotnet-templates/compare/3.0.3...3.1.0
