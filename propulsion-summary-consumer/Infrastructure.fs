@@ -6,7 +6,7 @@ open System
 module StreamCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IUnionEncoder<_,_>) (log : Serilog.ILogger) (stream : string) (x : FsCodec.IEvent<byte[]>) =
+    let tryDecode (codec : FsCodec.IUnionEncoder<_,_>) (log : Serilog.ILogger) (stream : string) (x : FsCodec.IIndexedEvent<byte[]>) =
         match codec.TryDecode x with
         | None ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
@@ -14,13 +14,6 @@ module StreamCodec =
                     .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, stream)
             None
         | x -> x
-
-    /// For a span of pending events, search backwards to find Some one we can use; Failing that, yields None
-    let tryPickBack log (codec : FsCodec.IUnionEncoder<'summary,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) : (int64*'summary) option =
-        span.events
-        |> Seq.mapi (fun i x -> span.index + int64 i, x)
-        |> Seq.rev
-        |> Seq.tryPick (fun (v,e) -> match tryDecode codec log stream e with Some d -> Some (v,d) | None -> None)
 
 [<AutoOpen>]
 module StreamNameParser =

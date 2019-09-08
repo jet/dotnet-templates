@@ -452,7 +452,9 @@ module EventV0Parser =
             /// Event body, as UTF-8 encoded json ready to be injected into the Json being rendered for CosmosDB
             [<JsonConverter(typeof<FsCodec.NewtonsoftJson.VerbatimUtf8JsonConverter>)>]
             d: byte[] }
-        interface FsCodec.IEvent<byte[]> with
+        interface FsCodec.IIndexedEvent<byte[]> with
+            member x.Index = x.i
+            member x.IsUnfold = false
             member x.EventType = x.t
             member x.Data = x.d
             member __.Meta = null
@@ -467,7 +469,7 @@ module EventV0Parser =
     /// We assume all Documents represent Events laid out as above
     let parse (d : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> =
         let e = d.Cast<EventV0>()
-        { stream = e.s; index = e.i; event = e } : _
+        { stream = e.s; event = e } : _
 
 let transformV0 categorize catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
@@ -552,8 +554,8 @@ let start (args : CmdParser.Arguments) =
             let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, transmute')
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
-        let withNullData (e : FsCodec.IEvent<_>) : FsCodec.IEvent<_> =
-            FsCodec.Core.EventData.Create(e.EventType, null, e.Meta, e.Timestamp) :> _
+        let withNullData (e : FsCodec.IIndexedEvent<_>) : FsCodec.IIndexedEvent<_> =
+            FsCodec.Core.IndexedEventData(e.Index, false, e.EventType, null, e.Meta, e.Timestamp) :> _
         let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$"
@@ -562,7 +564,7 @@ let start (args : CmdParser.Arguments) =
             | PropulsionStreamEvent e ->
                 if Propulsion.EventStore.Reader.payloadBytes x > 1_000_000 then
                     Log.Error("replacing {stream} event index {index} with `null` Data due to length of {len}MB",
-                        e.stream, e.index, Propulsion.EventStore.Reader.mb e.event.Data.Length)
+                        e.stream, e.event.Index, Propulsion.EventStore.Reader.mb e.event.Data.Length)
                     Some { e with event = withNullData e.event }
                 else Some e
         let runPipeline =

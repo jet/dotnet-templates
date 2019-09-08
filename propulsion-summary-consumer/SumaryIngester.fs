@@ -6,6 +6,7 @@ open System
 
 /// Defines the contract we share with the SummaryProjector's published feed
 module TodoUpdates =
+    open FsCodec
 
     /// A single Item in the Todo List
     type ItemInfo = { id: int; order: int; title: string; completed: bool }
@@ -16,7 +17,11 @@ module TodoUpdates =
     type Message =
         | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
-    let codec = FsCodec.NewtonsoftJson.Codec.Create<Message>()
+    let codec =
+        // We also want the index (which is the Version of the Summary) whenever we're handling an event
+        let up (d : IIndexedEvent<_>,e) = d.Index,e
+        let down _e = failwith "Not Implemented"
+        FsCodec.NewtonsoftJson.Codec.Create(up,down)
     let [<Literal>] categoryId = "TodoSummary"
 
 [<RequireQualifiedAccess>]
@@ -47,8 +52,8 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
                 [| for x in x.items ->
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
     let (|ClientId|) (value : string) = ClientId.parse value
-    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) : (int64 * 'summary) option =
-        StreamCodec.tryPickBack log codec (stream,span)
+    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
+        span.events |> Seq.rev |> Seq.tryPick (StreamCodec.tryDecode codec log stream)
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         match stream, (stream,span) with
         | Category (TodoUpdates.categoryId, ClientId clientId), DecodeNewest TodoUpdates.codec (version,update) ->
@@ -58,6 +63,6 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
         | _ -> return Outcome.NoRelevantEvents span.events.Length
     }
     let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parseStreamSummaries(spanJson)
+        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse spanJson
     let stats = Stats(log)
     Propulsion.Kafka.StreamsConsumer.Start(log, config, maxDop, parseStreamSummaries, ingestIncomingSummaryMessage, stats, category)

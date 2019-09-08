@@ -113,7 +113,7 @@ module Processor =
 
     let private enumStreamEvents(KeyValue (streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         match streamName with 
-        | Category (Input.CategoryId,_) -> Propulsion.Codec.NewtonsoftJson.RenderedSpan.parseStreamEvents(spanJson)
+        | Category (Input.CategoryId,_) -> Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
         | _ -> Seq.empty
 
     let log = Log.ForContext<Handler>()

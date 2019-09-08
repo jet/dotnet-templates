@@ -147,17 +147,18 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let replaceLongDataWithNull (x : FsCodec.IEvent<byte[]>) : FsCodec.IEvent<_> =
-    x // if x.Data.Length < 900_000 then x else FsCodec.Core.EventData.Create(x.EventType,null,x.Meta,x.Timestamp) :> _
+let replaceLongDataWithNull (x : FsCodec.IIndexedEvent<byte[]>) : FsCodec.IIndexedEvent<_> =
+    if x.Data.Length < 900_000 then x
+    else FsCodec.Core.IndexedEventData(x.Index,false,x.EventType,null,x.Meta,x.Timestamp) :> _
 
 let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
-    { stream = e.stream; index = e.index; event = replaceLongDataWithNull e.event }
+    { stream = e.stream; event = replaceLongDataWithNull e.event }
 
 let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
     docs
     |> Seq.collect EquinoxCosmosParser.enumStreamEvents
-    // TODO use Seq.filter and/or Seq.map to adjust what's being sent
-    |> Seq.map hackDropBigBodies
+    // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
+    // |> Seq.map hackDropBigBodies
 
 #if kafka && nostreams
 type ExampleOutput = { Id : string }

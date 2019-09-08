@@ -9,7 +9,7 @@ open System.Threading
 module StreamCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IUnionEncoder<_,_>) (log : ILogger) (stream : string) (x : FsCodec.IEvent<byte[]>) =
+    let tryDecode (codec : FsCodec.IUnionEncoder<_,_>) (log : ILogger) (stream : string) (x : FsCodec.IIndexedEvent<byte[]>) =
         match codec.TryDecode x with
         | None ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
@@ -148,7 +148,7 @@ module MultiStreams =
                 otherCats.Clear(); otherKeys.Clear()
 
     let private parseStreamEvents(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        Propulsion.Codec.NewtonsoftJson.RenderedSpan.parseStreamEvents(spanJson)
+        Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
 
     let start (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, degreeOfParallelism : int) =
         let log, handler = Log.ForContext<InMemoryHandler>(), InMemoryHandler()
@@ -163,6 +163,7 @@ module MultiMessages =
     
     // We'll use the same event parsing logic, though it works a little differently
     open MultiStreams
+    open Propulsion.Codec.NewtonsoftJson
 
     type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name : string * count : int | Unclassified of messageKey : string
 
@@ -182,8 +183,8 @@ module MultiMessages =
 
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
         member private __.Interpret(streamName : string, spanJson) : seq<Message> = seq {
-            let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse(spanJson)
-            let decode tryDecode wrap = span.e |> Seq.choose (tryDecode log streamName >> Option.map wrap)
+            let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
+            let decode tryDecode wrap = RenderedSpan.enum span |> Seq.choose (fun x -> x.event |> tryDecode log streamName |> Option.map wrap)
             match streamName with
             | Category (Favorites.CategoryId,_) -> yield! decode Favorites.tryDecode Fave
             | Category (SavedForLater.CategoryId,_) -> yield! decode SavedForLater.tryDecode Save
