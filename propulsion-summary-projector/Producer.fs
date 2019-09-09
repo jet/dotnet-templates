@@ -40,4 +40,4 @@ let handleAccumulatedEvents
         let! _ = produce rendered
         return version'
     | _ ->
-        return span.index + span.events.LongLength }
+        let x = Array.last span.events in return x.Index }
