@@ -65,4 +65,4 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
     let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse spanJson
     let stats = Stats(log)
-    Propulsion.Kafka.StreamsConsumer.Start(log, config, maxDop, parseStreamSummaries, ingestIncomingSummaryMessage, stats, category)
+    Propulsion.Kafka.StreamsConsumer.Start(log, config, parseStreamSummaries, ingestIncomingSummaryMessage, maxDop, stats, category)
