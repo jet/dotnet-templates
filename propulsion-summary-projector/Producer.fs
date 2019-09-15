@@ -38,6 +38,8 @@ let handleAccumulatedEvents
         let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
         let rendered : Propulsion.Codec.NewtonsoftJson.RenderedSummary = summary |> StreamCodec.encodeSummary Contract.codec stream version'
         let! _ = produce rendered
-        return version'
+        // We need to yield the next write position, which will be after the version we've just generated the summary based on
+        return version'+1L
     | _ ->
-        let x = Array.last span.events in return x.Index }
+        // If we're ignoring the events, we mark the next write position to be one beyond the last one offered
+        let x = Array.last span.events in return x.Index+1L }
