@@ -13,7 +13,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
-<a name="3.3.1"></a>
+<a name="3.3.2"></a>
+## [3.3.2] - 2019-09-15
+
+### Changed
+
+- Target Propulsion 1.2.0 (minor breaking change in source due to parameter reordering)
+
+<<a name="3.3.1"></a>
 ## [3.3.1] - 2019-09-08
 
 ### Changed
@@ -163,7 +170,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.3.1...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.3.2...HEAD
+[3.3.2]: https://github.com/jet/dotnet-templates/compare/3.3.1...3.3.2
 [3.3.1]: https://github.com/jet/dotnet-templates/compare/3.3.0...3.3.1
 [3.3.0]: https://github.com/jet/dotnet-templates/compare/3.2.0...3.3.0
 [3.2.0]: https://github.com/jet/dotnet-templates/compare/3.1.0...3.2.0
