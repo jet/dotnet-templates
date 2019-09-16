@@ -16,8 +16,8 @@ module CmdParser =
 
     module Cosmos =
         type [<NoEquality; NoComparison>] Parameters =
-            | [<AltCommandLine "-s">] Connection of string
             | [<AltCommandLine "-cm">] ConnectionMode of Equinox.Cosmos.ConnectionMode
+            | [<AltCommandLine "-s">] Connection of string
             | [<AltCommandLine "-d">] Database of string
             | [<AltCommandLine "-c">] Container of string
             | [<AltCommandLine "-o">] Timeout of float
@@ -26,16 +26,16 @@ module CmdParser =
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
-                    | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
-                    | ConnectionMode _ ->   "override the connection mode (default: Direct)."
-                    | Database _ ->         "specify a database name for store (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
-                    | Container _ ->        "specify a container name for store (defaults: envvar:EQUINOX_COSMOS_CONTAINER)."
-                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                    | Retries _ ->          "specify operation retries (default: 1)."
-                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
+                    | ConnectionMode _ ->   "override the connection mode. Default: Direct."
+                    | Connection _ ->       "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
+                    | Database _ ->         "specify a database name for store. Default: envvar:EQUINOX_COSMOS_DATABASE."
+                    | Container _ ->        "specify a container name for store. Default: envvar:EQUINOX_COSMOS_CONTAINER."
+                    | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
+                    | Retries _ ->          "specify operation retries. Default: 1."
+                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
         type Arguments(a : ParseResults<Parameters>) =
-            member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
             member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+            member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
             member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
             member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
 
@@ -75,7 +75,7 @@ module CmdParser =
             member a.Usage =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container (default: `-aux`)."
+                | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container. Default: `-aux`."
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
@@ -84,8 +84,8 @@ module CmdParser =
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
 //#if kafka
-                | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable PROPULSION_KAFKA_BROKER, if specified)"
-                | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
+                | Broker _ ->               "specify Kafka Broker, in host:port format. Default: use environment variable PROPULSION_KAFKA_BROKER."
+                | Topic _ ->                "specify Kafka Topic Id. Default: use environment variable PROPULSION_KAFKA_TOPIC."
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(args : ParseResults<Parameters>) =

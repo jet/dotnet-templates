@@ -15,8 +15,8 @@ module CmdParser =
 
     module Cosmos =
         type [<NoEquality; NoComparison>] Parameters =
-            | [<AltCommandLine "-s">] Connection of string
             | [<AltCommandLine "-cm">] ConnectionMode of ConnectionMode
+            | [<AltCommandLine "-s">] Connection of string
             | [<AltCommandLine "-d">] Database of string
             | [<AltCommandLine "-c">] Container of string
             | [<AltCommandLine "-o">] Timeout of float
@@ -25,16 +25,16 @@ module CmdParser =
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
-                    | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
-                    | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
-                    | Database _ ->         "specify a database name for Cosmos store (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
-                    | Container _ ->        " specify a container name for Cosmos store (defaults: envvar:EQUINOX_COSMOS_CONTAINER)."
-                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                    | Retries _ ->          "specify operation retries (default: 1)."
-                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
+                    | ConnectionMode _ ->   "override the connection mode. Default: Direct."
+                    | Connection _ ->       "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
+                    | Database _ ->         "specify a database name for Cosmos store. Default: envvar:EQUINOX_COSMOS_DATABASE."
+                    | Container _ ->        " specify a container name for Cosmos store. Default: envvar:EQUINOX_COSMOS_CONTAINER."
+                    | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
+                    | Retries _ ->          "specify operation retries. Default: 1."
+                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
         type Arguments(a : ParseResults<Parameters>) =
-            member __.Mode = a.GetResult(ConnectionMode,ConnectionMode.Direct)
             member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+            member __.Mode = a.GetResult(ConnectionMode,ConnectionMode.Direct)
             member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
             member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
 

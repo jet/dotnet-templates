@@ -138,8 +138,8 @@ module CmdParser =
         | [<AltCommandLine "-l"; Unique>] LagFreqM of float
         | [<AltCommandLine "-a"; Unique>] LeaseContainer of string
 
-        | [<AltCommandLine "-s">] Connection of string
         | [<AltCommandLine "-cm">] ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-s">] Connection of string
         | [<AltCommandLine "-d">] Database of string
         | [<AltCommandLine "-c"; Unique(*Mandatory is not supported*)>] Container of string
         | [<AltCommandLine "-o">] Timeout of float
@@ -153,15 +153,15 @@ module CmdParser =
                 | FromTail ->          "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->    "maximum item count to request from feed. Default: unlimited"
                 | LagFreqM _ ->        "frequency (in minutes) to dump lag stats. Default: off"
-                | LeaseContainer _ ->  "specify Container Name for Leases container (default: `sourceContainer` + `-aux`)."
+                | LeaseContainer _ ->  "specify Container Name for Leases container. Default: `sourceContainer` + `-aux`."
 
-                | Connection _ ->      "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
-                | ConnectionMode _ ->  "override the connection mode (default: Direct)."
-                | Database _ ->        "specify a database name for Cosmos account (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
-                | Container _ ->       "specify a container name within `SourceDatabase`."
-                | Timeout _ ->         "specify operation timeout in seconds (default: 5)."
-                | Retries _ ->         "specify operation retries (default: 1)."
-                | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
+                | ConnectionMode _ ->  "override the connection mode. Default: Direct."
+                | Connection _ ->      "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
+                | Database _ ->        "specify a database name for Cosmos account. Default: envvar:EQUINOX_COSMOS_DATABASE."
+                | Container _ ->       "specify a container name within `Database`."
+                | Timeout _ ->         "specify operation timeout in seconds. Default: 5."
+                | Retries _ ->         "specify operation retries. Default: 1."
+                | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 
                 | DstEs _ ->           "EventStore Sink parameters."
                 | DstCosmos _ ->       "CosmosDb Sink parameters."
@@ -230,13 +230,13 @@ module CmdParser =
                 | Percent _ ->          "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
 
                 | Verbose ->            "Include low level Store logging."
-                | Host _ ->             "specify a DNS query, using Gossip-driven discovery against all A records returned (defaults: envvar:EQUINOX_ES_HOST, localhost)."
-                | Port _ ->             "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
-                | Username _ ->         "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
-                | Password _ ->         "specify a Password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
-                | Timeout _ ->          "specify operation timeout in seconds (default: 20)."
-                | Retries _ ->          "specify operation retries (default: 3)."
-                | HeartbeatTimeout _ -> "specify heartbeat timeout in seconds (default: 1.5)."
+                | Host _ ->             "specify a DNS query, using Gossip-driven discovery against all A records returned. Default: envvar:EQUINOX_ES_HOST."
+                | Port _ ->             "specify a custom port. Defaults: envvar:EQUINOX_ES_PORT, 30778."
+                | Username _ ->         "specify a username. Default: envvar:EQUINOX_ES_USERNAME."
+                | Password _ ->         "specify a Password. Default: envvar:EQUINOX_ES_PASSWORD."
+                | Timeout _ ->          "specify operation timeout in seconds. Default: 20."
+                | Retries _ ->          "specify operation retries. Default: 3."
+                | HeartbeatTimeout _ -> "specify heartbeat timeout in seconds. Default: 1.5."
 
                 | Cosmos _ ->           "CosmosDb Sink parameters."
                 | Es _ ->               "EventStore Sink parameters."
@@ -277,8 +277,8 @@ module CmdParser =
             | Some (Cosmos cosmos) -> CosmosSinkArguments cosmos
             | _ -> raise (MissingArg "Must specify cosmos for Sink if source is `es`")
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
-        | [<AltCommandLine("-s")>] Connection of string
         | [<AltCommandLine("-cm")>] ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine("-s")>] Connection of string
         | [<AltCommandLine("-d")>] Database of string
         | [<AltCommandLine("-c")>] Container of string
         | [<AltCommandLine "-a"; Unique>] LeaseContainer of string
@@ -290,16 +290,16 @@ module CmdParser =
 #endif
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Connection _ ->      "specify a connection string for a Cosmos account (default: envvar:EQUINOX_COSMOS_CONNECTION)."
-                | Database _ ->        "specify a database name for Cosmos account (default: envvar:EQUINOX_COSMOS_DATABASE)."
-                | Container _ ->       "specify a Container name for Cosmos account (default: envvar:EQUINOX_COSMOS_CONTAINER)."
-                | LeaseContainer _ ->  "specify Container Name (in this [target] Database) for Leases container (default: `sourceContainer` + `-aux`)."
-                | Timeout _ ->         "specify operation timeout in seconds (default: 5)."
-                | Retries _ ->         "specify operation retries (default: 0)."
-                | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-                | ConnectionMode _ ->  "override the connection mode (default: Direct)."
+                | ConnectionMode _ ->  "override the connection mode. Default: Direct."
+                | Connection _ ->      "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
+                | Database _ ->        "specify a database name for Cosmos account. Default: envvar:EQUINOX_COSMOS_DATABASE."
+                | Container _ ->       "specify a Container name for Cosmos account. Default: envvar:EQUINOX_COSMOS_CONTAINER."
+                | LeaseContainer _ ->  "specify Container Name (in this [target] Database) for Leases container. Default: `SourceContainer` + `-aux`."
+                | Timeout _ ->         "specify operation timeout in seconds. Default: 5."
+                | Retries _ ->         "specify operation retries. Default: 0."
+                | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 #if kafka
-                | Kafka _ ->           "specify Kafka target for non-Synced categories (default: None)"
+                | Kafka _ ->           "specify Kafka target for non-Synced categories. Default: None."
 #endif
     and CosmosSinkArguments(a : ParseResults<CosmosSinkParameters>) =
         member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
@@ -340,13 +340,13 @@ module CmdParser =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose ->           "Include low level Store logging."
-                | Host _ ->            "specify a DNS query, using Gossip-driven discovery against all A records returned (defaults: envvar:EQUINOX_ES_HOST, localhost)."
-                | Port _ ->            "specify a custom port (default: envvar:EQUINOX_ES_PORT, 30778)."
-                | Username _ ->        "specify a username (defaults: envvar:EQUINOX_ES_USERNAME, admin)."
-                | Password _ ->        "specify a password (defaults: envvar:EQUINOX_ES_PASSWORD, changeit)."
-                | Timeout _ ->         "specify operation timeout in seconds (default: 20)."
-                | Retries _ ->         "specify operation retries (default: 3)."
-                | HeartbeatTimeout _ ->"specify heartbeat timeout in seconds (default: 1.5)."
+                | Host _ ->            "specify a DNS query, using Gossip-driven discovery against all A records returned. Default: envvar:EQUINOX_ES_HOST."
+                | Port _ ->            "specify a custom port. Defaults: envvar:EQUINOX_ES_PORT, 30778."
+                | Username _ ->        "specify a username. Default: envvar:EQUINOX_ES_USERNAME."
+                | Password _ ->        "specify a password. Default: envvar:EQUINOX_ES_PASSWORD."
+                | Timeout _ ->         "specify operation timeout in seconds. Default: 20."
+                | Retries _ ->         "specify operation retries. Default: 3."
+                | HeartbeatTimeout _ ->"specify heartbeat timeout in seconds. Default: 1.5."
     and EsSinkArguments(a : ParseResults<EsSinkParameters>) =
         member __.Discovery =           match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
         member __.Host =                match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
@@ -371,9 +371,9 @@ module CmdParser =
         | [<AltCommandLine "-p"; Unique>] Producers of int
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable PROPULSION_KAFKA_BROKER, if specified)"
-                | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
-                | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1"
+                | Broker _ ->               "specify Kafka Broker, in host:port format. Default: use environment variable PROPULSION_KAFKA_BROKER."
+                | Topic _ ->                "specify Kafka Topic Id. Default: use environment variable PROPULSION_KAFKA_TOPIC."
+                | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1."
     and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
         member __.Broker =                  Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
         member __.Topic =                       match a.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
