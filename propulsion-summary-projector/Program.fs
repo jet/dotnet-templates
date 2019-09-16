@@ -59,7 +59,7 @@ module CmdParser =
         | [<AltCommandLine "-as"; Unique>] LeaseContainerSuffix of string
         | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-m"; Unique>] MaxDocuments of int
-        | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
+        | [<AltCommandLine "-r"; Unique>] MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine "-l"; Unique>] LagFreqM of float
         | [<AltCommandLine "-v"; Unique>] Verbose
@@ -77,7 +77,7 @@ module CmdParser =
                 | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container (default: `-aux`)."
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
-                | MaxPendingBatches _ ->    "maximum number of batches to let processing get ahead of completion. Default: 64"
+                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
@@ -94,17 +94,17 @@ module CmdParser =
         member __.Verbose =                 args.Contains Verbose
         member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
-        member __.MaxReadAhead =            args.GetResult(MaxPendingBatches,64)
+        member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
         member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,1024)
         member __.LagFrequency =            args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.AuxContainerName =       __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
             | None ->
-                Log.Information("Processing {leaseId} in {auxContainerName} without document count limit (<= {maxPending} pending) using {dop} processors",
+                Log.Information("Processing {leaseId} in {auxContainerName} without document count limit (<= {maxReadAhead} pending) using {dop} processors",
                     x.LeaseId, x.AuxContainerName, x.MaxReadAhead, x.ConcurrentStreamProcessors)
             | Some lim ->
-                Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors",
+                Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents (<= {maxReadAhead} pending) using {dop} processors",
                     x.LeaseId, x.AuxContainerName, lim, x.MaxReadAhead, x.ConcurrentStreamProcessors)
             if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))

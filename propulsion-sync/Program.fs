@@ -22,7 +22,7 @@ module CmdParser =
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
-        | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
+        | [<AltCommandLine "-r"; Unique>] MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine "-c"; Unique>] MaxConnections of int
         | [<AltCommandLine "-s"; Unique>] MaxSubmit of int
@@ -39,7 +39,7 @@ module CmdParser =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | ConsumerGroupName _ ->"Projector consumer group name."
-                | MaxPendingBatches _ ->"maximum number of batches to let processing get ahead of completion. Default: 16"
+                | MaxReadAhead _ ->     "maximum number of batches to let processing get ahead of completion. Default: 16"
                 | MaxWriters _ ->       "maximum number of concurrent writes to target permitted. Default: 512"
                 | MaxConnections _ ->   "size of Sink connection pool to maintain. Default: 1"
                 | MaxSubmit _ ->        "maximum number of batches to submit concurrently. Default: 8"
@@ -55,7 +55,7 @@ module CmdParser =
                 | SrcEs _ ->            "EventStore input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =   a.GetResult ConsumerGroupName
-        member __.MaxPendingBatches =   a.GetResult(MaxPendingBatches,2048)
+        member __.MaxReadAhead =        a.GetResult(MaxReadAhead,2048)
         member __.MaxWriters =          a.GetResult(MaxWriters,1024)
         member __.MaxConnections =      a.GetResult(MaxConnections,1)
         member __.MaybeSeqEndpoint =    if a.Contains LocalSeq then Some "http://localhost:5341" else None
@@ -116,7 +116,7 @@ module CmdParser =
                     | Choice2Of2 _dstE ->
                         let lc = match srcC.LeaseContainer with Some sc -> sc | None -> srcC.Container + "-aux"
                         srcC.Discovery, { database = srcC.Database; container = lc }
-                Log.Information("Max read backlog: {maxPending}", x.MaxPendingBatches)
+                Log.Information("Max read backlog: {maxReadAhead}", x.MaxReadAhead)
                 Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                     x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
@@ -126,8 +126,8 @@ module CmdParser =
                 let startPos = srcE.StartPos
                 Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Container {container}",
                     x.ConsumerGroupName, startPos, srcE.ForceRestart, srcE.Sink.Database, srcE.Sink.Container)
-                Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxPendingBatches} uncommitted batches ahead",
-                    srcE.MinBatchSize, srcE.StartingBatchSize, x.MaxPendingBatches)
+                Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxReadAhead} uncommitted batches ahead",
+                    srcE.MinBatchSize, srcE.StartingBatchSize, x.MaxReadAhead)
                 Choice2Of2 (srcE,
                     {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                         forceRestart = srcE.ForceRestart
@@ -509,12 +509,12 @@ let start (args : CmdParser.Arguments) =
                             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize }
                     let producer = Propulsion.Kafka.Producer(Log.Logger, "SyncTemplate", broker, topic, degreeOfParallelism = producers)
                     StreamsProducerSink.Start(
-                        Log.Logger, args.MaxPendingBatches, args.MaxWriters, render, producer, categorize,
+                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, categorize,
                         statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 1., maxBytes=maxBytes, maxEvents=maxEvents),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
-                CosmosSink.Start(log, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
+                CosmosSink.Start(log, args.MaxReadAhead, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
                 args.CategoryFilterFunction(excludeLong=true)
             Some (mainConn,containers),sink,streamFilter
         | Choice2Of2 es ->
@@ -523,7 +523,7 @@ let start (args : CmdParser.Arguments) =
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, "SyncTemplate", connIndex)
                 return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            let sink = EventStoreSink.Start(log, storeLog, args.MaxPendingBatches, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+            let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
             None,sink,args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency) ->
@@ -570,7 +570,7 @@ let start (args : CmdParser.Arguments) =
         let runPipeline =
             EventStoreSource.Run(
                 log, sink, checkpoints, connect, spec, categorize, tryMapEvent streamFilter,
-                args.MaxPendingBatches, args.StatsInterval)
+                args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
 
 [<EntryPoint>]
