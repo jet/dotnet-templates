@@ -148,20 +148,20 @@ let [<Literal>] appName = "ProjectorTemplate"
 
 let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose args.ChangeFeedVerbose
-    let (broker,topic, producers) = args.Target.BuildTargetParams()
+    let broker,topic,producers = args.Target.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic, degreeOfParallelism = producers)
     let produce (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
         producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 
-    let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
-    let handleStreamEvents =
-        let cache = Caching.Cache (appName, 10)
+    let discovery,connector,source = args.Cosmos.BuildConnectionDetails()
+    let cache = Caching.Cache(appName, 10(*MiB*))
+    let handleStreamEvents : (string*Propulsion.Streams.StreamSpan<_>) -> Async<int64> =
         let connection = Async.RunSynchronously <| connector.Connect(appName, discovery)
         let context = Context(connection, source.database, source.container)
         let service = Todo.Repository.createService cache context
         Producer.handleAccumulatedEvents service produce
 
-    let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
+    let aux,leaseId,startFromTail,maxDocuments,lagFrequency,(maxReadAhead,maxConcurrentStreams) = args.BuildChangeFeedParams()
     let projector =
         Propulsion.Streams.Sync.StreamsSync.Start(
              Log.Logger, maxReadAhead, maxConcurrentStreams, handleStreamEvents, category,
@@ -172,7 +172,7 @@ let start (args : CmdParser.Arguments) =
             Log.Logger, discovery, connector.ClientOptions, source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-    runSourcePipeline, projector
+    runSourcePipeline,projector
 
 [<EntryPoint>]
 let main argv =
