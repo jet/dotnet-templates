@@ -11,19 +11,19 @@ open System.Threading
 module CmdParser =
     type [<NoEquality; NoComparison>]
         Parameters =
-        | [<AltCommandLine("-v")>] Verbose
-        | [<AltCommandLine("-vc")>] VerboseConsole
-        | [<AltCommandLine("-S")>] LocalSeq
-        | [<AltCommandLine("-l")>] LogFile of string
+        | [<AltCommandLine("-v")>]     Verbose
+        | [<AltCommandLine("-vc")>]    VerboseConsole
+        | [<AltCommandLine("-S")>]     LocalSeq
+        | [<AltCommandLine("-l")>]     LogFile of string
         | [<CliPrefix(CliPrefix.None); Last; Unique>] Run of ParseResults<TestParameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
-                | Verbose ->            "Include low level logging regarding specific test runs."
-                | VerboseConsole ->     "Include low level test and store actions logging in on-screen output to console."
-                | LocalSeq ->           "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
-                | LogFile _ ->          "specify a log file to write the result breakdown into. Default: TestbedTemplate.log."
-                | Run _ ->              "Run a load test"
+                | Verbose ->           "Include low level logging regarding specific test runs."
+                | VerboseConsole ->    "Include low level test and store actions logging in on-screen output to console."
+                | LocalSeq ->          "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
+                | LogFile _ ->         "specify a log file to write the result breakdown into. Default: TestbedTemplate.log."
+                | Run _ ->             "Run a load test"
     and [<NoComparison>]
         TestParameters =
         | [<AltCommandLine("-t"); Unique>] Name of Tests.Test
@@ -46,23 +46,23 @@ module CmdParser =
 //#endif
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Name _ ->             "specify which test to run. Default: Favorite."
-                | Size _ ->             "For `-t Todo`: specify random title length max size to use. Default 100."
-                | Cached ->             "employ a 50MB cache, wire in to Stream configuration."
-                | Unfolds ->            "employ a store-appropriate Rolling Snapshots and/or Unfolding strategy."
-                | BatchSize _ ->        "Maximum item count to supply when querying. Default: 500."
-                | TestsPerSecond _ ->   "specify a target number of requests per second. Default: 100."
-                | DurationM _ ->        "specify a run duration in minutes. Default: 30."
-                | ErrorCutoff _ ->      "specify an error cutoff; test ends when exceeded. Default: 10000."
-                | ReportIntervalS _ ->  "specify reporting intervals in seconds. Default: 10."
+                | Name _ ->            "specify which test to run. Default: Favorite."
+                | Size _ ->            "For `-t Todo`: specify random title length max size to use. Default 100."
+                | Cached ->            "employ a 50MB cache, wire in to Stream configuration."
+                | Unfolds ->           "employ a store-appropriate Rolling Snapshots and/or Unfolding strategy."
+                | BatchSize _ ->       "Maximum item count to supply when querying. Default: 500."
+                | TestsPerSecond _ ->  "specify a target number of requests per second. Default: 100."
+                | DurationM _ ->       "specify a run duration in minutes. Default: 30."
+                | ErrorCutoff _ ->     "specify an error cutoff; test ends when exceeded. Default: 10000."
+                | ReportIntervalS _ -> "specify reporting intervals in seconds. Default: 10."
 //#if (memoryStore || (!cosmos && !eventStore))
-                | Memory _ ->           "target in-process Transient Memory Store. Default if not other target specified."
+                | Memory _ ->          "target in-process Transient Memory Store. Default if not other target specified."
 //#endif
 //#if eventStore
-                | Es _ ->               "Run transactions in-process against EventStore."
+                | Es _ ->              "Run transactions in-process against EventStore."
 //#endif
 //#if cosmos
-                | Cosmos _ ->           "Run transactions in-process against CosmosDb."
+                | Cosmos _ ->          "Run transactions in-process against CosmosDb."
 //#endif
     and TestArguments(args: ParseResults<TestParameters>) =
         member __.Options =             args.GetResults Cached @ args.GetResults Unfolds
