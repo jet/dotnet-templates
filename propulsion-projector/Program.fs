@@ -34,8 +34,8 @@ module CmdParser =
                     | Retries _ ->     "specify operation retries. Default: 1."
                     | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
         type Arguments(a : ParseResults<Parameters>) =
-            member __.Connection =     match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
             member __.Mode =           a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
+            member __.Connection =     match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
             member __.Database =       match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
             member __.Container =      match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
 

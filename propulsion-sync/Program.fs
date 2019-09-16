@@ -21,57 +21,57 @@ module CmdParser =
 
     [<NoEquality; NoComparison>]
     type Parameters =
-        | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
-        | [<AltCommandLine "-r"; Unique>] MaxReadAhead of int
-        | [<AltCommandLine "-w"; Unique>] MaxWriters of int
-        | [<AltCommandLine "-c"; Unique>] MaxConnections of int
-        | [<AltCommandLine "-s"; Unique>] MaxSubmit of int
+        | [<MainCommand; ExactlyOnce>]      ConsumerGroupName of string
+        | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
+        | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
+        | [<AltCommandLine "-c"; Unique>]   MaxConnections of int
+        | [<AltCommandLine "-s"; Unique>]   MaxSubmit of int
 
-        | [<AltCommandLine "-S"; Unique>] LocalSeq
-        | [<AltCommandLine "-v"; Unique>] Verbose
-        | [<AltCommandLine "-vc"; Unique>] VerboseConsole
+        | [<AltCommandLine "-S"; Unique>]   LocalSeq
+        | [<AltCommandLine "-v"; Unique>]   Verbose
+        | [<AltCommandLine "-vc"; Unique>]  VerboseConsole
 
-        | [<AltCommandLine "-e">] CategoryBlacklist of string
-        | [<AltCommandLine "-i">] CategoryWhitelist of string
+        | [<AltCommandLine "-e">]           CategoryBlacklist of string
+        | [<AltCommandLine "-i">]           CategoryWhitelist of string
 
         | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] SrcEs of ParseResults<EsSourceParameters>
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | ConsumerGroupName _ ->"Projector consumer group name."
-                | MaxReadAhead _ ->    "maximum number of batches to let processing get ahead of completion. Default: 16"
-                | MaxWriters _ ->      "maximum number of concurrent writes to target permitted. Default: 512"
-                | MaxConnections _ ->  "size of Sink connection pool to maintain. Default: 1"
-                | MaxSubmit _ ->       "maximum number of batches to submit concurrently. Default: 8"
+                | ConsumerGroupName _ ->    "Projector consumer group name."
+                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
+                | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 512."
+                | MaxConnections _ ->       "size of Sink connection pool to maintain. Default: 1."
+                | MaxSubmit _ ->            "maximum number of batches to submit concurrently. Default: 8."
 
-                | LocalSeq ->          "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
-                | Verbose ->           "request Verbose Logging. Default: off"
-                | VerboseConsole ->    "request Verbose Console Logging. Default: off"
+                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
+                | Verbose ->                "request Verbose Logging. Default: off"
+                | VerboseConsole ->         "request Verbose Console Logging. Default: off"
 
-                | CategoryBlacklist _ ->"category whitelist"
-                | CategoryWhitelist _ ->"category blacklist"
+                | CategoryBlacklist _ ->    "category whitelist"
+                | CategoryWhitelist _ ->    "category blacklist"
 
-                | SrcCosmos _ ->       "Cosmos input parameters."
-                | SrcEs _ ->           "EventStore input parameters."
+                | SrcCosmos _ ->            "Cosmos input parameters."
+                | SrcEs _ ->                "EventStore input parameters."
     and Arguments(a : ParseResults<Parameters>) =
-        member __.ConsumerGroupName =  a.GetResult ConsumerGroupName
-        member __.MaxReadAhead =       a.GetResult(MaxReadAhead,2048)
-        member __.MaxWriters =         a.GetResult(MaxWriters,1024)
-        member __.MaxConnections =     a.GetResult(MaxConnections,1)
-        member __.MaybeSeqEndpoint =   if a.Contains LocalSeq then Some "http://localhost:5341" else None
-        member __.MaxSubmit =          a.GetResult(MaxSubmit,8)
+        member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
+        member __.MaxReadAhead =            a.GetResult(MaxReadAhead,2048)
+        member __.MaxWriters =              a.GetResult(MaxWriters,1024)
+        member __.MaxConnections =          a.GetResult(MaxConnections,1)
+        member __.MaybeSeqEndpoint =        if a.Contains LocalSeq then Some "http://localhost:5341" else None
+        member __.MaxSubmit =               a.GetResult(MaxSubmit,8)
 
-        member __.Verbose =            a.Contains Parameters.Verbose
-        member __.VerboseConsole =     a.Contains VerboseConsole
-        member __.ConsoleMinLevel =    if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
+        member __.Verbose =                 a.Contains Parameters.Verbose
+        member __.VerboseConsole =          a.Contains VerboseConsole
+        member __.ConsoleMinLevel =         if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
         member val Source : Choice<CosmosSourceArguments,EsSourceArguments> =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> Choice1Of2 (CosmosSourceArguments cosmos)
             | Some (SrcEs es) -> Choice2Of2 (EsSourceArguments es)
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
 
-        member __.StatsInterval =      TimeSpan.FromMinutes 1.
-        member __.StateInterval =      TimeSpan.FromMinutes 5.
+        member __.StatsInterval =           TimeSpan.FromMinutes 1.
+        member __.StateInterval =           TimeSpan.FromMinutes 5.
         member __.CategoryFilterFunction(?excludeLong, ?longOnly): string -> bool =
             let isLong (streamName : string) =
                 streamName.StartsWith "Inventory-" // Too long
@@ -133,52 +133,52 @@ module CmdParser =
                         forceRestart = srcE.ForceRestart
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = srcE.StreamReaders })
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
-        | [<AltCommandLine "-z"; Unique>] FromTail
-        | [<AltCommandLine "-m"; Unique>] MaxDocuments of int
-        | [<AltCommandLine "-l"; Unique>] LagFreqM of float
-        | [<AltCommandLine "-a"; Unique>] LeaseContainer of string
+        | [<AltCommandLine "-z"; Unique>]   FromTail
+        | [<AltCommandLine "-m"; Unique>]   MaxDocuments of int
+        | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
+        | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
 
-        | [<AltCommandLine "-cm">]     ConnectionMode of Equinox.Cosmos.ConnectionMode
-        | [<AltCommandLine "-s">]      Connection of string
-        | [<AltCommandLine "-d">]      Database of string
+        | [<AltCommandLine "-cm">]          ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-s">]           Connection of string
+        | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c"; Unique(*Mandatory is not supported*)>] Container of string
-        | [<AltCommandLine "-o">]      Timeout of float
-        | [<AltCommandLine "-r">]      Retries of int
-        | [<AltCommandLine "-rt">]     RetriesWaitTime of int
+        | [<AltCommandLine "-o">]           Timeout of float
+        | [<AltCommandLine "-r">]           Retries of int
+        | [<AltCommandLine "-rt">]          RetriesWaitTime of int
 
         | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] DstEs of ParseResults<EsSinkParameters>
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] DstCosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | FromTail ->          "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | MaxDocuments _ ->    "maximum item count to request from feed. Default: unlimited"
-                | LagFreqM _ ->        "frequency (in minutes) to dump lag stats. Default: off"
-                | LeaseContainer _ ->  "specify Container Name for Leases container. Default: `sourceContainer` + `-aux`."
+                | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
+                | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: off"
+                | LeaseContainer _ ->       "specify Container Name for Leases container. Default: `sourceContainer` + `-aux`."
 
-                | ConnectionMode _ ->  "override the connection mode. Default: Direct."
-                | Connection _ ->      "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
-                | Database _ ->        "specify a database name for Cosmos account. Default: envvar:EQUINOX_COSMOS_DATABASE."
-                | Container _ ->       "specify a container name within `Database`."
-                | Timeout _ ->         "specify operation timeout in seconds. Default: 5."
-                | Retries _ ->         "specify operation retries. Default: 1."
-                | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
+                | ConnectionMode _ ->       "override the connection mode. Default: Direct."
+                | Connection _ ->           "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
+                | Database _ ->             "specify a database name for Cosmos account. Default: envvar:EQUINOX_COSMOS_DATABASE."
+                | Container _ ->            "specify a container name within `Database`."
+                | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
+                | Retries _ ->              "specify operation retries. Default: 1."
+                | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 
-                | DstEs _ ->           "EventStore Sink parameters."
-                | DstCosmos _ ->       "CosmosDb Sink parameters."
+                | DstEs _ ->                "EventStore Sink parameters."
+                | DstCosmos _ ->            "CosmosDb Sink parameters."
     and CosmosSourceArguments(a : ParseResults<CosmosSourceParameters>) =
-        member __.FromTail =           a.Contains CosmosSourceParameters.FromTail
-        member __.MaxDocuments =       a.TryGetResult MaxDocuments
-        member __.LagFrequency =       a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member __.LeaseContainer =     a.TryGetResult CosmosSourceParameters.LeaseContainer
+        member __.FromTail =                a.Contains CosmosSourceParameters.FromTail
+        member __.MaxDocuments =            a.TryGetResult MaxDocuments
+        member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member __.LeaseContainer =          a.TryGetResult CosmosSourceParameters.LeaseContainer
 
-        member __.Connection =         match a.TryGetResult CosmosSourceParameters.Connection   with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Discovery =          Discovery.FromConnectionString __.Connection
-        member __.Mode =               a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Database =           match a.TryGetResult CosmosSourceParameters.Database     with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Container =          a.GetResult CosmosSourceParameters.Container
-        member __.Timeout =            a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =            a.GetResult(CosmosSourceParameters.Retries, 1)
-        member __.MaxRetryWaitTime =   a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5)
+        member __.Mode =                    a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member __.Connection =              match a.TryGetResult CosmosSourceParameters.Connection   with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+        member __.Discovery =               Discovery.FromConnectionString __.Connection
+        member __.Database =                match a.TryGetResult CosmosSourceParameters.Database     with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
+        member __.Container =               a.GetResult CosmosSourceParameters.Container
+        member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
+        member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5)
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,_)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
@@ -194,75 +194,75 @@ module CmdParser =
             | Some (DstEs es) -> Choice2Of2 (EsSinkArguments es)
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Sink")
     and [<NoEquality; NoComparison>] EsSourceParameters =
-        | [<AltCommandLine "-z"; Unique>] FromTail
-        | [<AltCommandLine "-g"; Unique>] Gorge of int
-        | [<AltCommandLine "-i"; Unique>] StreamReaders of int
-        | [<AltCommandLine "-t"; Unique>] Tail of intervalS: float
+        | [<AltCommandLine "-z"; Unique>]   FromTail
+        | [<AltCommandLine "-g"; Unique>]   Gorge of int
+        | [<AltCommandLine "-i"; Unique>]   StreamReaders of int
+        | [<AltCommandLine "-t"; Unique>]   Tail of intervalS: float
         | [<AltCommandLine "-force"; Unique>] ForceRestart
-        | [<AltCommandLine "-m"; Unique>] BatchSize of int
+        | [<AltCommandLine "-m"; Unique>]   BatchSize of int
         | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-pos"; Unique>] Position of int64
-        | [<AltCommandLine "-c"; Unique>] Chunk of int
+        | [<AltCommandLine "-c"; Unique>]   Chunk of int
         | [<AltCommandLine "-pct"; Unique>] Percent of float
 
-        | [<AltCommandLine("-v")>]     Verbose
-        | [<AltCommandLine("-o")>]     Timeout of float
-        | [<AltCommandLine("-r")>]     Retries of int
-        | [<AltCommandLine("-oh")>]     HeartbeatTimeout of float
-        | [<AltCommandLine("-h")>]     Host of string
-        | [<AltCommandLine("-x")>]     Port of int
-        | [<AltCommandLine("-u")>]     Username of string
-        | [<AltCommandLine("-p")>]     Password of string
+        | [<AltCommandLine("-v")>]          Verbose
+        | [<AltCommandLine("-o")>]          Timeout of float
+        | [<AltCommandLine("-r")>]          Retries of int
+        | [<AltCommandLine("-oh")>]         HeartbeatTimeout of float
+        | [<AltCommandLine("-h")>]          Host of string
+        | [<AltCommandLine("-x")>]          Port of int
+        | [<AltCommandLine("-u")>]          Username of string
+        | [<AltCommandLine("-p")>]          Password of string
 
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSinkParameters>
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | FromTail ->          "Start the processing from the Tail"
-                | Gorge _ ->           "Request Parallel readers phase during initial catchup, running one chunk (256MB) apart. Default: off"
-                | StreamReaders _ ->   "number of concurrent readers that will fetch a missing stream when in tailing mode. Default: 1. TODO: IMPLEMENT!"
-                | Tail _ ->            "attempt to read from tail at specified interval in Seconds. Default: 1"
-                | ForceRestart _ ->    "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
-                | BatchSize _ ->       "maximum item count to request from feed. Default: 4096"
-                | MinBatchSize _ ->    "minimum item count to drop down to in reaction to read failures. Default: 512"
-                | Position _ ->        "EventStore $all Stream Position to commence from"
-                | Chunk _ ->           "EventStore $all Chunk to commence from"
-                | Percent _ ->         "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
+                | FromTail ->               "Start the processing from the Tail"
+                | Gorge _ ->                "Request Parallel readers phase during initial catchup, running one chunk (256MB) apart. Default: off"
+                | StreamReaders _ ->        "number of concurrent readers that will fetch a missing stream when in tailing mode. Default: 1. TODO: IMPLEMENT!"
+                | Tail _ ->                 "attempt to read from tail at specified interval in Seconds. Default: 1"
+                | ForceRestart _ ->         "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
+                | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
+                | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
+                | Position _ ->             "EventStore $all Stream Position to commence from"
+                | Chunk _ ->                "EventStore $all Chunk to commence from"
+                | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
 
-                | Verbose ->           "Include low level Store logging."
-                | Host _ ->            "specify a DNS query, using Gossip-driven discovery against all A records returned. Default: envvar:EQUINOX_ES_HOST."
-                | Port _ ->            "specify a custom port. Defaults: envvar:EQUINOX_ES_PORT, 30778."
-                | Username _ ->        "specify a username. Default: envvar:EQUINOX_ES_USERNAME."
-                | Password _ ->        "specify a Password. Default: envvar:EQUINOX_ES_PASSWORD."
-                | Timeout _ ->         "specify operation timeout in seconds. Default: 20."
-                | Retries _ ->         "specify operation retries. Default: 3."
-                | HeartbeatTimeout _ ->"specify heartbeat timeout in seconds. Default: 1.5."
+                | Verbose ->                "Include low level Store logging."
+                | Host _ ->                 "specify a DNS query, using Gossip-driven discovery against all A records returned. Default: envvar:EQUINOX_ES_HOST."
+                | Port _ ->                 "specify a custom port. Defaults: envvar:EQUINOX_ES_PORT, 30778."
+                | Username _ ->             "specify a username. Default: envvar:EQUINOX_ES_USERNAME."
+                | Password _ ->             "specify a Password. Default: envvar:EQUINOX_ES_PASSWORD."
+                | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
+                | Retries _ ->              "specify operation retries. Default: 3."
+                | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
 
-                | Cosmos _ ->          "CosmosDb Sink parameters."
-                | Es _ ->              "EventStore Sink parameters."
+                | Cosmos _ ->               "CosmosDb Sink parameters."
+                | Es _ ->                   "EventStore Sink parameters."
     and EsSourceArguments(a : ParseResults<EsSourceParameters>) =
-        member __.Gorge =              a.TryGetResult Gorge
-        member __.StreamReaders =      a.GetResult(StreamReaders,1)
-        member __.TailInterval =       a.GetResult(Tail,1.) |> TimeSpan.FromSeconds
-        member __.ForceRestart =       a.Contains ForceRestart
-        member __.StartingBatchSize =  a.GetResult(BatchSize,4096)
-        member __.MinBatchSize =       a.GetResult(MinBatchSize,512)
+        member __.Gorge =                   a.TryGetResult Gorge
+        member __.StreamReaders =           a.GetResult(StreamReaders,1)
+        member __.TailInterval =            a.GetResult(Tail,1.) |> TimeSpan.FromSeconds
+        member __.ForceRestart =            a.Contains ForceRestart
+        member __.StartingBatchSize =       a.GetResult(BatchSize,4096)
+        member __.MinBatchSize =            a.GetResult(MinBatchSize,512)
         member __.StartPos =
             match a.TryGetResult Position, a.TryGetResult Chunk, a.TryGetResult Percent, a.Contains FromTail with
-            | Some p, _, _, _ ->       Absolute p
-            | _, Some c, _, _ ->       StartPos.Chunk c
-            | _, _, Some p, _ ->       Percentage p
-            | None, None, None, true ->StartPos.TailOrCheckpoint
-            | None, None, None, _ ->   StartPos.StartOrCheckpoint
+            | Some p, _, _, _ ->            Absolute p
+            | _, Some c, _, _ ->            StartPos.Chunk c
+            | _, _, Some p, _ ->            Percentage p
+            | None, None, None, true ->     StartPos.TailOrCheckpoint
+            | None, None, None, _ ->        StartPos.StartOrCheckpoint
 
-        member __.Host =               match a.TryGetResult EsSourceParameters.Host with Some x -> x | None -> envBackstop "Host"          "EQUINOX_ES_HOST"
-        member __.Port =               match a.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
-        member __.Discovery =          match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
-        member __.User =               match a.TryGetResult EsSourceParameters.Username with Some x -> x | None -> envBackstop "Username"  "EQUINOX_ES_USERNAME"
-        member __.Password =           match a.TryGetResult EsSourceParameters.Password with Some x -> x | None -> envBackstop "Password"  "EQUINOX_ES_PASSWORD"
-        member __.Timeout =            a.GetResult(EsSourceParameters.Timeout,20.) |> TimeSpan.FromSeconds
-        member __.Retries =            a.GetResult(EsSourceParameters.Retries,3)
-        member __.Heartbeat =          a.GetResult(EsSourceParameters.HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
+        member __.Host =                    match a.TryGetResult EsSourceParameters.Host with Some x -> x | None -> envBackstop "Host"          "EQUINOX_ES_HOST"
+        member __.Port =                    match a.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
+        member __.Discovery =               match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
+        member __.User =                    match a.TryGetResult EsSourceParameters.Username with Some x -> x | None -> envBackstop "Username"  "EQUINOX_ES_USERNAME"
+        member __.Password =                match a.TryGetResult EsSourceParameters.Password with Some x -> x | None -> envBackstop "Password"  "EQUINOX_ES_PASSWORD"
+        member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout,20.) |> TimeSpan.FromSeconds
+        member __.Retries =                 a.GetResult(EsSourceParameters.Retries,3)
+        member __.Heartbeat =               a.GetResult(EsSourceParameters.HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
         member __.Connect(log: ILogger, storeLog: ILogger, connectionStrategy) =
             let s (x : TimeSpan) = x.TotalSeconds
             log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s __.Heartbeat, s __.Timeout, __.Retries)
@@ -277,40 +277,40 @@ module CmdParser =
             | Some (Cosmos cosmos) -> CosmosSinkArguments cosmos
             | _ -> raise (MissingArg "Must specify cosmos for Sink if source is `es`")
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
-        | [<AltCommandLine("-cm")>]    ConnectionMode of Equinox.Cosmos.ConnectionMode
-        | [<AltCommandLine("-s")>]     Connection of string
-        | [<AltCommandLine("-d")>]     Database of string
-        | [<AltCommandLine("-c")>]     Container of string
-        | [<AltCommandLine "-a"; Unique>] LeaseContainer of string
-        | [<AltCommandLine("-o")>]     Timeout of float
-        | [<AltCommandLine("-r")>]     Retries of int
-        | [<AltCommandLine("-rt")>]    RetriesWaitTime of int
+        | [<AltCommandLine("-cm")>]         ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine("-s")>]          Connection of string
+        | [<AltCommandLine("-d")>]          Database of string
+        | [<AltCommandLine("-c")>]          Container of string
+        | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
+        | [<AltCommandLine("-o")>]          Timeout of float
+        | [<AltCommandLine("-r")>]          Retries of int
+        | [<AltCommandLine("-rt")>]         RetriesWaitTime of int
 #if kafka
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
 #endif
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | ConnectionMode _ ->  "override the connection mode. Default: Direct."
-                | Connection _ ->      "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
-                | Database _ ->        "specify a database name for Cosmos account. Default: envvar:EQUINOX_COSMOS_DATABASE."
-                | Container _ ->       "specify a Container name for Cosmos account. Default: envvar:EQUINOX_COSMOS_CONTAINER."
-                | LeaseContainer _ ->  "specify Container Name (in this [target] Database) for Leases container. Default: `SourceContainer` + `-aux`."
-                | Timeout _ ->         "specify operation timeout in seconds. Default: 5."
-                | Retries _ ->         "specify operation retries. Default: 0."
-                | RetriesWaitTime _ -> "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
+                | ConnectionMode _ ->       "override the connection mode. Default: Direct."
+                | Connection _ ->           "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
+                | Database _ ->             "specify a database name for Cosmos account. Default: envvar:EQUINOX_COSMOS_DATABASE."
+                | Container _ ->            "specify a Container name for Cosmos account. Default: envvar:EQUINOX_COSMOS_CONTAINER."
+                | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `SourceContainer` + `-aux`."
+                | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
+                | Retries _ ->              "specify operation retries. Default: 0."
+                | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 #if kafka
-                | Kafka _ ->           "specify Kafka target for non-Synced categories. Default: None."
+                | Kafka _ ->                "specify Kafka target for non-Synced categories. Default: None."
 #endif
     and CosmosSinkArguments(a : ParseResults<CosmosSinkParameters>) =
-        member __.Connection =         match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Mode =               a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Discovery =          Discovery.FromConnectionString __.Connection
-        member __.Database =           match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Container =          match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
-        member __.LeaseContainer =     a.TryGetResult LeaseContainer
-        member __.Timeout =            a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =            a.GetResult(CosmosSinkParameters.Retries, 0)
-        member __.MaxRetryWaitTime =   a.GetResult(RetriesWaitTime, 5)
+        member __.Connection =              match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+        member __.Mode =                    a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member __.Discovery =               Discovery.FromConnectionString __.Connection
+        member __.Database =                match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
+        member __.Container =               match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
+        member __.LeaseContainer =          a.TryGetResult LeaseContainer
+        member __.Timeout =                 a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        member __.Retries =                 a.GetResult(CosmosSinkParameters.Retries, 0)
+        member __.MaxRetryWaitTime =        a.GetResult(RetriesWaitTime, 5)
         /// Connect with the provided parameters and/or environment variables
         member x.Connect
             /// Connection/Client identifier for logging purposes
@@ -329,33 +329,33 @@ module CmdParser =
             | _ -> None
 #endif
     and [<NoEquality; NoComparison>] EsSinkParameters =
-        | [<AltCommandLine("-v")>]     Verbose
-        | [<AltCommandLine("-h")>]     Host of string
-        | [<AltCommandLine("-x")>]     Port of int
-        | [<AltCommandLine("-u")>]     Username of string
-        | [<AltCommandLine("-p")>]     Password of string
-        | [<AltCommandLine("-o")>]     Timeout of float
-        | [<AltCommandLine("-r")>]     Retries of int
-        | [<AltCommandLine("-oh")>]    HeartbeatTimeout of float
+        | [<AltCommandLine("-v")>]          Verbose
+        | [<AltCommandLine("-h")>]          Host of string
+        | [<AltCommandLine("-x")>]          Port of int
+        | [<AltCommandLine("-u")>]          Username of string
+        | [<AltCommandLine("-p")>]          Password of string
+        | [<AltCommandLine("-o")>]          Timeout of float
+        | [<AltCommandLine("-r")>]          Retries of int
+        | [<AltCommandLine("-oh")>]         HeartbeatTimeout of float
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Verbose ->           "Include low level Store logging."
-                | Host _ ->            "specify a DNS query, using Gossip-driven discovery against all A records returned. Default: envvar:EQUINOX_ES_HOST."
-                | Port _ ->            "specify a custom port. Defaults: envvar:EQUINOX_ES_PORT, 30778."
-                | Username _ ->        "specify a username. Default: envvar:EQUINOX_ES_USERNAME."
-                | Password _ ->        "specify a password. Default: envvar:EQUINOX_ES_PASSWORD."
-                | Timeout _ ->         "specify operation timeout in seconds. Default: 20."
-                | Retries _ ->         "specify operation retries. Default: 3."
-                | HeartbeatTimeout _ ->"specify heartbeat timeout in seconds. Default: 1.5."
+                | Verbose ->                "Include low level Store logging."
+                | Host _ ->                 "specify a DNS query, using Gossip-driven discovery against all A records returned. Default: envvar:EQUINOX_ES_HOST."
+                | Port _ ->                 "specify a custom port. Defaults: envvar:EQUINOX_ES_PORT, 30778."
+                | Username _ ->             "specify a username. Default: envvar:EQUINOX_ES_USERNAME."
+                | Password _ ->             "specify a password. Default: envvar:EQUINOX_ES_PASSWORD."
+                | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
+                | Retries _ ->              "specify operation retries. Default: 3."
+                | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
     and EsSinkArguments(a : ParseResults<EsSinkParameters>) =
-        member __.Discovery =          match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
-        member __.Host =               match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
-        member __.Port =               match a.TryGetResult Port       with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
-        member __.User =               match a.TryGetResult Username   with Some x -> x | None -> envBackstop "Username"   "EQUINOX_ES_USERNAME"
-        member __.Password =           match a.TryGetResult Password   with Some x -> x | None -> envBackstop "Password"   "EQUINOX_ES_PASSWORD"
-        member __.Retries =            a.GetResult(Retries,3)
-        member __.Timeout =            a.GetResult(Timeout,20.) |> TimeSpan.FromSeconds
-        member __.Heartbeat =          a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
+        member __.Discovery =               match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
+        member __.Host =                    match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
+        member __.Port =                    match a.TryGetResult Port       with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
+        member __.User =                    match a.TryGetResult Username   with Some x -> x | None -> envBackstop "Username"   "EQUINOX_ES_USERNAME"
+        member __.Password =                match a.TryGetResult Password   with Some x -> x | None -> envBackstop "Password"   "EQUINOX_ES_PASSWORD"
+        member __.Retries =                 a.GetResult(Retries,3)
+        member __.Timeout =                 a.GetResult(Timeout,20.) |> TimeSpan.FromSeconds
+        member __.Heartbeat =               a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
         member __.Connect(log: ILogger, storeLog: ILogger, connectionStrategy, appName, connIndex) =
             let s (x : TimeSpan) = x.TotalSeconds
             log.Information("EventStore {host} Connection {connId} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
@@ -366,19 +366,19 @@ module CmdParser =
                 .Establish("SyncTemplate", __.Discovery, connectionStrategy)
 #if kafka
     and [<NoEquality; NoComparison>] KafkaSinkParameters =
-        | [<AltCommandLine "-b"; Unique>] Broker of string
-        | [<AltCommandLine "-t"; Unique>] Topic of string
-        | [<AltCommandLine "-p"; Unique>] Producers of int
+        | [<AltCommandLine "-b"; Unique>]   Broker of string
+        | [<AltCommandLine "-t"; Unique>]   Topic of string
+        | [<AltCommandLine "-p"; Unique>]   Producers of int
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Broker _ ->          "specify Kafka Broker, in host:port format. Default: use environment variable PROPULSION_KAFKA_BROKER."
-                | Topic _ ->           "specify Kafka Topic Id. Default: use environment variable PROPULSION_KAFKA_TOPIC."
-                | Producers _ ->       "specify number of Kafka Producer instances to use. Default: 1."
+                | Broker _ ->               "specify Kafka Broker, in host:port format. Default: use environment variable PROPULSION_KAFKA_BROKER."
+                | Topic _ ->                "specify Kafka Topic Id. Default: use environment variable PROPULSION_KAFKA_TOPIC."
+                | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1."
     and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
-        member __.Broker =             Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic =                  match a.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
-        member __.Producers =          a.GetResult(Producers,1)
-        member x.BuildTargetParams() = x.Broker, x.Topic, x.Producers
+        member __.Broker =                  Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic =                       match a.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
+        member __.Producers =               a.GetResult(Producers,1)
+        member x.BuildTargetParams() =      x.Broker, x.Topic, x.Producers
 #endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
