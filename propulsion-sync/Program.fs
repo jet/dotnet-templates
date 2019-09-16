@@ -13,10 +13,10 @@ open System
 module CmdParser =
     open Argu
 
-    exception InvalidArguments of string
+    exception MissingArg of string
     let envBackstop msg key =
         match Environment.GetEnvironmentVariable key with
-        | null -> raise <| InvalidArguments (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
+        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
         | x -> x
 
     [<NoEquality; NoComparison>]
@@ -68,7 +68,7 @@ module CmdParser =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> Choice1Of2 (CosmosSourceArguments cosmos)
             | Some (SrcEs es) -> Choice2Of2 (EsSourceArguments es)
-            | _ -> raise (InvalidArguments "Must specify one of cosmos or es for Src")
+            | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
 
         member __.StatsInterval =       TimeSpan.FromMinutes 1.
         member __.StateInterval =      TimeSpan.FromMinutes 5.
@@ -96,7 +96,7 @@ module CmdParser =
                 fun x -> not (black.Contains x) && (not << isCheckpoint) x && (not excludeLong || (not << isLong) x)
             | bad, [] ->    let black = Set.ofList bad in Log.Warning("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
             | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
-            | _, _ -> raise (InvalidArguments "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
+            | _, _ -> raise (MissingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
 
         member __.Sink : Choice<CosmosSinkArguments,EsSinkArguments> =
             match __.Source with
@@ -112,7 +112,7 @@ module CmdParser =
                         | None, None ->     srcC.Discovery, { database = srcC.Database; container = srcC.Container + "-aux" }
                         | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
                         | None, Some dc ->  dstC.Discovery, { database = dstC.Database; container = dc }
-                        | Some _, Some _ -> raise (InvalidArguments "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
+                        | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
                     | Choice2Of2 _dstE ->
                         let lc = match srcC.LeaseContainer with Some sc -> sc | None -> srcC.Container + "-aux"
                         srcC.Discovery, { database = srcC.Database; container = lc }
@@ -192,7 +192,7 @@ module CmdParser =
             match a.TryGetSubCommand() with
             | Some (DstCosmos cosmos) -> Choice1Of2 (CosmosSinkArguments cosmos)
             | Some (DstEs es) -> Choice2Of2 (EsSinkArguments es)
-            | _ -> raise (InvalidArguments "Must specify one of cosmos or es for Sink")
+            | _ -> raise (MissingArg "Must specify one of cosmos or es for Sink")
     and [<NoEquality; NoComparison>] EsSourceParameters =
         | [<AltCommandLine "-z"; Unique>] FromTail
         | [<AltCommandLine "-g"; Unique>] Gorge of int
@@ -275,7 +275,7 @@ module CmdParser =
         member val Sink =
             match a.TryGetSubCommand() with
             | Some (Cosmos cosmos) -> CosmosSinkArguments cosmos
-            | _ -> raise (InvalidArguments "Must specify cosmos for Sink if source is `es`")
+            | _ -> raise (MissingArg "Must specify cosmos for Sink if source is `es`")
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine("-s")>] Connection of string
         | [<AltCommandLine("-cm")>] ConnectionMode of Equinox.Cosmos.ConnectionMode
@@ -580,6 +580,6 @@ let main argv =
             sink.AwaitCompletion() |> Async.RunSynchronously
             if sink.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-            | CmdParser.InvalidArguments msg -> eprintfn "%s" msg; 1
+            | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
             | e -> eprintfn "%s" e.Message; 1
     finally Log.CloseAndFlush()
