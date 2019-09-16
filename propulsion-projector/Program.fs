@@ -63,7 +63,7 @@ module CmdParser =
         | [<AltCommandLine "-w"; Unique>] MaxWriters of int
         | [<AltCommandLine "-l"; Unique>] LagFreqM of float
         | [<AltCommandLine "-v"; Unique>] Verbose
-        | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
+        | [<AltCommandLine "-vc"; Unique>] VerboseConsole
 //#if kafka
         (* Kafka Args *)
         | [<AltCommandLine "-b"; Unique>] Broker of string
@@ -82,7 +82,7 @@ module CmdParser =
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
+                | VerboseConsole ->         "request Verbose Logging from ChangeFeedProcessor. Default: off"
 //#if kafka
                 | Broker _ ->               "specify Kafka Broker, in host:port format. Default: use environment variable PROPULSION_KAFKA_BROKER."
                 | Topic _ ->                "specify Kafka Topic Id. Default: use environment variable PROPULSION_KAFKA_TOPIC."
@@ -96,7 +96,7 @@ module CmdParser =
         member __.LeaseId =                 args.GetResult ConsumerGroupName
         member __.Suffix =                  args.GetResult(LeaseContainerSuffix,"-aux")
         member __.Verbose =                 args.Contains Verbose
-        member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
+        member __.VerboseConsole =       args.Contains VerboseConsole
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
         member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
         member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,1024)
@@ -165,7 +165,7 @@ type ExampleOutput = { Id : string }
 #endif
 
 let start (args : CmdParser.Arguments) =
-    Logging.initialize args.Verbose args.ChangeFeedVerbose
+    Logging.initialize args.Verbose args.VerboseConsole
     let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
