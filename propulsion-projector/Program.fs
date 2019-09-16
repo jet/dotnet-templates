@@ -198,26 +198,26 @@ let start (args : CmdParser.Arguments) =
         let ms = r.Next(1,span.events.Length)
         do! Async.Sleep ms }
     let categorize (streamName : string) = streamName.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
-    let projector =
+    let sink =
         Propulsion.Streams.StreamsProjector.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, project,
             categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
-    let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
 #endif
     let runSourcePipeline =
         CosmosSource.Run(
             Log.Logger, discovery, clientOptions, source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-    runSourcePipeline, projector
+    sink,runSourcePipeline
 
 [<EntryPoint>]
 let main argv =
     try try let args = CmdParser.parse argv
-            let runSourcePipeline, projector = start args    
-            Async.Start <| runSourcePipeline
-            Async.RunSynchronously <| projector.AwaitCompletion()
-            if projector.RanToCompletion then 0 else 2
+            let sink,runSourcePipeline = start args
+            runSourcePipeline |> Async.Start
+            sink.AwaitCompletion() |> Async.RunSynchronously
+            if sink.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
             | e -> eprintfn "%s" e.Message; 1

@@ -526,7 +526,7 @@ let start (args : CmdParser.Arguments) =
             let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
             None,sink,args.CategoryFilterFunction()
     match args.SourceParams() with
-    | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromHere, maxDocuments, lagFrequency) ->
+    | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency) ->
         let discovery, source, clientOptions = srcC.BuildConnectionDetails()
 #if marveleqx
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize streamFilter))
@@ -535,7 +535,7 @@ let start (args : CmdParser.Arguments) =
 #endif
         let runPipeline =
             CosmosSource.Run(log, discovery, clientOptions, source,
-                aux, leaseId, startFromHere, createObserver,
+                aux, leaseId, startFromTail, createObserver,
                 ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxDiscovery=auxDiscovery)
         sink,runPipeline
     | Choice2Of2 (srcE,spec) ->
@@ -575,7 +575,7 @@ let start (args : CmdParser.Arguments) =
 
 [<EntryPoint>]
 let main argv =
-    try try let sink, runSourcePipeline = CmdParser.parse argv |> start
+    try try let sink,runSourcePipeline = CmdParser.parse argv |> start
             runSourcePipeline |> Async.Start
             sink.AwaitCompletion() |> Async.RunSynchronously
             if sink.RanToCompletion then 0 else 2
