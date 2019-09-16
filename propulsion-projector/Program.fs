@@ -50,7 +50,7 @@ module CmdParser =
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
                 let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-                discovery, connector, { database = x.Database; container = x.Container }
+                discovery, { database = x.Database; container = x.Container }, connector.ClientOptions
 
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -99,21 +99,21 @@ module CmdParser =
         member __.VerboseConsole =     args.Contains VerboseConsole
         member __.MaxDocuments =       args.TryGetResult MaxDocuments
         member __.MaxReadAhead =       args.GetResult(MaxReadAhead,64)
-        member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,1024)
+        member __.MaxConcurrentStreams = args.GetResult(MaxWriters,1024)
         member __.LagFrequency =       args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.AuxContainerName =   __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
             | None ->
                 Log.Information("Processing {leaseId} in {auxContainerName} without document count limit (<= {maxPending} pending) using {dop} processors",
-                    x.LeaseId, x.AuxContainerName, x.MaxReadAhead, x.ConcurrentStreamProcessors)
+                    x.LeaseId, x.AuxContainerName, x.MaxReadAhead, x.MaxConcurrentStreams)
             | Some lim ->
                 Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors",
-                    x.LeaseId, x.AuxContainerName, lim, x.MaxReadAhead, x.ConcurrentStreamProcessors)
+                    x.LeaseId, x.AuxContainerName, lim, x.MaxReadAhead, x.MaxConcurrentStreams)
             if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             { database = x.Cosmos.Database; container = x.AuxContainerName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.LagFrequency,
-            (x.MaxReadAhead, x.ConcurrentStreamProcessors)
+            (x.MaxReadAhead, x.MaxConcurrentStreams)
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
         member __.Broker    =          Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
@@ -166,7 +166,7 @@ type ExampleOutput = { Id : string }
 
 let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose args.VerboseConsole
-    let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
+    let discovery, source, clientOptions = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
     let (broker,topic) = args.Target.BuildTargetParams()
@@ -193,7 +193,7 @@ let start (args : CmdParser.Arguments) =
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif
 #else
-    let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async { 
+    let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
         let r = Random()
         let ms = r.Next(1,span.events.Length)
         do! Async.Sleep ms }
@@ -206,7 +206,7 @@ let start (args : CmdParser.Arguments) =
 #endif
     let runSourcePipeline =
         CosmosSource.Run(
-            Log.Logger, discovery, connector.ClientOptions, source,
+            Log.Logger, discovery, clientOptions, source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     runSourcePipeline, projector
