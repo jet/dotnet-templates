@@ -25,7 +25,7 @@ module CmdParser =
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
-                    | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
+                    | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
                     | ConnectionMode _ ->   "override the connection mode (default: DirectTcp)."
                     | Database _ ->         "specify a database name for Cosmos store (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
                     | Container _ ->        " specify a container name for Cosmos store (defaults: envvar:EQUINOX_COSMOS_CONTAINER)."

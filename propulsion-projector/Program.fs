@@ -26,10 +26,10 @@ module CmdParser =
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
-                    | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
+                    | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION)."
                     | ConnectionMode _ ->   "override the connection mode (default: Direct)."
-                    | Database _ ->         "specify a database name for store (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
-                    | Container _ ->        "specify a container name for store (defaults: envvar:EQUINOX_COSMOS_CONTAINER, test)."
+                    | Database _ ->         "specify a database name for store (defaults: envvar:EQUINOX_COSMOS_DATABASE)."
+                    | Container _ ->        "specify a container name for store (defaults: envvar:EQUINOX_COSMOS_CONTAINER)."
                     | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
                     | Retries _ ->          "specify operation retries (default: 1)."
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
