@@ -141,7 +141,7 @@ module CmdParser =
         | [<AltCommandLine "-cm">]          ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
-        | [<AltCommandLine "-c"; Unique(*Mandatory is not supported*)>] Container of string
+        | [<AltCommandLine "-c"; Unique>]   Container of string // Actually Mandatory, but stating that is not supported
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of int
