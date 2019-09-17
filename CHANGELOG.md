@@ -10,7 +10,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
-- `trackingConsumer` template providing a baseline for projecting accumulating updates across autonomous bounded contexts: [#29](https://github.com/jet/dotnet-templates/pull/30) [@luo4neck](https://github.com/luo4neck)
+- `trackingConsumer` template providing a baseline for projecting accumulating updates across autonomous bounded contexts: [#30](https://github.com/jet/dotnet-templates/pull/30) [@luo4neck](https://github.com/luo4neck)
 
 ### Changed
 ### Removed
