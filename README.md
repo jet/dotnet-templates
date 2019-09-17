@@ -19,7 +19,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 ## Templates combining usage of Equinox and Propulsion
 
-- [`summaryProjector`](propulsion-summary-projector/README.md) - Boilerplate for an Azure CosmosDb ChangeFeedProcessor generating versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed from an `Equinox.Cosmos` store using `Propulsion.Cosmos`.
+- [`summaryProjector`](propulsion-summary-projector/README.md) - Boilerplate for an a Projector that can consume from a) Azure CosmosDb ChangeFeedProcessor b) EventStore generating versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed from an `Equinox.Cosmos` store using `Propulsion.Cosmos`.
 
 - [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new summaryProjector`)
 
