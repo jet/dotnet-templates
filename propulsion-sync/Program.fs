@@ -121,7 +121,7 @@ module CmdParser =
                     x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
-                Choice1Of2 (srcC, disco, db, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+                Choice1Of2 (srcC,(disco, db, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
             | Choice2Of2 srcE ->
                 let startPos = srcE.StartPos
                 Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Container {container}",
@@ -172,9 +172,9 @@ module CmdParser =
         member __.LeaseContainer =          a.TryGetResult CosmosSourceParameters.LeaseContainer
 
         member __.Mode =                    a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Connection =              match a.TryGetResult CosmosSourceParameters.Connection   with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Discovery =               Discovery.FromConnectionString __.Connection
-        member __.Database =                match a.TryGetResult CosmosSourceParameters.Database     with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
+        member __.Connection =              match a.TryGetResult CosmosSourceParameters.Connection with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+        member __.Database =                match a.TryGetResult CosmosSourceParameters.Database   with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
         member __.Container =               a.GetResult CosmosSourceParameters.Container
         member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
@@ -255,11 +255,11 @@ module CmdParser =
             | None, None, None, true ->     StartPos.TailOrCheckpoint
             | None, None, None, _ ->        StartPos.StartOrCheckpoint
 
-        member __.Host =                    match a.TryGetResult EsSourceParameters.Host with Some x -> x | None -> envBackstop "Host"          "EQUINOX_ES_HOST"
+        member __.Host =                    match a.TryGetResult EsSourceParameters.Host     with Some x -> x | None -> envBackstop "Host"     "EQUINOX_ES_HOST"
         member __.Port =                    match a.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
-        member __.Discovery =               match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
-        member __.User =                    match a.TryGetResult EsSourceParameters.Username with Some x -> x | None -> envBackstop "Username"  "EQUINOX_ES_USERNAME"
-        member __.Password =                match a.TryGetResult EsSourceParameters.Password with Some x -> x | None -> envBackstop "Password"  "EQUINOX_ES_PASSWORD"
+        member __.Discovery =               match __.Port with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
+        member __.User =                    match a.TryGetResult EsSourceParameters.Username with Some x -> x | None -> envBackstop "Username" "EQUINOX_ES_USERNAME"
+        member __.Password =                match a.TryGetResult EsSourceParameters.Password with Some x -> x | None -> envBackstop "Password" "EQUINOX_ES_PASSWORD"
         member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout,20.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(EsSourceParameters.Retries,3)
         member __.Heartbeat =               a.GetResult(EsSourceParameters.HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
@@ -302,11 +302,11 @@ module CmdParser =
                 | Kafka _ ->                "specify Kafka target for non-Synced categories. Default: None."
 #endif
     and CosmosSinkArguments(a : ParseResults<CosmosSinkParameters>) =
-        member __.Connection =              match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
         member __.Mode =                    a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Discovery =               Discovery.FromConnectionString __.Connection
-        member __.Database =                match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Container =               match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
+        member __.Connection =              match a.TryGetResult Connection with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+        member __.Database =                match a.TryGetResult Database   with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
+        member __.Container =               match a.TryGetResult Container  with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
         member __.LeaseContainer =          a.TryGetResult LeaseContainer
         member __.Timeout =                 a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosSinkParameters.Retries, 0)
@@ -348,11 +348,11 @@ module CmdParser =
                 | Retries _ ->              "specify operation retries. Default: 3."
                 | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
     and EsSinkArguments(a : ParseResults<EsSinkParameters>) =
-        member __.Discovery =               match __.Port                   with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
-        member __.Host =                    match a.TryGetResult Host       with Some x -> x | None -> envBackstop "Host"       "EQUINOX_ES_HOST"
-        member __.Port =                    match a.TryGetResult Port       with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
-        member __.User =                    match a.TryGetResult Username   with Some x -> x | None -> envBackstop "Username"   "EQUINOX_ES_USERNAME"
-        member __.Password =                match a.TryGetResult Password   with Some x -> x | None -> envBackstop "Password"   "EQUINOX_ES_PASSWORD"
+        member __.Discovery =               match __.Port                 with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
+        member __.Host =                    match a.TryGetResult Host     with Some x -> x | None -> envBackstop "Host"     "EQUINOX_ES_HOST"
+        member __.Port =                    match a.TryGetResult Port     with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
+        member __.User =                    match a.TryGetResult Username with Some x -> x | None -> envBackstop "Username" "EQUINOX_ES_USERNAME"
+        member __.Password =                match a.TryGetResult Password with Some x -> x | None -> envBackstop "Password" "EQUINOX_ES_PASSWORD"
         member __.Retries =                 a.GetResult(Retries,3)
         member __.Timeout =                 a.GetResult(Timeout,20.) |> TimeSpan.FromSeconds
         member __.Heartbeat =               a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
@@ -526,7 +526,7 @@ let start (args : CmdParser.Arguments) =
             let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
             None,sink,args.CategoryFilterFunction()
     match args.SourceParams() with
-    | Choice1Of2 (srcC, auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency) ->
+    | Choice1Of2 (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
         let discovery, source, clientOptions = srcC.BuildConnectionDetails()
 #if marveleqx
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize streamFilter))
@@ -543,7 +543,6 @@ let start (args : CmdParser.Arguments) =
         | None -> failwith "ES->ES checkpointing E_NOTIMPL"
         | Some (mainConn,containers) ->
 
-        let connect () = let c = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
         let resolveCheckpointStream =
             let context = Equinox.Cosmos.Context(mainConn, containers)
             let codec = FsCodec.NewtonsoftJson.Codec.Create()
@@ -567,6 +566,7 @@ let start (args : CmdParser.Arguments) =
                         e.stream, e.event.Index, Propulsion.EventStore.Reader.mb e.event.Data.Length)
                     Some { e with event = withNullData e.event }
                 else Some e
+        let connect () = let c = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
         let runPipeline =
             EventStoreSource.Run(
                 log, sink, checkpoints, connect, spec, categorize, tryMapEvent streamFilter,
