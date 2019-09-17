@@ -23,9 +23,9 @@ This project was generated using:
         eqx init -ru 1000 cosmos
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
-        # `-t saveforlater` SaveForLater test produces uniform size events to project
+        # `-t todo` Todo test produces items the sample Aggregate logic knows how to summarize
         # `-C -f 200` constrains current writers to 100 and applies caching so RU consumption is constrained such that an allocation of 1000 is sufficient
-        eqx run -t saveforlater -C -f 100 cosmos 
+        eqx run -t todo -C -f 100 cosmos 
 
 2. To run an instance of the Projector:
 
@@ -34,10 +34,10 @@ This project was generated using:
         $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
 
         # `default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
-        # `-md 1000` sets the change feed maximum document limit to 1000
+        # `cosmos` specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
+        # `-m 1000` sets the change feed maximum document limit to 1000
         # `-t topic0` identifies the Kafka topic to which the Projector should write
-        # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
-        dotnet run -- default -md 1000 -t topic0 cosmos
+        dotnet run -- default cosmos -m 1000 kafka -t topic0
 
         # (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
 

@@ -16,23 +16,23 @@ module CmdParser =
 
     module Cosmos =
         type [<NoEquality; NoComparison>] Parameters =
-            | [<AltCommandLine "-s">] Connection of string
-            | [<AltCommandLine "-cm">] ConnectionMode of Equinox.Cosmos.ConnectionMode
-            | [<AltCommandLine "-d">] Database of string
-            | [<AltCommandLine "-c">] Container of string
-            | [<AltCommandLine "-o">] Timeout of float
-            | [<AltCommandLine "-r">] Retries of int
-            | [<AltCommandLine "-rt">] RetriesWaitTime of int
+            | [<AltCommandLine "-cm">]      ConnectionMode of Equinox.Cosmos.ConnectionMode
+            | [<AltCommandLine "-s">]       Connection of string
+            | [<AltCommandLine "-d">]       Database of string
+            | [<AltCommandLine "-c">]       Container of string
+            | [<AltCommandLine "-o">]       Timeout of float
+            | [<AltCommandLine "-r">]       Retries of int
+            | [<AltCommandLine "-rt">]      RetriesWaitTime of int
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
-                    | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
-                    | ConnectionMode _ ->   "override the connection mode (default: Direct)."
-                    | Database _ ->         "specify a database name for store (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
-                    | Container _ ->        "specify a container name for store (defaults: envvar:EQUINOX_COSMOS_CONTAINER, test)."
-                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                    | Retries _ ->          "specify operation retries (default: 1)."
-                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
+                    | ConnectionMode _ ->   "override the connection mode. Default: Direct."
+                    | Connection _ ->       "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
+                    | Database _ ->         "specify a database name for store. Default: envvar:EQUINOX_COSMOS_DATABASE."
+                    | Container _ ->        "specify a container name for store. Default: envvar:EQUINOX_COSMOS_CONTAINER."
+                    | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
+                    | Retries _ ->          "specify operation retries. Default: 1."
+                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
         type Arguments(a : ParseResults<Parameters>) =
             member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
             member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
@@ -50,24 +50,24 @@ module CmdParser =
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
                 let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-                discovery, connector, { database = x.Database; container = x.Container }
+                discovery, { database = x.Database; container = x.Container }, connector.ClientOptions
 
     [<NoEquality; NoComparison>]
     type Parameters =
         (* ChangeFeed Args*)
-        | [<MainCommand; ExactlyOnce>] ConsumerGroupName of string
-        | [<AltCommandLine "-as"; Unique>] LeaseContainerSuffix of string
-        | [<AltCommandLine "-z"; Unique>] FromTail
-        | [<AltCommandLine "-m"; Unique>] MaxDocuments of int
-        | [<AltCommandLine "-r"; Unique>] MaxPendingBatches of int
-        | [<AltCommandLine "-w"; Unique>] MaxWriters of int
-        | [<AltCommandLine "-l"; Unique>] LagFreqM of float
-        | [<AltCommandLine "-v"; Unique>] Verbose
-        | [<AltCommandLine "-vc"; Unique>] ChangeFeedVerbose
+        | [<MainCommand; ExactlyOnce>]      ConsumerGroupName of string
+        | [<AltCommandLine "-as"; Unique>]  LeaseContainerSuffix of string
+        | [<AltCommandLine "-z"; Unique>]   FromTail
+        | [<AltCommandLine "-m"; Unique>]   MaxDocuments of int
+        | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
+        | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
+        | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
+        | [<AltCommandLine "-v"; Unique>]   Verbose
+        | [<AltCommandLine "-vc"; Unique>]  VerboseConsole
 //#if kafka
         (* Kafka Args *)
-        | [<AltCommandLine "-b"; Unique>] Broker of string
-        | [<AltCommandLine "-t"; Unique>] Topic of string
+        | [<AltCommandLine "-b"; Unique>]   Broker of string
+        | [<AltCommandLine "-t"; Unique>]   Topic of string
 //#endif
         (* Cosmos Source Args *)
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
@@ -75,49 +75,49 @@ module CmdParser =
             member a.Usage =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container (default: `-aux`)."
+                | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container. Default: `-aux`."
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
-                | MaxPendingBatches _ ->    "maximum number of batches to let processing get ahead of completion. Default: 64"
+                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | ChangeFeedVerbose ->      "request Verbose Logging from ChangeFeedProcessor. Default: off"
+                | VerboseConsole ->         "request Verbose Logging from ChangeFeedProcessor. Default: off"
 //#if kafka
-                | Broker _ ->               "specify Kafka Broker, in host:port format. (default: use environment variable PROPULSION_KAFKA_BROKER, if specified)"
-                | Topic _ ->                "specify Kafka Topic Id. (default: use environment variable PROPULSION_KAFKA_TOPIC, if specified)"
+                | Broker _ ->               "specify Kafka Broker, in host:port format. Default: use environment variable PROPULSION_KAFKA_BROKER."
+                | Topic _ ->                "specify Kafka Topic Id. Default: use environment variable PROPULSION_KAFKA_TOPIC."
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(args : ParseResults<Parameters>) =
-        member val Cosmos = Cosmos.Arguments(args.GetResult Cosmos)
+        member val Cosmos =                 Cosmos.Arguments(args.GetResult Cosmos)
 //#if kafka
-        member val Target = TargetInfo args
+        member val Target =                 TargetInfo args
 //#endif
         member __.LeaseId =                 args.GetResult ConsumerGroupName
         member __.Suffix =                  args.GetResult(LeaseContainerSuffix,"-aux")
         member __.Verbose =                 args.Contains Verbose
-        member __.ChangeFeedVerbose =       args.Contains ChangeFeedVerbose
+        member __.VerboseConsole =          args.Contains VerboseConsole
         member __.MaxDocuments =            args.TryGetResult MaxDocuments
-        member __.MaxReadAhead =            args.GetResult(MaxPendingBatches,64)
-        member __.ConcurrentStreamProcessors = args.GetResult(MaxWriters,1024)
+        member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
+        member __.MaxConcurrentStreams =    args.GetResult(MaxWriters,1024)
         member __.LagFrequency =            args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.AuxContainerName =        __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
             | None ->
                 Log.Information("Processing {leaseId} in {auxContainerName} without document count limit (<= {maxPending} pending) using {dop} processors",
-                    x.LeaseId, x.AuxContainerName, x.MaxReadAhead, x.ConcurrentStreamProcessors)
+                    x.LeaseId, x.AuxContainerName, x.MaxReadAhead, x.MaxConcurrentStreams)
             | Some lim ->
                 Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors",
-                    x.LeaseId, x.AuxContainerName, lim, x.MaxReadAhead, x.ConcurrentStreamProcessors)
+                    x.LeaseId, x.AuxContainerName, lim, x.MaxReadAhead, x.MaxConcurrentStreams)
             if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
             { database = x.Cosmos.Database; container = x.AuxContainerName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.LagFrequency,
-            (x.MaxReadAhead, x.ConcurrentStreamProcessors)
+            (x.MaxReadAhead, x.MaxConcurrentStreams)
 //#if kafka
     and TargetInfo(args : ParseResults<Parameters>) =
-        member __.Broker    = Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic     =     match args.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
+        member __.Broker    =               Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
+        member __.Topic     =                   match args.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
         member x.BuildTargetParams() = x.Broker, x.Topic
 //#endif
 
@@ -165,8 +165,8 @@ type ExampleOutput = { Id : string }
 #endif
 
 let start (args : CmdParser.Arguments) =
-    Logging.initialize args.Verbose args.ChangeFeedVerbose
-    let discovery, connector, source = args.Cosmos.BuildConnectionDetails()
+    Logging.initialize args.Verbose args.VerboseConsole
+    let discovery, source, clientOptions = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
     let (broker,topic) = args.Target.BuildTargetParams()
@@ -193,31 +193,31 @@ let start (args : CmdParser.Arguments) =
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif
 #else
-    let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async { 
+    let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
         let r = Random()
         let ms = r.Next(1,span.events.Length)
         do! Async.Sleep ms }
     let categorize (streamName : string) = streamName.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
-    let projector =
+    let sink =
         Propulsion.Streams.StreamsProjector.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, project,
             categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
-    let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
 #endif
     let runSourcePipeline =
         CosmosSource.Run(
-            Log.Logger, discovery, connector.ClientOptions, source,
+            Log.Logger, discovery, clientOptions, source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-    runSourcePipeline, projector
+    sink,runSourcePipeline
 
 [<EntryPoint>]
 let main argv =
     try try let args = CmdParser.parse argv
-            let runSourcePipeline, projector = start args    
-            Async.Start <| runSourcePipeline
-            Async.RunSynchronously <| projector.AwaitCompletion()
-            if projector.RanToCompletion then 0 else 2
+            let sink,runSourcePipeline = start args
+            runSourcePipeline |> Async.Start
+            sink.AwaitCompletion() |> Async.RunSynchronously
+            if sink.RanToCompletion then 0 else 2
         with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
             | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
             | e -> eprintfn "%s" e.Message; 1
