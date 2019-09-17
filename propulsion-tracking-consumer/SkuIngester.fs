@@ -26,7 +26,7 @@ type Stats(log, ?statsInterval, ?stateInterval) =
     inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>
         (log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 
-    let mutable (ok, skipped) = 0, 0
+    let mutable ok, skipped = 0, 0
 
     override __.HandleOk res = res |> function
         | Completed (used,total) -> ok <- ok + used; skipped <- skipped + (total-used)
@@ -43,13 +43,13 @@ type MessagesByArrivalOrder() =
     static let indices = System.Collections.Generic.Dictionary()
     static let genIndex streamName =
         match indices.TryGetValue streamName with
-        | true, v -> let x = v + 1 in indices.[streamName] <- x; x
-        | false, _ -> let x = 0 in indices.[streamName] <- x; x
+        | true, v -> let x = v + 1 in indices.[streamName] <- x; int64 x
+        | false, _ -> let x = 0 in indices.[streamName] <- x; int64 x
 
     // Stuff the full content of the message into an Event record - we'll parse it when it comes out the other end in a span
     static member ToStreamEvent (KeyValue (k,v : string)) : Propulsion.Streams.StreamEvent<byte[]> seq =
-        let e = FsCodec.Core.EventData.Create(eventType = String.Empty,data = System.Text.Encoding.UTF8.GetBytes v)
-        Seq.singleton { stream=k; index=genIndex k |> int64; event=e }
+        let e = FsCodec.Core.IndexedEventData(genIndex k,false,String.Empty,System.Text.Encoding.UTF8.GetBytes v,null,DateTimeOffset.UtcNow)
+        Seq.singleton { stream=k; event=e }
 
 let (|SkuId|) (value : string) = SkuId.parse value
 
@@ -71,4 +71,4 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
     let stats = Stats(log)
     // No categorization required, out inputs are all one big family defying categorization
     let category _streamName = "Sku"
-    Propulsion.Kafka.StreamsConsumer.Start(log, config, maxDop, MessagesByArrivalOrder.ToStreamEvent, ingestIncomingSummaryMessage, stats, category)
+    Propulsion.Kafka.StreamsConsumer.Start(log, config, MessagesByArrivalOrder.ToStreamEvent, ingestIncomingSummaryMessage, maxDop, stats, category)
