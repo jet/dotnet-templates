@@ -61,7 +61,7 @@ namespace TodoBackendTemplate.Web
 #endif
 #if eventStore
             // EVENTSTORE: see https://eventstore.org/
-            // Requires a Commercial HA Cluster, which can be simulated by 1) installing the OSS Edition from Choocolatey 2) running it in cluster mode
+            // Requires a Commercial HA Cluster, which can be simulated by 1) installing the OSS Edition from Chocolatey 2) running it in cluster mode
 
             // # requires admin privilege
             // cinst eventstore-oss -y # where cinst is an invocation of the Chocolatey Package Installer on Windows

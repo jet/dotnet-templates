@@ -13,7 +13,7 @@ This project was generated using:
         $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
         $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use - c
 
-1. Use the `eqx` tool to initialize and then run some transactions in a CosmosDb container
+1a. Use the `eqx` tool to initialize and then run some transactions in a CosmosDb container
 
         dotnet tool install -g Equinox.Tool # only needed once
 
@@ -27,7 +27,7 @@ This project was generated using:
         # `-C -f 200` constrains current writers to 100 and applies caching so RU consumption is constrained such that an allocation of 1000 is sufficient
         eqx run -t todo -C -f 100 cosmos 
 
-2. To run an instance of the Projector:
+1b. To run an instance of the Projector from CosmosDb
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
 
@@ -40,5 +40,23 @@ This project was generated using:
         dotnet run -- default cosmos -m 1000 kafka -t topic0
 
         # (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
+
+2. To run an instance of the Projector from EventStore
+
+        # (either add environment variables as per step 0 or use -s/-d/-c to specify them after the `cosmos` argument token)
+
+        $env:EQUINOX_ES_USERNAME="admin" # or use -u
+        $env:EQUINOX_ES_PASSWORD="changeit" # or use -p
+        $env:EQUINOX_ES_HOST="localhost" # or use -g
+
+        $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
+
+        # `default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
+        # `es` specifies the source (if you have specified 3x EQUINOX_ES_* environment vars, no arguments are needed)
+        # `cosmos` specifies the destination and the checkpoint store (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
+        # `-t topic0` identifies the Kafka topic to which the Projector should write
+        dotnet run -- default es cosmos kafka -t topic0
+
+        # NB running more than one projector will cause them to duel, and is hence not advised
 
 3. To create a Consumer, use `dotnet new summaryConsumer` (see README therein for details)

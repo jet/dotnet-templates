@@ -56,12 +56,12 @@ This project was generated using:
 4. To run an instance of the Sync tool feeding into EventStore:
 
         # (this is in addition to details in step 3 above)
-		# `es` specifies the destination (if you have specified 3x EQUINOX_EVENTSTORE_* environment vars, no arguments are needed)
+        # `es` specifies the destination (if you have specified 3x EQUINOX_ES_* environment vars, no arguments are needed)
         # `cosmos -s connection -d database -c container` specifies the input datasource
 
-		$env:EQUINOX_ES_USERNAME="admin" # or use -u
-		$env:EQUINOX_ES_PASSWORD="changeit" # or use -p
-		$env:EQUINOX_ES_HOST="localhost" # or use -g
+        $env:EQUINOX_ES_USERNAME="admin" # or use -u
+        $env:EQUINOX_ES_PASSWORD="changeit" # or use -p
+        $env:EQUINOX_ES_HOST="localhost" # or use -g
 
         dotnet run -- defaultSync `
             cosmos -s $env:EQUINOX_COSMOS_CONNECTION_SOURCE -d $env:EQUINOX_COSMOS_DATABASE_SOURCE -c $env:EQUINOX_COSMOS_CONTAINER_SOURCE `
