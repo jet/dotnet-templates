@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="Program.fs" />
+    <Content Include="README.md" />
   </ItemGroup>
 
   <ItemGroup>

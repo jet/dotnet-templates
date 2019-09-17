@@ -48,13 +48,13 @@ module Cosmos =
             member a.Usage =
                 match a with
                 | VerboseStore ->       "Include low level Store logging."
-                | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                | Retries _ ->          "specify operation retries (default: 1)."
-                | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-                | Connection _ ->       "specify a connection string for a Cosmos account (defaults: envvar:EQUINOX_COSMOS_CONNECTION, Cosmos Emulator)."
-                | ConnectionMode _ ->   "override the connection mode (default: Direct)."
-                | Database _ ->         "specify a database name for store (defaults: envvar:EQUINOX_COSMOS_DATABASE, test)."
-                | Container _ ->        "specify a container name for store (defaults: envvar:EQUINOX_COSMOS_CONTAINER, test)."
+                | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
+                | Retries _ ->          "specify operation retries. Default: 1."
+                | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
+                | ConnectionMode _ ->   "override the connection mode. Default: Direct."
+                | Connection _ ->       "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
+                | Database _ ->         "specify a database name for store. Default: envvar:EQUINOX_COSMOS_DATABASE."
+                | Container _ ->        "specify a container name for store. Default: envvar:EQUINOX_COSMOS_CONTAINER."
     type Arguments(a : ParseResults<Parameters>) =
         member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
         member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
@@ -109,13 +109,13 @@ module EventStore =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | VerboseStore ->       "include low level Store logging."
-                | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                | Retries _ ->          "specify operation retries (default: 1)."
-                | Host _ ->             "specify a DNS query, using Gossip-driven discovery against all A records returned (default: localhost)."
-                | Username _ ->         "specify a username (default: admin)."
-                | Password _ ->         "specify a Password (default: changeit)."
-                | ConcurrentOperationsLimit _ -> "max concurrent operations in flight (default: 5000)."
-                | HeartbeatTimeout _ -> "specify heartbeat timeout in seconds (default: 1.5)."
+                | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
+                | Retries _ ->          "specify operation retries. Default: 1."
+                | Host _ ->             "specify a DNS query, using Gossip-driven discovery against all A records returned. Default: localhost."
+                | Username _ ->         "specify a username. Default: admin."
+                | Password _ ->         "specify a Password. Default: changeit."
+                | ConcurrentOperationsLimit _ -> "max concurrent operations in flight. Default: 5000."
+                | HeartbeatTimeout _ -> "specify heartbeat timeout in seconds. Default: 1.5."
 
     open Equinox.EventStore
 
