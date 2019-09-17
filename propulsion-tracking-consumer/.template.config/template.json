@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Event Sourcing",
+    "Equinox",
+    "Propulsion",
+    "CosmosDb",
+    "Kafka"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Propulsion.Template.TrackingConsumer",
+  "name": "Propulsion/Equinox Tracking Consumer",
+  "shortName": "trackingConsumer",
+  "sourceName": "ConsumerTemplate",
+  "preferNameDirectory": true
+}
