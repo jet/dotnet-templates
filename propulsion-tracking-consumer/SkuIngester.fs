@@ -40,14 +40,14 @@ type Stats(log, ?statsInterval, ?stateInterval) =
 /// The messages we consume don't have such characteristics, so we generate a fake `index` by keeping an int per stream in a dictionary
 type MessagesByArrivalOrder() =
     // we synthesize a monotonically increasing index to render the deduplication facility inert
-    static let indices = System.Collections.Generic.Dictionary()
-    static let genIndex streamName =
+    let indices = System.Collections.Generic.Dictionary()
+    let genIndex streamName =
         match indices.TryGetValue streamName with
         | true, v -> let x = v + 1 in indices.[streamName] <- x; int64 x
         | false, _ -> let x = 0 in indices.[streamName] <- x; int64 x
 
     // Stuff the full content of the message into an Event record - we'll parse it when it comes out the other end in a span
-    static member ToStreamEvent (KeyValue (k,v : string)) : Propulsion.Streams.StreamEvent<byte[]> seq =
+    member __.ToStreamEvent (KeyValue (k,v : string)) : Propulsion.Streams.StreamEvent<byte[]> seq =
         let e = FsCodec.Core.IndexedEventData(genIndex k,false,String.Empty,System.Text.Encoding.UTF8.GetBytes v,null,DateTimeOffset.UtcNow)
         Seq.singleton { stream=k; event=e }
 
@@ -71,4 +71,5 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
     let stats = Stats(log)
     // No categorization required, out inputs are all one big family defying categorization
     let category _streamName = "Sku"
-    Propulsion.Kafka.StreamsConsumer.Start(log, config, MessagesByArrivalOrder.ToStreamEvent, ingestIncomingSummaryMessage, maxDop, stats, category)
+    let sequencer = MessagesByArrivalOrder()
+    Propulsion.Kafka.StreamsConsumer.Start(log, config, sequencer.ToStreamEvent, ingestIncomingSummaryMessage, maxDop, stats, category)
