@@ -13,6 +13,17 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
+<a name="3.4.0"></a>
+## [3.4.0] - 2019-09-18
+
+### Added
+
+- `trackingConsumer` template providing a baseline for projecting accumulating updates across autonomous bounded contexts: [#30](https://github.com/jet/dotnet-templates/pull/30) [@luo4neck](https://github.com/luo4neck)
+
+### Changed
+
+- Significant reformatting and consistency updates in preparation for adding ES support for `summaryProjector` in [#31](https://github.com/jet/dotnet-templates/pull/31)
+
 <a name="3.3.2"></a>
 ## [3.3.2] - 2019-09-15
 
@@ -170,7 +181,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.3.2...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.4.0...HEAD
+[3.4.0]: https://github.com/jet/dotnet-templates/compare/3.3.2...3.4.0
 [3.3.2]: https://github.com/jet/dotnet-templates/compare/3.3.1...3.3.2
 [3.3.1]: https://github.com/jet/dotnet-templates/compare/3.3.0...3.3.1
 [3.3.0]: https://github.com/jet/dotnet-templates/compare/3.2.0...3.3.0
