@@ -1,5 +1,5 @@
-/// Follows a feed of updates, holding the most recently observed one; each update recieved is intended to completely supersede all previous updates
-/// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previus message
+/// Follows a feed of updates, holding the most recently observed one; each update received is intended to completely supersede all previous updates
+/// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
 module ConsumerTemplate.SummaryIngester
 
 open System
@@ -27,7 +27,7 @@ module TodoUpdates =
 [<RequireQualifiedAccess>]
 type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of count : int
 
-/// Gathers stats based on the outcome of each Span processed for emission at intervals controlled by `StreamsConsumer`
+/// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
 type Stats(log, ?statsInterval, ?stateInterval) =
     inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 
