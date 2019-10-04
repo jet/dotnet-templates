@@ -4,8 +4,9 @@ open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and
 open System
 
 module StreamCodec =
+
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecodeSpan (codec : FsCodec.IUnionEncoder<_,_>) (log : Serilog.ILogger) (stream : string) (x : FsCodec.IIndexedEvent<byte[]>) =
+    let tryDecode (codec : FsCodec.IUnionEncoder<_,_>) (log : Serilog.ILogger) (stream : string) (x : FsCodec.IIndexedEvent<byte[]>) =
         match codec.TryDecode x with
         | None ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
@@ -13,9 +14,6 @@ module StreamCodec =
                     .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, stream)
             None
         | x -> x
-
-    let encodeSummary (codec : FsCodec.IUnionEncoder<_,_>) stream version x : Propulsion.Codec.NewtonsoftJson.RenderedSummary =
-       x |> codec.Encode |> Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version
 
 [<AutoOpen>]
 module StreamNameParser =

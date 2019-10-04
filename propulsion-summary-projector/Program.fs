@@ -86,19 +86,19 @@ module CmdParser =
 
                 | Kafka _ ->                "Kafka Sink parameters."
     and CosmosSourceArguments(a : ParseResults<CosmosSourceParameters>) =
-        member __.FromTail =                a.Contains CosmosSourceParameters.FromTail
+        member __.FromTail =                a.Contains FromTail
         member __.MaxDocuments =            a.TryGetResult MaxDocuments
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member __.LeaseContainer =          a.TryGetResult CosmosSourceParameters.LeaseContainer
+        member __.LeaseContainer =          a.TryGetResult LeaseContainer
 
-        member __.Mode =                    a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member __.Mode =                    a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Discovery =               Discovery.FromConnectionString __.Connection
-        member __.Connection =              match a.TryGetResult CosmosSourceParameters.Connection with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Database =                match a.TryGetResult CosmosSourceParameters.Database   with Some x -> x | None -> envBackstop "Database" "EQUINOX_COSMOS_DATABASE"
-        member __.Container =               a.GetResult CosmosSourceParameters.Container
-        member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
-        member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5)
+        member __.Connection =              match a.TryGetResult Connection with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+        member __.Database =                match a.TryGetResult Database   with Some x -> x | None -> envBackstop "Database" "EQUINOX_COSMOS_DATABASE"
+        member __.Container =               a.GetResult Container
+        member __.Timeout =                 a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        member __.Retries =                 a.GetResult(Retries, 1)
+        member __.MaxRetryWaitTime =        a.GetResult(RetriesWaitTime, 5)
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,_)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
@@ -109,9 +109,9 @@ module CmdParser =
             discovery, { database = x.Database; container = x.Container }, connector
         member val Sink =
             match a.TryGetSubCommand() with
-            | Some (CosmosSourceParameters.Kafka cosmos) -> KafkaSinkArguments cosmos
+            | Some (Kafka kafka) -> KafkaSinkArguments kafka
             | _ -> raise (MissingArg "Must specify `kafka` arguments")
-    and [<NoEquality; NoComparison>] KafkaSinkParameters =
+     and [<NoEquality; NoComparison>] KafkaSinkParameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
         interface IArgParserTemplate with
@@ -156,20 +156,22 @@ let build (args : CmdParser.Arguments) =
     let (discovery,cosmos,connector),(broker,topic) =
         srcC.BuildConnectionDetails(),srcC.Sink.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
-    let produce (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
+    let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
         producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
+
     let cache = Equinox.Cosmos.Caching.Cache(appName, sizeMb = 10)
     let connection = connector.Connect(appName, discovery) |> Async.RunSynchronously
     let context = Equinox.Cosmos.Context(connection, cosmos.database, cosmos.container)
-    let handleStreamEvents : (string*Propulsion.Streams.StreamSpan<_>) -> Async<int64> =
-        let service = Todo.Repository.createService cache context
-        Producer.handleAccumulatedEvents service produce
-    let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
-        docs |> Seq.collect EquinoxCosmosParser.enumStreamEvents
+
+    let service = Todo.Repository.createService cache context
+    let handle = Handler.handleCosmosStreamEvents (service,produceSummary)
+
     let sink =
          Propulsion.Streams.Sync.StreamsSync.Start(
-             log, args.MaxReadAhead, args.MaxConcurrentStreams, handleStreamEvents, category,
+             log, args.MaxReadAhead, args.MaxConcurrentStreams, handle, category,
              statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
+    let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
+        docs |> Seq.collect EquinoxCosmosParser.enumStreamEvents
     let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, mapToStreamItems)
     sink,CosmosSource.Run(log, discovery, connector.ClientOptions, cosmos,
         aux, leaseId, startFromTail, createObserver,

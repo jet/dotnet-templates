@@ -23,23 +23,6 @@ module Contract =
     let ofState (state : Todo.Folds.State) : SummaryEvent =
         Summary { items = [| for x in state.items -> render x |]}
 
-let (|ClientId|) = ClientId.parse
-
-let (|Decode|) (codec : FsCodec.IUnionEncoder<_,_>) stream (span : Propulsion.Streams.StreamSpan<_>) =
-    span.events |> Seq.choose (StreamCodec.tryDecodeSpan codec Serilog.Log.Logger stream)
-
-let handleAccumulatedEvents
-        (service : Todo.Service)
-        (produce : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<_>)
-        (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64> = async {
-    match stream, span with
-    | Category (Todo.categoryId, ClientId clientId), (Decode Todo.Events.codec stream events)
-            when events |> Seq.exists Todo.Folds.impliesStateChange ->
-        let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
-        let rendered : Propulsion.Codec.NewtonsoftJson.RenderedSummary = summary |> StreamCodec.encodeSummary Contract.codec stream version'
-        let! _ = produce rendered
-        // We need to yield the next write position, which will be after the version we've just generated the summary based on
-        return version'+1L
-    | _ ->
-        // If we're ignoring the events, we mark the next write position to be one beyond the last one offered
-        let x = Array.last span.events in return x.Index+1L }
+let generate stream version summary =
+    let event = Contract.codec.Encode summary
+    Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version event

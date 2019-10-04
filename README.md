@@ -82,11 +82,11 @@ To use from the command line, the outline is:
     # run for two minutes against CosmosDb (see https://github.com/jet/equinox#quickstart) for provisioning instructions
     dotnet run -p Testbed -- run -d 2 cosmos
 
-	# ... to add a Sync tool
+    # ... to add a Sync tool
     md -p ../My.Tools.Sync | Set-Location
-	# (-m includes an example of how to upconvert from similar event-sourced representations in an existing store)
-	dotnet new proSync -m
-	start README.md
+    # (-m includes an example of how to upconvert from similar event-sourced representations in an existing store)
+    dotnet new proSync -m
+    start README.md
 
 ## CONTRIBUTING
 
