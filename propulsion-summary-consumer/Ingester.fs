@@ -5,11 +5,10 @@ module ConsumerTemplate.Ingester
 open System
 
 /// Defines the contract we share with the SummaryProjector's published feed
-module TodoUpdates =
-    open FsCodec
+module Contract =
 
     /// A single Item in the Todo List
-    type ItemInfo = { id: int; order: int; title: string; completed: bool }
+    type ItemInfo = { id : int; order : int; title : string; completed : bool }
 
     /// All data summarized for Summary Event Stream
     type SummaryInfo = { items : ItemInfo[] }
@@ -19,7 +18,7 @@ module TodoUpdates =
         interface TypeShape.UnionContract.IUnionContract
     let codec =
         // We also want the index (which is the Version of the Summary) whenever we're handling an event
-        let up (d : IIndexedEvent<_>,e) = d.Index,e
+        let up (d : FsCodec.IIndexedEvent<_>,e) = d.Index,e
         let down _e = failwith "Not Implemented"
         FsCodec.NewtonsoftJson.Codec.Create(up,down)
     let [<Literal>] categoryId = "TodoSummary"
@@ -46,8 +45,8 @@ type Stats(log, ?statsInterval, ?stateInterval) =
 /// Starts a processing loop accumulating messages by stream - each time we only take the latest event as previous ones are superseded by definition
 let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log : Serilog.ILogger) (service : TodoSummary.Service) maxDop =
     // map from external contract to internal contract defined by the aggregate
-    let map : TodoUpdates.Message -> TodoSummary.Events.SummaryData = function
-        | TodoUpdates.Summary x ->
+    let map : Contract.Message -> TodoSummary.Events.SummaryData = function
+        | Contract.Summary x ->
             { items =
                 [| for x in x.items ->
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
@@ -56,7 +55,7 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
         span.events |> Seq.rev |> Seq.tryPick (StreamCodec.tryDecode codec log stream)
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         match stream, (stream,span) with
-        | Category (TodoUpdates.categoryId, ClientId clientId), DecodeNewest TodoUpdates.codec (version,update) ->
+        | Category (Contract.categoryId, ClientId clientId), DecodeNewest Contract.codec (version,update) ->
             match! service.Ingest(clientId,version,map update) with
             | true -> return Outcome.Ok span.events.Length
             | false -> return Outcome.Skipped span.events.Length

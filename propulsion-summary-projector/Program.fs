@@ -246,9 +246,9 @@ module CmdParser =
             discovery, { database = x.Database; container = x.Container }, connector
         member val Sink =
             match a.TryGetSubCommand() with
-            | Some (Kafka cosmos) -> KafkaSinkArguments cosmos
+            | Some (Kafka kafka) -> KafkaSinkArguments kafka
             | _ -> raise (MissingArg "Must specify `kafka` arguments")
-    and [<NoEquality; NoComparison>] KafkaSinkParameters =
+     and [<NoEquality; NoComparison>] KafkaSinkParameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
         interface IArgParserTemplate with
@@ -287,22 +287,25 @@ module Logging =
 
 let [<Literal>] appName = "ProjectorTemplate"
 
+module EventStoreContext =
+    let cache = Equinox.EventStore.Caching.Cache(appName, sizeMb = 10)
+    let create connection = Context(connection, BatchingPolicy(maxBatchSize=500))
+
 let build (args : CmdParser.Arguments) =
     let log = Logging.initialize args.Verbose args.VerboseConsole
     let src = args.SourceParams()
     let (discovery,cosmos,connector),(broker,topic) =
         match src with
         | Choice1Of2 (_srcE,cosmos,_spec) -> cosmos.BuildConnectionDetails(),cosmos.Sink.BuildTargetParams()
-        | Choice2Of2 (srcC, _srcSpec) -> srcC.BuildConnectionDetails(),srcC.Sink.BuildTargetParams()
+        | Choice2Of2 (srcC,_srcSpec) -> srcC.BuildConnectionDetails(),srcC.Sink.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
-    let produce (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
+    let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
         producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
+
     let cache = Equinox.Cosmos.Caching.Cache(appName, sizeMb = 10)
     let connection = connector.Connect(appName, discovery) |> Async.RunSynchronously
     let context = Equinox.Cosmos.Context(connection, cosmos.database, cosmos.container)
-    let handleStreamEvents : (string*Propulsion.Streams.StreamSpan<_>) -> Async<int64> =
-        let service = Todo.Repository.createService cache context
-        Producer.handleAccumulatedEvents service produce
+
     match src with
     | Choice1Of2 (srcE,_cosmos,spec) ->
         let resolveCheckpointStream =
@@ -312,25 +315,34 @@ let build (args : CmdParser.Arguments) =
             let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, transmute')
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
+        let service =
+            let connection = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave)
+            let context = EventStoreContext.create connection
+            Todo.EventStoreRepository.createService EventStoreContext.cache context
+        let handle = Handler.handleEventStoreStreamEvents (service,produceSummary)
+
+        let sink =
+            Propulsion.Streams.Sync.StreamsSync.Start(
+                 log, args.MaxReadAhead, args.MaxConcurrentStreams, handle, category,
+                 statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
+        let connect () = let c = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
         let tryMapEvent (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$" -> None
             | PropulsionStreamEvent e -> Some e
-        let sink =
-            Propulsion.Streams.Sync.StreamsSync.Start(
-                 log, args.MaxReadAhead, args.MaxConcurrentStreams, handleStreamEvents, category,
-                 statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
-        let connect () = let c = srcE.Connect(log, log, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
         sink,EventStoreSource.Run(
             log, sink, checkpoints, connect, spec, category, tryMapEvent,
             args.MaxReadAhead, args.StatsInterval)
     | Choice2Of2 (_srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-        let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
-            docs |> Seq.collect EquinoxCosmosParser.enumStreamEvents
+        let service = Todo.CosmosRepository.createService cache context
+        let handle = Handler.handleCosmosStreamEvents (service,produceSummary)
+
         let sink =
              Propulsion.Streams.Sync.StreamsSync.Start(
-                 log, args.MaxReadAhead, args.MaxConcurrentStreams, handleStreamEvents, category,
+                 log, args.MaxReadAhead, args.MaxConcurrentStreams, handle, category,
                  statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
+        let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
+            docs |> Seq.collect EquinoxCosmosParser.enumStreamEvents
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, mapToStreamItems)
         sink,CosmosSource.Run(log, discovery, connector.ClientOptions, cosmos,
             aux, leaseId, startFromTail, createObserver,
