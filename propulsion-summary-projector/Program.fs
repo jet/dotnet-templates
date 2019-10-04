@@ -150,7 +150,7 @@ module Logging =
 
 let [<Literal>] appName = "ProjectorTemplate"
 
-let start (args : CmdParser.Arguments) =
+let build (args : CmdParser.Arguments) =
     let log = Logging.initialize args.Verbose args.VerboseConsole
     let (srcC,(auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
     let (discovery,cosmos,connector),(broker,topic) =
@@ -175,14 +175,20 @@ let start (args : CmdParser.Arguments) =
         aux, leaseId, startFromTail, createObserver,
         ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxDiscovery=auxDiscovery)
 
+/// Handles command line parsing and running the program loop
+// NOTE Any custom logic should go in main
+let run argv =
+    try let projector,runSourcePipeline = argv |> CmdParser.parse |> build
+        runSourcePipeline |> Async.Start
+        projector.AwaitCompletion() |> Async.RunSynchronously
+        if projector.RanToCompletion then 0 else 2
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
+        | e -> eprintfn "%s" e.Message; 1
+
 [<EntryPoint>]
 let main argv =
-    try try let args = CmdParser.parse argv
-            let projector,runSourcePipeline = start args
-            runSourcePipeline |> Async.Start
-            projector.AwaitCompletion() |> Async.RunSynchronously
-            if projector.RanToCompletion then 0 else 2
-        with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-            | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-            | e -> eprintfn "%s" e.Message; 1
+    // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
+    try run argv
+    // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()
