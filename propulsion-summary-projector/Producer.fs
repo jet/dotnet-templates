@@ -23,7 +23,7 @@ module Contract =
     let ofState (state : Todo.Folds.State) : SummaryEvent =
         Summary { items = [| for x in state.items -> render x |]}
 
-let (|ClientId|) (value : string) = ClientId.parse value
+let (|ClientId|) = ClientId.parse
 
 let (|Decode|) (codec : FsCodec.IUnionEncoder<_,_>) stream (span : Propulsion.Streams.StreamSpan<_>) =
     span.events |> Seq.choose (StreamCodec.tryDecodeSpan codec Serilog.Log.Logger stream)

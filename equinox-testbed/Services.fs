@@ -7,6 +7,7 @@ module Domain =
 
         // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
         module Events =
+
             type Favorited =                            { date: System.DateTimeOffset; skuId: SkuId }
             type Unfavorited =                          { skuId: SkuId }
             module Compaction =
@@ -20,6 +21,7 @@ module Domain =
             let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
         module Folds =
+
             type State = Events.Favorited []
 
             type private InternalState(input: State) =
@@ -61,7 +63,8 @@ module Domain =
                     [ Events.Unfavorited { skuId = skuId } ]
 
         type Service(log, resolveStream, ?maxAttempts) =
-            let (|AggregateId|) (id: ClientId) = Equinox.AggregateId("Favorites", ClientId.toStringN id)
+
+            let (|AggregateId|) (id: ClientId) = Equinox.AggregateId("Favorites", ClientId.toString id)
             let (|Stream|) (AggregateId id) = Equinox.Stream(log, resolveStream id, defaultArg maxAttempts 2)
             let execute (Stream stream) command : Async<unit> =
                 stream.Transact(Commands.interpret command)

@@ -72,8 +72,9 @@ type View = { id: int; order: int; title: string; completed: bool }
 
 /// Defines operations that a Controller can perform on a Todo List
 type Service(handlerLog, resolve, ?maxAttempts) =
+
     /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId("Todos", ClientId.toStringN clientId)
+    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId("Todos", ClientId.toString clientId)
     
     /// Maps a ClientId to Handler for the relevant stream
     let (|Stream|) (AggregateId id) = Equinox.Stream(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)

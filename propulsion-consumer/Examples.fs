@@ -57,7 +57,7 @@ module MultiStreams =
             interface TypeShape.UnionContract.IUnionContract
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
         let tryDecode = StreamCodec.tryDecode codec
-        let [<Literal>] CategoryId = "SavedForLater"
+        let [<Literal>] categoryId = "SavedForLater"
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module Favorites =
@@ -70,7 +70,7 @@ module MultiStreams =
             interface TypeShape.UnionContract.IUnionContract
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
         let tryDecode = StreamCodec.tryDecode codec
-        let [<Literal>] CategoryId = "Favorites"
+        let [<Literal>] categoryId = "Favorites"
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int | OtherMessage of string
 
@@ -85,10 +85,10 @@ module MultiStreams =
         let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|UnknownMessage|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
             let decode tryDecode = span.events |> Seq.choose (tryDecode log streamName) |> Array.ofSeq
             match category streamName with
-            | Category (Favorites.CategoryId, id) ->
+            | Category (Favorites.categoryId, id) ->
                 let s = match faves.TryGetValue id with true, value -> value | false, _ -> new HashSet<SkuId>()
                 FavoritesEvents (id, s, decode Favorites.tryDecode)
-            | Category (SavedForLater.CategoryId, id) ->
+            | Category (SavedForLater.categoryId, id) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
                 SavedForLaterEvents (id, s, decode SavedForLater.tryDecode)
             | Category (categoryName, _) -> OtherCategory (categoryName, Seq.length span.events)
@@ -185,8 +185,8 @@ module MultiMessages =
             let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
             let decode tryDecode wrap = RenderedSpan.enum span |> Seq.choose (fun x -> x.event |> tryDecode log streamName |> Option.map wrap)
             match streamName with
-            | Category (Favorites.CategoryId,_) -> yield! decode Favorites.tryDecode Fave
-            | Category (SavedForLater.CategoryId,_) -> yield! decode SavedForLater.tryDecode Save
+            | Category (Favorites.categoryId,_) -> yield! decode Favorites.tryDecode Fave
+            | Category (SavedForLater.categoryId,_) -> yield! decode SavedForLater.tryDecode Save
             | Category (otherCategoryName,_) -> yield OtherCat (otherCategoryName, Seq.length span.e)
             | _ -> yield Unclassified streamName }
 

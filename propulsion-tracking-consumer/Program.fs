@@ -103,7 +103,7 @@ module Logging =
 
 let [<Literal>] appName = "ConsumerTemplate"
 
-let startConsumer (args : CmdParser.Arguments) =
+let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose
     let context = args.Cosmos.Connect(appName) |> Async.RunSynchronously
     let cache = Caching.Cache (appName, 10) // here rather than in SkuSummary aggregate as it can be shared with other Aggregates
@@ -112,16 +112,22 @@ let startConsumer (args : CmdParser.Arguments) =
         Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
             appName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    SkuIngester.startConsumer config Log.Logger service args.MaxDop
+    Ingester.startConsumer config Log.Logger service args.MaxDop
+
+/// Handles command line parsing and running the program loop
+// NOTE Any custom logic should go in main
+let run args =
+    try use consumer = args |> CmdParser.parse |> start
+        consumer.AwaitCompletion() |> Async.RunSynchronously
+        if consumer.RanToCompletion then 0 else 2
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
+        // If the handler throws, we exit the app in order to let an orchestrator flag the failure
+        | e -> Log.Fatal(e, "Exiting"); 1
 
 [<EntryPoint>]
 let main argv =
-    try try use consumer = argv |> CmdParser.parse |> startConsumer
-            consumer.AwaitCompletion() |> Async.RunSynchronously
-            if consumer.RanToCompletion then 0 else 2
-        with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-            | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-            // If the handler throws, we exit the app in order to let an orchestrator flag the failure
-            | e -> Log.Fatal(e, "Exiting"); 1
+    // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
+    try run argv
     // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()

@@ -484,7 +484,7 @@ let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.
             yield e }
 //#endif
 
-let start (args : CmdParser.Arguments) =
+let build (args : CmdParser.Arguments) =
     let log,storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
     let categorize (streamName : string) = streamName.Split([|'-'|],2).[0]
     let maybeDstCosmos, sink, streamFilter =
@@ -573,13 +573,20 @@ let start (args : CmdParser.Arguments) =
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
 
+/// Handles command line parsing and running the program loop
+// NOTE Any custom logic should go in main
+let run args =
+    try let sink,runSourcePipeline = CmdParser.parse args |> build
+        runSourcePipeline |> Async.Start
+        sink.AwaitCompletion() |> Async.RunSynchronously
+        if sink.RanToCompletion then 0 else 2
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
+        | e -> eprintfn "%s" e.Message; 1
+
 [<EntryPoint>]
 let main argv =
-    try try let sink,runSourcePipeline = CmdParser.parse argv |> start
-            runSourcePipeline |> Async.Start
-            sink.AwaitCompletion() |> Async.RunSynchronously
-            if sink.RanToCompletion then 0 else 2
-        with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-            | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-            | e -> eprintfn "%s" e.Message; 1
+    // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
+    try run argv
+    // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()

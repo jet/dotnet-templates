@@ -17,9 +17,7 @@ module Events =
 
 module Folds =
 
-    open Events
-
-    type State = ItemData list
+    type State = Events.ItemData list
     module State =
         let equals (x : Events.ItemData) (y : Events.ItemData) =
             x.locationId = y.locationId
@@ -36,10 +34,10 @@ module Folds =
         | Events.Snapshotted _ -> true // Yes, a snapshot is enough info
         | Events.Ingested _ -> false
     let evolve state = function
-        | Ingested e -> e :: state
-        | Snapshotted items -> List.ofArray items
-    let fold (state : State) : Event seq -> State = Seq.fold evolve state
-    let snapshot (x : State) : Event = Snapshotted (Array.ofList x)
+        | Events.Ingested e -> e :: state
+        | Events.Snapshotted items -> List.ofArray items
+    let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
+    let snapshot (x : State) : Events.Event = Events.Snapshotted (Array.ofList x)
 
 module Commands =
 
@@ -51,9 +49,10 @@ module Commands =
         | Consume updates ->
             [for x in updates do if x |> Folds.State.isNewOrUpdated state then yield Events.Ingested x]
 
-let [<Literal>]categoryId = "SkuSummary"
+let [<Literal>] categoryId = "SkuSummary"
 
 type Service(log, resolve, ?maxAttempts) =
+
     let (|AggregateId|) (id : SkuId) = Equinox.AggregateId(categoryId, SkuId.toString id)
     let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
 
@@ -74,6 +73,7 @@ type Service(log, resolve, ?maxAttempts) =
         query skuId id
 
 module Repository =
+
     open Equinox.Cosmos // Everything until now is independent of a concrete store
     let private resolve cache context =
         // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots

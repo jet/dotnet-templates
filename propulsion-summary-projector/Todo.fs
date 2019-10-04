@@ -14,7 +14,7 @@ module Events =
         | Cleared   of {| nextId: int |}
         /// For EventStore, AccessStrategy.RollingSnapshots embeds these events every `batchSize` events
         /// For Cosmos, AccessStrategy.Snapshot maintains this as an event in the `u`nfolds list in the Tip-document
-        | Snapshot of {| nextId: int; items: ItemData[] |}
+        | Snapshotted of {| nextId: int; items: ItemData[] |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
@@ -31,20 +31,21 @@ module Folds =
         | Events.Updated value -> { s with items = s.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
         | Events.Deleted e -> { s with items = s.items  |> List.filter (fun x -> x.id <> e.id) }
         | Events.Cleared e -> { nextId = e.nextId; items = [] }
-        | Events.Snapshot s -> { nextId = s.nextId; items = List.ofArray s.items }
+        | Events.Snapshotted s -> { nextId = s.nextId; items = List.ofArray s.items }
     /// Folds a set of events from the store into a given `state`
     let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
-    let isOrigin = function Events.Cleared _ | Events.Snapshot _ -> true | _ -> false
+    let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-    let snapshot state = Events.Snapshot {| nextId = state.nextId; items = Array.ofList state.items |}
-    /// Allows us to slkip producing summaries for events that we know won't result in an externally discernable change to the summary output
-    let impliesStateChange = function Events.Snapshot _ -> false | _ -> true
+    let snapshot state = Events.Snapshotted {| nextId = state.nextId; items = Array.ofList state.items |}
+    /// Allows us to skip producing summaries for events that we know won't result in an externally discernable change to the summary output
+    let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
 
-let [<Literal>]categoryId = "Todos"
+let [<Literal>] categoryId = "Todos"
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
 type Service(log, resolve, ?maxAttempts) =
+
     /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
     let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toString clientId)
 
@@ -60,6 +61,7 @@ type Service(log, resolve, ?maxAttempts) =
         queryEx clientId render
 
 module Repository =
+
     open Equinox.Cosmos // Everything until now is independent of a concrete store
     let private resolve cache context =
         let accessStrategy = AccessStrategy.Snapshot (Folds.isOrigin,Folds.snapshot)

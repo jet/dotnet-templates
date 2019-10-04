@@ -32,5 +32,5 @@ module Guid =
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =
-    let toStringN (value : ClientId) : string = Guid.toStringN %value
+    let toString (value : ClientId) : string = Guid.toStringN %value
     let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw

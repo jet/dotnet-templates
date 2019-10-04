@@ -1,6 +1,6 @@
 /// Follows a feed of updates, holding the most recently observed one; each update received is intended to completely supersede all previous updates
 /// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
-module ConsumerTemplate.SummaryIngester
+module ConsumerTemplate.Ingester
 
 open System
 
@@ -31,7 +31,7 @@ type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of 
 type Stats(log, ?statsInterval, ?stateInterval) =
     inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 
-    let mutable (ok, na, redundant) = 0, 0, 0
+    let mutable ok, na, redundant = 0, 0, 0
 
     override __.HandleOk res = res |> function
         | Outcome.Ok count -> ok <- ok + 1; redundant <- redundant + count - 1
@@ -51,7 +51,7 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
             { items =
                 [| for x in x.items ->
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
-    let (|ClientId|) (value : string) = ClientId.parse value
+    let (|ClientId|) = ClientId.parse
     let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
         span.events |> Seq.rev |> Seq.tryPick (StreamCodec.tryDecode codec log stream)
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {

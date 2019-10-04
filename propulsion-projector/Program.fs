@@ -164,7 +164,7 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
 type ExampleOutput = { Id : string }
 #endif
 
-let start (args : CmdParser.Arguments) =
+let build (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose args.VerboseConsole
     let discovery, source, clientOptions = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
@@ -211,14 +211,20 @@ let start (args : CmdParser.Arguments) =
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     sink,runSourcePipeline
 
+/// Handles command line parsing and running the program loop
+// NOTE Any custom logic should go in main
+let run args =
+    try let sink,runSourcePipeline = args |> CmdParser.parse |> build
+        runSourcePipeline |> Async.Start
+        sink.AwaitCompletion() |> Async.RunSynchronously
+        if sink.RanToCompletion then 0 else 2
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
+        | e -> eprintfn "%s" e.Message; 1
+
 [<EntryPoint>]
 let main argv =
-    try try let args = CmdParser.parse argv
-            let sink,runSourcePipeline = start args
-            runSourcePipeline |> Async.Start
-            sink.AwaitCompletion() |> Async.RunSynchronously
-            if sink.RanToCompletion then 0 else 2
-        with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-            | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-            | e -> eprintfn "%s" e.Message; 1
+    // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
+    try run argv
+    // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()
