@@ -1,12 +1,12 @@
 /// Follows a feed of messages representing items being added/updated on an aggregate that maintains a list of child items
-/// Compared to the SummaryIngester in the `summaryProjector` template, each event is potentially relevant
-module ConsumerTemplate.SkuIngester
+/// Compared to the Ingester in the `summaryProjector` template, each event is potentially relevant
+module ConsumerTemplate.Ingester
 
 open ConsumerTemplate.SkuSummary.Events
 open System
 
 /// Defines the shape of input messages on the topic we're consuming
-module SkuUpdates =
+module Contract =
 
     type OrderInfo = { poNumber : string; reservedUnitQuantity : int }
     type Message =
@@ -36,29 +36,14 @@ type Stats(log, ?statsInterval, ?stateInterval) =
             log.Information(" Used {ok} Ignored {skipped}", ok, skipped)
             ok <- 0; skipped <- 0
 
-/// StreamsConsumer buffers and deduplicates messages from a contiguous stream with each message bearing an index.
-/// The messages we consume don't have such characteristics, so we generate a fake `index` by keeping an int per stream in a dictionary
-type MessagesByArrivalOrder() =
-    // we synthesize a monotonically increasing index to render the deduplication facility inert
-    let indices = System.Collections.Generic.Dictionary()
-    let genIndex streamName =
-        match indices.TryGetValue streamName with
-        | true, v -> let x = v + 1 in indices.[streamName] <- x; int64 x
-        | false, _ -> let x = 0 in indices.[streamName] <- x; int64 x
-
-    // Stuff the full content of the message into an Event record - we'll parse it when it comes out the other end in a span
-    member __.ToStreamEvent (KeyValue (k,v : string)) : Propulsion.Streams.StreamEvent<byte[]> seq =
-        let e = FsCodec.Core.IndexedEventData(genIndex k,false,String.Empty,System.Text.Encoding.UTF8.GetBytes v,null,DateTimeOffset.UtcNow)
-        Seq.singleton { stream=k; event=e }
-
-let (|SkuId|) (value : string) = SkuId.parse value
+let (|SkuId|) = SkuId.parse
 
 /// Starts a processing loop accumulating messages by stream - each time we handle all the incoming updates for a give Sku as a single transaction
 let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log : Serilog.ILogger) (service : SkuSummary.Service) maxDop =
     let ingestIncomingSummaryMessage(SkuId skuId, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         let items =
             [ for e in span.events do
-                let x = SkuUpdates.parse e.Data
+                let x = Contract.parse e.Data
                 for o in x.purchaseOrderInfo do
                     yield { locationId = x.locationId
                             messageIndex = x.messageIndex
@@ -69,7 +54,7 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
         return Outcome.Completed(used,List.length items)
     }
     let stats = Stats(log)
-    // No categorization required, out inputs are all one big family defying categorization
+    // No categorization required, our inputs are all one big family defying categorization
     let category _streamName = "Sku"
-    let sequencer = MessagesByArrivalOrder()
+    let sequencer = StreamKeyEventSequencer()
     Propulsion.Kafka.StreamsConsumer.Start(log, config, sequencer.ToStreamEvent, ingestIncomingSummaryMessage, maxDop, stats, category)

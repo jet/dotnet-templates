@@ -73,8 +73,8 @@ let start (args : CmdParser.Arguments) =
 
 /// Handles command line parsing and running the program loop
 // NOTE Any custom logic should go in main
-let run argv =
-    try use consumer = argv |> CmdParser.parse |> start
+let run args =
+    try use consumer = args |> CmdParser.parse |> start
         consumer.AwaitCompletion() |> Async.RunSynchronously
         if consumer.RanToCompletion then 0 else 2
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

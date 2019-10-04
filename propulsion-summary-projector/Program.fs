@@ -177,8 +177,8 @@ let build (args : CmdParser.Arguments) =
 
 /// Handles command line parsing and running the program loop
 // NOTE Any custom logic should go in main
-let run argv =
-    try let projector,runSourcePipeline = argv |> CmdParser.parse |> build
+let run args =
+    try let projector,runSourcePipeline = args |> CmdParser.parse |> build
         runSourcePipeline |> Async.Start
         projector.AwaitCompletion() |> Async.RunSynchronously
         if projector.RanToCompletion then 0 else 2

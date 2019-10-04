@@ -213,8 +213,8 @@ let build (args : CmdParser.Arguments) =
 
 /// Handles command line parsing and running the program loop
 // NOTE Any custom logic should go in main
-let run argv =
-    try let sink,runSourcePipeline = argv |> CmdParser.parse |> build
+let run args =
+    try let sink,runSourcePipeline = args |> CmdParser.parse |> build
         runSourcePipeline |> Async.Start
         sink.AwaitCompletion() |> Async.RunSynchronously
         if sink.RanToCompletion then 0 else 2

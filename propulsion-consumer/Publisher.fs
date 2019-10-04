@@ -36,7 +36,7 @@ module Input =
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let tryDecode = StreamCodec.tryDecode codec
-    let [<Literal>] CategoryId = "Inventory"
+    let [<Literal>] categoryId = "Inventory"
 
 module Output =
 
@@ -113,7 +113,7 @@ module Processor =
 
     let private enumStreamEvents(KeyValue (streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         match streamName with 
-        | Category (Input.CategoryId,_) -> Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
+        | Category (Input.categoryId,_) -> Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
         | _ -> Seq.empty
 
     let log = Log.ForContext<Handler>()

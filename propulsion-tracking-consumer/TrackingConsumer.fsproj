@@ -10,7 +10,7 @@
     <None Include="README.md" />
     <Compile Include="Infrastructure.fs" />
     <Compile Include="SkuSummary.fs" />
-    <Compile Include="SkuIngester.fs" />
+    <Compile Include="Ingester.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

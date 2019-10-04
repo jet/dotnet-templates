@@ -112,12 +112,12 @@ let start (args : CmdParser.Arguments) =
         Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
             appName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    SkuIngester.startConsumer config Log.Logger service args.MaxDop
+    Ingester.startConsumer config Log.Logger service args.MaxDop
 
 /// Handles command line parsing and running the program loop
 // NOTE Any custom logic should go in main
-let run argv =
-    try use consumer = argv |> CmdParser.parse |> start
+let run args =
+    try use consumer = args |> CmdParser.parse |> start
         consumer.AwaitCompletion() |> Async.RunSynchronously
         if consumer.RanToCompletion then 0 else 2
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

@@ -2,13 +2,14 @@
 
 // NB - these types and names reflect the actual storage formats and hence need to be versioned with care
 module Events =
-    type Compacted = { happened: bool }
+
+    type CompactedData = { happened: bool }
 
     type Event =
         | Happened
-        | Compacted of Compacted
+        | Compacted of CompactedData
         interface TypeShape.UnionContract.IUnionContract
-    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>(rejectNullaryCases=false)
 
 module Folds =
 
@@ -33,6 +34,7 @@ module Commands =
 type View = { sorted : bool }
 
 type Service(handlerLog, resolve, ?maxAttempts) =
+
     let (|AggregateId|) (id: string) = Equinox.AggregateId("Aggregate", id)
     let (|Stream|) (AggregateId id) = Equinox.Stream(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
 

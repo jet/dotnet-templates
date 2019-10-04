@@ -27,7 +27,6 @@ module StreamNameParser =
         | [| category; id |] -> Category (category, id)
         | _ -> Unknown streamName
 
-
 module Guid =
     let inline toStringN (x : Guid) = x.ToString "N"
 
