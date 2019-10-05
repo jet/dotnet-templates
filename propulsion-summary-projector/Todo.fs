@@ -62,11 +62,19 @@ type Service(log, resolve, ?maxAttempts) =
 
 let private createService resolve = Service(Serilog.Log.ForContext<Service>(), resolve)
 
-module Repository =
+module CosmosRepository =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
     let private resolve cache context =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let accessStrategy = AccessStrategy.Snapshot (Folds.isOrigin,Folds.snapshot)
         Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
+    let createService cache context = resolve cache context |> createService
+
+module EventStoreRepository =
+
+    open Equinox.EventStore // Everything until now is independent of a concrete store
+    let private resolve cache context =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy).Resolve
     let createService cache context = resolve cache context |> createService
