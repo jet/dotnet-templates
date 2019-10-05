@@ -9,12 +9,16 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
-
-- EventStore source support for `summaryProjector` [#31](https://github.com/jet/dotnet-templates/pull/31)
-
 ### Changed
 ### Removed
 ### Fixed
+
+<a name="3.5.0-rc1"></a>
+## [3.5.0-rc1] - 2019-10-05
+
+### Added
+
+- EventStore source support for `summaryProjector` [#31](https://github.com/jet/dotnet-templates/pull/31)
 
 <a name="3.4.1"></a>
 ## [3.4.1] - 2019-10-05
@@ -191,7 +195,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.4.1...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.5.0-rc1...HEAD
+[3.5.0-rc1]: https://github.com/jet/dotnet-templates/compare/3.4.1...3.5.0-rc1
 [3.4.1]: https://github.com/jet/dotnet-templates/compare/3.4.0...3.4.1
 [3.4.0]: https://github.com/jet/dotnet-templates/compare/3.3.2...3.4.0
 [3.3.2]: https://github.com/jet/dotnet-templates/compare/3.3.1...3.3.2
