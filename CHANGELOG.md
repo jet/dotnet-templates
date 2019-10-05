@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- EventStore source support for `summaryProjector` [#31](https://github.com/jet/dotnet-templates/pull/31)
+
 ### Changed
 ### Removed
 ### Fixed
