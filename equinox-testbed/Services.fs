@@ -5,7 +5,7 @@ open System
 module Domain =
     module Favorites =
 
-        // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
+        // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
         module Events =
 
             type Favorited =                            { date: System.DateTimeOffset; skuId: SkuId }

@@ -20,7 +20,7 @@ type StorageConfig =
 //#if (memoryStore || (!cosmos && !eventStore))
 module MemoryStore =
     type [<NoEquality; NoComparison>] Parameters =
-        | [<AltCommandLine("-vs")>] VerboseStore
+        | [<AltCommandLine "-vs">]      VerboseStore
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | VerboseStore ->       "Include low level Store logging."
@@ -36,14 +36,14 @@ module Cosmos =
         | x -> x
 
     type [<NoEquality; NoComparison>] Parameters =
-        | [<AltCommandLine("-vs")>] VerboseStore
-        | [<AltCommandLine("-cm")>] ConnectionMode of Equinox.Cosmos.ConnectionMode
-        | [<AltCommandLine("-o")>] Timeout of float
-        | [<AltCommandLine("-r")>] Retries of int
-        | [<AltCommandLine("-rt")>] RetriesWaitTime of int
-        | [<AltCommandLine("-s")>] Connection of string
-        | [<AltCommandLine("-d")>] Database of string
-        | [<AltCommandLine("-c")>] Container of string
+        | [<AltCommandLine "-vs">]      VerboseStore
+        | [<AltCommandLine "-cm">]      ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-o">]       Timeout of float
+        | [<AltCommandLine "-r">]       Retries of int
+        | [<AltCommandLine "-rt">]      RetriesWaitTime of int
+        | [<AltCommandLine "-s">]       Connection of string
+        | [<AltCommandLine "-d">]       Database of string
+        | [<AltCommandLine "-c">]       Container of string
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
@@ -52,9 +52,9 @@ module Cosmos =
                 | Retries _ ->          "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
                 | ConnectionMode _ ->   "override the connection mode. Default: Direct."
-                | Connection _ ->       "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
-                | Database _ ->         "specify a database name for store. Default: envvar:EQUINOX_COSMOS_DATABASE."
-                | Container _ ->        "specify a container name for store. Default: envvar:EQUINOX_COSMOS_CONTAINER."
+                | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
+                | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
+                | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
     type Arguments(a : ParseResults<Parameters>) =
         member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
         member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
@@ -98,14 +98,14 @@ module Cosmos =
 ///   2. & $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
 module EventStore =
     type [<NoEquality; NoComparison>] Parameters =
-        | [<AltCommandLine("-vs")>] VerboseStore
-        | [<AltCommandLine("-o")>] Timeout of float
-        | [<AltCommandLine("-r")>] Retries of int
-        | [<AltCommandLine("-g")>] Host of string
-        | [<AltCommandLine("-u")>] Username of string
-        | [<AltCommandLine("-p")>] Password of string
-        | [<AltCommandLine("-c")>] ConcurrentOperationsLimit of int
-        | [<AltCommandLine("-h")>] HeartbeatTimeout of float
+        | [<AltCommandLine "-vs">]      VerboseStore
+        | [<AltCommandLine "-o">]       Timeout of float
+        | [<AltCommandLine "-r">]       Retries of int
+        | [<AltCommandLine "-g">]       Host of string
+        | [<AltCommandLine "-u">]       Username of string
+        | [<AltCommandLine "-p">]       Password of string
+        | [<AltCommandLine "-c">]       ConcurrentOperationsLimit of int
+        | [<AltCommandLine "-h">]       HeartbeatTimeout of float
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | VerboseStore ->       "include low level Store logging."

@@ -27,17 +27,17 @@ module CmdParser =
                 member a.Usage =
                     match a with
                     | ConnectionMode _ ->   "override the connection mode. Default: Direct."
-                    | Connection _ ->       "specify a connection string for a Cosmos account. Default: envvar:EQUINOX_COSMOS_CONNECTION."
-                    | Database _ ->         "specify a database name for store. Default: envvar:EQUINOX_COSMOS_DATABASE."
-                    | Container _ ->        "specify a container name for store. Default: envvar:EQUINOX_COSMOS_CONTAINER."
+                    | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
+                    | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
+                    | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
                     | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
                     | Retries _ ->          "specify operation retries. Default: 1."
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
         type Arguments(a : ParseResults<Parameters>) =
             member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
-            member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-            member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-            member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
+            member __.Connection =          match a.TryGetResult Connection with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
+            member __.Database =            match a.TryGetResult Database   with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
+            member __.Container =           match a.TryGetResult Container  with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
 
             member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
             member __.Retries =             a.GetResult(Retries, 1)
@@ -84,8 +84,8 @@ module CmdParser =
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | VerboseConsole ->         "request Verbose Logging from ChangeFeedProcessor. Default: off"
 //#if kafka
-                | Broker _ ->               "specify Kafka Broker, in host:port format. Default: use environment variable PROPULSION_KAFKA_BROKER."
-                | Topic _ ->                "specify Kafka Topic Id. Default: use environment variable PROPULSION_KAFKA_TOPIC."
+                | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
+                | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(args : ParseResults<Parameters>) =
