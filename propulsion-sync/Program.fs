@@ -551,8 +551,7 @@ let build (args : CmdParser.Arguments) =
             let caching =
                 let c = Equinox.Cosmos.Caching.Cache(appName, sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
-            let transmute' e s = let e,u = Checkpoint.Folds.transmute e s in e,List.singleton u // TODO fixed in Propulsion > 1.2.0
-            let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, transmute')
+            let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let withNullData (e : FsCodec.IIndexedEvent<_>) : FsCodec.IIndexedEvent<_> =
