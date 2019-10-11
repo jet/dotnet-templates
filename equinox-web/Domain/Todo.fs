@@ -32,7 +32,7 @@ module Folds =
         | Events.Cleared e -> { nextId = e.nextId; items = [] }
         | Events.Compacted s -> { nextId = s.nextId; items = List.ofArray s.items }
     /// Folds a set of events from the store into a given `state`
-    let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
+    let fold : State -> Events.Event seq -> State = Seq.fold evolve
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
     let isOrigin = function Events.Cleared _ | Events.Compacted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it

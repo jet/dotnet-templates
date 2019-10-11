@@ -17,7 +17,7 @@ module Folds =
     let initial = { version = -1L; value = None }
     let evolve _state = function
         | Events.Ingested e -> { version = e.version; value = Some e.value }
-    let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
+    let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let private isOrigin = function Events.Ingested _ -> true
     // A `transmute` function gets presented with:XX
     // a) events a command decided to generate (in it's `interpret`)

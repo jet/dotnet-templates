@@ -36,7 +36,7 @@ module Folds =
     let evolve state = function
         | Events.Ingested e -> e :: state
         | Events.Snapshotted items -> List.ofArray items
-    let fold (state : State) : Events.Event seq -> State = Seq.fold evolve state
+    let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let snapshot (x : State) : Events.Event = Events.Snapshotted (Array.ofList x)
 
 module Commands =
