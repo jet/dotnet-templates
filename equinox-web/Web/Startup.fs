@@ -31,10 +31,10 @@ module Storage =
         | MemoryStore of Equinox.MemoryStore.VolatileStore
 //#endif
 //#if eventStore
-        | EventStore of context: Equinox.EventStore.Context * cache: Equinox.EventStore.Caching.Cache
+        | EventStore of context: Equinox.EventStore.Context * cache: Equinox.Cache
 //#endif
 //#if cosmos
-        | CosmosStore of store: Equinox.Cosmos.Context * cache: Equinox.Cosmos.Caching.Cache
+        | CosmosStore of store: Equinox.Cosmos.Context * cache: Equinox.Cache
 //#endif
 
 //#if (memoryStore || (!cosmos && !eventStore))
@@ -49,7 +49,7 @@ module Storage =
     /// EventStore wiring, uses Equinox.EventStore nuget package
     module private ES =
         open Equinox.EventStore
-        let mkCache mb = Caching.Cache ("ES", mb)
+        let mkCache mb = Equinox.Cache ("ES", mb)
         let connect host username password =
             let log = Logger.SerilogNormal (Log.ForContext<Instance>())
             let c = Connector(username,password,reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
@@ -61,7 +61,7 @@ module Storage =
     /// CosmosDb wiring, uses Equinox.Cosmos nuget package
     module private Cosmos =
         open Equinox.Cosmos
-        let mkCache mb = Caching.Cache ("Cosmos", mb)
+        let mkCache mb = Equinox.Cache ("Cosmos", mb)
         let connect appName (mode, discovery) (operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds) =
             let log = Log.ForContext<Instance>()
             let c = Connector(log=log, mode=mode, requestTimeout=operationTimeout, maxRetryAttemptsOnThrottledRequests=maxRetryForThrottling, maxRetryWaitTimeInSeconds=maxRetryWaitSeconds)
@@ -98,7 +98,7 @@ module Services =
     /// Builds a Stream Resolve function appropriate to the store being used
     type StreamResolver(storage : Storage.Instance) =
         member __.Resolve
-            (   codec : FsCodec.IUnionEncoder<'event,byte[]>,
+            (   codec : FsCodec.IUnionEncoder<'event,byte[],_>,
                 fold: ('state -> 'event seq -> 'state),
                 initial: 'state,
                 snapshot: (('event -> bool) * ('state -> 'event))) =
@@ -111,13 +111,13 @@ module Services =
             | Storage.EventStore (gateway, cache) ->
                 let accessStrategy = Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot
                 let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.EventStore.Resolver<'event,'state>(gateway, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
+                Equinox.EventStore.Resolver<'event,'state,_>(gateway, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
 //#endif
 //#if cosmos
             | Storage.CosmosStore (store, cache) ->
                 let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot snapshot
                 let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.Cosmos.Resolver<'event,'state>(store, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
+                Equinox.Cosmos.Resolver<'event,'state,_>(store, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
 //#endif
 
     /// Binds a storage independent Service's Handler's `resolve` function to a given Stream Policy using the StreamResolver

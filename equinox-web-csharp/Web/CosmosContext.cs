@@ -30,14 +30,14 @@ namespace TodoBackendTemplate
 
     public class CosmosContext : EquinoxContext
     {
-        readonly Caching.Cache _cache;
+        readonly Cache _cache;
 
         Context _store;
         readonly Func<Task> _connect;
 
         public CosmosContext(CosmosConfig config)
         {
-            _cache = new Caching.Cache("Cosmos", config.CacheMb);
+            _cache = new Cache("Cosmos", config.CacheMb);
             var retriesOn429Throttling = 1; // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             var timeout = TimeSpan.FromSeconds(5); // Timeout applied per request to CosmosDb, including retry attempts
             var discovery = Discovery.FromConnectionString(config.ConnectionStringWithUriAndKey);
@@ -62,8 +62,8 @@ namespace TodoBackendTemplate
             return new Gateway(conn, new BatchingPolicy(defaultMaxItems: 500));
         }
 
-        public override Func<Target,Equinox.Store.IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IUnionEncoder<TEvent, byte[]> codec,
+        public override Func<Target,Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
+            FsCodec.IUnionEncoder<TEvent, byte[],object> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
@@ -77,8 +77,8 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new Resolver<TEvent, TState>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy);
-            return t => resolver.Resolve.Invoke(t);
+            var resolver = new Resolver<TEvent, TState, object>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy);
+            return t => resolver.Resolve(t);
         }
     }
 }

@@ -87,7 +87,7 @@ open Microsoft.Extensions.DependencyInjection
 
 type StreamResolver(storage) =
     member __.Resolve
-        (   codec : FsCodec.IUnionEncoder<'event,byte[]>,
+        (   codec : FsCodec.IUnionEncoder<'event,byte[],_>,
             fold: ('state -> 'event seq -> 'state),
             initial: 'state,
             snapshot: (('event -> bool) * ('state -> 'event))) =
@@ -99,13 +99,13 @@ type StreamResolver(storage) =
 //#if eventStore
         | Storage.StorageConfig.Es (gateway, caching, unfolds) ->
             let accessStrategy = if unfolds then Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot |> Some else None
-            Equinox.EventStore.Resolver<'event,'state>(gateway, codec, fold, initial, ?caching = caching, ?access = accessStrategy).Resolve
+            Equinox.EventStore.Resolver<'event,'state,_>(gateway, codec, fold, initial, ?caching = caching, ?access = accessStrategy).Resolve
 //#endif
 //#if cosmos
         | Storage.StorageConfig.Cosmos (gateway, caching, unfolds, databaseId, containerId) ->
             let store = Equinox.Cosmos.Context(gateway, databaseId, containerId)
             let accessStrategy = if unfolds then Equinox.Cosmos.AccessStrategy.Snapshot snapshot |> Some else None
-            Equinox.Cosmos.Resolver<'event,'state>(store, codec, fold, initial, caching, ?access = accessStrategy).Resolve
+            Equinox.Cosmos.Resolver<'event,'state,_>(store, codec, fold, initial, caching, ?access = accessStrategy).Resolve
 //#endif
 
 type ServiceBuilder(storageConfig, handlerLog) =

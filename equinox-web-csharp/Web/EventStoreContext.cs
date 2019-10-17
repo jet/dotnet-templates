@@ -1,6 +1,6 @@
 using Equinox;
 using Equinox.EventStore;
-using Equinox.Store;
+using Equinox.Core;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
 using System;
@@ -27,14 +27,14 @@ namespace TodoBackendTemplate
 
     public class EventStoreContext : EquinoxContext
     {
-        readonly Caching.Cache _cache;
+        readonly Cache _cache;
 
         Context _connection;
         readonly Func<Task> _connect;
 
         public EventStoreContext(EventStoreConfig config)
         {
-            _cache = new Caching.Cache("Es", config.CacheMb);
+            _cache = new Cache("Es", config.CacheMb);
             _connect = async () => _connection = await Connect(config);
         }
 
@@ -52,7 +52,7 @@ namespace TodoBackendTemplate
         }
 
         public override Func<Target,IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IUnionEncoder<TEvent, byte[]> codec,
+            FsCodec.IUnionEncoder<TEvent, byte[], object> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
@@ -65,9 +65,9 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new Resolver<TEvent, TState>(_connection, codec, FuncConvert.FromFunc(fold),
+            var resolver = new Resolver<TEvent, TState, object>(_connection, codec, FuncConvert.FromFunc(fold),
                 initial, cacheStrategy, accessStrategy);
-            return t => resolver.Resolve.Invoke(t);
+            return t => resolver.Resolve(t);
         }
     }
 }

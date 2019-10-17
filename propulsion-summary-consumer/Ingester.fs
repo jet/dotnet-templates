@@ -2,6 +2,7 @@
 /// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
 module ConsumerTemplate.Ingester
 
+open FsCodec
 open System
 
 /// Defines the contract we share with the SummaryProjector's published feed
@@ -16,10 +17,10 @@ module Contract =
     type Message =
         | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
-    let codec =
+    let codec : IUnionEncoder<int64*Message,_,obj> =
         // We also want the index (which is the Version of the Summary) whenever we're handling an event
-        let up (d : FsCodec.IIndexedEvent<_>,e) = d.Index,e
-        let down _e = failwith "Not Implemented"
+        let up (d : FsCodec.ITimelineEvent<_>,e) = d.Index,e
+        let down _c _e = failwith "Not Implemented"
         FsCodec.NewtonsoftJson.Codec.Create(up,down)
     let [<Literal>] categoryId = "TodoSummary"
 
@@ -51,7 +52,7 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
                 [| for x in x.items ->
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
     let (|ClientId|) = ClientId.parse
-    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
+    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
         span.events |> Seq.rev |> Seq.tryPick (StreamCodec.tryDecode codec log stream)
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         match stream, (stream,span) with

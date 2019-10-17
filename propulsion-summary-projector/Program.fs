@@ -285,7 +285,7 @@ module Logging =
 let [<Literal>] appName = "ProjectorTemplate"
 
 module EventStoreContext =
-    let cache = Equinox.EventStore.Caching.Cache(appName, sizeMb = 10)
+    let cache = Equinox.Cache(appName, sizeMb = 10)
     let create connection = Context(connection, BatchingPolicy(maxBatchSize=500))
 
 let build (args : CmdParser.Arguments) =
@@ -299,7 +299,7 @@ let build (args : CmdParser.Arguments) =
     let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
         producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 
-    let cache = Equinox.Cosmos.Caching.Cache(appName, sizeMb = 10)
+    let cache = Equinox.Cache(appName, sizeMb = 10)
     let connection = connector.Connect(appName, discovery) |> Async.RunSynchronously
     let context = Equinox.Cosmos.Context(connection, cosmos.database, cosmos.container)
 

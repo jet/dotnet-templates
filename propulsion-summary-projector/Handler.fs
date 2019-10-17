@@ -2,7 +2,7 @@ module ProjectorTemplate.Handler
 
 let (|ClientId|) = ClientId.parse
 
-let (|Decode|) (codec : FsCodec.IUnionEncoder<_,_>) stream (span : Propulsion.Streams.StreamSpan<_>) =
+let (|Decode|) (codec : FsCodec.IUnionEncoder<_,_,_>) stream (span : Propulsion.Streams.StreamSpan<_>) =
     span.events |> Seq.choose (StreamCodec.tryDecode codec Serilog.Log.Logger stream)
 
 let tryHandle

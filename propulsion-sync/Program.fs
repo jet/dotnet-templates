@@ -452,13 +452,15 @@ module EventV0Parser =
             /// Event body, as UTF-8 encoded json ready to be injected into the Json being rendered for CosmosDB
             [<JsonConverter(typeof<FsCodec.NewtonsoftJson.VerbatimUtf8JsonConverter>)>]
             d: byte[] }
-        interface FsCodec.IIndexedEvent<byte[]> with
+        interface FsCodec.ITimelineEvent<byte[]> with
             member x.Index = x.i
             member x.IsUnfold = false
             member x.EventType = x.t
             member x.Data = x.d
             member __.Meta = null
             member x.Timestamp = x.c
+            member __.CorrelationId = null
+            member __.CausationId = null
 
     type Microsoft.Azure.Documents.Document with
         member document.Cast<'T>() =
@@ -549,13 +551,13 @@ let build (args : CmdParser.Arguments) =
             let context = Equinox.Cosmos.Context(mainConn, containers)
             let codec = FsCodec.NewtonsoftJson.Codec.Create()
             let caching =
-                let c = Equinox.Cosmos.Caching.Cache(appName, sizeMb = 1)
+                let c = Equinox.Cache(appName, sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
-        let withNullData (e : FsCodec.IIndexedEvent<_>) : FsCodec.IIndexedEvent<_> =
-            FsCodec.Core.IndexedEventData(e.Index, false, e.EventType, null, e.Meta, e.Timestamp) :> _
+        let withNullData (e : FsCodec.ITimelineEvent<_>) : FsCodec.ITimelineEvent<_> =
+            FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, null, e.Meta, timestamp=e.Timestamp) :> _
         let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$"

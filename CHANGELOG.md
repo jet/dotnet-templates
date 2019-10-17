@@ -10,8 +10,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Target Propulsion 1.3.0, Equinox 2.0.0-rc7, FsCodec 1.0.0
+
 ### Removed
 ### Fixed
+
+<a name="3.6.0"></a>
+## [3.6.0] - 2019-10-11
 
 <a name="3.5.0"></a>
 ## [3.5.0] - 2019-10-11

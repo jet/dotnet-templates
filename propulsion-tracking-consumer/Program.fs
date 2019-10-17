@@ -106,7 +106,7 @@ let [<Literal>] appName = "ConsumerTemplate"
 let start (args : CmdParser.Arguments) =
     Logging.initialize args.Verbose
     let context = args.Cosmos.Connect(appName) |> Async.RunSynchronously
-    let cache = Caching.Cache (appName, 10) // here rather than in SkuSummary aggregate as it can be shared with other Aggregates
+    let cache = Equinox.Cache (appName, 10) // here rather than in SkuSummary aggregate as it can be shared with other Aggregates
     let service = SkuSummary.Repository.createService cache context
     let config =
         Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(

@@ -62,7 +62,7 @@ module EventEncoder =
             /// Event body, as UTF-8 encoded json ready to be injected directly into the Json being rendered
             [<Newtonsoft.Json.JsonConverter(typeof<FsCodec.NewtonsoftJson.VerbatimUtf8JsonConverter>)>]
             d: byte[] }
-    let ofEvent (x:  FsCodec.IEvent<_>) =
+    let ofEvent (x:  FsCodec.IEventData<_>) =
         {   c = x.EventType
             d = x.Data }
 
@@ -72,7 +72,7 @@ module Processor =
 
     type Handler(log, producer : Propulsion.Kafka.Producer) =
         let render (x : Output.Event) : string =
-            let encoded = Output.codec.Encode x
+            let encoded = Output.codec.Encode(None,x)
             let enveloped = EventEncoder.ofEvent encoded
             JsonConvert.SerializeObject(enveloped)
 

@@ -12,8 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox" Version="2.0.0-rc6" />
-    <PackageReference Include="FsCodec.NewtonsoftJson" Version="1.0.0-rc2" />
+    <PackageReference Include="Equinox" Version="2.0.0-rc7" />
+    <PackageReference Include="FsCodec.NewtonsoftJson" Version="1.0.0" />
     <PackageReference Include="FSharp.UMX" Version="1.0.0" />
   </ItemGroup>
 

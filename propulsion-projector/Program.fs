@@ -147,9 +147,9 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let replaceLongDataWithNull (x : FsCodec.IIndexedEvent<byte[]>) : FsCodec.IIndexedEvent<_> =
+let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
     if x.Data.Length < 900_000 then x
-    else FsCodec.Core.IndexedEventData(x.Index,false,x.EventType,null,x.Meta,x.Timestamp) :> _
+    else FsCodec.Core.TimelineEvent.Create(x.Index,x.EventType,null,x.Meta,timestamp=x.Timestamp) :> _
 
 let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
     { stream = e.stream; event = replaceLongDataWithNull e.event }

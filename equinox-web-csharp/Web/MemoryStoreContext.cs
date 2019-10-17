@@ -1,6 +1,6 @@
 using Equinox;
 using Equinox.MemoryStore;
-using Equinox.Store;
+using Equinox.Core;
 using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
@@ -16,14 +16,14 @@ namespace TodoBackendTemplate
             _store = store;
 
         public override Func<Target,IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IUnionEncoder<TEvent, byte[]> codec,
+            FsCodec.IUnionEncoder<TEvent, byte[], object> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> compact = null)
         {
-            var resolver = new Resolver<TEvent, TState>(_store, FuncConvert.FromFunc(fold), initial);
-            return target => resolver.Resolve.Invoke(target);
+            var resolver = new Resolver<TEvent, TState, object>(_store, FuncConvert.FromFunc(fold), initial);
+            return target => resolver.Resolve(target);
         }
 
         internal override Task Connect() => Task.CompletedTask;

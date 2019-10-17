@@ -24,5 +24,5 @@ module Contract =
         Summary { items = [| for x in state.items -> render x |]}
 
 let generate stream version summary =
-    let event = Contract.codec.Encode summary
+    let event = Contract.codec.Encode(None,summary)
     Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version event

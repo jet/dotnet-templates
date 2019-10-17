@@ -1,5 +1,5 @@
 using Equinox;
-using Equinox.Store;
+using Equinox.Core;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
@@ -15,7 +15,7 @@ namespace TodoBackendTemplate
     public static class HandlerExtensions
     {
         public static void Execute<TEvent, TState>(this Accumulator<TEvent, TState> that, Func<TState, IEnumerable<TEvent>> f) =>
-            that.Execute(FuncConvert.FromFunc<TState, FSharpList<TEvent>>(s => ListModule.OfSeq(f(s))));
+            that.Transact(FuncConvert.FromFunc<TState, FSharpList<TEvent>>(s => ListModule.OfSeq(f(s))));
     }
 
     public class EquinoxStream<TEvent, TState> : Stream<TEvent, TState>

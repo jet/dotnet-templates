@@ -56,5 +56,5 @@ let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log 
     let stats = Stats(log)
     // No categorization required, our inputs are all one big family defying categorization
     let category _streamName = "Sku"
-    let sequencer = StreamKeyEventSequencer()
+    let sequencer = Propulsion.Kafka.Core.StreamKeyEventSequencer()
     Propulsion.Kafka.StreamsConsumer.Start(log, config, sequencer.ToStreamEvent, ingestIncomingSummaryMessage, maxDop, stats, category)

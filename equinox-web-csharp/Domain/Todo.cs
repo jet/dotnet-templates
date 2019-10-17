@@ -1,5 +1,5 @@
 ﻿using Equinox;
-using Equinox.Store;
+using Equinox.Core;
 using Microsoft.FSharp.Core;
 using Newtonsoft.Json;
 using Serilog;
