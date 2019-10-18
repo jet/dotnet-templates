@@ -2,6 +2,7 @@
 using Equinox.Core;
 using Microsoft.FSharp.Core;
 using Newtonsoft.Json;
+using OneOf;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -12,7 +13,7 @@ namespace TodoBackendTemplate
     public static class Aggregate
     {
         /// NB - these types and names reflect the actual storage formats and hence need to be versioned with care
-        public abstract class Event
+        public abstract class Event : OneOfBase<Event.Happened, Event.Compacted>
         {
             public class Happened : Event
             {
@@ -43,21 +44,10 @@ namespace TodoBackendTemplate
 
             internal State(bool happened) { Happened = happened; }
 
-            public static readonly State Initial = new State(false);
-
-            static void Evolve(State s, Event x)
-            {
-                switch (x)
-                {
-                    case Event.Happened e:
-                        s.Happened = true;
-                        break;
-                    case Event.Compacted e:
-                        s.Happened = e.Happened;
-                        break;
-                    default: throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
-                }
-            }
+            static void Evolve(State s, Event x) =>
+                x.Match(
+                    (Event.Happened _) => s.Happened = true,
+                    (Event.Compacted e) => s.Happened = e.Happened);
 
             public static State Fold(State origin, IEnumerable<Event> xs)
             {
@@ -74,22 +64,15 @@ namespace TodoBackendTemplate
         }
 
         /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
-        public abstract class Command
+        public abstract class Command : OneOfBase<Command.MakeItSo>
         {
             public class MakeItSo : Command
             {
             }
 
-            public static IEnumerable<Event> Interpret(State s, Command x)
-            {
-                switch (x)
-                {
-                    case MakeItSo c:
-                        if (!s.Happened) yield return new Event.Happened();
-                        break;
-                    default: throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
-                }
-            }
+            public static Event[] Interpret(State s, Command x) =>
+                x.Match((MakeItSo _) => 
+                    s.Happened ? new Event[0] : new Event [] { new Event.Happened()});
         }
 
         class Handler

@@ -2,6 +2,7 @@
 using Equinox.Core;
 using Microsoft.FSharp.Core;
 using Newtonsoft.Json;
+using OneOf;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -14,6 +15,7 @@ namespace TodoBackendTemplate
     {
         /// NB - these types and names reflect the actual storage formats and hence need to be versioned with care
         public abstract class Event
+        : OneOfBase<Event.Added, Event.Updated, Event.Deleted, Event.Cleared, Event.Compacted>
         {
             /// Information we retain per Todo List entry
             public class ItemData
@@ -96,37 +98,23 @@ namespace TodoBackendTemplate
                 var nextId = origin.NextId;
                 var items = origin.Items.ToList();
                 foreach (var x in xs)
-                    switch (x)
-                    {
-                        case Event.Added e:
-                            nextId++;
-                            items.Insert(0, e.Data);
-                            break;
-                        case Event.Updated e:
+                    x.Switch(
+                        (Event.Added e) => { nextId++; items.Insert(0, e.Data); },
+                        (Event.Updated e) =>
+                        {
                             var i = items.FindIndex(item => item.Id == e.Data.Id);
                             if (i != -1)
                                 items[i] = e.Data;
-                            break;
-                        case Event.Deleted e:
-                            items.RemoveAll(item => item.Id == e.Id);
-                            break;
-                        case Event.Cleared e:
-                            nextId = e.NextId;
-                            items.Clear();
-                            break;
-                        case Event.Compacted e:
-                            nextId = e.NextId;
-                            items = e.Items.ToList();
-                            break;
-                        default:
-                            throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
-                    }
+                        },
+                        (Event.Deleted e) => items.RemoveAll(item => item.Id == e.Id),
+                        (Event.Cleared e) => { nextId = e.NextId; items.Clear(); },
+                        (Event.Compacted e) => { nextId = e.NextId; items = e.Items.ToList(); });
                 return new State(nextId, items.ToArray());
             }
-            
+
             /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
             public static bool IsOrigin(Event e) => e is Event.Cleared || e is Event.Compacted;
-            
+
             /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
             public static Event Compact(State state) => new Event.Compacted { NextId = state.NextId, Items = state.Items };
         }
@@ -141,6 +129,7 @@ namespace TodoBackendTemplate
 
         /// Defines the operations a caller can perform on a Todo List
         public abstract class Command
+        : OneOfBase<Command.Add, Command.Update, Command.Delete, Command.Clear>
         {
             /// Create a single item
             public class Add : Command
@@ -167,38 +156,26 @@ namespace TodoBackendTemplate
             }
 
             /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
-            public static IEnumerable<Event> Interpret(State s, Command x)
-            {
-                switch (x)
-                {
-                    case Add c:
-                        yield return Make<Event.Added>(s.NextId, c.Props);
-                        break;
-                    case Update c:
-                        var proposed = new {c.Props.Order, c.Props.Title, c.Props.Completed};
+            public static IEnumerable<Event> Interpret(State s, Command x) =>
+                x.Match(
+                    (Add c) => new Event[] { Make<Event.Added>(s.NextId, c.Props) },
+                    (Update c) =>
+                    {
+                        var proposed = new { c.Props.Order, c.Props.Title, c.Props.Completed };
 
                         bool IsEquivalent(Event.ItemData i) =>
                             i.Id == c.Id
-                            && new {i.Order, i.Title, i.Completed} == proposed;
+                            && new { i.Order, i.Title, i.Completed } == proposed;
 
-                        if (!s.Items.Any(IsEquivalent))
-                            yield return Make<Event.Updated>(c.Id, c.Props);
-                        break;
-                    case Delete c:
-                        if (s.Items.Any(i => i.Id == c.Id))
-                            yield return new Event.Deleted {Id = c.Id};
-                        break;
-                    case Clear _:
-                        if (s.Items.Any()) yield return new Event.Cleared {NextId = s.NextId};
-                        break;
+                        if (s.Items.Any(IsEquivalent))
+                            return Enumerable.Empty<Event>();
+                        return new[] { Make<Event.Updated>(c.Id, c.Props) };
+                    },
+                    (Delete c) => s.Items.Any(i => i.Id == c.Id) ? new Event[] { new Event.Deleted { Id = c.Id } } : new Event[0],
+                    (Clear _) => s.Items.Any() ? new Event[] { new Event.Cleared { NextId = s.NextId } } : new Event[0]);
 
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
-                }
-
-                T Make<T>(int id, Props value) where T : Event.ItemEvent, new() =>
-                    new T {Data = {Id = id, Order = value.Order, Title = value.Title, Completed = value.Completed}};
-            }
+            static T Make<T>(int id, Props value) where T : Event.ItemEvent, new() =>
+                new T { Data = { Id = id, Order = value.Order, Title = value.Title, Completed = value.Completed } };
         }
 
         /// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
