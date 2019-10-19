@@ -9,7 +9,7 @@ module Events =
         | Happened
         | Compacted of CompactedData
         interface TypeShape.UnionContract.IUnionContract
-    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>(rejectNullaryCases=false)
+    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 module Folds =
 
