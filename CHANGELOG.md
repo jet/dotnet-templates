@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- SummaryConsumer: Target FsCodec 1.1.0 to simplify `up` function [#32](https://github.com/jet/dotnet-templates/pull/32)
+
 ### Removed
 ### Fixed
 

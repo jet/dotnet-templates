@@ -17,11 +17,12 @@ module Contract =
     type Message =
         | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
-    let codec : IUnionEncoder<int64*Message,_,obj> =
+    type Union = int64*Message
+    let codec =
         // We also want the index (which is the Version of the Summary) whenever we're handling an event
-        let up (d : FsCodec.ITimelineEvent<_>,e) = d.Index,e
-        let down _c _e = failwith "Not Implemented"
-        FsCodec.NewtonsoftJson.Codec.Create(up,down)
+        let up (encoded : FsCodec.ITimelineEvent<_>,message) : Union = encoded.Index,message
+        let down _union = failwith "Not Implemented"
+        FsCodec.NewtonsoftJson.Codec.Create<Union,Message,(*'Meta*)obj>(up,down)
     let [<Literal>] categoryId = "TodoSummary"
 
 [<RequireQualifiedAccess>]
