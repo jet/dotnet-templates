@@ -30,10 +30,13 @@ module MemoryStore =
 //#endif
 //#if cosmos
 module Cosmos =
-    let envBackstop msg key =
-        match Environment.GetEnvironmentVariable key with
-        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
+    let private getEnvVarForArgumentOrThrow varName argName =
+        match Environment.GetEnvironmentVariable varName with
+        | null -> raise (MissingArg(sprintf "Please provide a %s, either as an argument or via the %s environment variable" argName varName))
         | x -> x
+    let private defaultWithEnvVar varName argName = function
+        | None -> getEnvVarForArgumentOrThrow varName argName
+        | Some x -> x
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-vs">]      VerboseStore
@@ -57,9 +60,9 @@ module Cosmos =
                 | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
     type Arguments(a : ParseResults<Parameters>) =
         member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Connection =          match a.TryGetResult Connection  with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Database =            match a.TryGetResult Database    with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Container =           match a.TryGetResult Container   with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
+        member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
+        member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
+        member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
 
         member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(Retries,1)
@@ -123,8 +126,8 @@ module EventStore =
         member __.Host =                a.GetResult(Host,"localhost")
         member __.Credentials =         a.GetResult(Username,"admin"), a.GetResult(Password,"changeit")
 
-        member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(Retries, 1)
+        member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
         member __.HeartbeatTimeout =    a.GetResult(HeartbeatTimeout,1.5) |> float |> TimeSpan.FromSeconds
         member __.ConcurrentOperationsLimit = a.GetResult(ConcurrentOperationsLimit,5000)
 

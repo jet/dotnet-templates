@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Split out Settings initialization [#34](https://github.com/jet/dotnet-templates/pull/34)
+
 ### Changed
 
 - SummaryConsumer: Target FsCodec 1.1.0 to simplify `up` function [#32](https://github.com/jet/dotnet-templates/pull/32)

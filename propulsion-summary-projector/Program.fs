@@ -1,21 +1,39 @@
 ﻿module ProjectorTemplate.Program
 
-open Equinox.Cosmos
-open Equinox.EventStore
 open Propulsion.Cosmos
 open Propulsion.EventStore
 open Serilog
 open System
 
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
+
+module Settings =
+
+    let private initEnvVar var key loadF =
+        if None = EnvVar.tryGet var then
+            printfn "Setting %s from %A" var key
+            EnvVar.set var (loadF key)
+
+    let initialize () =
+        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
+
 module CmdParser =
-    open Argu
 
     exception MissingArg of string
-    let envBackstop msg key =
-        match Environment.GetEnvironmentVariable key with
-        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
-        | x -> x
-
+    let private getEnvVarForArgumentOrThrow varName argName =
+        match EnvVar.tryGet varName with
+        | None -> raise (MissingArg(sprintf "Please provide a %s, either as an argument or via the %s environment variable" argName varName))
+        | Some x -> x
+    let private defaultWithEnvVar varName argName = function
+        | None -> getEnvVarForArgumentOrThrow varName argName
+        | Some x -> x
+    open Argu
+    open Equinox.Cosmos
+    open Equinox.EventStore
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<MainCommand; ExactlyOnce>]      ConsumerGroupName of string
@@ -128,12 +146,12 @@ module CmdParser =
             | None, None, None, _ ->        StartPos.StartOrCheckpoint
 
         member __.Discovery =               match __.Port with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
-        member __.Port =                    match a.TryGetResult Port     with Some x -> Some x | None -> Environment.GetEnvironmentVariable "EQUINOX_ES_PORT" |> Option.ofObj |> Option.map int
-        member __.Host =                    match a.TryGetResult Host     with Some x -> x      | None -> envBackstop "Host"     "EQUINOX_ES_HOST"
-        member __.User =                    match a.TryGetResult Username with Some x -> x      | None -> envBackstop "Username" "EQUINOX_ES_USERNAME"
-        member __.Password =                match a.TryGetResult Password with Some x -> x      | None -> envBackstop "Password" "EQUINOX_ES_PASSWORD"
-        member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout,20.) |> TimeSpan.FromSeconds
+        member __.Port =                    match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
+        member __.Host =                    a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
+        member __.User =                    a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
+        member __.Password =                a.TryGetResult Password |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "Password"
         member __.Retries =                 a.GetResult(EsSourceParameters.Retries,3)
+        member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout,20.) |> TimeSpan.FromSeconds
         member __.Heartbeat =               a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
         member __.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
             let s (x : TimeSpan) = x.TotalSeconds
@@ -170,9 +188,9 @@ module CmdParser =
                 | Kafka _ ->                "Kafka Sink parameters."
     and CosmosArguments(a : ParseResults<CosmosParameters>) =
         member __.Mode =                    a.GetResult(CosmosParameters.ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Connection =              match a.TryGetResult CosmosParameters.Connection with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Database =                match a.TryGetResult CosmosParameters.Database   with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-        member __.Container =               match a.TryGetResult CosmosParameters.Container  with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
+        member __.Connection =              a.TryGetResult CosmosParameters.Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
+        member __.Database =                a.TryGetResult CosmosParameters.Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
+        member __.Container =               a.TryGetResult CosmosParameters.Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
         member __.Timeout =                 a.GetResult(CosmosParameters.Timeout,5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosParameters.Retries, 1)
         member __.MaxRetryWaitTime =        a.GetResult(CosmosParameters.RetriesWaitTime, 5)
@@ -227,8 +245,8 @@ module CmdParser =
 
         member __.Mode =                    a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Discovery =               Discovery.FromConnectionString __.Connection
-        member __.Connection =              match a.TryGetResult Connection with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-        member __.Database =                match a.TryGetResult Database   with Some x -> x | None -> envBackstop "Database"  "EQUINOX_COSMOS_DATABASE"
+        member __.Connection =              a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
+        member __.Database =                a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
         member __.Container =               a.GetResult Container
         member __.Timeout =                 a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(Retries, 1)
@@ -253,8 +271,8 @@ module CmdParser =
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
     and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
-        member __.Broker =                  Uri(match a.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic =                       match a.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member x.BuildTargetParams() =      x.Broker, x.Topic
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -264,6 +282,7 @@ module CmdParser =
         parser.ParseCommandLine argv |> Arguments
 
 module Logging =
+
     let initialize verbose changeLogVerbose =
         Log.Logger <-
             LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
@@ -286,10 +305,9 @@ let [<Literal>] appName = "ProjectorTemplate"
 
 module EventStoreContext =
     let cache = Equinox.Cache(appName, sizeMb = 10)
-    let create connection = Context(connection, BatchingPolicy(maxBatchSize=500))
+    let create connection = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
 
-let build (args : CmdParser.Arguments) =
-    let log = Logging.initialize args.Verbose args.VerboseConsole
+let build (args : CmdParser.Arguments, log : ILogger) =
     let src = args.SourceParams()
     let (discovery,cosmos,connector),(broker,topic) =
         match src with
@@ -312,7 +330,7 @@ let build (args : CmdParser.Arguments) =
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let service =
-            let connection = srcE.Connect(log, log, appName, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave)
+            let connection = srcE.Connect(log, log, appName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
             let context = EventStoreContext.create connection
             Todo.EventStoreRepository.createService EventStoreContext.cache context
         let handle = Handler.handleEventStoreStreamEvents (service,produceSummary)
@@ -321,7 +339,7 @@ let build (args : CmdParser.Arguments) =
             Propulsion.Streams.Sync.StreamsSync.Start(
                  log, args.MaxReadAhead, args.MaxConcurrentStreams, handle, category,
                  statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
-        let connect () = let c = srcE.Connect(log, log, appName, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
+        let connect () = let c = srcE.Connect(log, log, appName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave) in c.ReadConnection
         let tryMapEvent (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$" -> None
@@ -344,10 +362,11 @@ let build (args : CmdParser.Arguments) =
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxDiscovery=auxDiscovery)
 
-/// Handles command line parsing and running the program loop
-// NOTE Any custom logic should go in main
-let run args =
-    try let projector,runSourcePipeline = args |> CmdParser.parse |> build
+let run argv =
+    try let args = CmdParser.parse argv
+        let log = Logging.initialize args.Verbose args.VerboseConsole
+        Settings.initialize ()
+        let projector,runSourcePipeline = build (args,log)
         runSourcePipeline |> Async.Start
         projector.AwaitCompletion() |> Async.RunSynchronously
         if projector.RanToCompletion then 0 else 2
@@ -357,7 +376,5 @@ let run args =
 
 [<EntryPoint>]
 let main argv =
-    // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
     try run argv
-    // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()
