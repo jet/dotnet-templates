@@ -21,7 +21,7 @@ module Contract =
     let codec =
         // We also want the index (which is the Version of the Summary) whenever we're handling an event
         let up (encoded : FsCodec.ITimelineEvent<_>,message) : Union = encoded.Index,message
-        let down union = failwith "Not Implemented"
+        let down _union = failwith "Not Implemented"
         FsCodec.NewtonsoftJson.Codec.Create<Union,Message,(*'Meta*)obj>(up,down)
     let [<Literal>] categoryId = "TodoSummary"
 
