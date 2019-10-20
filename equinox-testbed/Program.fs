@@ -9,6 +9,7 @@ open System.Threading
 
 [<AutoOpen>]
 module CmdParser =
+
     type [<NoEquality; NoComparison>]
         Parameters =
         | [<AltCommandLine "-v">]       Verbose
@@ -64,22 +65,22 @@ module CmdParser =
 //#if cosmos
                 | Cosmos _ ->           "Run transactions in-process against CosmosDb."
 //#endif
-    and TestArguments(args: ParseResults<TestParameters>) =
-        member __.Options =             args.GetResults Cached @ args.GetResults Unfolds
+    and TestArguments(a : ParseResults<TestParameters>) =
+        member __.Options =             a.GetResults Cached @ a.GetResults Unfolds
         member __.Cache =               __.Options |> List.contains Cached
         member __.Unfolds =             __.Options |> List.contains Unfolds
-        member __.BatchSize =           args.GetResult(BatchSize,500)
-        member __.Test =                args.GetResult(Name,Tests.Favorite)
-        member __.ErrorCutoff =         args.GetResult(ErrorCutoff,10000L)
-        member __.TestsPerSecond =      args.GetResult(TestsPerSecond,100)
-        member __.Duration =            args.GetResult(DurationM,30.) |> TimeSpan.FromMinutes
+        member __.BatchSize =           a.GetResult(BatchSize,500)
+        member __.Test =                a.GetResult(Name,Tests.Favorite)
+        member __.ErrorCutoff =         a.GetResult(ErrorCutoff,10000L)
+        member __.TestsPerSecond =      a.GetResult(TestsPerSecond,100)
+        member __.Duration =            a.GetResult(DurationM,30.) |> TimeSpan.FromMinutes
         member __.ReportingIntervals =
-            match args.GetResults(ReportIntervalS) with
+            match a.GetResults(ReportIntervalS) with
             | [] -> TimeSpan.FromSeconds 10.|> Seq.singleton
             | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(float i) }
             |> fun intervals -> [| yield __.Duration; yield! intervals |]
-        member __.ConfigureStore(log : ILogger, createStoreLog) = 
-            match args.TryGetSubCommand() with
+        member __.ConfigureStore(log : ILogger, createStoreLog) =
+            match a.TryGetSubCommand() with
 //#if memoryStore || (!cosmos && !eventStore)
             | Some (Memory _) ->
                 log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", __.Options)

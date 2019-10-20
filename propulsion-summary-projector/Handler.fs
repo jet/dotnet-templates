@@ -23,7 +23,7 @@ let handleStreamEvents (service,produceSummary) (stream, span : Propulsion.Strea
     // We need to yield the next write position, which will be after the version we've just generated the summary based on
     | Some version' -> return version'+1L
     // If we're ignoring the events, we mark the next write position to be one beyond the last one offered
-    | _ -> let x = Array.last span.events in return x.Index+1L }
+    | _ -> return (Array.last span.events).Index+1L }
 
 let handleCosmosStreamEvents = handleStreamEvents
 let handleEventStoreStreamEvents = handleStreamEvents

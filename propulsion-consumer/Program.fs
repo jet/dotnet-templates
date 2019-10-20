@@ -3,15 +3,33 @@
 open Serilog
 open System
 
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
+
+module Settings =
+
+    let private initEnvVar var key loadF =
+        if None = EnvVar.tryGet var then
+            printfn "Setting %s from %A" var key
+            EnvVar.set var (loadF key)
+
+    let initialize () =
+        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
+
 module CmdParser =
-    open Argu
 
     exception MissingArg of string
-    let envBackstop msg key =
-        match Environment.GetEnvironmentVariable key with
-        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
-        | x -> x
-
+    let private getEnvVarForArgumentOrThrow varName argName =
+        match EnvVar.tryGet varName with
+        | None -> raise (MissingArg(sprintf "Please provide a %s, either as an argument or via the %s environment variable" argName varName))
+        | Some x -> x
+    let private defaultWithEnvVar varName argName = function
+        | None -> getEnvVarForArgumentOrThrow varName argName
+        | Some x -> x
+    open Argu
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<AltCommandLine "-g"; Unique>]   Group of string
@@ -31,15 +49,14 @@ module CmdParser =
                 | MaxInflightGb _ ->        "maximum GB of data to read ahead. Default: 0.5."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off."
                 | Verbose _ ->              "request verbose logging."
-
-    type Arguments(args : ParseResults<Parameters>) =
-        member __.Broker =                  Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic =                       match args.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
-        member __.Group =                       match args.TryGetResult Group  with Some x -> x | None -> envBackstop "Group"  "PROPULSION_KAFKA_GROUP"
-        member __.MaxDop =                      match args.TryGetResult MaxDop with Some x -> x | None -> 1024
-        member __.MaxInFlightBytes =        (match args.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
-        member __.LagFrequency =            args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member __.Verbose =                 args.Contains Verbose
+    type Arguments(a : ParseResults<Parameters>) =
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
+        member __.Group =                   a.TryGetResult Group  |> defaultWithEnvVar "PROPULSION_KAFKA_GROUP"  "Group"
+        member __.MaxDop =                  match a.TryGetResult MaxDop with Some x -> x | None -> 1024
+        member __.MaxInFlightBytes =        (match a.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
+        member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member __.Verbose =                 a.Contains Verbose
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
@@ -48,6 +65,7 @@ module CmdParser =
         parser.ParseCommandLine argv |> Arguments
 
 module Logging =
+
     let initialize verbose =
         Log.Logger <-
             LoggerConfiguration()
@@ -60,7 +78,6 @@ module Logging =
             |> fun c -> c.CreateLogger()
 
 let start (args : CmdParser.Arguments) =
-    Logging.initialize args.Verbose
     let c =
         Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
             "ConsumerTemplate",
@@ -71,10 +88,11 @@ let start (args : CmdParser.Arguments) =
     //NultiMessages.Parallel.Start(c, args.MaxDop)
     MultiStreams.start(c, args.MaxDop)
 
-/// Handles command line parsing and running the program loop
-// NOTE Any custom logic should go in main
-let run args =
-    try use consumer = args |> CmdParser.parse |> start
+let run argv =
+    try let args = CmdParser.parse argv
+        Logging.initialize args.Verbose
+        Settings.initialize ()
+        use consumer = start args
         consumer.AwaitCompletion() |> Async.RunSynchronously
         if consumer.RanToCompletion then 0 else 2
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
@@ -84,7 +102,5 @@ let run args =
 
 [<EntryPoint>]
 let main argv =
-    // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
     try run argv
-    // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()

@@ -1,20 +1,38 @@
 ﻿module ProjectorTemplate.Program
 
-open Equinox.Cosmos
 open Propulsion.Cosmos
 open Serilog
 open System
 
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
+
+module Settings =
+
+    let private initEnvVar var key loadF =
+        if None = EnvVar.tryGet var then
+            printfn "Setting %s from %A" var key
+            EnvVar.set var (loadF key)
+
+    let initialize () =
+        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
+
 module CmdParser =
-    open Argu
 
     exception MissingArg of string
-    let envBackstop msg key =
-        match Environment.GetEnvironmentVariable key with
-        | null -> raise <| MissingArg (sprintf "Please provide a %s, either as an argument or via the %s environment variable" msg key)
-        | x -> x
-
+    let private getEnvVarForArgumentOrThrow varName argName =
+        match EnvVar.tryGet varName with
+        | None -> raise (MissingArg(sprintf "Please provide a %s, either as an argument or via the %s environment variable" argName varName))
+        | Some x -> x
+    let private defaultWithEnvVar varName argName = function
+        | None -> getEnvVarForArgumentOrThrow varName argName
+        | Some x -> x
+    open Argu
     module Cosmos =
+        open Equinox.Cosmos
         type [<NoEquality; NoComparison>] Parameters =
             | [<AltCommandLine "-cm">]      ConnectionMode of Equinox.Cosmos.ConnectionMode
             | [<AltCommandLine "-s">]       Connection of string
@@ -35,9 +53,9 @@ module CmdParser =
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
         type Arguments(a : ParseResults<Parameters>) =
             member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
-            member __.Connection =          match a.TryGetResult Connection with Some x -> x | None -> envBackstop "Connection" "EQUINOX_COSMOS_CONNECTION"
-            member __.Database =            match a.TryGetResult Database   with Some x -> x | None -> envBackstop "Database"   "EQUINOX_COSMOS_DATABASE"
-            member __.Container =           match a.TryGetResult Container  with Some x -> x | None -> envBackstop "Container"  "EQUINOX_COSMOS_CONTAINER"
+            member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
+            member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
+            member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
 
             member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
             member __.Retries =             a.GetResult(Retries, 1)
@@ -88,19 +106,19 @@ module CmdParser =
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
-    and Arguments(args : ParseResults<Parameters>) =
-        member val Cosmos =                 Cosmos.Arguments(args.GetResult Cosmos)
+    and Arguments(a : ParseResults<Parameters>) =
+        member val Cosmos =                 Cosmos.Arguments(a.GetResult Cosmos)
 //#if kafka
-        member val Target =                 TargetInfo args
+        member val Target =                 TargetInfo a
 //#endif
-        member __.LeaseId =                 args.GetResult ConsumerGroupName
-        member __.Suffix =                  args.GetResult(LeaseContainerSuffix,"-aux")
-        member __.Verbose =                 args.Contains Verbose
-        member __.VerboseConsole =          args.Contains VerboseConsole
-        member __.MaxDocuments =            args.TryGetResult MaxDocuments
-        member __.MaxReadAhead =            args.GetResult(MaxReadAhead,64)
-        member __.MaxConcurrentStreams =    args.GetResult(MaxWriters,1024)
-        member __.LagFrequency =            args.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member __.LeaseId =                 a.GetResult ConsumerGroupName
+        member __.Suffix =                  a.GetResult(LeaseContainerSuffix,"-aux")
+        member __.Verbose =                 a.Contains Verbose
+        member __.VerboseConsole =          a.Contains VerboseConsole
+        member __.MaxDocuments =            a.TryGetResult MaxDocuments
+        member __.MaxReadAhead =            a.GetResult(MaxReadAhead,64)
+        member __.MaxConcurrentStreams =    a.GetResult(MaxWriters,1024)
+        member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.AuxContainerName =        __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
@@ -110,14 +128,14 @@ module CmdParser =
             | Some lim ->
                 Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors",
                     x.LeaseId, x.AuxContainerName, lim, x.MaxReadAhead, x.MaxConcurrentStreams)
-            if args.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-            x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds)) 
-            { database = x.Cosmos.Database; container = x.AuxContainerName}, x.LeaseId, args.Contains FromTail, x.MaxDocuments, x.LagFrequency,
+            if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
+            x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
+            { database = x.Cosmos.Database; container = x.AuxContainerName }, x.LeaseId, a.Contains FromTail, x.MaxDocuments, x.LagFrequency,
             (x.MaxReadAhead, x.MaxConcurrentStreams)
 //#if kafka
-    and TargetInfo(args : ParseResults<Parameters>) =
-        member __.Broker    =               Uri(match args.TryGetResult Broker with Some x -> x | None -> envBackstop "Broker" "PROPULSION_KAFKA_BROKER")
-        member __.Topic     =                   match args.TryGetResult Topic  with Some x -> x | None -> envBackstop "Topic"  "PROPULSION_KAFKA_TOPIC"
+    and TargetInfo(a : ParseResults<Parameters>) =
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member x.BuildTargetParams() = x.Broker, x.Topic
 //#endif
 
@@ -130,6 +148,7 @@ module CmdParser =
 // Illustrates how to emit direct to the Console using Serilog
 // Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
 module Logging =
+
     let initialize verbose changeLogVerbose =
         Log.Logger <-
             LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
@@ -164,8 +183,9 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
 type ExampleOutput = { Id : string }
 #endif
 
+let [<Literal>] appName = "ProjectorTemplate"
+
 let build (args : CmdParser.Arguments) =
-    Logging.initialize args.Verbose args.VerboseConsole
     let discovery, source, clientOptions = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
@@ -174,7 +194,7 @@ let build (args : CmdParser.Arguments) =
     let render (doc : Microsoft.Azure.Documents.Document) : string * string =
         let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
         equinoxPartition,FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
-    let producer = Propulsion.Kafka.Producer(Log.Logger, "ProjectorTemplate", broker, topic)
+    let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
     let projector =
         Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producer, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
@@ -185,7 +205,7 @@ let build (args : CmdParser.Arguments) =
             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize }
     let categorize (streamName : string) =
         streamName.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
-    let producer = Propulsion.Kafka.Producer(Log.Logger, "ProjectorTemplate", broker, topic)
+    let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
     let projector =
         Propulsion.Kafka.StreamsProducerSink.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, render, producer,
@@ -211,10 +231,11 @@ let build (args : CmdParser.Arguments) =
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     sink,runSourcePipeline
 
-/// Handles command line parsing and running the program loop
-// NOTE Any custom logic should go in main
-let run args =
-    try let sink,runSourcePipeline = args |> CmdParser.parse |> build
+let run argv =
+    try let args = CmdParser.parse argv
+        Logging.initialize args.Verbose args.VerboseConsole
+        Settings.initialize ()
+        let sink,runSourcePipeline = build args
         runSourcePipeline |> Async.Start
         sink.AwaitCompletion() |> Async.RunSynchronously
         if sink.RanToCompletion then 0 else 2
@@ -224,7 +245,5 @@ let run args =
 
 [<EntryPoint>]
 let main argv =
-    // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
     try run argv
-    // need to ensure all logs are flushed prior to exit
     finally Log.CloseAndFlush()

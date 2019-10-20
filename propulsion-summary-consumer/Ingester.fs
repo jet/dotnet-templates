@@ -2,7 +2,6 @@
 /// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
 module ConsumerTemplate.Ingester
 
-open FsCodec
 open System
 
 /// Defines the contract we share with the SummaryProjector's published feed
