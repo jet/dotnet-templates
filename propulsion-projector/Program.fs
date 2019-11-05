@@ -73,7 +73,7 @@ module CmdParser =
     [<NoEquality; NoComparison>]
     type Parameters =
         (* ChangeFeed Args*)
-        | [<MainCommand; ExactlyOnce>]      ConsumerGroupName of string
+        | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
         | [<AltCommandLine "-as"; Unique>]  LeaseContainerSuffix of string
         | [<AltCommandLine "-z"; Unique>]   FromTail
         | [<AltCommandLine "-m"; Unique>]   MaxDocuments of int
@@ -93,7 +93,7 @@ module CmdParser =
             member a.Usage =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container. Default: `-aux`."
+                | LeaseContainerSuffix _ ->  "specify Container Name suffix for Leases container. Default: `-aux`."
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
@@ -111,8 +111,8 @@ module CmdParser =
 //#if kafka
         member val Target =                 TargetInfo a
 //#endif
-        member __.LeaseId =                 a.GetResult ConsumerGroupName
-        member __.Suffix =                  a.GetResult(LeaseContainerSuffix,"-aux")
+        member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
+        member __.Suffix =                   a.GetResult(LeaseContainerSuffix,"-aux")
         member __.Verbose =                 a.Contains Verbose
         member __.VerboseConsole =          a.Contains VerboseConsole
         member __.MaxDocuments =            a.TryGetResult MaxDocuments
@@ -124,13 +124,13 @@ module CmdParser =
             match x.MaxDocuments with
             | None ->
                 Log.Information("Processing {leaseId} in {auxContainerName} without document count limit (<= {maxPending} pending) using {dop} processors",
-                    x.LeaseId, x.AuxContainerName, x.MaxReadAhead, x.MaxConcurrentStreams)
+                    x.ConsumerGroupName, x.AuxContainerName, x.MaxReadAhead, x.MaxConcurrentStreams)
             | Some lim ->
                 Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors",
-                    x.LeaseId, x.AuxContainerName, lim, x.MaxReadAhead, x.MaxConcurrentStreams)
+                    x.ConsumerGroupName, x.AuxContainerName, lim, x.MaxReadAhead, x.MaxConcurrentStreams)
             if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
-            { database = x.Cosmos.Database; container = x.AuxContainerName }, x.LeaseId, a.Contains FromTail, x.MaxDocuments, x.LagFrequency,
+            { database = x.Cosmos.Database; container = x.AuxContainerName }, x.ConsumerGroupName, a.Contains FromTail, x.MaxDocuments, x.LagFrequency,
             (x.MaxReadAhead, x.MaxConcurrentStreams)
 //#if kafka
     and TargetInfo(a : ParseResults<Parameters>) =

@@ -40,7 +40,7 @@ module CmdParser =
     open Argu
     [<NoEquality; NoComparison>]
     type Parameters =
-        | [<MainCommand; ExactlyOnce>]      ConsumerGroupName of string
+        | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-c"; Unique>]   MaxConnections of int
