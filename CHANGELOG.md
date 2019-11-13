@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="3.6.1"></a>
+## [3.6.1] - 2019-10-13
+
+### Added
 
 - Split out Settings initialization [#34](https://github.com/jet/dotnet-templates/pull/34)
 
@@ -19,9 +27,6 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - use `-g` for ES and Cosmos `ConsumerGroupName` values [#37](https://github.com/jet/dotnet-templates/pull/37)
 - `summaryProjector`: Use `AllowStale` for CheckpointSeries as should only typically run single instance
 - Removed anonymous records usage to support usage with v `2.1.504` SDK
-
-### Removed
-### Fixed
 
 <a name="3.6.0"></a>
 ## [3.6.0] - 2019-10-11
@@ -217,7 +222,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.6.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.6.1...HEAD
+[3.6.1]: https://github.com/jet/dotnet-templates/compare/3.6.0...3.6.1
 [3.6.0]: https://github.com/jet/dotnet-templates/compare/3.5.0...3.6.0
 [3.5.0]: https://github.com/jet/dotnet-templates/compare/3.4.1...3.5.0
 [3.4.1]: https://github.com/jet/dotnet-templates/compare/3.4.0...3.4.1
