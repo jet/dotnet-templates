@@ -33,11 +33,11 @@ This project was generated using:
 
         $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
 
-        # `default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
+        # `-g default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
         # `cosmos` specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         # `-m 1000` sets the change feed maximum document limit to 1000
         # `-t topic0` identifies the Kafka topic to which the Projector should write
-        dotnet run -- default cosmos -m 1000 kafka -t topic0
+        dotnet run -- -g default cosmos -m 1000 kafka -t topic0
 
         # (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
 
@@ -51,11 +51,11 @@ This project was generated using:
 
         $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
 
-        # `default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
+        # `-g default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
         # `es` specifies the source (if you have specified 3x EQUINOX_ES_* environment vars, no arguments are needed)
         # `cosmos` specifies the destination and the checkpoint store (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         # `-t topic0` identifies the Kafka topic to which the Projector should write
-        dotnet run -- default es cosmos kafka -t topic0
+        dotnet run -- -g default es cosmos kafka -t topic0
 
         # NB running more than one projector will cause them to duel, and is hence not advised
 
