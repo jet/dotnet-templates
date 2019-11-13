@@ -15,6 +15,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - SummaryConsumer: Target FsCodec 1.1.0 to simplify `up` function [#32](https://github.com/jet/dotnet-templates/pull/32)
+- `trackingConsumer`: switch serializer to FsCodec [#35](https://github.com/jet/dotnet-templates/pull/35)
 - SummaryProjector: Use `AllowStale` for CheckpointSeries as should only run single instance
 
 ### Removed
