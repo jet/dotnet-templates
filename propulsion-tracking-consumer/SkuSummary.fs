@@ -72,12 +72,12 @@ type Service(log, resolve, ?maxAttempts) =
     member __.Read skuId: Async<Events.ItemData list> =
         query skuId id
 
-module Repository =
+module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
-    let private resolve cache context =
+    let private resolve (context,cache) =
         // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
         let accessStrategy = AccessStrategy.Snapshot(Folds.isOrigin, Folds.snapshot)
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
-    let createService cache context = Service(Serilog.Log.ForContext<Service>(), resolve cache context)
+    let createService (context,cache) = Service(Serilog.Log.ForContext<Service>(), resolve (context,cache))

@@ -3,20 +3,19 @@
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    /// Information we retain per Todo List entry
-    type ItemData = { id: int; order: int; title: string; completed: bool }
-    /// Events we keep in Todo-* streams
+    type ItemData =     { id : int; order : int; title : string; completed : bool }
+    type DeletedData =  { id : int }
+    type ClearedData =  { nextId : int }
+    type SnapshotData = { nextId : int; items : ItemData[] }
     type Event =
-        | Added     of ItemData
-        | Updated   of ItemData
-        | Deleted   of {| id: int |}
-        /// Cleared also `isOrigin` (see below) - if we see one of these, we know we don't need to look back any further
-        | Cleared   of {| nextId: int |}
-        /// For EventStore, AccessStrategy.RollingSnapshots embeds these events every `batchSize` events
-        /// For Cosmos, AccessStrategy.Snapshot maintains this as an event in the `u`nfolds list in the Tip-document
-        | Snapshotted of {| nextId: int; items: ItemData[] |}
+        | Added         of ItemData
+        | Updated       of ItemData
+        | Deleted       of DeletedData
+        | Cleared       of ClearedData
+        | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let [<Literal>] categoryId = "Todos"
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Folds =
@@ -37,17 +36,15 @@ module Folds =
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
     let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-    let snapshot state = Events.Snapshotted {| nextId = state.nextId; items = Array.ofList state.items |}
+    let snapshot state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
     /// Allows us to skip producing summaries for events that we know won't result in an externally discernable change to the summary output
     let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
-
-let [<Literal>] categoryId = "Todos"
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
 type Service(log, resolve, ?maxAttempts) =
 
     /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toString clientId)
+    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(Events.categoryId, ClientId.toString clientId)
 
     /// Maps a ClientId to a Stream for the relevant stream
     let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
@@ -62,19 +59,19 @@ type Service(log, resolve, ?maxAttempts) =
 
 let private createService resolve = Service(Serilog.Log.ForContext<Service>(), resolve)
 
-module CosmosRepository =
+module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
-    let private resolve cache context =
+    let private resolve (context,cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let accessStrategy = AccessStrategy.Snapshot (Folds.isOrigin,Folds.snapshot)
         Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
-    let createService cache context = resolve cache context |> createService
+    let createService (context,cache) = resolve (context,cache) |> createService
 
-module EventStoreRepository =
+module EventStore =
 
     open Equinox.EventStore // Everything until now is independent of a concrete store
-    let private resolve cache context =
+    let private resolve (context,cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy).Resolve
-    let createService cache context = resolve cache context |> createService
+    let createService (context,cache) = resolve (context,cache) |> createService

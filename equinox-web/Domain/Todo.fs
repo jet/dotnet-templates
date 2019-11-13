@@ -3,19 +3,23 @@
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    /// Information we retain per Todo List entry
-    type ItemData = { id: int; order: int; title: string; completed: bool }
+    type ItemData =     { id : int; order : int; title : string; completed : bool }
+    type DeletedData =  { id : int }
+    type ClearedData =  { nextId : int }
+    type SnapshotData = { nextId : int; items : ItemData[] }
     /// Events we keep in Todo-* streams
     type Event =
-        | Added     of ItemData
-        | Updated   of ItemData
-        | Deleted   of {| id: int |}
+        | Added         of ItemData
+        | Updated       of ItemData
+        | Deleted       of DeletedData
         /// Cleared also `isOrigin` (see below) - if we see one of these, we know we don't need to look back any further
-        | Cleared   of {| nextId: int |}
+        | Cleared       of ClearedData
+        /// For Cosmos, AccessStrategy.Snapshot maintains this as an event in the `u`nfolds list in the Tip-document
         /// For EventStore, AccessStrategy.RollingSnapshots embeds these events every `batchSize` events
-        | Compacted of {| nextId: int; items: ItemData[] |}
+        | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let [<Literal>] category = "Todos"
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Folds =
@@ -25,18 +29,18 @@ module Folds =
     /// State implied by the absence of any events on this stream
     let initial = { items = []; nextId = 0 }
     /// Compute State change implied by a given Event
-    let evolve s = function
-        | Events.Added item -> { s with items = item :: s.items; nextId = s.nextId + 1 }
-        | Events.Updated value -> { s with items = s.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
-        | Events.Deleted e -> { s with items = s.items  |> List.filter (fun x -> x.id <> e.id) }
+    let evolve state = function
+        | Events.Added item -> { state with items = item :: state.items; nextId = state.nextId + 1 }
+        | Events.Updated value -> { state with items = state.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
+        | Events.Deleted e -> { state with items = state.items  |> List.filter (fun x -> x.id <> e.id) }
         | Events.Cleared e -> { nextId = e.nextId; items = [] }
-        | Events.Compacted s -> { nextId = s.nextId; items = List.ofArray s.items }
+        | Events.Snapshotted s -> { nextId = s.nextId; items = List.ofArray s.items }
     /// Folds a set of events from the store into a given `state`
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
-    let isOrigin = function Events.Cleared _ | Events.Compacted _ -> true | _ -> false
+    let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-    let compact state = Events.Compacted {| nextId = state.nextId; items = Array.ofList state.items |}
+    let snapshot state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
 
 /// Properties that can be edited on a Todo List item
 type Props = { order: int; title: string; completed: bool }
@@ -64,8 +68,8 @@ module Commands =
             match state.items |> List.tryFind (function { id = id } -> id = itemId) with
             | Some current when current <> proposed -> [Events.Updated proposed]
             | _ -> []
-        | Delete id -> if state.items |> List.exists (fun x -> x.id = id) then [Events.Deleted {|id=id|}] else []
-        | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared {| nextId = state.nextId |}]
+        | Delete id -> if state.items |> List.exists (fun x -> x.id = id) then [Events.Deleted { id=id }] else []
+        | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared { nextId = state.nextId }]
 
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }
@@ -74,7 +78,7 @@ type View = { id: int; order: int; title: string; completed: bool }
 type Service(handlerLog, resolve, ?maxAttempts) =
 
     /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId("Todos", ClientId.toString clientId)
+    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(Events.category, ClientId.toString clientId)
     
     /// Maps a ClientId to Handler for the relevant stream
     let (|Stream|) (AggregateId id) = Equinox.Stream(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)

@@ -14,10 +14,11 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- SummaryConsumer: Target FsCodec 1.1.0 to simplify `up` function [#32](https://github.com/jet/dotnet-templates/pull/32)
+- `summaryConsumer`: Target FsCodec 1.1.0 to simplify `up` function [#32](https://github.com/jet/dotnet-templates/pull/32)
 - `trackingConsumer`: switch serializer to FsCodec [#35](https://github.com/jet/dotnet-templates/pull/35)
 - use `-g` for ES and Cosmos `ConsumerGroupName` values [#37](https://github.com/jet/dotnet-templates/pull/37)
-- SummaryProjector: Use `AllowStale` for CheckpointSeries as should only typically run single instance
+- `summaryProjector`: Use `AllowStale` for CheckpointSeries as should only typically run single instance
+- Removed anonymous records usage to support usage with v `2.1.504` SDK
 
 ### Removed
 ### Fixed

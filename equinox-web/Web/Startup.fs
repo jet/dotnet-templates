@@ -49,7 +49,6 @@ module Storage =
     /// EventStore wiring, uses Equinox.EventStore nuget package
     module private ES =
         open Equinox.EventStore
-        let mkCache mb = Equinox.Cache ("ES", mb)
         let connect host username password =
             let log = Logger.SerilogNormal (Log.ForContext<Instance>())
             let c = Connector(username,password,reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
@@ -61,7 +60,6 @@ module Storage =
     /// CosmosDb wiring, uses Equinox.Cosmos nuget package
     module private Cosmos =
         open Equinox.Cosmos
-        let mkCache mb = Equinox.Cache ("Cosmos", mb)
         let connect appName (mode, discovery) (operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds) =
             let log = Log.ForContext<Instance>()
             let c = Connector(log=log, mode=mode, requestTimeout=operationTimeout, maxRetryAttemptsOnThrottledRequests=maxRetryForThrottling, maxRetryWaitTimeInSeconds=maxRetryWaitSeconds)
@@ -78,13 +76,13 @@ module Storage =
 //#endif
 //#if eventStore
         | Config.ES (host, user, pass, cache) ->
-            let cache = ES.mkCache cache
+            let cache = Equinox.Cache("ES", sizeMb=10)
             let conn = ES.connect host user pass
             Instance.EventStore (conn, cache)
 //#endif
 //#if cosmos
         | Config.Cosmos (mode, connectionString, database, container, cache) ->
-            let cache = Cosmos.mkCache cache
+            let cache = Equinox.Cache("Cosmos", sizeMb=10)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
             let gateway = Cosmos.connect "App" (mode, Equinox.Cosmos.Discovery.FromConnectionString connectionString) (timeout, retriesOn429Throttling, int timeout.TotalSeconds)
@@ -125,7 +123,7 @@ module Services =
 //#if todos
          member __.CreateTodosService() =
             let fold, initial = Todo.Folds.fold, Todo.Folds.initial
-            let snapshot = Todo.Folds.isOrigin, Todo.Folds.compact
+            let snapshot = Todo.Folds.isOrigin, Todo.Folds.snapshot
             Todo.Service(handlerLog, resolver.Resolve(Todo.Events.codec,fold,initial,snapshot))
 //#endif
 //#if aggregate

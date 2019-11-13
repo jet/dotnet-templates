@@ -332,7 +332,7 @@ let build (args : CmdParser.Arguments, log : ILogger) =
         let service =
             let connection = srcE.Connect(log, log, appName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
             let context = EventStoreContext.create connection
-            Todo.EventStoreRepository.createService EventStoreContext.cache context
+            Todo.EventStore.createService (context,EventStoreContext.cache)
         let handle = Handler.handleEventStoreStreamEvents (service,produceSummary)
 
         let sink =
@@ -348,7 +348,7 @@ let build (args : CmdParser.Arguments, log : ILogger) =
             log, sink, checkpoints, connect, spec, category, tryMapEvent,
             args.MaxReadAhead, args.StatsInterval)
     | Choice2Of2 (_srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-        let service = Todo.CosmosRepository.createService cache context
+        let service = Todo.Cosmos.createService (context,cache)
         let handle = Handler.handleCosmosStreamEvents (service,produceSummary)
 
         let sink =

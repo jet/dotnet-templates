@@ -10,7 +10,7 @@ let tryHandle
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<_>)
         (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option> = async {
     match stream,span with
-    | Category (Todo.categoryId, ClientId clientId), (Decode Todo.Events.codec stream events)
+    | Category (Todo.Events.categoryId, ClientId clientId), (Decode Todo.Events.codec stream events)
             when events |> Seq.exists Todo.Folds.impliesStateChange ->
         let! version', summary = service.QueryWithVersion(clientId, Producer.Contract.ofState)
         let wrapped = Producer.generate stream version' summary

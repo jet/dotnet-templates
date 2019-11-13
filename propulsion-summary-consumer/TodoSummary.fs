@@ -76,10 +76,10 @@ type Service(log, resolve, ?maxAttempts) =
     member __.Read clientId: Async<Item[]> =
         query clientId render
 
-module Repository =
+module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
-    let private resolve cache context =
+    let private resolve (context,cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, Folds.accessStrategy).Resolve
-    let createService cache context = Service(Serilog.Log.ForContext<Service>(), resolve cache context)
+    let createService (context,cache) = Service(Serilog.Log.ForContext<Service>(), resolve (context,cache))

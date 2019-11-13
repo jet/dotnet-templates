@@ -124,8 +124,8 @@ let [<Literal>] appName = "ConsumerTemplate"
 
 let start (args : CmdParser.Arguments) =
     let context = args.Cosmos.Connect(appName) |> Async.RunSynchronously
-    let cache = Equinox.Cache (appName, 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
-    let service = TodoSummary.Repository.createService cache context
+    let cache = Equinox.Cache (appName, sizeMb = 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
+    let service = TodoSummary.Cosmos.createService (context,cache)
     let config =
         Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
             appName, args.Broker, [args.Topic], args.Group,
