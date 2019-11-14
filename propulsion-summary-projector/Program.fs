@@ -173,7 +173,7 @@ module CmdParser =
         | [<AltCommandLine "-c">]           Container of string
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
-        | [<AltCommandLine "-rt">]          RetriesWaitTime of int
+        | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Kafka of ParseResults<KafkaSinkParameters>
         interface IArgParserTemplate with
             member a.Usage =
@@ -193,13 +193,13 @@ module CmdParser =
         member __.Container =               a.TryGetResult CosmosParameters.Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
         member __.Timeout =                 a.GetResult(CosmosParameters.Timeout,5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosParameters.Retries, 1)
-        member __.MaxRetryWaitTime =        a.GetResult(CosmosParameters.RetriesWaitTime, 5)
+        member __.MaxRetryWaitTime =        a.GetResult(CosmosParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
+                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; container = x.Container }, connector
         member val Sink =
@@ -218,7 +218,7 @@ module CmdParser =
         | [<AltCommandLine "-c"; Unique>]   Container of string // Actually Mandatory, but stating that is not supported
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
-        | [<AltCommandLine "-rt">]          RetriesWaitTime of int
+        | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Kafka of ParseResults<KafkaSinkParameters>
         interface IArgParserTemplate with
@@ -250,7 +250,7 @@ module CmdParser =
         member __.Container =               a.GetResult Container
         member __.Timeout =                 a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(Retries, 1)
-        member __.MaxRetryWaitTime =        a.GetResult(RetriesWaitTime, 5)
+        member __.MaxRetryWaitTime =        a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,_)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
@@ -326,7 +326,7 @@ let build (args : CmdParser.Arguments, log : ILogger) =
         let resolveCheckpointStream =
             let codec = FsCodec.NewtonsoftJson.Codec.Create()
             let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
+            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
             fun target -> Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve(target,Equinox.AllowStale)
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let service =
@@ -358,9 +358,9 @@ let build (args : CmdParser.Arguments, log : ILogger) =
         let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
             docs |> Seq.collect EquinoxCosmosParser.enumStreamEvents
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, mapToStreamItems)
-        sink,CosmosSource.Run(log, discovery, connector.ClientOptions, cosmos,
+        sink,CosmosSource.Run(log, connector.CreateClient(appName,discovery), cosmos,
             aux, leaseId, startFromTail, createObserver,
-            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxDiscovery=auxDiscovery)
+            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=connector.CreateClient(appName,auxDiscovery))
 
 let run argv =
     try let args = CmdParser.parse argv

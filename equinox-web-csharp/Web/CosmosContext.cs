@@ -43,8 +43,7 @@ namespace TodoBackendTemplate
             var discovery = Discovery.FromConnectionString(config.ConnectionStringWithUriAndKey);
             _connect = async () =>
             {
-                var gateway = await Connect("App", config.Mode, discovery, timeout, retriesOn429Throttling,
-                    (int)timeout.TotalSeconds);
+                var gateway = await Connect("App", config.Mode, discovery, timeout, retriesOn429Throttling, timeout);
                 var containers = new Containers(config.Database, config.Container);
 
                 _store = new Context(gateway, containers);
@@ -54,10 +53,10 @@ namespace TodoBackendTemplate
         internal override async Task Connect() => await _connect();
 
         static async Task<Gateway> Connect(string appName, ConnectionMode mode, Discovery discovery, TimeSpan operationTimeout,
-            int maxRetryForThrottling, int maxRetryWaitSeconds)
+            int maxRetryForThrottling, TimeSpan maxRetryWait)
         {
             var log = Log.ForContext<CosmosContext>();
-            var c = new Connector(operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds, log, mode: mode);
+            var c = new Connector(operationTimeout, maxRetryForThrottling, maxRetryWait, log, mode: mode);
             var conn = await FSharpAsync.StartAsTask(c.Connect(appName, discovery), null, null);
             return new Gateway(conn, new BatchingPolicy(defaultMaxItems: 500));
         }

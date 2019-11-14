@@ -163,7 +163,7 @@ module CmdParser =
         | [<AltCommandLine "-c"; Unique>]   Container of string // Actually Mandatory, but stating that is not supported
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
-        | [<AltCommandLine "-rt">]          RetriesWaitTime of int
+        | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 
         | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] DstEs of ParseResults<EsSinkParameters>
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] DstCosmos of ParseResults<CosmosSinkParameters>
@@ -197,7 +197,7 @@ module CmdParser =
         member __.Container =               a.GetResult CosmosSourceParameters.Container
         member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
-        member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5)
+        member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,_)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
@@ -205,7 +205,7 @@ module CmdParser =
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; container = x.Container }, c.ClientOptions
+            discovery, { database = x.Database; container = x.Container }, c
 
         member val Sink =
             match a.TryGetSubCommand() with
@@ -303,7 +303,7 @@ module CmdParser =
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
-        | [<AltCommandLine "-rt">]          RetriesWaitTime of int
+        | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 #if kafka
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
 #endif
@@ -329,7 +329,7 @@ module CmdParser =
         member __.LeaseContainer =          a.TryGetResult LeaseContainer
         member __.Timeout =                 a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosSinkParameters.Retries, 0)
-        member __.MaxRetryWaitTime =        a.GetResult(RetriesWaitTime, 5)
+        member __.MaxRetryWaitTime =        a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         /// Connect with the provided parameters and/or environment variables
         member x.Connect
             /// Connection/Client identifier for logging purposes
@@ -338,7 +338,7 @@ module CmdParser =
             Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
+                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             c.Connect(sprintf "App=%s Conn=%d" appName connIndex, discovery)
 #if kafka
@@ -550,16 +550,16 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
             None,sink,args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-        let discovery, source, clientOptions = srcC.BuildConnectionDetails()
+        let discovery, source, connector = srcC.BuildConnectionDetails()
 #if marveleqx
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize streamFilter))
 #else
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter categorize streamFilter))
 #endif
         let runPipeline =
-            CosmosSource.Run(log, discovery, clientOptions, source,
-                aux, leaseId, startFromTail, createObserver,
-                ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxDiscovery=auxDiscovery)
+            CosmosSource.Run(log, connector.CreateClient(appName, discovery), source, aux,
+                leaseId, startFromTail, createObserver,
+                ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=connector.CreateClient(appName,auxDiscovery))
         sink,runPipeline
     | Choice2Of2 (srcE,spec) ->
         match maybeDstCosmos with
@@ -572,7 +572,7 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
             let caching =
                 let c = Equinox.Cache(appName, sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.RollingUnfolds (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
+            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let withNullData (e : FsCodec.ITimelineEvent<_>) : FsCodec.ITimelineEvent<_> =

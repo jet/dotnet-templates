@@ -39,7 +39,7 @@ module CmdParser =
             | [<AltCommandLine "-c">]       Container of string
             | [<AltCommandLine "-o">]       Timeout of float
             | [<AltCommandLine "-r">]       Retries of int
-            | [<AltCommandLine "-rt">]      RetriesWaitTime of int
+            | [<AltCommandLine "-rt">]      RetriesWaitTime of float
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
@@ -58,14 +58,14 @@ module CmdParser =
 
             member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
             member __.Retries =             a.GetResult(Retries, 1)
-            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
+            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
             member x.Connect(clientId) = async {
                 let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
                 Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
                     x.Mode, endpointUri, x.Database, x.Container)
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                    (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
+                    (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
                 let! connection = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode).Connect(clientId,discovery)
                 return Context(connection, x.Database, x.Container) }
 

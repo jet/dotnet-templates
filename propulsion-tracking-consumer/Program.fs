@@ -39,7 +39,7 @@ module CmdParser =
             | [<AltCommandLine "-c">]       Container of string
             | [<AltCommandLine "-o">]       Timeout of float
             | [<AltCommandLine "-r">]       Retries of int
-            | [<AltCommandLine "-rt">]      RetriesWaitTime of int
+            | [<AltCommandLine "-rt">]      RetriesWaitTime of float
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
@@ -58,7 +58,7 @@ module CmdParser =
 
             member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
             member __.Retries =             a.GetResult(Retries, 1)
-            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
+            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
             member x.Connect(clientId) = async {
                 let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection

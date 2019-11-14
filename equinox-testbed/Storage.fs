@@ -8,7 +8,7 @@ exception MissingArg of string
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type StorageConfig =
 //#if (memoryStore || (!cosmos && !eventStore))
-    | Memory of Equinox.MemoryStore.VolatileStore
+    | Memory of Equinox.MemoryStore.VolatileStore<obj>
 //#endif
 //#if eventStore
     | Es of Equinox.EventStore.Context * Equinox.EventStore.CachingStrategy option * unfolds: bool
@@ -43,7 +43,7 @@ module Cosmos =
         | [<AltCommandLine "-cm">]      ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-o">]       Timeout of float
         | [<AltCommandLine "-r">]       Retries of int
-        | [<AltCommandLine "-rt">]      RetriesWaitTime of int
+        | [<AltCommandLine "-rt">]      RetriesWaitTime of float
         | [<AltCommandLine "-s">]       Connection of string
         | [<AltCommandLine "-d">]       Database of string
         | [<AltCommandLine "-c">]       Container of string
@@ -66,7 +66,7 @@ module Cosmos =
 
         member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(Retries,1)
-        member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
+        member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
     /// Standing up an Equinox instance is necessary to run for test purposes; You'll need to either:
     /// 1) replace connection below with a connection string or Uri+Key for an initialized Equinox instance with a database and container named "equinox-test"

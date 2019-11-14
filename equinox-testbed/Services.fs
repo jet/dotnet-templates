@@ -94,7 +94,7 @@ type StreamResolver(storage) =
         match storage with
 //#if memoryStore || (!cosmos && !eventStore)
         | Storage.StorageConfig.Memory store ->
-            Equinox.MemoryStore.Resolver(store, fold, initial).Resolve
+            Equinox.MemoryStore.Resolver(store, FsCodec.Box.Codec.Create(), fold, initial).Resolve
 //#endif
 //#if eventStore
         | Storage.StorageConfig.Es (gateway, caching, unfolds) ->
@@ -104,8 +104,8 @@ type StreamResolver(storage) =
 //#if cosmos
         | Storage.StorageConfig.Cosmos (gateway, caching, unfolds, databaseId, containerId) ->
             let store = Equinox.Cosmos.Context(gateway, databaseId, containerId)
-            let accessStrategy = if unfolds then Equinox.Cosmos.AccessStrategy.Snapshot snapshot |> Some else None
-            Equinox.Cosmos.Resolver<'event,'state,_>(store, codec, fold, initial, caching, ?access = accessStrategy).Resolve
+            let accessStrategy = if unfolds then Equinox.Cosmos.AccessStrategy.Snapshot snapshot else Equinox.Cosmos.AccessStrategy.Unoptimized
+            Equinox.Cosmos.Resolver<'event,'state,_>(store, codec, fold, initial, caching, accessStrategy).Resolve
 //#endif
 
 type ServiceBuilder(storageConfig, handlerLog) =

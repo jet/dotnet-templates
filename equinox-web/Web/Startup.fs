@@ -28,7 +28,7 @@ module Storage =
     /// Holds an initialized/customized/configured of the store as defined by the `Config`
     type Instance =
 //#if (memoryStore || (!cosmos && !eventStore))
-        | MemoryStore of Equinox.MemoryStore.VolatileStore
+        | MemoryStore of Equinox.MemoryStore.VolatileStore<obj>
 //#endif
 //#if eventStore
         | EventStore of context: Equinox.EventStore.Context * cache: Equinox.Cache
@@ -60,9 +60,9 @@ module Storage =
     /// CosmosDb wiring, uses Equinox.Cosmos nuget package
     module private Cosmos =
         open Equinox.Cosmos
-        let connect appName (mode, discovery) (operationTimeout, maxRetryForThrottling, maxRetryWaitSeconds) =
+        let connect appName (mode, discovery) (operationTimeout, maxRetryForThrottling, maxRetryWait) =
             let log = Log.ForContext<Instance>()
-            let c = Connector(log=log, mode=mode, requestTimeout=operationTimeout, maxRetryAttemptsOnThrottledRequests=maxRetryForThrottling, maxRetryWaitTimeInSeconds=maxRetryWaitSeconds)
+            let c = Connector(log=log, mode=mode, requestTimeout=operationTimeout, maxRetryAttemptsOnRateLimitedRequests=maxRetryForThrottling, maxRetryWaitTimeOnRateLimitedRequests=maxRetryWait)
             let conn = c.Connect(appName, discovery) |> Async.RunSynchronously
             Gateway(conn, BatchingPolicy(defaultMaxItems=500))
 
@@ -85,7 +85,7 @@ module Storage =
             let cache = Equinox.Cache("Cosmos", sizeMb=10)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
-            let gateway = Cosmos.connect "App" (mode, Equinox.Cosmos.Discovery.FromConnectionString connectionString) (timeout, retriesOn429Throttling, int timeout.TotalSeconds)
+            let gateway = Cosmos.connect "App" (mode, Equinox.Cosmos.Discovery.FromConnectionString connectionString) (timeout, retriesOn429Throttling, timeout)
             let containers = Equinox.Cosmos.Containers(database, container)
             let context = Equinox.Cosmos.Context(gateway, containers)
             Instance.CosmosStore (context, cache)
@@ -103,7 +103,7 @@ module Services =
             match storage with
 //#if (memoryStore || (!cosmos && !eventStore))
             | Storage.MemoryStore store ->
-                Equinox.MemoryStore.Resolver(store, fold, initial).Resolve
+                Equinox.MemoryStore.Resolver(store, FsCodec.Box.Codec.Create(), fold, initial).Resolve
 //#endif
 //#if eventStore
             | Storage.EventStore (gateway, cache) ->

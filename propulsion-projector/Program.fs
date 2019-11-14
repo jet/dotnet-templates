@@ -40,7 +40,7 @@ module CmdParser =
             | [<AltCommandLine "-c">]       Container of string
             | [<AltCommandLine "-o">]       Timeout of float
             | [<AltCommandLine "-r">]       Retries of int
-            | [<AltCommandLine "-rt">]      RetriesWaitTime of int
+            | [<AltCommandLine "-rt">]      RetriesWaitTime of float
             interface IArgParserTemplate with
                 member a.Usage =
                     match a with
@@ -59,7 +59,7 @@ module CmdParser =
 
             member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
             member __.Retries =             a.GetResult(Retries, 1)
-            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5)
+            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
             member x.BuildConnectionDetails() =
                 let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
@@ -68,7 +68,7 @@ module CmdParser =
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, x.MaxRetryWaitTime)
                 let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-                discovery, { database = x.Database; container = x.Container }, connector.ClientOptions
+                discovery, { database = x.Database; container = x.Container }, connector
 
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -186,7 +186,7 @@ type ExampleOutput = { Id : string }
 let [<Literal>] appName = "ProjectorTemplate"
 
 let build (args : CmdParser.Arguments) =
-    let discovery, source, clientOptions = args.Cosmos.BuildConnectionDetails()
+    let discovery, source, connector = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
     let (broker,topic) = args.Target.BuildTargetParams()
@@ -226,7 +226,7 @@ let build (args : CmdParser.Arguments) =
 #endif
     let runSourcePipeline =
         CosmosSource.Run(
-            Log.Logger, discovery, clientOptions, source,
+            Log.Logger, connector.CreateClient(appName, discovery), source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     sink,runSourcePipeline
