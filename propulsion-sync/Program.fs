@@ -284,7 +284,7 @@ module CmdParser =
         member __.Heartbeat =               a.GetResult(EsSourceParameters.HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
         member __.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
             let s (x : TimeSpan) = x.TotalSeconds
-            log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s __.Heartbeat, s __.Timeout, __.Retries)
+            log.Information("EventStore {host}:{port} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, __.Port, s __.Heartbeat, s __.Timeout, __.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
@@ -377,8 +377,8 @@ module CmdParser =
         member __.Heartbeat =               a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
         member __.Connect(log: ILogger, storeLog: ILogger, connectionStrategy, appName, connIndex) =
             let s (x : TimeSpan) = x.TotalSeconds
-            log.Information("EventStore {host} Connection {connId} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
-                __.Host, connIndex, s __.Heartbeat, s __.Timeout, __.Retries)
+            log.Information("EventStore {host}:{port} Connection {connId} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
+                __.Host, __.Port, connIndex, s __.Heartbeat, s __.Timeout, __.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string; "Conn", connIndex]
             Connector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
