@@ -153,13 +153,16 @@ module CmdParser =
         member __.Retries =                 a.GetResult(EsSourceParameters.Retries,3)
         member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout,20.) |> TimeSpan.FromSeconds
         member __.Heartbeat =               a.GetResult(HeartbeatTimeout,1.5) |> TimeSpan.FromSeconds
-        member __.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
+        member x.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
             let s (x : TimeSpan) = x.TotalSeconds
-            log.Information("EventStore {host} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}", __.Host, s __.Heartbeat, s __.Timeout, __.Retries)
+            let discovery = x.Discovery
+            log.ForContext("host",x.Host).ForContext("port",x.Port)
+                .Information("EventStore {discovery} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
+                    discovery, s x.Heartbeat, s x.Timeout, x.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
-            Connector(__.User, __.Password, __.Timeout, __.Retries, log=log, heartbeatTimeout=__.Heartbeat, tags=tags)
-                .Establish(appName, __.Discovery, connectionStrategy) |> Async.RunSynchronously
+            Connector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
+                .Establish(appName, discovery, connectionStrategy) |> Async.RunSynchronously
 
         member __.CheckpointInterval =  TimeSpan.FromHours 1.
         member val CheckpointStore : CosmosArguments =
@@ -285,7 +288,9 @@ module Logging =
 
     let initialize verbose changeLogVerbose =
         Log.Logger <-
-            LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
+            LoggerConfiguration()
+                .Destructure.FSharpTypes()
+                .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             // LibLog writes to the global logger, so we need to control the emission
             |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
