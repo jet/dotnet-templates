@@ -62,7 +62,7 @@ type Cosmos(testOutput) =
     let log = testOutput |> TestOutputAdapter |> createLogger
     do Serilog.Log.Logger <- log
 
-    let [<Property>] properties maxEvents args =
+    let [<Property(MaxTest=10)>] properties maxEvents args =
         let zeroBalance = 0
         let maxEvents = max 1 maxEvents
         let shouldClose (state : Epoch.Folds.OpenState) = state.count > maxEvents
