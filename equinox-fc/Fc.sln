@@ -7,6 +7,11 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "Domain\Domain.fsp
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "Domain.Tests\Domain.Tests.fsproj", "{AA589DC7-D0B7-4F95-BC29-6B89AF4E9280}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".project", ".project", "{FEADBAC9-0CA2-440B-AF9B-184FED9B362E}"
+ProjectSection(SolutionItems) = preProject
+	README.md = README.md
+EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
