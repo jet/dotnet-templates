@@ -291,7 +291,7 @@ module CmdParser =
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
-                .Establish(appName, discovery, connectionStrategy) |> Async.RunSynchronously
+                .Establish(appName, discovery, connectionStrategy)
         member __.CheckpointInterval =  TimeSpan.FromHours 1.
 
         member val Sink =
@@ -387,7 +387,7 @@ module CmdParser =
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
-                .Establish(appName, discovery, connectionStrategy) |> Async.RunSynchronously
+                .Establish(appName, discovery, connectionStrategy)
 #if kafka
     and [<NoEquality; NoComparison>] KafkaSinkParameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
@@ -593,7 +593,9 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
                         e.stream, e.event.Index, Propulsion.EventStore.Reader.mb e.event.Data.Length)
                     Some { e with event = withNullData e.event }
                 else Some e
-        let connect () = let c = srcE.Connect(log, log, appName, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) in c.ReadConnection
+        let connect () =
+            let c = srcE.Connect(log, log, appName, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) |> Async.RunSynchronously
+            c.ReadConnection
         let runPipeline =
             EventStoreSource.Run(
                 log, sink, checkpoints, connect, spec, categorize, tryMapEvent streamFilter,
