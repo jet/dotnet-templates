@@ -34,6 +34,7 @@ type LocationService internal (zeroBalance, shouldClose, series : Series.Service
 
 [<AutoOpen>]
 module Helpers =
+
     let create (zeroBalance, shouldClose) (series, epochs) =
         LocationService(zeroBalance, shouldClose, series, epochs)
 
