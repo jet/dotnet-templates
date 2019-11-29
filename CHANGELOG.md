@@ -84,6 +84,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - Add handling for `-T` TCP/IP switch on EventStore args [#46](https://github.com/jet/dotnet-templates/pulls/46)
+- `equinox-fc`: Fulfilment-Center inspired example utilizing Process Manager patterns with basic `Equinox.MemoryStore` and `Equinox.Cosmos` tests [#40](https://github.com/jet/dotnet-templates/pulls/40)
 
 ### Changed
 
