@@ -15,9 +15,15 @@
         <Compile Include="InventoryEpoch.fs" />
         <Compile Include="InventoryTransaction.fs" />
         <Compile Include="Inventory.fs" />
+        <Compile Include="Ticket.fs" />
+        <Compile Include="TicketList.fs" />
+        <Compile Include="Allocator.fs" />
+        <Compile Include="Allocation.fs" />
+        <Compile Include="ListAllocation.fs" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Equinox.Cosmos" Version="2.0.0" />
+        <PackageReference Include="Equinox.EventStore" Version="2.0.0" />
     </ItemGroup>
 
 </Project>
