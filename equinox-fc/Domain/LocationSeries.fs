@@ -9,10 +9,10 @@ module Events =
         | Started of Started
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] categoryId = "LocationSeries"
-    let (|AggregateId|) id = Equinox.AggregateId(categoryId, LocationId.toString id)
+    let [<Literal>] category = "LocationSeries"
+    let (|For|) id = Equinox.AggregateId(category, LocationId.toString id)
 
-module Folds =
+module Fold =
 
     type State = LocationEpochId
     let initial = LocationEpochId.parse -1
@@ -20,26 +20,25 @@ module Folds =
         | Events.Started e -> e.epochId
     let fold = Seq.fold evolve
 
-let interpretActivateEpoch epochId (state : Folds.State) =
+let interpretActivateEpoch epochId (state : Fold.State) =
     [if state < epochId then yield Events.Started { epochId = epochId }]
 
 let toActiveEpoch state =
-    if state = Folds.initial then None else Some state
+    if state = Fold.initial then None else Some state
 
-type Service internal (resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    let log = Serilog.Log.ForContext<Service>()
-    let (|Stream|) (Events.AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     member __.Read(locationId) : Async<LocationEpochId option> =
-        let (Stream stream) = locationId
+        let stream = resolve locationId
         stream.Query toActiveEpoch
 
-    member __.ActivateEpoch(locationId,epochId) : Async<unit> =
-        let (Stream stream) = locationId
+    member __.ActivateEpoch(locationId, epochId) : Async<unit> =
+        let stream = resolve locationId
         stream.Transact(interpretActivateEpoch epochId)
 
-let create resolve maxAttempts = Service(resolve, maxAttempts)
+let create resolve maxAttempts = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts)
 
 module Cosmos =
 
@@ -47,6 +46,6 @@ module Cosmos =
     let resolve (context,cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let opt = Equinox.ResolveOption.AllowStale
-        fun id -> Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id,opt)
+        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id,opt)
     let createService (context, cache, maxAttempts) =
         create (resolve (context,cache)) maxAttempts
