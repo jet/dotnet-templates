@@ -44,7 +44,7 @@ let create resolver =
 
 module EventStore =
 
-    let resolver (context,cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers (which might cause us to have to retry a Transact and discover it is redundant), there is never a cost to being wrong
         let opt = Equinox.ResolveOption.AllowStale
@@ -56,7 +56,7 @@ module EventStore =
 
 module Cosmos =
 
-    let resolver (context,cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers (which might cause us to have to retry a Transact and discover it is redundant), there is never a cost to being wrong
         let opt = Equinox.ResolveOption.AllowStale

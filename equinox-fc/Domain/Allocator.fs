@@ -58,13 +58,13 @@ let create resolver =
 module EventStore =
 
     let accessStrategy = Equinox.EventStore.AccessStrategy.LatestKnownEvent
-    let resolver (context,cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
         fun id -> Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id,opt)
     let create (context, cache) =
-        create (resolver (context,cache))
+        create (resolver (context, cache))
 
 module Cosmos =
 
@@ -75,4 +75,4 @@ module Cosmos =
         let opt = Equinox.ResolveOption.AllowStale
         fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id,opt)
     let create (context, cache) =
-        create (resolver (context,cache))
+        create (resolver (context, cache))

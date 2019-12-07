@@ -231,18 +231,18 @@ let create resolver =
 
 module EventStore =
 
-    let resolver (context,cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
         // We should be reaching Completed state frequently so no actual Snapshots should get written
         fun id -> Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve(id,opt)
     let create (context, cache) =
-        create (resolver (context,cache))
+        create (resolver (context, cache))
 
 module Cosmos =
 
-    let resolver (context,cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
