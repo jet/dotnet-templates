@@ -39,8 +39,8 @@ module CmdParser =
         | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
-        | [<AltCommandLine "-v"; Unique>]   Verbose
-        | [<AltCommandLine "-vc"; Unique>]  VerboseConsole
+        | [<AltCommandLine "-V"; Unique>]   Verbose
+        | [<AltCommandLine "-C"; Unique>]   VerboseConsole
         | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] SrcEs of ParseResults<EsSourceParameters>
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique; Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
@@ -89,7 +89,7 @@ module CmdParser =
                 srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
                 Choice2Of2 (srcC,(disco, auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
     and [<NoEquality; NoComparison>] EsSourceParameters =
-        | [<AltCommandLine "-z"; Unique>]   FromTail
+        | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-g"; Unique>]   Gorge of int
         | [<AltCommandLine "-t"; Unique>]   Tail of intervalS: float
         | [<AltCommandLine "-force"; Unique>] ForceRestart
@@ -99,7 +99,7 @@ module CmdParser =
         | [<AltCommandLine "-c"; Unique>]   Chunk of int
         | [<AltCommandLine "-pct"; Unique>] Percent of float
 
-        | [<AltCommandLine "-v">]           Verbose
+        | [<AltCommandLine "-V">]           Verbose
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-oh">]          HeartbeatTimeout of float
@@ -199,7 +199,7 @@ module CmdParser =
         member __.MaxRetryWaitTime =        a.GetResult(CosmosParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
-            Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
+            Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
@@ -210,7 +210,7 @@ module CmdParser =
             | Some (CosmosParameters.Kafka kafka) -> KafkaSinkArguments kafka
             | _ -> raise (MissingArg "Must specify `kafka` arguments")
      and [<NoEquality; NoComparison>] CosmosSourceParameters =
-        | [<AltCommandLine "-z"; Unique>]   FromTail
+        | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-m"; Unique>]   MaxDocuments of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
@@ -377,7 +377,7 @@ let run argv =
         if projector.RanToCompletion then 0 else 2
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-        | e -> eprintfn "%s" e.Message; 1
+        | e -> Log.Fatal(e, "Exiting"); 1
 
 [<EntryPoint>]
 let main argv =

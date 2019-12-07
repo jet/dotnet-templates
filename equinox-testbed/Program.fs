@@ -12,8 +12,8 @@ module CmdParser =
 
     type [<NoEquality; NoComparison>]
         Parameters =
-        | [<AltCommandLine "-v">]       Verbose
-        | [<AltCommandLine "-vc">]      VerboseConsole
+        | [<AltCommandLine "-V">]       Verbose
+        | [<AltCommandLine "-C">]       VerboseConsole
         | [<AltCommandLine "-S">]       LocalSeq
         | [<AltCommandLine "-l">]       LogFile of string
         | [<CliPrefix(CliPrefix.None); Last; Unique>] Run of ParseResults<TestParameters>

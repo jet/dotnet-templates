@@ -12,9 +12,12 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - Target Propulsion 1.5.0, FsKafka 1.3.0
+- Use uppercase for switch arguments in commandline parsing
 
 ### Removed
 ### Fixed
+
+- Included stacktrace in Exception-exit logging
 
 <a name="3.7.0"></a>
 ## [3.7.0] - 2019-10-14

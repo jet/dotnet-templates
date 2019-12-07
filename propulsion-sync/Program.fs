@@ -47,8 +47,8 @@ module CmdParser =
         | [<AltCommandLine "-s"; Unique>]   MaxSubmit of int
 
         | [<AltCommandLine "-S"; Unique>]   LocalSeq
-        | [<AltCommandLine "-v"; Unique>]   Verbose
-        | [<AltCommandLine "-vc"; Unique>]  VerboseConsole
+        | [<AltCommandLine "-V"; Unique>]   Verbose
+        | [<AltCommandLine "-C"; Unique>]   VerboseConsole
 
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
@@ -152,7 +152,7 @@ module CmdParser =
                         forceRestart = srcE.ForceRestart
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = srcE.StreamReaders })
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
-        | [<AltCommandLine "-z"; Unique>]   FromTail
+        | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-m"; Unique>]   MaxDocuments of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
@@ -213,7 +213,7 @@ module CmdParser =
             | Some (DstEs es) -> Choice2Of2 (EsSinkArguments es)
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Sink")
     and [<NoEquality; NoComparison>] EsSourceParameters =
-        | [<AltCommandLine "-z"; Unique>]   FromTail
+        | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-g"; Unique>]   Gorge of int
         | [<AltCommandLine "-i"; Unique>]   StreamReaders of int
         | [<AltCommandLine "-t"; Unique>]   Tail of intervalS: float
@@ -224,7 +224,7 @@ module CmdParser =
         | [<AltCommandLine "-c"; Unique>]   Chunk of int
         | [<AltCommandLine "-pct"; Unique>] Percent of float
 
-        | [<AltCommandLine "-v">]           Verbose
+        | [<AltCommandLine "-V">]           Verbose
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-oh">]          HeartbeatTimeout of float
@@ -351,7 +351,7 @@ module CmdParser =
             | _ -> None
 #endif
     and [<NoEquality; NoComparison>] EsSinkParameters =
-        | [<AltCommandLine "-v">]           Verbose
+        | [<AltCommandLine "-V">]           Verbose
         | [<AltCommandLine "-h">]           Host of string
         | [<AltCommandLine "-x">]           Port of int
         | [<AltCommandLine "-u">]           Username of string
@@ -612,7 +612,7 @@ let run argv =
         if sink.RanToCompletion then 0 else 2
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-        | e -> eprintfn "%s" e.Message; 1
+        | e -> Log.Fatal(e, "Exiting"); 1
 
 [<EntryPoint>]
 let main argv =
