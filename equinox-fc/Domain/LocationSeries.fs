@@ -10,6 +10,7 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let [<Literal>] categoryId = "LocationSeries"
+    let (|AggregateId|) id = Equinox.AggregateId(categoryId, LocationId.toString id)
 
 module Folds =
 
@@ -28,8 +29,7 @@ let toActiveEpoch state =
 type Service internal (resolve, ?maxAttempts) =
 
     let log = Serilog.Log.ForContext<Service>()
-    let (|AggregateId|) id = Equinox.AggregateId(Events.categoryId, LocationId.toString id)
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
+    let (|Stream|) (Events.AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
 
     member __.Read(locationId) : Async<LocationEpochId option> =
         let (Stream stream) = locationId
