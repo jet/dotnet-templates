@@ -10,24 +10,30 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+### Removed
+### Fixed
+
+<a name="3.8.0"></a>
+## [3.8.0] - 2019-12-07
+
+### Changed
 
 - Target Propulsion 1.5.0, FsKafka 1.3.0
 - Use uppercase for switch arguments in commandline parsing
 
-### Removed
 ### Fixed
 
 - Included stacktrace in Exception-exit logging
 
 <a name="3.7.0"></a>
-## [3.7.0] - 2019-10-14
+## [3.7.0] - 2019-11-14
 
 ### Changed
 
 - Target Propulsion 1.4.0, Equinox 2.0.0-rc8, FsCodec 1.2.1
 
 <a name="3.6.1"></a>
-## [3.6.1] - 2019-10-13
+## [3.6.1] - 2019-11-13
 
 ### Added
 
@@ -42,7 +48,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - Removed anonymous records usage to support usage with v `2.1.504` SDK
 
 <a name="3.6.0"></a>
-## [3.6.0] - 2019-10-11
+## [3.6.0] - 2019-10-17
 
 ### Changed
 
@@ -235,7 +241,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.7.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.8.0...HEAD
+[3.8.0]: https://github.com/jet/dotnet-templates/compare/3.7.0...3.8.0
 [3.7.0]: https://github.com/jet/dotnet-templates/compare/3.6.1...3.7.0
 [3.6.1]: https://github.com/jet/dotnet-templates/compare/3.6.0...3.6.1
 [3.6.0]: https://github.com/jet/dotnet-templates/compare/3.5.0...3.6.0
