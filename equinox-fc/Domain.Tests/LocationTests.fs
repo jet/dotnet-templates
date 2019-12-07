@@ -9,17 +9,17 @@ open System
 /// Helpers to match `module Cosmos` wrapping inside the impl
 module Location =
 
-    open Equinox.MemoryStore
-
-    module Series =
-
-        let resolve store = Resolver(store, Series.Events.codec, Series.Folds.fold, Series.Folds.initial).Resolve
-
-    module Epoch =
-
-        let resolve store = Resolver(store, Epoch.Events.codec, Epoch.Folds.fold, Epoch.Folds.initial).Resolve
-
     module MemoryStore =
+
+        open Equinox.MemoryStore
+
+        module Series =
+
+            let resolve store = Resolver(store, Series.Events.codec, Series.Fold.fold, Series.Fold.initial).Resolve
+
+        module Epoch =
+
+            let resolve store = Resolver(store, Epoch.Events.codec, Epoch.Fold.fold, Epoch.Fold.initial).Resolve
 
         let createService (zeroBalance, shouldClose) store =
             let maxAttempts = Int32.MaxValue
@@ -35,7 +35,7 @@ let run (service : LocationService) (IdsAtLeastOne locations, deltas : _[]) = As
 
     (* Apply random deltas *)
 
-    let adjust delta (bal : Epoch.Folds.Balance) =
+    let adjust delta (bal : Epoch.Fold.Balance) =
         let value = max -bal delta
         if value = 0 then 0, []
         else value, [Location.Epoch.Events.Delta { value = value }]
@@ -51,7 +51,7 @@ let [<Property>] ``MemoryStore properties`` maxEvents args =
     let store = Equinox.MemoryStore.VolatileStore()
     let zeroBalance = 0
     let maxEvents = max 1 maxEvents
-    let shouldClose (state : Epoch.Folds.OpenState) = state.count > maxEvents
+    let shouldClose (state : Epoch.Fold.OpenState) = state.count > maxEvents
     let service = Location.MemoryStore.createService (zeroBalance, shouldClose) store
     run service args
 
@@ -65,6 +65,6 @@ type Cosmos(testOutput) =
     let [<Property(MaxTest=10)>] properties maxEvents args =
         let zeroBalance = 0
         let maxEvents = max 1 maxEvents
-        let shouldClose (state : Epoch.Folds.OpenState) = state.count > maxEvents
+        let shouldClose (state : Epoch.Fold.OpenState) = state.count > maxEvents
         let service = Location.Cosmos.createService (zeroBalance, shouldClose) (context,cache,Int32.MaxValue)
         run service args
