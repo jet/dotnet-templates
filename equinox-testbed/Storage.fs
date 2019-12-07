@@ -81,7 +81,7 @@ module Cosmos =
         log.Information("CosmosDb {mode} {connection} Database {database} Container {container}",
             a.Mode, endpointUri, a.Database, a.Container)
         Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-            (let t = a.Timeout in t.TotalSeconds), a.Retries, a.MaxRetryWaitTime)
+            (let t = a.Timeout in t.TotalSeconds), a.Retries, (let t = a.MaxRetryWaitTime in t.TotalSeconds))
         let connector = Connector(a.Timeout, a.Retries, a.MaxRetryWaitTime, storeLog, mode=a.Mode)
         discovery, a.Database, a.Container, connector
     let config (log: ILogger, storeLog) (cache, unfolds, batchSize) info =
