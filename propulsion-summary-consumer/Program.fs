@@ -51,22 +51,22 @@ module CmdParser =
                     | Retries _ ->          "specify operation retries. Default: 1."
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
         type Arguments(a : ParseResults<Parameters>) =
-            member __.Mode =                a.GetResult(ConnectionMode,ConnectionMode.Direct)
+            member __.Mode =                a.GetResult(ConnectionMode, ConnectionMode.Direct)
             member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
             member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
             member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
 
-            member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+            member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
             member __.Retries =             a.GetResult(Retries, 1)
             member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
             member x.Connect(clientId) = async {
-                let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
+                let (Discovery.UriAndKey (endpointUri, _) as discovery) = Discovery.FromConnectionString x.Connection
                 Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
                     x.Mode, endpointUri, x.Database, x.Container)
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                     (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-                let! connection = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode).Connect(clientId,discovery)
+                let! connection = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode).Connect(clientId, discovery)
                 return Context(connection, x.Database, x.Container) }
 
     [<NoEquality; NoComparison>]
@@ -125,7 +125,7 @@ let [<Literal>] appName = "ConsumerTemplate"
 let start (args : CmdParser.Arguments) =
     let context = args.Cosmos.Connect(appName) |> Async.RunSynchronously
     let cache = Equinox.Cache (appName, sizeMb = 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
-    let service = TodoSummary.Cosmos.createService (context,cache)
+    let service = TodoSummary.Cosmos.create (context, cache)
     let config =
         FsKafka.KafkaConsumerConfig.Create(
             appName, args.Broker, [args.Topic], args.Group,

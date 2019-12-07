@@ -51,7 +51,7 @@ module Storage =
         open Equinox.EventStore
         let connect host username password =
             let log = Logger.SerilogNormal (Log.ForContext<Instance>())
-            let c = Connector(username,password,reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
+            let c = Connector(username, password, reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
             let conn = c.Establish ("Twin", Discovery.GossipDns host, ConnectionStrategy.ClusterTwinPreferSlaveReads) |> Async.RunSynchronously
             Context(conn, BatchingPolicy(maxBatchSize=500))
 
@@ -96,7 +96,7 @@ module Services =
     /// Builds a Stream Resolve function appropriate to the store being used
     type StreamResolver(storage : Storage.Instance) =
         member __.Resolve
-            (   codec : FsCodec.IUnionEncoder<'event,byte[],_>,
+            (   codec : FsCodec.IUnionEncoder<'event, byte[], _>,
                 fold: ('state -> 'event seq -> 'state),
                 initial: 'state,
                 snapshot: (('event -> bool) * ('state -> 'event))) =
@@ -109,28 +109,28 @@ module Services =
             | Storage.EventStore (gateway, cache) ->
                 let accessStrategy = Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot
                 let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.EventStore.Resolver<'event,'state,_>(gateway, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
+                Equinox.EventStore.Resolver<'event, 'state, _>(gateway, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
 //#endif
 //#if cosmos
             | Storage.CosmosStore (store, cache) ->
                 let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot snapshot
                 let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.Cosmos.Resolver<'event,'state,_>(store, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
+                Equinox.Cosmos.Resolver<'event, 'state, _>(store, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
 //#endif
 
     /// Binds a storage independent Service's Handler's `resolve` function to a given Stream Policy using the StreamResolver
-    type ServiceBuilder(resolver: StreamResolver, handlerLog : ILogger) =
+    type ServiceBuilder(resolver: StreamResolver) =
 //#if todos
          member __.CreateTodosService() =
-            let fold, initial = Todo.Folds.fold, Todo.Folds.initial
-            let snapshot = Todo.Folds.isOrigin, Todo.Folds.snapshot
-            Todo.Service(handlerLog, resolver.Resolve(Todo.Events.codec,fold,initial,snapshot))
+            let fold, initial = Todo.Fold.fold, Todo.Fold.initial
+            let snapshot = Todo.Fold.isOrigin, Todo.Fold.snapshot
+            Todo.create (resolver.Resolve(Todo.Events.codec, fold, initial, snapshot))
 //#endif
 //#if aggregate
          member __.CreateAggregateService() =
-            let fold, initial = Aggregate.Folds.fold, Aggregate.Folds.initial
-            let snapshot = Aggregate.Folds.isOrigin, Aggregate.Folds.compact
-            Aggregate.Service(handlerLog, resolver.Resolve(Aggregate.Events.codec,fold,initial,snapshot))
+            let fold, initial = Aggregate.Fold.fold, Aggregate.Fold.initial
+            let snapshot = Aggregate.Fold.isOrigin, Aggregate.Fold.compact
+            Aggregate.create (resolver.Resolve(Aggregate.Events.codec, fold, initial, snapshot))
 //#endif
 //#if (!aggregate && !todos)
         // TODO implement Service builders, e.g. 
@@ -138,7 +138,7 @@ module Services =
         //   let codec = genCodec<Thing.Events.Event>()
         //   let fold, initial = Thing.Folds.fold, Thing.Folds.initial
         //   let snapshot = Thing.Folds.isOrigin, Thing.Folds.compact
-        //   Thing.Service(handlerLog, resolver.Resolve(codec,fold,initial,snapshot))
+        //   Thing.Service(handlerLog, resolver.Resolve(codec, fold, initial, snapshot))
 //#endif
 
     /// F# syntactic sugar for registering services
@@ -153,7 +153,7 @@ module Services =
     let register (services : IServiceCollection, storeCfg) =
         services.Register(fun _sp -> Storage.connect storeCfg)
         services.Register(fun sp -> StreamResolver(sp.Resolve()))
-        services.Register(fun sp -> ServiceBuilder(sp.Resolve(), Log.ForContext<Equinox.Stream<_,_>>()))
+        services.Register(fun sp -> ServiceBuilder(sp.Resolve()))
 //#if todos
         services.Register(fun sp -> sp.Resolve<ServiceBuilder>().CreateTodosService())
 //#endif
@@ -185,7 +185,7 @@ type Startup() =
         //# run as a single-node cluster to allow connection logic to use cluster mode as for a commercial cluster
         //& $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
 
-        let storeConfig = Storage.Config.ES ("localhost","admin","changeit",cacheMb)
+        let storeConfig = Storage.Config.ES ("localhost", "admin", "changeit", cacheMb)
 
 //#endif
 //#if cosmos

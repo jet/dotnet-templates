@@ -70,6 +70,10 @@ namespace TodoBackendTemplate
             }
 
             public static Tuple<string, byte[]> Encode(Event e) => Tuple.Create(e.GetType().Name, Codec.Encode(e));
+
+            /// Maps a ClientId to the Target that specifies the Stream in which the data for that client will be held
+            public static Target For(ClientId id) =>
+                Target.NewAggregateId("Todos", id?.ToString() ?? "1");
         }
 
         /// Present state of the Todo List as inferred from the Events we've seen to date
@@ -128,7 +132,7 @@ namespace TodoBackendTemplate
             public static bool IsOrigin(Event e) => e is Event.Cleared || e is Event.Compacted;
             
             /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-            public static Event Compact(State state) => new Event.Compacted { NextId = state.NextId, Items = state.Items };
+            public static Event Snapshot(State state) => new Event.Compacted { NextId = state.NextId, Items = state.Items };
         }
 
         /// Properties that can be edited on a Todo List item
@@ -204,18 +208,18 @@ namespace TodoBackendTemplate
         /// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
         class Handler
         {
-            readonly EquinoxStream<Event, State> _inner;
+            readonly EquinoxStream<Event, State> _stream;
 
             public Handler(ILogger log, IStream<Event, State> stream) =>
-                _inner = new EquinoxStream<Event, State>(State.Fold, log, stream);
+                _stream = new EquinoxStream<Event, State>(State.Fold, log, stream);
 
             /// Execute `command`; does not emit the post state
             public Task<Unit> Execute(Command c) =>
-                _inner.Execute(s => Command.Interpret(s, c));
+                _stream.Execute(s => Command.Interpret(s, c));
 
             /// Handle `command`, return the items after the command's intent has been applied to the stream
             public Task<Event.ItemData[]> Decide(Command c) =>
-                _inner.Decide(ctx =>
+                _stream.Decide(ctx =>
                 {
                     ctx.Execute(s => Command.Interpret(s, c));
                     return ctx.State.Items;
@@ -223,7 +227,7 @@ namespace TodoBackendTemplate
 
             /// Establish the present state of the Stream, project from that as specified by `projection`
             public Task<T> Query<T>(Func<State, T> projection) =>
-                _inner.Query(projection);
+                _stream.Query(projection);
         }
 
         /// A single Item in the Todo List
@@ -241,12 +245,8 @@ namespace TodoBackendTemplate
             /// Maps a ClientId to Handler for the relevant stream
             readonly Func<ClientId, Handler> _stream;
 
-            /// Maps a ClientId to the CatId that specifies the Stream in which the data for that client will be held
-            static Target CategoryId(ClientId id) =>
-                Target.NewAggregateId("Todos", id?.ToString() ?? "1");
-
             public Service(ILogger handlerLog, Func<Target, IStream<Event, State>> resolve) =>
-                _stream = id => new Handler(handlerLog, resolve(CategoryId(id)));
+                _stream = id => new Handler(handlerLog, resolve(Event.For(id)));
 
             //
             // READ

@@ -10,7 +10,7 @@ namespace TodoBackendTemplate
 {
     public abstract class EquinoxContext
     {
-        public abstract Func<Target,Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
+        public abstract Func<Target, Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
             FsCodec.IUnionEncoder<TEvent, byte[], object> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
@@ -23,11 +23,11 @@ namespace TodoBackendTemplate
     public static class EquinoxCodec
     {
         public static FsCodec.IUnionEncoder<TEvent, byte[], object> Create<TEvent>(
-            Func<TEvent, Tuple<string,byte[]>> encode,
+            Func<TEvent, Tuple<string, byte[]>> encode,
             Func<string, byte[], TEvent> tryDecode,
             JsonSerializerSettings settings = null) where TEvent: class
         {
-            return FsCodec.Codec.Create<TEvent,byte[]>(
+            return FsCodec.Codec.Create<TEvent, byte[]>(
                 FuncConvert.FromFunc(encode),
                 FuncConvert.FromFunc((Func<Tuple<string, byte[]>, FSharpOption<TEvent>>) TryDecodeImpl));
             FSharpOption<TEvent> TryDecodeImpl(Tuple<string, byte[]> encoded) => OptionModule.OfObj(tryDecode(encoded.Item1, encoded.Item2));

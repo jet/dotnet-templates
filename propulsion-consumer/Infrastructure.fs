@@ -7,7 +7,7 @@ open System.Threading.Tasks
 
 type FSharp.Control.Async with
     static member AwaitTaskCorrect (task : Task<'T>) : Async<'T> =
-        Async.FromContinuations <| fun (k,ek,_) ->
+        Async.FromContinuations <| fun (k, ek, _) ->
             task.ContinueWith (fun (t:Task<'T>) ->
                 if t.IsFaulted then
                     let e = t.Exception

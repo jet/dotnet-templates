@@ -9,7 +9,7 @@ open System.Threading
 module StreamCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IUnionEncoder<_,_,_>) (log : ILogger) (stream : string) (x : FsCodec.ITimelineEvent<byte[]>) =
+    let tryDecode (codec : FsCodec.IUnionEncoder<_, _, _>) (log : ILogger) (stream : string) (x : FsCodec.ITimelineEvent<byte[]>) =
         match codec.TryDecode x with
         | None ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
@@ -57,7 +57,7 @@ module MultiStreams =
             interface TypeShape.UnionContract.IUnionContract
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
         let tryDecode = StreamCodec.tryDecode codec
-        let [<Literal>] categoryId = "SavedForLater"
+        let [<Literal>] category = "SavedForLater"
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module Favorites =
@@ -70,7 +70,7 @@ module MultiStreams =
             interface TypeShape.UnionContract.IUnionContract
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
         let tryDecode = StreamCodec.tryDecode codec
-        let [<Literal>] categoryId = "Favorites"
+        let [<Literal>] category = "Favorites"
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int | OtherMessage of string
 
@@ -79,16 +79,16 @@ module MultiStreams =
         let log = Log.ForContext<InMemoryHandler>()
 
         // events are handled concurrently across streams. Only a single Handle call will be in progress at any time per stream
-        let faves,saves = ConcurrentDictionary<string, HashSet<SkuId>>(), ConcurrentDictionary<string,SkuId list>()
+        let faves, saves = ConcurrentDictionary<string, HashSet<SkuId>>(), ConcurrentDictionary<string, SkuId list>()
 
         // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
         let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|UnknownMessage|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
             let decode tryDecode = span.events |> Seq.choose (tryDecode log streamName) |> Array.ofSeq
             match category streamName with
-            | Category (Favorites.categoryId, id) ->
+            | Category (Favorites.category, id) ->
                 let s = match faves.TryGetValue id with true, value -> value | false, _ -> new HashSet<SkuId>()
                 FavoritesEvents (id, s, decode Favorites.tryDecode)
-            | Category (SavedForLater.categoryId, id) ->
+            | Category (SavedForLater.category, id) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
                 SavedForLaterEvents (id, s, decode SavedForLater.tryDecode)
             | Category (categoryName, _) -> OtherCategory (categoryName, Seq.length span.events)
@@ -97,7 +97,7 @@ module MultiStreams =
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
         member __.Handle(streamName : string, span : Propulsion.Streams.StreamSpan<_>) = async {
             match streamName, span with
-            | OtherCategory (cat,count) -> return OtherCategory (cat, count)
+            | OtherCategory (cat, count) -> return OtherCategory (cat, count)
             | UnknownMessage messageKey -> return OtherMessage messageKey
             | FavoritesEvents (id, s, xs) -> 
                 let folder (s : HashSet<_>) = function
@@ -116,7 +116,7 @@ module MultiStreams =
                     | SavedForLater.Added e -> add e.skus s
                     | SavedForLater.Removed e -> remove e.skus s
                     | SavedForLater.Merged e -> s |> remove [| for x in e.items -> x.skuId |] |> add [| for x in e.items -> x.skuId |]
-                saves.[id] <- (s,xs) ||> Array.fold folder
+                saves.[id] <- (s, xs) ||> Array.fold folder
                 return Saves xs.Length
         }
 
@@ -134,7 +134,7 @@ module MultiStreams =
         override __.HandleOk res = res |> function
             | Faves count -> faves <- faves + count
             | Saves count -> saves <- saves + count
-            | OtherCategory (cat,count) -> otherCats.Ingest(cat, int64 count)
+            | OtherCategory (cat, count) -> otherCats.Ingest(cat, int64 count)
             | OtherMessage messageKey -> otherKeys.Ingest messageKey
 
         // Dump stats relating to the nature of the message processing throughput
@@ -185,9 +185,9 @@ module MultiMessages =
             let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
             let decode tryDecode wrap = RenderedSpan.enum span |> Seq.choose (fun x -> x.event |> tryDecode log streamName |> Option.map wrap)
             match streamName with
-            | Category (Favorites.categoryId,_) -> yield! decode Favorites.tryDecode Fave
-            | Category (SavedForLater.categoryId,_) -> yield! decode SavedForLater.tryDecode Save
-            | Category (otherCategoryName,_) -> yield OtherCat (otherCategoryName, Seq.length span.e)
+            | Category (Favorites.category, _) -> yield! decode Favorites.tryDecode Fave
+            | Category (SavedForLater.category, _) -> yield! decode SavedForLater.tryDecode Save
+            | Category (otherCategoryName, _) -> yield OtherCat (otherCategoryName, Seq.length span.e)
             | _ -> yield Unclassified streamName }
 
         // NB can be called in parallel, so must be thread-safe
@@ -196,11 +196,11 @@ module MultiMessages =
                 match x with
                 | Fave (Favorites.Favorited _) -> Interlocked.Increment &favorited |> ignore
                 | Fave (Favorites.Unfavorited _) -> Interlocked.Increment &unfavorited |> ignore
-                | Save (SavedForLater.Added e) -> Interlocked.Add(&saved,e.skus.Length) |> ignore
-                | Save (SavedForLater.Removed e) -> Interlocked.Add(&cleared,e.skus.Length) |> ignore
-                | Save (SavedForLater.Merged e) -> Interlocked.Add(&saved,e.items.Length) |> ignore
+                | Save (SavedForLater.Added e) -> Interlocked.Add(&saved, e.skus.Length) |> ignore
+                | Save (SavedForLater.Removed e) -> Interlocked.Add(&cleared, e.skus.Length) |> ignore
+                | Save (SavedForLater.Merged e) -> Interlocked.Add(&saved, e.items.Length) |> ignore
                 | Save (SavedForLater.Cleared) -> Interlocked.Increment(&cleared) |> ignore
-                | OtherCat (cat,count) -> lock cats <| fun () -> cats.Ingest(cat, int64 count)
+                | OtherCat (cat, count) -> lock cats <| fun () -> cats.Ingest(cat, int64 count)
                 | Unclassified messageKey -> keys.TryAdd(messageKey, ()) |> ignore
 
     type Parallel =
@@ -209,7 +209,7 @@ module MultiMessages =
         /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
         static member Start(config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
             let log, processor = Log.ForContext<Parallel>(), Processor()
-            let handleMessage (KeyValue (streamName,eventsSpan)) = async { processor.Handle(streamName, eventsSpan) }
+            let handleMessage (KeyValue (streamName, eventsSpan)) = async { processor.Handle(streamName, eventsSpan) }
             Propulsion.Kafka.ParallelConsumer.Start(
                 log, config, degreeOfParallelism, handleMessage,
                 statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
@@ -219,7 +219,7 @@ module MultiMessages =
         /// Processing runs as a single Async computation per batch, which can work well where parallelism is not relevant
         static member Start(config : FsKafka.KafkaConsumerConfig) =
             let log = Log.ForContext<BatchesSync>()
-            let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_,_>[]) = async {
+            let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_, _>[]) = async {
                 let processor = Processor()
                 for m in msgs do
                     processor.Handle(m.Key, m.Value)
@@ -234,7 +234,7 @@ module MultiMessages =
         static member Start(config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
             let log = Log.ForContext<BatchesAsync>()
             let dop = new SemaphoreSlim(degreeOfParallelism)
-            let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_,_>[]) = async {
+            let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_, _>[]) = async {
                 let processor = Processor()
                 let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(m.Key, m.Value) } |> dop.Throttle })
                 processor.DumpStats log }

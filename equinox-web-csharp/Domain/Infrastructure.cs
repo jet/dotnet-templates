@@ -31,7 +31,7 @@ namespace TodoBackendTemplate
         }
 
         /// Run the decision method, letting it decide whether or not the Command's intent should manifest as Events
-        public async Task<Unit> Execute(Func<TState,IEnumerable<TEvent>> interpret)
+        public async Task<Unit> Execute(Func<TState, IEnumerable<TEvent>> interpret)
         {
             FSharpList<TEvent> decide_(TState state)
             {
@@ -39,7 +39,7 @@ namespace TodoBackendTemplate
                 a.Execute(interpret);
                 return a.Accumulated;
             }
-            return await FSharpAsync.StartAsTask(Transact(FuncConvert.FromFunc<TState,FSharpList<TEvent>>(decide_)), null, null);
+            return await FSharpAsync.StartAsTask(Transact(FuncConvert.FromFunc<TState, FSharpList<TEvent>>(decide_)), null, null);
         }
 
         /// Execute a command, as Decide(Action) does, but also yield an outcome from the decision
@@ -51,7 +51,7 @@ namespace TodoBackendTemplate
                 var r = decide(a);
                 return Tuple.Create(r, a.Accumulated);
             }
-            return await FSharpAsync.StartAsTask<T>(Transact(FuncConvert.FromFunc<TState,Tuple<T,FSharpList<TEvent>>>(decide_)), null, null);
+            return await FSharpAsync.StartAsTask<T>(Transact(FuncConvert.FromFunc<TState, Tuple<T, FSharpList<TEvent>>>(decide_)), null, null);
         }
 
         // Project from the synchronized state, without the possibility of adding events that Decide(Func) admits

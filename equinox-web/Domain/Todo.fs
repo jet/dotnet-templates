@@ -20,9 +20,11 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let [<Literal>] category = "Todos"
+    /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
+    let (|For|) (clientId: ClientId) = Equinox.AggregateId(category, ClientId.toString clientId)
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
-module Folds =
+module Fold =
 
     /// Present state of the Todo List as inferred from the Events we've seen to date
     type State = { items : Events.ItemData list; nextId : int }
@@ -45,55 +47,50 @@ module Folds =
 /// Properties that can be edited on a Todo List item
 type Props = { order: int; title: string; completed: bool }
 
-/// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
-module Commands =
+/// Defines the operations a caller can perform on a Todo List
+type Command =
+    /// Create a single item
+    | Add of Props
+    /// Update a single item
+    | Update of id: int * Props
+    /// Delete a single item from the list
+    | Delete of id: int
+    /// Complete clear the Todo list
+    | Clear
 
-    /// Defines the operations a caller can perform on a Todo List
-    type Command =
-        /// Create a single item
-        | Add of Props
-        /// Update a single item
-        | Update of id: int * Props
-        /// Delete a single item from the list
-        | Delete of id: int
-        /// Complete clear the todo list
-        | Clear
-
-    let interpret c (state : Folds.State) =
-        let mkItem id (value: Props): Events.ItemData = { id = id; order=value.order; title=value.title; completed=value.completed }
-        match c with
-        | Add value -> [Events.Added (mkItem state.nextId value)]
-        | Update (itemId,value) ->
-            let proposed = mkItem itemId value
-            match state.items |> List.tryFind (function { id = id } -> id = itemId) with
-            | Some current when current <> proposed -> [Events.Updated proposed]
-            | _ -> []
-        | Delete id -> if state.items |> List.exists (fun x -> x.id = id) then [Events.Deleted { id=id }] else []
-        | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared { nextId = state.nextId }]
+/// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream
+let interpret c (state : Fold.State) =
+    let mkItem id (value: Props): Events.ItemData = { id = id; order=value.order; title=value.title; completed=value.completed }
+    match c with
+    | Add value -> [Events.Added (mkItem state.nextId value)]
+    | Update (itemId, value) ->
+        let proposed = mkItem itemId value
+        match state.items |> List.tryFind (function { id = id } -> id = itemId) with
+        | Some current when current <> proposed -> [Events.Updated proposed]
+        | _ -> []
+    | Delete id -> if state.items |> List.exists (fun x -> x.id = id) then [Events.Deleted { id=id }] else []
+    | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared { nextId = state.nextId }]
 
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }
 
 /// Defines operations that a Controller can perform on a Todo List
-type Service(handlerLog, resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(Events.category, ClientId.toString clientId)
-    
     /// Maps a ClientId to Handler for the relevant stream
-    let (|Stream|) (AggregateId id) = Equinox.Stream(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
+    let (|Stream|) (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     /// Execute `command`; does not emit the post state
     let execute (Stream stream) command : Async<unit> =
-        stream.Transact(Commands.interpret command)
+        stream.Transact(interpret command)
     /// Handle `command`, return the items after the command's intent has been applied to the stream
     let handle (Stream stream) command : Async<Events.ItemData list> =
         stream.Transact(fun state ->
-            let ctx = Equinox.Accumulator(Folds.fold, state)
-            ctx.Transact(Commands.interpret command)
-            ctx.State.items,ctx.Accumulated)
+            let ctx = Equinox.Accumulator(Fold.fold, state)
+            ctx.Transact(interpret command)
+            ctx.State.items, ctx.Accumulated)
     /// Establish the present state of the Stream, project from that as specified by `projection`
-    let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
+    let query (Stream stream) (projection : Fold.State -> 't) : Async<'t> =
         stream.Query projection
 
     let render (item: Events.ItemData) : View =
@@ -122,10 +119,12 @@ type Service(handlerLog, resolve, ?maxAttempts) =
 
     /// Create a new ToDo List item; response contains the generated `id`
     member __.Create(clientId , template: Props) : Async<View> = async {
-        let! state' = handle clientId (Commands.Add template)
+        let! state' = handle clientId (Add template)
         return List.head state' |> render }
 
     /// Update the specified item as referenced by the `item.id`
     member __.Patch(clientId, id: int, value: Props) : Async<View> = async {
-        let! state' = handle clientId (Commands.Update (id, value))
+        let! state' = handle clientId (Update (id, value))
         return state' |> List.find (fun x -> x.id = id) |> render}
+
+let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)

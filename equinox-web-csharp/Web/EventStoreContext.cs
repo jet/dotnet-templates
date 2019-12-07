@@ -51,7 +51,7 @@ namespace TodoBackendTemplate
             return new Context(conn, new BatchingPolicy(maxBatchSize: 500));
         }
 
-        public override Func<Target,IStream<TEvent, TState>> Resolve<TEvent, TState>(
+        public override Func<Target, IStream<TEvent, TState>> Resolve<TEvent, TState>(
             FsCodec.IUnionEncoder<TEvent, byte[], object> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,

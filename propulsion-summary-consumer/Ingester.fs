@@ -19,10 +19,10 @@ module Contract =
     type Union = int64*Message
     let codec =
         // We also want the index (which is the Version of the Summary) whenever we're handling an event
-        let up (encoded : FsCodec.ITimelineEvent<_>,message) : Union = encoded.Index,message
+        let up (encoded : FsCodec.ITimelineEvent<_>, message) : Union = encoded.Index, message
         let down _union = failwith "Not Implemented"
-        FsCodec.NewtonsoftJson.Codec.Create<Union,Message,(*'Meta*)obj>(up,down)
-    let [<Literal>] categoryId = "TodoSummary"
+        FsCodec.NewtonsoftJson.Codec.Create<Union, Message, (*'Meta*)obj>(up, down)
+    let [<Literal>] category = "TodoSummary"
 
 [<RequireQualifiedAccess>]
 type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of count : int
@@ -52,12 +52,12 @@ let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger)
                 [| for x in x.items ->
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
     let (|ClientId|) = ClientId.parse
-    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_,_,_>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
+    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_, _, _>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
         span.events |> Seq.rev |> Seq.tryPick (StreamCodec.tryDecode codec log stream)
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
-        match stream, (stream,span) with
-        | Category (Contract.categoryId, ClientId clientId), DecodeNewest Contract.codec (version,update) ->
-            match! service.Ingest(clientId,version,map update) with
+        match stream, (stream, span) with
+        | Category (Contract.category, ClientId clientId), DecodeNewest Contract.codec (version, update) ->
+            match! service.Ingest(clientId, version, map update) with
             | true -> return Outcome.Ok span.events.Length
             | false -> return Outcome.Skipped span.events.Length
         | _ -> return Outcome.NoRelevantEvents span.events.Length

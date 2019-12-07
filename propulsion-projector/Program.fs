@@ -52,17 +52,17 @@ module CmdParser =
                     | Retries _ ->          "specify operation retries. Default: 1."
                     | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
         type Arguments(a : ParseResults<Parameters>) =
-            member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
+            member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
             member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
             member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
             member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
 
-            member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
+            member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
             member __.Retries =             a.GetResult(Retries, 1)
             member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
             member x.BuildConnectionDetails() =
-                let (Discovery.UriAndKey (endpointUri,_) as discovery) = Discovery.FromConnectionString x.Connection
+                let (Discovery.UriAndKey (endpointUri, _) as discovery) = Discovery.FromConnectionString x.Connection
                 Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                     x.Mode, endpointUri, x.Database, x.Container)
                 Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
@@ -112,12 +112,12 @@ module CmdParser =
         member val Target =                 TargetInfo a
 //#endif
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.Suffix =                   a.GetResult(LeaseContainerSuffix,"-aux")
+        member __.Suffix =                   a.GetResult(LeaseContainerSuffix, "-aux")
         member __.Verbose =                 a.Contains Verbose
         member __.VerboseConsole =          a.Contains VerboseConsole
         member __.MaxDocuments =            a.TryGetResult MaxDocuments
-        member __.MaxReadAhead =            a.GetResult(MaxReadAhead,64)
-        member __.MaxConcurrentStreams =    a.GetResult(MaxWriters,1024)
+        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 64)
+        member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 1024)
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.AuxContainerName =        __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
@@ -168,7 +168,7 @@ module Logging =
 
 let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
     if x.Data.Length < 900_000 then x
-    else FsCodec.Core.TimelineEvent.Create(x.Index,x.EventType,null,x.Meta,timestamp=x.Timestamp) :> _
+    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp) :> _
 
 let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
     { stream = e.stream; event = replaceLongDataWithNull e.event }
@@ -189,11 +189,11 @@ let build (args : CmdParser.Arguments) =
     let discovery, source, connector = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
-    let (broker,topic) = args.Target.BuildTargetParams()
+    let (broker, topic) = args.Target.BuildTargetParams()
 #if parallelOnly
     let render (doc : Microsoft.Azure.Documents.Document) : string * string =
-        let equinoxPartition,documentId = doc.GetPropertyValue "p",doc.Id
-        equinoxPartition,FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
+        let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
+        equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
     let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
     let projector =
         Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producer, statsInterval=TimeSpan.FromMinutes 1.)
@@ -215,7 +215,7 @@ let build (args : CmdParser.Arguments) =
 #else
     let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
         let r = Random()
-        let ms = r.Next(1,span.events.Length)
+        let ms = r.Next(1, span.events.Length)
         do! Async.Sleep ms }
     let categorize (streamName : string) = streamName.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
     let sink =
@@ -229,13 +229,13 @@ let build (args : CmdParser.Arguments) =
             Log.Logger, connector.CreateClient(appName, discovery), source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-    sink,runSourcePipeline
+    sink, runSourcePipeline
 
 let run argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.VerboseConsole
         Settings.initialize ()
-        let sink,runSourcePipeline = build args
+        let sink, runSourcePipeline = build args
         runSourcePipeline |> Async.Start
         sink.AwaitCompletion() |> Async.RunSynchronously
         if sink.RanToCompletion then 0 else 2

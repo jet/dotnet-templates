@@ -10,8 +10,9 @@ module Events =
         | Compacted of CompactedData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let (|For|) (id: string) = Equinox.AggregateId("Aggregate", id)
 
-module Folds =
+module Fold =
 
     type State = { happened: bool }
     let initial = { happened = false }
@@ -22,37 +23,28 @@ module Folds =
     let isOrigin = function Events.Compacted _ -> true | _ -> false
     let compact state = Events.Compacted { happened = state.happened }
 
-module Commands =
+type Command =
+    | MakeItSo
 
-    type Command =
-        | MakeItSo
-
-    let interpret c (state : Folds.State) =
-        match c with
-        | MakeItSo -> if state.happened then [] else [Events.Happened]
+let interpret c (state : Fold.State) =
+    match c with
+    | MakeItSo -> if state.happened then [] else [Events.Happened]
 
 type View = { sorted : bool }
 
-type Service(handlerLog, resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    let (|AggregateId|) (id: string) = Equinox.AggregateId("Aggregate", id)
-    let (|Stream|) (AggregateId id) = Equinox.Stream(handlerLog, resolve id, maxAttempts = defaultArg maxAttempts 2)
-
-    /// Execute `command`, syncing any events decided upon
-    let execute (Stream stream) command : Async<unit> =
-        stream.Transact(Commands.interpret command)
-    /// Establish the present state of the Stream, project from that as specified by `projection`
-    let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
-        stream.Query projection
-
-    let render (s: Folds.State) : View =
-        {   sorted = s.happened }
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     /// Read the present state
     // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
     member __.Read clientId : Async<View> =
-        query clientId render
+        let stream = resolve clientId
+        stream.Query(fun s -> { sorted = s.happened })
 
     /// Execute the specified command 
     member __.Execute(clientId, command) : Async<unit> =
-        execute clientId command
+        let stream = resolve clientId
+        stream.Transact(interpret command)
+
+let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)

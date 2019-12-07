@@ -15,14 +15,14 @@ namespace TodoBackendTemplate
         public MemoryStoreContext(VolatileStore<object> store) =>
             _store = store;
 
-        public override Func<Target,IStream<TEvent, TState>> Resolve<TEvent, TState>(
+        public override Func<Target, IStream<TEvent, TState>> Resolve<TEvent, TState>(
             FsCodec.IUnionEncoder<TEvent, byte[], object> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> compact = null)
         {
-            var resolver = new Resolver<TEvent, TState, object, object>(_store, FsCodec.Box.Codec.Create<TEvent>(),FuncConvert.FromFunc(fold), initial);
+            var resolver = new Resolver<TEvent, TState, object, object>(_store, FsCodec.Box.Codec.Create<TEvent>(), FuncConvert.FromFunc(fold), initial);
             return target => resolver.Resolve(target);
         }
 

@@ -10,8 +10,10 @@ module Events =
         | Ingested of IngestedData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let [<Literal>] category = "TodoSummary"
+    let (|For|) (clientId: ClientId) = Equinox.AggregateId(category, ClientId.toString clientId)
 
-module Folds =
+module Fold =
 
     type State = { version : int64; value : Events.SummaryData option }
     let initial = { version = -1L; value = None }
@@ -21,18 +23,17 @@ module Folds =
     let snapshot state = Events.Ingested { version = state.version; value = state.value.Value }
     let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingState snapshot
 
-module Commands =
-    type Command =
-        | Consume of version : int64 * value : Events.SummaryData
+type Command =
+    | Consume of version : int64 * value : Events.SummaryData
 
-    let decide command (state : Folds.State) =
-        match command with
-        | Consume (version,value) ->
-            if state.version <= version then false,[] else
-            true,[Events.Ingested { version = version; value = value }]
+let decide command (state : Fold.State) =
+    match command with
+    | Consume (version, value) ->
+        if state.version <= version then false, [] else
+        true, [Events.Ingested { version = version; value = value }]
 
 type Item = { id: int; order: int; title: string; completed: bool }
-let render : Folds.State -> Item[] = function
+let render : Fold.State -> Item[] = function
     | { value = Some { items = xs} } ->
         [| for x in xs ->
             {   id = x.id
@@ -41,30 +42,25 @@ let render : Folds.State -> Item[] = function
                 completed = x.completed } |]
     | _ -> [||]
 
-let [<Literal>] categoryId = "TodoSummary"
-
 /// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
-type Service(log, resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(categoryId, ClientId.toString clientId)
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
-
-    let execute (Stream stream) command : Async<bool> =
-        stream.Transact(Commands.decide command)
-
-    let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
-        stream.Query projection
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     member __.Ingest(clientId, version, value) : Async<bool> =
-        execute clientId <| Commands.Consume (version,value)
+        let stream = resolve clientId
+        stream.Transact(decide (Consume (version, value)))
 
     member __.Read clientId: Async<Item[]> =
-        query clientId render
+        let stream = resolve clientId
+        stream.Query render
+
+let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
 
 module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
-    let private resolve (context,cache) =
+    let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, Folds.accessStrategy).Resolve
-    let createService (context,cache) = Service(Serilog.Log.ForContext<Service>(), resolve (context,cache))
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, Fold.accessStrategy).Resolve
+    let create (context, cache) = create (resolve (context, cache))

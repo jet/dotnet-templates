@@ -14,8 +14,10 @@ module Events =
         | Snapshotted of ItemData[]
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let [<Literal>] category = "SkuSummary"
+    let (|For|) (id : SkuId) = Equinox.AggregateId(category, SkuId.toString id)
 
-module Folds =
+module Fold =
 
     type State = Events.ItemData list
     module State =
@@ -39,45 +41,40 @@ module Folds =
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let snapshot (x : State) : Events.Event = Events.Snapshotted (Array.ofList x)
 
-module Commands =
+type Command =
+    | Consume of Events.ItemData list
 
-    type Command =
-        | Consume of Events.ItemData list
+let interpret command (state : Fold.State) =
+    match command with
+    | Consume updates ->
+        [for x in updates do if x |> Fold.State.isNewOrUpdated state then yield Events.Ingested x]
 
-    let interpret command (state : Folds.State) =
-        match command with
-        | Consume updates ->
-            [for x in updates do if x |> Folds.State.isNewOrUpdated state then yield Events.Ingested x]
+type Service internal (log, resolve, maxAttempts) =
 
-let [<Literal>] categoryId = "SkuSummary"
-
-type Service(log, resolve, ?maxAttempts) =
-
-    let (|AggregateId|) (id : SkuId) = Equinox.AggregateId(categoryId, SkuId.toString id)
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
-
-    let executeWithCount (Stream stream) command : Async<int> =
-        let decide state =
-            let events = Commands.interpret command state
-            List.length events,events
-        stream.Transact(decide)
-
-    let query (Stream stream) (projection : Folds.State -> 't) : Async<'t> =
-        stream.Query projection
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     /// <returns>count of items</returns>
     member __.Ingest(skuId, items) : Async<int> =
-        executeWithCount skuId <| Commands.Consume items
+        let stream = resolve skuId
+        let executeWithCount command : Async<int> =
+            let decide state =
+                let events = interpret command state
+                List.length events, events
+            stream.Transact(decide)
+        executeWithCount <| Consume items
 
     member __.Read skuId: Async<Events.ItemData list> =
-        query skuId id
+        let stream = resolve skuId
+        stream.Query id
+
+let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
 
 module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
-    let private resolve (context,cache) =
+    let private resolve (context, cache) =
         // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
-        let accessStrategy = AccessStrategy.Snapshot(Folds.isOrigin, Folds.snapshot)
+        let accessStrategy = AccessStrategy.Snapshot(Fold.isOrigin, Fold.snapshot)
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
-    let createService (context,cache) = Service(Serilog.Log.ForContext<Service>(), resolve (context,cache))
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
+    let create (context, cache) = create (resolve (context, cache))

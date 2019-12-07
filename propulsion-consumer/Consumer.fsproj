@@ -10,7 +10,6 @@
     <Content Include="README.md" />
     <Compile Include="Infrastructure.fs" />
     <Compile Include="Examples.fs" />
-    <Compile Include="Publisher.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

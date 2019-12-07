@@ -36,6 +36,7 @@ namespace TodoBackendTemplate
             }
 
             public static Tuple<string, byte[]> Encode(Event e) => Tuple.Create(e.GetType().Name, Codec.Encode(e));
+            public static Target For(ClientId id) => Target.NewAggregateId("Aggregate", id.ToString());
         }
         public class State
         {
@@ -94,18 +95,18 @@ namespace TodoBackendTemplate
 
         class Handler
         {
-            readonly EquinoxStream<Event, State> _inner;
+            readonly EquinoxStream<Event, State> _stream;
 
             public Handler(ILogger log, IStream<Event, State> stream) =>
-                _inner = new EquinoxStream<Event, State>(State.Fold, log, stream);
+                _stream = new EquinoxStream<Event, State>(State.Fold, log, stream);
 
             /// Execute `command`, syncing any events decided upon
             public Task<Unit> Execute(Command c) =>
-                _inner.Execute(s => Command.Interpret(s, c));
+                _stream.Execute(s => Command.Interpret(s, c));
 
             /// Establish the present state of the Stream, project from that as specified by `projection`
             public Task<T> Query<T>(Func<State, T> projection) =>
-                _inner.Query(projection);
+                _stream.Query(projection);
         }
 
         public class View
@@ -116,20 +117,18 @@ namespace TodoBackendTemplate
         public class Service
         {
             /// Maps a ClientId to Handler for the relevant stream
-            readonly Func<string, Handler> _stream;
-
-            static Target AggregateId(string id) => Target.NewAggregateId("Aggregate", id);
+            readonly Func<ClientId, Handler> _stream;
 
             public Service(ILogger handlerLog, Func<Target, IStream<Event, State>> resolve) =>
-                _stream = id => new Handler(handlerLog, resolve(AggregateId(id)));
+                _stream = id => new Handler(handlerLog, resolve(Event.For(id)));
 
             /// Execute the specified command 
-            public Task<Unit> Execute(string id, Command command) =>
+            public Task<Unit> Execute(ClientId id, Command command) =>
                 _stream(id).Execute(command);
 
             /// Read the present state
             // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
-            public Task<View> Read(string id) => _stream(id).Query(Render);
+            public Task<View> Read(ClientId id) => _stream(id).Query(Render);
 
             static View Render(State s) => new View() {Sorted = s.Happened};
         }

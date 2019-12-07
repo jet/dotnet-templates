@@ -20,9 +20,9 @@ module Contract =
             order = item.order
             title = item.title
             completed = item.completed }
-    let ofState (state : Todo.Folds.State) : SummaryEvent =
+    let ofState (state : Todo.Fold.State) : SummaryEvent =
         Summary { items = [| for x in state.items -> render x |]}
 
 let generate stream version summary =
-    let event = Contract.codec.Encode(None,summary)
+    let event = Contract.codec.Encode(None, summary)
     Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version event

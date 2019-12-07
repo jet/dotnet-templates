@@ -15,10 +15,11 @@ module Events =
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] categoryId = "Todos"
+    let [<Literal>] category = "Todos"
+    let (|For|) (id : ClientId) = Equinox.AggregateId(category, ClientId.toString id)
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
-module Folds =
+module Fold =
 
     /// Present state of the Todo List as inferred from the Events we've seen to date
     type State = { items : Events.ItemData list; nextId : int }
@@ -41,37 +42,31 @@ module Folds =
     let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
-type Service(log, resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|AggregateId|) (clientId: ClientId) = Equinox.AggregateId(Events.categoryId, ClientId.toString clientId)
-
-    /// Maps a ClientId to a Stream for the relevant stream
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
-
-    /// Establish the present state of the Stream, project from that as specified by `projection` (using QueryEx so we can determine the version in effect)
-    let queryEx (Stream stream) (projection : Folds.State -> 't) : Async<int64*'t> =
-        stream.QueryEx(fun v s -> v, projection s)
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     /// Load and render the state
-    member __.QueryWithVersion(clientId, render : Folds.State -> 'res) : Async<int64*'res> =
-        queryEx clientId render
+    member __.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =
+        let stream = resolve clientId
+        // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
+        stream.QueryEx(fun v s -> v, render s)
 
-let private createService resolve = Service(Serilog.Log.ForContext<Service>(), resolve)
+let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
 
 module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
-    let private resolve (context,cache) =
+    let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let accessStrategy = AccessStrategy.Snapshot (Folds.isOrigin,Folds.snapshot)
-        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, accessStrategy).Resolve
-    let createService (context,cache) = resolve (context,cache) |> createService
+        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
+    let create (context, cache) = resolve (context, cache) |> create
 
 module EventStore =
 
     open Equinox.EventStore // Everything until now is independent of a concrete store
-    let private resolve (context,cache) =
+    let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy).Resolve
-    let createService (context,cache) = resolve (context,cache) |> createService
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
+    let create (context, cache) = resolve (context, cache) |> create

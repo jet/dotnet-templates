@@ -59,13 +59,13 @@ module Cosmos =
                 | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
                 | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
     type Arguments(a : ParseResults<Parameters>) =
-        member __.Mode =                a.GetResult(ConnectionMode,Equinox.Cosmos.ConnectionMode.Direct)
+        member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
         member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
         member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
 
-        member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
-        member __.Retries =             a.GetResult(Retries,1)
+        member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        member __.Retries =             a.GetResult(Retries, 1)
         member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
     /// Standing up an Equinox instance is necessary to run for test purposes; You'll need to either:
@@ -77,7 +77,7 @@ module Cosmos =
 
     let private createGateway connection maxItems = Gateway(connection, BatchingPolicy(defaultMaxItems=maxItems))
     let private context (log: ILogger, storeLog: ILogger) (a : Arguments) =
-        let (Discovery.UriAndKey (endpointUri,_)) as discovery = a.Connection|> Discovery.FromConnectionString
+        let (Discovery.UriAndKey (endpointUri, _)) as discovery = a.Connection|> Discovery.FromConnectionString
         log.Information("CosmosDb {mode} {connection} Database {database} Container {container}",
             a.Mode, endpointUri, a.Database, a.Container)
         Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
@@ -123,13 +123,13 @@ module EventStore =
     open Equinox.EventStore
 
     type Arguments(a : ParseResults<Parameters>) =
-        member __.Host =                a.GetResult(Host,"localhost")
-        member __.Credentials =         a.GetResult(Username,"admin"), a.GetResult(Password,"changeit")
+        member __.Host =                a.GetResult(Host, "localhost")
+        member __.Credentials =         a.GetResult(Username, "admin"), a.GetResult(Password, "changeit")
 
         member __.Retries =             a.GetResult(Retries, 1)
-        member __.Timeout =             a.GetResult(Timeout,5.) |> TimeSpan.FromSeconds
-        member __.HeartbeatTimeout =    a.GetResult(HeartbeatTimeout,1.5) |> float |> TimeSpan.FromSeconds
-        member __.ConcurrentOperationsLimit = a.GetResult(ConcurrentOperationsLimit,5000)
+        member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        member __.HeartbeatTimeout =    a.GetResult(HeartbeatTimeout, 1.5) |> float |> TimeSpan.FromSeconds
+        member __.ConcurrentOperationsLimit = a.GetResult(ConcurrentOperationsLimit, 5000)
 
     let private connect (log: Serilog.ILogger) (dnsQuery, heartbeatTimeout, col) (username, password) (operationTimeout, operationRetries) =
         Connector(username, password, reqTimeout=operationTimeout, reqRetries=operationRetries,
