@@ -12,12 +12,12 @@ module Events =
         | Delta of Delta
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] categoryId = "LocationEpoch"
-    let (|AggregateId|) (locationId, epochId) =
+    let [<Literal>] category = "LocationEpoch"
+    let (|For|) (locationId, epochId) =
         let id = sprintf "%s_%s" (LocationId.toString locationId) (LocationEpochId.toString epochId)
-        Equinox.AggregateId(categoryId, id)
+        Equinox.AggregateId(category, id)
 
-module Folds =
+module Fold =
 
     type Balance = int
     type OpenState = { count : int; value : Balance }
@@ -36,55 +36,54 @@ module Folds =
 /// Holds events accumulated from a series of decisions while also evolving the presented `state` to reflect the pended events
 type private Accumulator() =
     let acc = ResizeArray()
-    member __.Ingest state : 'res * Events.Event list -> 'res * Folds.State = function
+    member __.Ingest state : 'res * Events.Event list -> 'res * Fold.State = function
         | res, [] ->                   res, state
-        | res, [e] -> acc.Add e;       res, Folds.evolve state e
-        | res, xs ->  acc.AddRange xs; res, Folds.fold state (Seq.ofList xs)
+        | res, [e] -> acc.Add e;       res, Fold.evolve state e
+        | res, xs ->  acc.AddRange xs; res, Fold.fold state (Seq.ofList xs)
     member __.Accumulated = List.ofSeq acc
 
-type Result<'t> = { balance : Folds.Balance; result : 't option; isOpen : bool }
+type Result<'t> = { balance : Fold.Balance; result : 't option; isOpen : bool }
 
-let sync (balanceCarriedForward : Folds.Balance option) (decide : (Folds.Balance -> 't*Events.Event list)) shouldClose state : Result<'t>*Events.Event list =
+let sync (balanceCarriedForward : Fold.Balance option) (decide : (Fold.Balance -> 't*Events.Event list)) shouldClose state : Result<'t>*Events.Event list =
     let acc = Accumulator()
     // We always want to have a CarriedForward event at the start of any Epoch's event stream
     let (), state =
         acc.Ingest state <|
             match state with
-            | Folds.Initial -> (), [Events.CarriedForward { initial = Option.get balanceCarriedForward }]
-            | Folds.Open _ | Folds.Closed _ -> (), []
+            | Fold.Initial -> (), [Events.CarriedForward { initial = Option.get balanceCarriedForward }]
+            | Fold.Open _ | Fold.Closed _ -> (), []
     // Run, unless we determine we're in Closed state
     let result, state =
         acc.Ingest state <|
             match state with
-            | Folds.Initial -> failwith "We've just guaranteed not Initial"
-            | Folds.Open { value = bal } -> let r,es = decide bal in Some r,es
-            | Folds.Closed _ -> None, []
+            | Fold.Initial -> failwith "We've just guaranteed not Initial"
+            | Fold.Open { value = bal } -> let r,es = decide bal in Some r,es
+            | Fold.Closed _ -> None, []
     // Finally (iff we're `Open`, have run a `decide` and `shouldClose`), we generate a Closed event
     let (balance, isOpen), _ =
         acc.Ingest state <|
             match state with
-            | Folds.Initial -> failwith "Can't be Initial"
-            | Folds.Open ({ value = bal } as openState) when shouldClose openState -> (bal, false), [Events.Closed]
-            | Folds.Open { value = bal } -> (bal, true), []
-            | Folds.Closed bal -> (bal, false), []
+            | Fold.Initial -> failwith "Can't be Initial"
+            | Fold.Open ({ value = bal } as openState) when shouldClose openState -> (bal, false), [Events.Closed]
+            | Fold.Open { value = bal } -> (bal, true), []
+            | Fold.Closed bal -> (bal, false), []
     { balance = balance; result = result; isOpen = isOpen }, acc.Accumulated
 
-type Service internal (resolve, ?maxAttempts) =
+type Service internal (log, resolve, maxAttempts) =
 
-    let log = Serilog.Log.ForContext<Service>()
-    let (|Stream|) (Events.AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
+    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     member __.Sync<'R>(locationId, epochId, prevEpochBalanceCarriedForward, decide, shouldClose) : Async<Result<'R>> =
-        let (Stream stream) = (locationId, epochId)
+        let stream = resolve (locationId, epochId)
         stream.Transact(sync prevEpochBalanceCarriedForward decide shouldClose)
 
-let create resolve maxAttempts = Service(resolve, maxAttempts)
+let create resolve maxAttempts = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = maxAttempts)
 
 module Cosmos =
 
     open Equinox.Cosmos
     let resolve (context,cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Folds.fold, Folds.initial, cacheStrategy, AccessStrategy.Unoptimized).Resolve
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.Unoptimized).Resolve
     let createService (context,cache,maxAttempts) =
         create (resolve (context,cache)) maxAttempts

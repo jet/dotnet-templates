@@ -6,8 +6,8 @@ open Swensen.Unquote
 open Location.Series
 
 let [<Property>] properties c1 c2 =
-    let events = interpretActivateEpoch c1 Folds.initial
-    let state1 = Folds.fold Folds.initial events
+    let events = interpretActivateEpoch c1 Fold.initial
+    let state1 = Fold.fold Fold.initial events
     let epoch0 = %0
     match c1, events, toActiveEpoch state1 with
     // Started events are not written for < 0
@@ -21,7 +21,7 @@ let [<Property>] properties c1 c2 =
         test <@ List.isEmpty l @>
 
     let events = interpretActivateEpoch c2 state1
-    let state2 = Folds.fold state1 events
+    let state2 = Fold.fold state1 events
     match toActiveEpoch state1, c2, events, toActiveEpoch state2 with
     // Started events are not written for < 0
     | None, n, [], activeEpoch when n < epoch0 ->

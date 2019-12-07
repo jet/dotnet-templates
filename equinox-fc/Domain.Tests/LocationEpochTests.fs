@@ -22,10 +22,10 @@ let [<Property>] properties carriedForward delta1 closeImmediately delta2 close 
     (* Starting with an empty stream, we'll need to supply the balance carried forward, optionally we apply a delta and potentially close *)
 
     let initialShouldClose _state = closeImmediately
-    let res,events = sync (Some carriedForward) (validateAndInterpret carriedForward delta1) initialShouldClose Folds.initial
+    let res,events = sync (Some carriedForward) (validateAndInterpret carriedForward delta1) initialShouldClose Fold.initial
     let cfEvents events = events |> List.filter (function Events.CarriedForward _ -> true | _ -> false)
     let closeEvents events = events |> List.filter (function Events.Closed -> true | _ -> false)
-    let state1 = Folds.fold Folds.initial events
+    let state1 = Fold.fold Fold.initial events
     let expectedBalance = carriedForward + delta1
     // Only expect closing if it was requested
     let expectImmediateClose = closeImmediately
