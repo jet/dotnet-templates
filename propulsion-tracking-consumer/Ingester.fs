@@ -40,7 +40,7 @@ type Stats(log, ?statsInterval, ?stateInterval) =
 let (|SkuId|) = SkuId.parse
 
 /// Starts a processing loop accumulating messages by stream - each time we handle all the incoming updates for a give Sku as a single transaction
-let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log : Serilog.ILogger) (service : SkuSummary.Service) maxDop =
+let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger) (service : SkuSummary.Service) maxDop =
     let ingestIncomingSummaryMessage(SkuId skuId, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         let items =
             [ for e in span.events do

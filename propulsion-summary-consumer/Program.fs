@@ -127,7 +127,7 @@ let start (args : CmdParser.Arguments) =
     let cache = Equinox.Cache (appName, sizeMb = 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
     let service = TodoSummary.Cosmos.createService (context,cache)
     let config =
-        Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
+        FsKafka.KafkaConsumerConfig.Create(
             appName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     Ingester.startConsumer config Log.Logger service args.MaxDop

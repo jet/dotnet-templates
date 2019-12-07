@@ -79,7 +79,7 @@ module Logging =
 
 let start (args : CmdParser.Arguments) =
     let c =
-        Jet.ConfluentKafka.FSharp.KafkaConsumerConfig.Create(
+        FsKafka.KafkaConsumerConfig.Create(
             "ConsumerTemplate",
             args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)

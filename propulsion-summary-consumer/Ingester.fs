@@ -44,7 +44,7 @@ type Stats(log, ?statsInterval, ?stateInterval) =
             ok <- 0; na <- 0 ; redundant <- 0
 
 /// Starts a processing loop accumulating messages by stream - each time we only take the latest event as previous ones are superseded by definition
-let startConsumer (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) (log : Serilog.ILogger) (service : TodoSummary.Service) maxDop =
+let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger) (service : TodoSummary.Service) maxDop =
     // map from external contract to internal contract defined by the aggregate
     let map : Contract.Message -> TodoSummary.Events.SummaryData = function
         | Contract.Summary x ->

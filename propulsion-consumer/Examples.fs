@@ -150,7 +150,7 @@ module MultiStreams =
     let private parseStreamEvents(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
 
-    let start (config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, degreeOfParallelism : int) =
+    let start (config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
         let log, handler = Log.ForContext<InMemoryHandler>(), InMemoryHandler()
         let stats = Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
         Propulsion.Kafka.StreamsConsumer.Start(
@@ -207,7 +207,7 @@ module MultiMessages =
         /// Starts a consumer that consumes a topic in streamed mode
         /// StreamingConsumer manages the parallelism, spreading individual messages out to Async tasks
         /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
-        static member Start(config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, degreeOfParallelism : int) =
+        static member Start(config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
             let log, processor = Log.ForContext<Parallel>(), Processor()
             let handleMessage (KeyValue (streamName,eventsSpan)) = async { processor.Handle(streamName, eventsSpan) }
             Propulsion.Kafka.ParallelConsumer.Start(
@@ -216,26 +216,26 @@ module MultiMessages =
 
     type BatchesSync =
         /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
-        /// Processing runs as a single Async computation per batch, which can work well where parallism is not relevant
-        static member Start(config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig) =
+        /// Processing runs as a single Async computation per batch, which can work well where parallelism is not relevant
+        static member Start(config : FsKafka.KafkaConsumerConfig) =
             let log = Log.ForContext<BatchesSync>()
             let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_,_>[]) = async {
                 let processor = Processor()
                 for m in msgs do
                     processor.Handle(m.Key, m.Value)
                 processor.DumpStats log }
-            Jet.ConfluentKafka.FSharp.BatchedConsumer.Start(log, config, handleBatch)
+            FsKafka.BatchedConsumer.Start(log, config, handleBatch)
     
     type BatchesAsync =
         /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
         /// Processing fans out as parallel Async computations (limited to max `degreeOfParallelism` concurrent tasks
         /// The messages in the batch emanate from a single partition and are all in sequence
         /// notably useful where there's an ability to share some processing cost across a batch of work by doing the processing in phases
-        static member Start(config : Jet.ConfluentKafka.FSharp.KafkaConsumerConfig, degreeOfParallelism : int) =
+        static member Start(config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
             let log = Log.ForContext<BatchesAsync>()
             let dop = new SemaphoreSlim(degreeOfParallelism)
             let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_,_>[]) = async {
                 let processor = Processor()
                 let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(m.Key, m.Value) } |> dop.Throttle })
                 processor.DumpStats log }
-            Jet.ConfluentKafka.FSharp.BatchedConsumer.Start(log, config, handleBatch)
+            FsKafka.BatchedConsumer.Start(log, config, handleBatch)
