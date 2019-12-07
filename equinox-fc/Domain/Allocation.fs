@@ -60,7 +60,7 @@ module Fold =
         let withRevoked (ToSet xs) x =  { withKnown xs x with reserved = Set.difference x.reserved xs }
         let withReleasing (ToSet xs) x ={ withKnown xs x with releasing = x.releasing |> Set.union xs } // TODO
         let withAssigned listId x = // TODO
-            let decided,remaining = x.assigning |> List.partition (fun x -> x.listId = listId)
+            let decided, remaining = x.assigning |> List.partition (fun x -> x.listId = listId)
             let xs = seq { for x in decided do yield! x.ticketIds }
             { withRevoked xs x with assigning = remaining }
     let initial = NotStarted
@@ -164,9 +164,9 @@ let decideUpdate update state =
 type private Accumulator() =
     let acc = ResizeArray()
     member __.Ingest state : 'res * Events.Event list -> 'res * Fold.State = function
-        | res, [] ->                   res,state
-        | res, [e] -> acc.Add e;       res,Fold.evolve state e
-        | res, xs ->  acc.AddRange xs; res,Fold.fold state (Seq.ofList xs)
+        | res, [] ->                   res, state
+        | res, [e] -> acc.Add e;       res, Fold.evolve state e
+        | res, xs ->  acc.AddRange xs; res, Fold.fold state (Seq.ofList xs)
     member __.Accumulated = List.ofSeq acc
 
 /// Impetus provided to the Aggregate Service from the Process Manager
@@ -182,31 +182,31 @@ let sync (updates : Update seq, command : Command) (state : Fold.State) : (bool*
     (* Apply any updates *)
     let mutable state = state
     for x in updates do
-        let (),state' = acc.Ingest state ((),decideUpdate x state)
+        let (), state' = acc.Ingest state ((), decideUpdate x state)
         state <- state'
 
     (* Decide whether the Command is now acceptable *)
-    let accepted,state =
+    let accepted, state =
         acc.Ingest state <|
             match state, command with
             (* Ignore on the basis of being idempotent in the face of retries *)
             // TOCONSIDER how to represent that a request is being denied e.g. due to timeout vs due to being complete
-            | (Fold.Idle | Fold.Releasing _), Apply _ ->
+            | (Fold.Idle|Fold.Releasing _), Apply _ ->
                 false, []
             (* Defer; Need to allow current request to progress before it can be considered *)
-            | (Fold.Acquiring _ | Fold.Releasing _), Commence _ ->
+            | (Fold.Acquiring _|Fold.Releasing _), Commence _ ->
                 true, [] // TODO validate idempotent ?
             (* Ok on the basis of idempotency *)
-            | (Fold.Idle | Fold.Releasing _), Cancel ->
+            | (Fold.Idle|Fold.Releasing _), Cancel ->
                 true, []
             (* Ok; Currently idle, normal Commence request*)
             | Fold.Idle, Commence tickets ->
-                true,[Events.Commenced { ticketIds = Array.ofList tickets }]
+                true, [Events.Commenced { ticketIds = Array.ofList tickets }]
             (* Ok; normal apply to distribute held tickets *)
-            | Fold.Acquiring s, Apply (assign,release) ->
+            | Fold.Acquiring s, Apply (assign, release) ->
                 let avail = System.Collections.Generic.HashSet s.reserved
                 let toAssign = [for a in assign -> { a with ticketIds = a.ticketIds |> Array.where avail.Remove }]
-                let toRelease = (Set.empty,release) ||> List.fold (fun s x -> if avail.Remove x then Set.add x s else s)
+                let toRelease = (Set.empty, release) ||> List.fold (fun s x -> if avail.Remove x then Set.add x s else s)
                 true, [
                     for x in toAssign do if (not << Array.isEmpty) x.ticketIds then yield Events.Allocated x
                     match toRelease with SetEmpty -> () | toRelease -> yield Events.Released { ticketIds = Set.toArray toRelease }]
@@ -219,9 +219,9 @@ let sync (updates : Update seq, command : Command) (state : Fold.State) : (bool*
 
 type Service internal (resolve : AllocationId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-    member __.Sync(allocationId,updates,command) : Async<bool*ProcessState> =
+    member __.Sync(allocationId, updates, command) : Async<bool*ProcessState> =
         let stream = resolve allocationId
-        stream.Transact(sync (updates,command))
+        stream.Transact(sync (updates, command))
 
 let create resolver =
     let resolve pickListId =
@@ -237,7 +237,7 @@ module EventStore =
         let opt = Equinox.ResolveOption.AllowStale
         // We should be reaching Completed state frequently so no actual Snapshots should get written
         fun id -> Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve(id,opt)
-    let create (context,cache) =
+    let create (context, cache) =
         create (resolver (context,cache))
 
 module Cosmos =
@@ -247,8 +247,8 @@ module Cosmos =
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
         // TODO impl snapshots
-        let makeEmptyUnfolds events _state = events,[]
+        let makeEmptyUnfolds events _state = events, []
         let accessStrategy = Equinox.Cosmos.AccessStrategy.Custom (Fold.isOrigin,makeEmptyUnfolds)
         fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id,opt)
-    let create (context,cache) =
+    let create (context, cache) =
         create (resolver (context, cache))

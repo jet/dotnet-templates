@@ -19,7 +19,7 @@ module Fold =
     type State = Set<TicketId>
     let initial = Set.empty
     let evolve state = function
-        | Events.Allocated e -> (state,e.ticketIds) ||> Array.fold (fun m x -> Set.add x m)
+        | Events.Allocated e -> (state, e.ticketIds) ||> Array.fold (fun m x -> Set.add x m)
         | Events.Snapshotted e -> Set.ofArray e.ticketIds
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let isOrigin = function Events.Snapshotted _ -> true | Events.Allocated _ -> false
@@ -32,9 +32,9 @@ let interpret (allocatorId : AllocatorId, allocated : TicketId list) (state : Fo
 
 type Service internal (resolve : TicketListId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-    member __.Sync(pickListId,allocatorId,assignedTickets) : Async<unit> =
+    member __.Sync(pickListId, allocatorId, assignedTickets) : Async<unit> =
         let stream = resolve pickListId
-        stream.Transact(interpret (allocatorId,assignedTickets))
+        stream.Transact(interpret (allocatorId, assignedTickets))
 
 let create resolver =
     let resolve pickListId =
@@ -49,9 +49,9 @@ module EventStore =
         // while there are competing writers (which might cause us to have to retry a Transact and discover it is redundant), there is never a cost to being wrong
         let opt = Equinox.ResolveOption.AllowStale
         // we _could_ use this Access Strategy, but because we are only generally doing a single shot write, its unwarranted
-        // let accessStrategy = AccessStrategy.RollingSnapshots (Folds.isOrigin,Folds.snapshot)
+        // let accessStrategy = AccessStrategy.RollingSnapshots (Folds.isOrigin, Folds.snapshot)
         fun id -> Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve(id,opt)
-    let create (context,cache) =
+    let create (context, cache) =
         create (resolver (context, cache))
 
 module Cosmos =
@@ -63,5 +63,5 @@ module Cosmos =
         // we want reads and writes (esp idempotent ones) to have optimal RU efficiency so we go the extra mile to do snapshotting into the Tip
         let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
         fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
-    let create (context,cache)=
+    let create (context, cache)=
         create (resolver (context, cache))

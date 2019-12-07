@@ -39,15 +39,15 @@ type Command =
 
 let decide (allocator : AllocatorId) (command : Command) (state : Fold.State) : bool * Events.Event list =
     match command, state with
-    | Reserve, Fold.Unallocated -> true,[Events.Reserved { allocatorId = allocator }] // normal case -> allow+record
-    | Reserve, Fold.Reserved by when by = allocator -> true,[] // idempotently permit
-    | Reserve, (Fold.Reserved _ | Fold.Allocated _) -> false,[] // report failure, nothing to write
-    | Allocate list, Fold.Allocated (by,l) when by = allocator && l = list -> true,[] // idempotent processing
-    | Allocate list, Fold.Reserved by when by = allocator -> true,[Events.Allocated { allocatorId = allocator; listId = list }] // normal
-    | Allocate _, (Fold.Allocated _ | Fold.Unallocated | Fold.Reserved _) -> false,[] // Fail if someone else has reserved or allocated, or we are jumping straight to Allocated without Reserving first
-    | Revoke, Fold.Unallocated -> true,[] // idempotent handling
-    | Revoke, (Fold.Reserved by | Fold.Allocated (by,_)) when by = allocator -> true,[Events.Revoked] // release Reservation or Allocation
-    | Revoke, (Fold.Reserved _ | Fold.Allocated _ ) -> true,[] // NOTE we report success of achieving the intent (but, critically, we leave it to the actual owner to manage any actual revoke)
+    | Reserve, Fold.Unallocated -> true, [Events.Reserved { allocatorId = allocator }] // normal case -> allow+record
+    | Reserve, Fold.Reserved by when by = allocator -> true, [] // idempotently permit
+    | Reserve, (Fold.Reserved _ | Fold.Allocated _) -> false, [] // report failure, nothing to write
+    | Allocate list, Fold.Allocated (by, l) when by = allocator && l = list -> true, [] // idempotent processing
+    | Allocate list, Fold.Reserved by when by = allocator -> true, [Events.Allocated { allocatorId = allocator; listId = list }] // normal
+    | Allocate _, (Fold.Allocated _ | Fold.Unallocated | Fold.Reserved _) -> false, [] // Fail if someone else has reserved or allocated, or we are jumping straight to Allocated without Reserving first
+    | Revoke, Fold.Unallocated -> true, [] // idempotent handling
+    | Revoke, (Fold.Reserved by | Fold.Allocated (by, _)) when by = allocator -> true, [Events.Revoked] // release Reservation or Allocation
+    | Revoke, (Fold.Reserved _ | Fold.Allocated _ ) -> true, [] // NOTE we report success of achieving the intent (but, critically, we leave it to the actual owner to manage any actual revoke)
 
 type Service internal (resolve : TicketId -> Equinox.Stream<Events.Event, Fold.State>) =
 
@@ -70,7 +70,7 @@ module EventStore =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // because we only ever need the last event, we use the Equinox.EventStore access strategy that optimizes around that
         Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context,cache)=
+    let create (context, cache) =
         create (resolver (context, cache))
 
 module Cosmos =
@@ -81,5 +81,5 @@ module Cosmos =
         // because we only ever need the last event to build the state, we feed the events we are writing
         // (there's always exactly one if we are writing), into the unfolds slot so a single point read with etag check gets us state in one trip
         Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context,cache) =
+    let create (context, cache) =
         create (resolver (context, cache))
