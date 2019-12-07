@@ -13,6 +13,9 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let [<Literal>] categoryId = "LocationEpoch"
+    let (|AggregateId|) (locationId, epochId) =
+        let id = sprintf "%s_%s" (LocationId.toString locationId) (LocationEpochId.toString epochId)
+        Equinox.AggregateId(categoryId, id)
 
 module Folds =
 
@@ -69,10 +72,7 @@ let sync (balanceCarriedForward : Folds.Balance option) (decide : (Folds.Balance
 type Service internal (resolve, ?maxAttempts) =
 
     let log = Serilog.Log.ForContext<Service>()
-    let (|AggregateId|) (locationId, epochId) =
-        let id = sprintf "%s_%s" (LocationId.toString locationId) (LocationEpochId.toString epochId)
-        Equinox.AggregateId(Events.categoryId, id)
-    let (|Stream|) (AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
+    let (|Stream|) (Events.AggregateId id) = Equinox.Stream<Events.Event,Folds.State>(log, resolve id, maxAttempts = defaultArg maxAttempts 2)
 
     member __.Sync<'R>(locationId, epochId, prevEpochBalanceCarriedForward, decide, shouldClose) : Async<Result<'R>> =
         let (Stream stream) = (locationId, epochId)
