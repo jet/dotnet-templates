@@ -121,7 +121,7 @@ namespace TodoBackendTemplate.Web
                     Todo.State.Fold,
                     Todo.State.Initial,
                     Todo.State.IsOrigin,
-                    Todo.State.Compact));
+                    Todo.State.Snapshot));
 #endif
 #if aggregate
         public Aggregate.Service CreateAggregateService() =>
@@ -132,18 +132,18 @@ namespace TodoBackendTemplate.Web
                     Aggregate.State.Fold,
                     Aggregate.State.Initial,
                     Aggregate.State.IsOrigin,
-                    Aggregate.State.Compact));
+                    Aggregate.State.Snapshot));
 #endif
 #if (!aggregate && !todos)
 //        public Thing.Service CreateThingService() =>
 //            Thing.Service(
 //                _handlerLog,
 //                _context.Resolve(
-//                    EquinoxCodec.Create<Thing.Events.Event>(), // Assumes Union following IUnionContract pattern, see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
-//                    Thing.Folds.fold, 
-//                    Thing.Folds.initial, 
-//                    Thing.Folds.isOrigin, 
-//                    Thing.Folds.compact));
+//                    EquinoxCodec.Create<Thing.Events.Event>(), // Requires Union following IUnionContract pattern, see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
+//                    Thing.Folds.Fold,
+//                    Thing.Folds.Initial,
+//                    Thing.Folds.IsOrigin,
+//                    Thing.Folds.Snapshot));
 #endif
     }
 }

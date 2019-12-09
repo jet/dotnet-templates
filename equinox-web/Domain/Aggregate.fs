@@ -3,11 +3,11 @@
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    type CompactedData = { happened: bool }
+    type SnapshottedData = { happened: bool }
 
     type Event =
         | Happened
-        | Compacted of CompactedData
+        | Snapshotted of SnapshottedData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let (|For|) (id: string) = Equinox.AggregateId("Aggregate", id)
@@ -18,10 +18,10 @@ module Fold =
     let initial = { happened = false }
     let evolve s = function
         | Events.Happened -> { happened = true }
-        | Events.Compacted e -> { happened = e.happened} 
+        | Events.Snapshotted e -> { happened = e.happened}
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
-    let isOrigin = function Events.Compacted _ -> true | _ -> false
-    let compact state = Events.Compacted { happened = state.happened }
+    let isOrigin = function Events.Snapshotted _ -> true | _ -> false
+    let snapshot state = Events.Snapshotted { happened = state.happened }
 
 type Command =
     | MakeItSo

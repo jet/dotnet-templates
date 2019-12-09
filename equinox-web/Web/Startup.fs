@@ -129,7 +129,7 @@ module Services =
 //#if aggregate
          member __.CreateAggregateService() =
             let fold, initial = Aggregate.Fold.fold, Aggregate.Fold.initial
-            let snapshot = Aggregate.Fold.isOrigin, Aggregate.Fold.compact
+            let snapshot = Aggregate.Fold.isOrigin, Aggregate.Fold.snapshot
             Aggregate.create (resolver.Resolve(Aggregate.Events.codec, fold, initial, snapshot))
 //#endif
 //#if (!aggregate && !todos)

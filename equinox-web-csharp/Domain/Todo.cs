@@ -48,7 +48,7 @@ namespace TodoBackendTemplate
                 public int NextId { get; set; }
             }
 
-            public class Compacted : Event
+            public class Snapshotted : Event
             {
                 public int NextId { get; set; }
                 public ItemData[] Items { get; set; }
@@ -64,7 +64,7 @@ namespace TodoBackendTemplate
                     case nameof(Updated): return Codec.Decode<Updated>(json);
                     case nameof(Deleted): return Codec.Decode<Deleted>(json);
                     case nameof(Cleared): return Codec.Decode<Cleared>(json);
-                    case nameof(Compacted): return Codec.Decode<Compacted>(json);
+                    case nameof(Snapshotted): return Codec.Decode<Snapshotted>(json);
                     default: return null;
                 }
             }
@@ -118,7 +118,7 @@ namespace TodoBackendTemplate
                             nextId = e.NextId;
                             items.Clear();
                             break;
-                        case Event.Compacted e:
+                        case Event.Snapshotted e:
                             nextId = e.NextId;
                             items = e.Items.ToList();
                             break;
@@ -129,10 +129,10 @@ namespace TodoBackendTemplate
             }
             
             /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
-            public static bool IsOrigin(Event e) => e is Event.Cleared || e is Event.Compacted;
+            public static bool IsOrigin(Event e) => e is Event.Cleared || e is Event.Snapshotted;
             
             /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-            public static Event Snapshot(State state) => new Event.Compacted { NextId = state.NextId, Items = state.Items };
+            public static Event Snapshot(State state) => new Event.Snapshotted { NextId = state.NextId, Items = state.Items };
         }
 
         /// Properties that can be edited on a Todo List item

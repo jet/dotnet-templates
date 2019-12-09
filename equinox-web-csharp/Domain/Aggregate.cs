@@ -18,7 +18,7 @@ namespace TodoBackendTemplate
             {
             }
 
-            public class Compacted : Event
+            public class Snapshotted : Event
             {
                 public new bool Happened { get; set; }
             }
@@ -30,7 +30,7 @@ namespace TodoBackendTemplate
                 switch (et)
                 {
                     case nameof(Happened): return Codec.Decode<Happened>(json);
-                    case nameof(Compacted): return Codec.Decode<Compacted>(json);
+                    case nameof(Snapshotted): return Codec.Decode<Snapshotted>(json);
                     default: return null;
                 }
             }
@@ -53,7 +53,7 @@ namespace TodoBackendTemplate
                     case Event.Happened e:
                         s.Happened = true;
                         break;
-                    case Event.Compacted e:
+                    case Event.Snapshotted e:
                         s.Happened = e.Happened;
                         break;
                     default: throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
@@ -69,9 +69,9 @@ namespace TodoBackendTemplate
                 return s;
             }
 
-            public static bool IsOrigin(Event e) => e is Event.Compacted;
+            public static bool IsOrigin(Event e) => e is Event.Snapshotted;
             
-            public static Event Compact(State s) => new Event.Compacted {Happened = s.Happened};
+            public static Event Snapshot(State s) => new Event.Snapshotted {Happened = s.Happened};
         }
 
         /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 

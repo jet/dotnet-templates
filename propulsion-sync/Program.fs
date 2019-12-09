@@ -585,7 +585,6 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
         let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$"
-                || e.EventType.StartsWith("compacted", StringComparison.OrdinalIgnoreCase)
                 || not (streamFilter e.EventStreamId)  -> None
             | PropulsionStreamEvent e ->
                 if Propulsion.EventStore.Reader.payloadBytes x > 1_000_000 then
