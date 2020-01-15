@@ -3,7 +3,7 @@ module ProjectorTemplate.Handler
 let (|ClientId|) = ClientId.parse
 
 let (|Decode|) (codec : FsCodec.IUnionEncoder<_, _, _>) stream (span : Propulsion.Streams.StreamSpan<_>) =
-    span.events |> Seq.choose (StreamCodec.tryDecode codec Serilog.Log.Logger stream)
+    span.events |> Seq.choose (EventCodec.tryDecode codec Serilog.Log.Logger stream)
 
 let tryHandle
         (service : Todo.Service)

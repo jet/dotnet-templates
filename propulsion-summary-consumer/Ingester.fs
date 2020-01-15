@@ -53,7 +53,7 @@ let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger)
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
     let (|ClientId|) = ClientId.parse
     let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_, _, _>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
-        span.events |> Seq.rev |> Seq.tryPick (StreamCodec.tryDecode codec log stream)
+        span.events |> Seq.rev |> Seq.tryPick (EventCodec.tryDecode codec log stream)
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         match stream, (stream, span) with
         | Category (Contract.category, ClientId clientId), DecodeNewest Contract.codec (version, update) ->

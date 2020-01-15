@@ -3,7 +3,7 @@
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
 open System
 
-module StreamCodec =
+module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
     let tryDecode (codec : FsCodec.IUnionEncoder<_, _, _>) (log : Serilog.ILogger) (stream : string) (x : FsCodec.ITimelineEvent<byte[]>) =
@@ -16,14 +16,18 @@ module StreamCodec =
         | x -> x
 
 [<AutoOpen>]
-module StreamNameParser =
+module StreamName =
     let private catSeparators = [|'-'|]
-    let private split (streamName : string) = streamName.Split(catSeparators, 2, StringSplitOptions.RemoveEmptyEntries)
-    let category (streamName : string) = let fragments = split streamName in fragments.[0]
-    let (|Category|Unknown|) (streamName : string) =
-        match split streamName with
-        | [| category; id |] -> Category (category, id)
-        | _ -> Unknown streamName
+    let private split (sep : char[]) (streamName : string) = streamName.Split(sep, 2, StringSplitOptions.RemoveEmptyEntries)
+    let category (streamName : string) = let fragments = split catSeparators streamName in fragments.[0]
+    let (|Two|_|) (sep : char[]) value =
+        match split sep value with
+        | [| category; id |] -> Some (category, id)
+        | _ -> None
+    let (|Category|Other|) (streamName : string) =
+        match streamName with
+        | Two catSeparators (category, id) -> Category (category, id)
+        | _ -> Other streamName
 
 module Guid =
     let inline toStringN (x : Guid) = x.ToString "N"

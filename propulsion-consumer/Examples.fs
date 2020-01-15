@@ -6,7 +6,7 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Threading
 
-module StreamCodec =
+module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
     let tryDecode (codec : FsCodec.IUnionEncoder<_, _, _>) (log : ILogger) (stream : string) (x : FsCodec.ITimelineEvent<byte[]>) =
@@ -19,14 +19,18 @@ module StreamCodec =
         | x -> x
 
 [<AutoOpen>]
-module StreamNameParser =
+module StreamName =
     let private catSeparators = [|'-'|]
-    let private split (streamName : string) = streamName.Split(catSeparators, 2, StringSplitOptions.RemoveEmptyEntries)
-    let category (streamName : string) = let fragments = split streamName in fragments.[0]
-    let (|Category|Unknown|) (streamName : string) =
-        match split streamName with
-        | [| category; id |] -> Category (category, id)
-        | _ -> Unknown streamName
+    let private split (sep : char[]) (streamName : string) = streamName.Split(sep, 2, StringSplitOptions.RemoveEmptyEntries)
+    let category (streamName : string) = let fragments = split catSeparators streamName in fragments.[0]
+    let (|Two|_|) (sep : char[]) value =
+        match split sep value with
+        | [| category; id |] -> Some (category, id)
+        | _ -> None
+    let (|Category|Other|) (streamName : string) =
+        match streamName with
+        | Two catSeparators (category, id) -> Category (category, id)
+        | _ -> Other streamName
 
 /// This more advanced sample shows processing >1 category of events, and maintaining derived state based on it
 // When processing streamwise, the handler is passed deduplicated spans of events per stream, with a guarantee of max 1
@@ -56,7 +60,7 @@ module MultiStreams =
             | Cleared
             interface TypeShape.UnionContract.IUnionContract
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-        let tryDecode = StreamCodec.tryDecode codec
+        let tryDecode = EventCodec.tryDecode codec
         let [<Literal>] category = "SavedForLater"
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
@@ -69,7 +73,7 @@ module MultiStreams =
             | Unfavorited       of Unfavorited
             interface TypeShape.UnionContract.IUnionContract
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-        let tryDecode = StreamCodec.tryDecode codec
+        let tryDecode = EventCodec.tryDecode codec
         let [<Literal>] category = "Favorites"
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int | OtherMessage of string
@@ -92,7 +96,7 @@ module MultiStreams =
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
                 SavedForLaterEvents (id, s, decode SavedForLater.tryDecode)
             | Category (categoryName, _) -> OtherCategory (categoryName, Seq.length span.events)
-            | Unknown streamName -> UnknownMessage streamName
+            | Other streamName -> UnknownMessage streamName
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
         member __.Handle(streamName : string, span : Propulsion.Streams.StreamSpan<_>) = async {
