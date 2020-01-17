@@ -4,19 +4,20 @@ module Location.Series
 [<RequireQualifiedAccess>]
 module Events =
 
+    let [<Literal>] category = "LocationSeries"
+    let (|For|) id = Equinox.AggregateId (category, LocationId.toString id)
+
     type Started = { epochId : LocationEpochId }
     type Event =
         | Started of Started
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] category = "LocationSeries"
-    let (|For|) id = Equinox.AggregateId(category, LocationId.toString id)
 
 module Fold =
 
     type State = LocationEpochId
     let initial = LocationEpochId.parse -1
-    let evolve _state = function
+    let private evolve _state = function
         | Events.Started e -> e.epochId
     let fold = Seq.fold evolve
 
