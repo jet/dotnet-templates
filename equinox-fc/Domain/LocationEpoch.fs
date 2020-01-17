@@ -4,6 +4,11 @@ module Location.Epoch
 [<RequireQualifiedAccess>]
 module Events =
 
+    let [<Literal>] category = "LocationEpoch"
+    let (|For|) (locationId, epochId) =
+        let id = sprintf "%s_%s" (LocationId.toString locationId) (LocationEpochId.toString epochId)
+        Equinox.AggregateId (category, id)
+
     type CarriedForward = { initial : int }
     type Delta = { value : int }
     type Event =
@@ -12,10 +17,6 @@ module Events =
         | Delta of Delta
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] category = "LocationEpoch"
-    let (|For|) (locationId, epochId) =
-        let id = sprintf "%s_%s" (LocationId.toString locationId) (LocationEpochId.toString epochId)
-        Equinox.AggregateId(category, id)
 
 module Fold =
 
