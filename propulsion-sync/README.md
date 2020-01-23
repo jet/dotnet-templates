@@ -31,11 +31,11 @@ This project was generated using:
         # generate a cosmos container to store events in
         eqx init -ru 1000 cosmos
 
-2. We'll be operating a ChangeFeedProcessor, so use `eqx initaux` to make a `-aux` container (unless there already is one)
+2. We'll be operating a ChangeFeedProcessor, so use `propulsion init` to make a `-aux` container (unless there already is one)
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
         # default name is "($EQUINOX_COSMOS_CONTAINER)-aux"
-        eqx initaux -ru 400 cosmos
+        propulsion init -ru 400 cosmos
 
 3. To run an instance of the Sync tool feeding into CosmosDb:
 

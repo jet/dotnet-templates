@@ -136,7 +136,7 @@ module Services =
         // TODO implement Service builders, e.g. 
         //member __.CreateThingService() =
         //   let codec = genCodec<Thing.Events.Event>()
-        //   let fold, initial = Thing.Folds.fold, Thing.Folds.initial
+        //   let fold, initial = Thing.Fold.fold, Thing.Folds.initial
         //   let snapshot = Thing.Folds.isOrigin, Thing.Folds.compact
         //   Thing.Service(handlerLog, resolver.Resolve(codec, fold, initial, snapshot))
 //#endif
