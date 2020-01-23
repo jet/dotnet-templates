@@ -71,23 +71,25 @@ module CmdParser =
 
     [<NoEquality; NoComparison>]
     type Parameters =
-        | [<AltCommandLine "-g"; Unique>]   Group of string
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
-        | [<AltCommandLine "-w"; Unique>]   MaxDop of int
+        | [<AltCommandLine "-g"; Unique>]   Group of string
         | [<AltCommandLine "-m"; Unique>]   MaxInflightGb of float
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
+
+        | [<AltCommandLine "-w"; Unique>]   MaxDop of int
         | [<AltCommandLine "-v"; Unique>]   Verbose
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
 
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Group _ ->                "specify Kafka Consumer Group Id. (optional if environment variable PROPULSION_KAFKA_GROUP specified)"
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic name. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
-                | MaxDop _ ->               "maximum number of items to process in parallel. Default: 1024."
+                | Group _ ->                "specify Kafka Consumer Group Id. (optional if environment variable PROPULSION_KAFKA_GROUP specified)"
                 | MaxInflightGb _ ->        "maximum GB of data to read ahead. Default: 0.5."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off."
+
+                | MaxDop _ ->               "maximum number of items to process in parallel. Default: 1024."
                 | Verbose _ ->              "request verbose logging."
                 | Cosmos _ ->               "specify CosmosDb input parameters"
 
@@ -96,9 +98,10 @@ module CmdParser =
         member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member __.Group =                   a.TryGetResult Group  |> defaultWithEnvVar "PROPULSION_KAFKA_GROUP"  "Group"
-        member __.MaxDop =                  match a.TryGetResult MaxDop with Some x -> x | None -> 1024
         member __.MaxInFlightBytes =        (match a.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+
+        member __.MaxDop =                  match a.TryGetResult MaxDop with Some x -> x | None -> 1024
         member __.Verbose =                 a.Contains Verbose
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
