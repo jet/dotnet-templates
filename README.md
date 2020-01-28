@@ -137,6 +137,104 @@ There's [no integration test for the templates yet](https://github.com/jet/dotne
 
 Pssst ... the above is also what implementing [#2](https://github.com/jet/dotnet-templates/issues/2) involves!
 
+# PATTERNS / GUIDANCE
+
+## Strongly typed ids
+
+- `FSharp.UMX` is useful to transparently pin types in a message contract cheaply
+
+## Managing Projections and Reactions with Equinox, Propulsion and FsKafka
+
+## Microservice Program.fs
+
+All the templates herein attempt to adhere to a consistent structure for the root `module` (the one containing an Application’s `main`)
+
+### `module Settings`
+
+_Responsible for: Loading secrets and configuration into Environment variables_
+
+Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an applications data sources. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`CmdParser` section](#module-cmdparser)
+
+The `Settings` module is responsible for the following:
+1. Feeding defaults into process-local Environment Variables, _where those are not already supplied_
+2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `CmdParser`
+
+- DO (sparingly) rely on inputs from the command line to drive the lookup process
+- DONT log values (CmdParser’s Arguments wrappers should do that as applicable as part of the wire process)
+- DONT perform redundant work to load values if they’ve already been supplied via Environment Variables
+
+### `module CmdParser`
+
+_Responsible for: mapping Environment Variables and Command Line `argv` to an `Arguments` model_
+
+The `CmdParser` module fulfils three roles:
+
+1. uses [Argu](http://fsprojects.github.io/Argu/tutorial.html) to map the inputs passed via `argv` to values per argument, providing good error and/or help messages in the case of invalid inputs
+2. Is responsible for managing all defaulting of input values _including echoing them them such that an operator can infer the arguments in force_ without having to go look up defaults in a source control repo
+3. Exposes an object model that the `build` or `start` functions can use to succinctly wire up the dependencies without needing to touch `Argu`, `Settings`, or any concrete Configuration or Secrets store technology
+
+- DO log the values being applied, especially where defaulting is in play
+- DONT log secrets
+- DO take values via Argu or Environment Variables
+- DONT mix in any application or settings specific logic (no retrieval of values, don’t make people read the boilerplate to see if this app has custom secrets retrieval)
+
+### `module Logging`
+
+_Responsible for applying logging config and setting up loggers for the application_
+
+- DO allow overriding of log level via a command line argument and/or environment variable (by passing CmdParser.Arguments or values from it
+
+#### example
+
+```
+module Logging =
+    let initialize verbose =
+	Log.Logger <- LoggerConfiguration(….)
+```
+
+### `start` function
+
+The `start` function contains the specific wireup relevant to the infrastructure requirements of the microservice - it's the sole aspect that is not expected to adhere to a standard layout as prescribed in this section.
+
+#### example
+
+```
+let start (args : CmdParser.Arguments) =
+	…
+	(yields a started application loop)
+```
+
+### `run`,  `main` functions
+
+The `run` function formalizes the overall pattern. It is responsible for:
+
+1. Managing the correct sequencing of the startup procedure, weaving together the above elements,
+2. managing the emission of startup or abnormal termination messages to the console
+
+- DONT alter the canonical form - the processing is in this exact order for a multitude of reasons
+- DONT have any application specific wire within `run` - any such logic should live within the `start` function
+
+#### example
+
+```
+let run argv =
+    try let args = CmdParser.parse argv
+        Logging.initialize args.Verbose
+        Settings.initialize ()
+        use consumer = start args
+        consumer.AwaitCompletion() |> Async.RunSynchronously
+        if consumer.RanToCompletion then 0 else 2
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
+        // If the handler throws, we exit the app in order to let an orchestrator flag the failure
+        | e -> Log.Fatal(e, "Exiting"); 1
+
+[<EntryPoint>]
+let main argv =
+    try run argv
+    finally Log.CloseAndFlush()
+```
+
 ## CONTRIBUTING
 
 Please don't hesitate to [create a GitHub issue](https://github.com/jet/dotnet-templates/issues/new) for any questions so others can benefit from the discussion. For any significant planned changes or additions, please err on the side of [reaching out early](https://github.com/jet/dotnet-templates/issues/new) so we can align expectations - there's nothing more frustrating than having your hard work not yielding a mutually agreeable result ;)
