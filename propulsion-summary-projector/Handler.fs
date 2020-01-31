@@ -1,8 +1,6 @@
 module ProjectorTemplate.Handler
 
-let (|ClientId|) = ClientId.parse
-
-let (|Decode|) (codec : FsCodec.IUnionEncoder<_, _, _>) stream (span : Propulsion.Streams.StreamSpan<_>) =
+let (|Decode|) (codec : FsCodec.IEventCodec<_, _, _>) stream (span : Propulsion.Streams.StreamSpan<_>) =
     span.events |> Seq.choose (EventCodec.tryDecode codec Serilog.Log.Logger stream)
 
 let tryHandle
@@ -10,7 +8,7 @@ let tryHandle
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<_>)
         (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option> = async {
     match stream, span with
-    | Category (Todo.Events.category, ClientId clientId), (Decode Todo.Events.codec stream events)
+    | FsCodec.StreamName.CategoryAndId (Todo.Events.CategoryId, ClientId.Parse clientId), (Decode Todo.Events.codec stream events)
             when events |> Seq.exists Todo.Fold.impliesStateChange ->
         let! version', summary = service.QueryWithVersion(clientId, Producer.Contract.ofState)
         let wrapped = Producer.generate stream version' summary

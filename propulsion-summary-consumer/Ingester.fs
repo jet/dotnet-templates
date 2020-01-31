@@ -7,6 +7,8 @@ open System
 /// Defines the contract we share with the SummaryProjector's published feed
 module Contract =
 
+    let [<Literal>] CategoryId = "TodoSummary"
+
     /// A single Item in the Todo List
     type ItemInfo = { id : int; order : int; title : string; completed : bool }
 
@@ -22,7 +24,6 @@ module Contract =
         let up (encoded : FsCodec.ITimelineEvent<_>, message) : Union = encoded.Index, message
         let down _union = failwith "Not Implemented"
         FsCodec.NewtonsoftJson.Codec.Create<Union, Message, (*'Meta*)obj>(up, down)
-    let [<Literal>] category = "TodoSummary"
 
 [<RequireQualifiedAccess>]
 type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of count : int
@@ -51,12 +52,11 @@ let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger)
             { items =
                 [| for x in x.items ->
                     { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
-    let (|ClientId|) = ClientId.parse
-    let (|DecodeNewest|_|) (codec : FsCodec.IUnionEncoder<_, _, _>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
+    let (|DecodeNewest|_|) (codec : FsCodec.IEventCodec<_, _, _>) (stream, span : Propulsion.Streams.StreamSpan<_>) : 'summary option =
         span.events |> Seq.rev |> Seq.tryPick (EventCodec.tryDecode codec log stream)
     let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         match stream, (stream, span) with
-        | Category (Contract.category, ClientId clientId), DecodeNewest Contract.codec (version, update) ->
+        | FsCodec.StreamName.CategoryAndId (Contract.CategoryId, ClientId.Parse clientId), DecodeNewest Contract.codec (version, update) ->
             match! service.Ingest(clientId, version, map update) with
             | true -> return Outcome.Ok span.events.Length
             | false -> return Outcome.Skipped span.events.Length
@@ -65,4 +65,4 @@ let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger)
     let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse spanJson
     let stats = Stats(log)
-    Propulsion.Kafka.StreamsConsumer.Start(log, config, parseStreamSummaries, ingestIncomingSummaryMessage, maxDop, stats, category)
+    Propulsion.Kafka.StreamsConsumer.Start(log, config, parseStreamSummaries, ingestIncomingSummaryMessage, maxDop, stats)

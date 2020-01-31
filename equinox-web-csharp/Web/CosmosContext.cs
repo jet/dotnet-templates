@@ -61,8 +61,8 @@ namespace TodoBackendTemplate
             return new Gateway(conn, new BatchingPolicy(defaultMaxItems: 500));
         }
 
-        public override Func<Target, Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IUnionEncoder<TEvent, byte[], object> codec,
+        public override Func<string, Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
+            FsCodec.IEventCodec<TEvent, byte[], object> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,

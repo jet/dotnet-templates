@@ -3,6 +3,8 @@
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
+    let (|For|) (id: string) = FsCodec.StreamName.create "Aggregate" id
+
     type SnapshottedData = { happened: bool }
 
     type Event =
@@ -10,7 +12,6 @@ module Events =
         | Snapshotted of SnapshottedData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let (|For|) (id: string) = Equinox.AggregateId("Aggregate", id)
 
 module Fold =
 

@@ -6,6 +6,7 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using FsCodec;
 
 namespace TodoBackendTemplate
 {
@@ -36,7 +37,7 @@ namespace TodoBackendTemplate
             }
 
             public static Tuple<string, byte[]> Encode(Event e) => Tuple.Create(e.GetType().Name, Codec.Encode(e));
-            public static Target For(ClientId id) => Target.NewAggregateId("Aggregate", id.ToString());
+            public static string For(ClientId id) => StreamNameModule.create("Aggregate", id.ToString());
         }
         public class State
         {
@@ -119,7 +120,7 @@ namespace TodoBackendTemplate
             /// Maps a ClientId to Handler for the relevant stream
             readonly Func<ClientId, Handler> _stream;
 
-            public Service(ILogger handlerLog, Func<Target, IStream<Event, State>> resolve) =>
+            public Service(ILogger handlerLog, Func<string, IStream<Event, State>> resolve) =>
                 _stream = id => new Handler(handlerLog, resolve(Event.For(id)));
 
             /// Execute the specified command 

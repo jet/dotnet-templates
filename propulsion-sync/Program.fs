@@ -486,6 +486,7 @@ module EventV0Parser =
             member x.Timestamp = x.c
             member __.CorrelationId = null
             member __.CausationId = null
+            member __.Context = null
 
     type Microsoft.Azure.Documents.Document with
         member document.Cast<'T>() =
@@ -496,25 +497,24 @@ module EventV0Parser =
     /// We assume all Documents represent Events laid out as above
     let parse (d : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> =
         let e = d.Cast<EventV0>()
-        { stream = e.s; event = e } : _
+        { stream = FsCodec.StreamName.parse e.s; event = e } : _
 
-let transformV0 categorize catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
+let transformV0 catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
-    let streamName = (*if parsed.Stream.Contains '-' then parsed.Stream else "Prefixed-"+*)parsed.stream
-    if catFilter (categorize streamName) then
+    let (FsCodec.StreamName.CategoryAndId (cat,_)) = parsed.stream
+    if catFilter cat then
         yield parsed }
 //#else
-let transformOrFilter categorize catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for { stream = s} as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
+let transformOrFilter catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
+    for { stream = FsCodec.StreamName.CategoryAndId (cat,_) } as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-        if catFilter (categorize s) then
+        if catFilter cat then
             yield e }
 //#endif
 
 let [<Literal>] appName = "SyncTemplate"
 
 let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
-    let categorize (streamName : string) = streamName.Split([|'-'|], 2).[0]
     let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
         | Choice1Of2 cosmos ->
@@ -542,7 +542,7 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
-                CosmosSink.Start(log, args.MaxReadAhead, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
+                CosmosSink.Start(log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
                 args.CategoryFilterFunction(excludeLong=true)
             Some (mainConn, containers), sink, streamFilter
         | Choice2Of2 es ->
@@ -551,15 +551,15 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, appName, connIndex)
                 return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, categorize, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+            let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
         let discovery, source, connector = srcC.BuildConnectionDetails()
 #if marveleqx
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 categorize streamFilter))
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 streamFilter))
 #else
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter categorize streamFilter))
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
 #endif
         let runPipeline =
             CosmosSource.Run(log, connector.CreateClient(appName, discovery), source, aux,
@@ -577,8 +577,8 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
             let caching =
                 let c = Equinox.Cache(appName, sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
-            Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve
+            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
+            Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let withNullData (e : FsCodec.ITimelineEvent<_>) : FsCodec.ITimelineEvent<_> =
             FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, null, e.Meta, timestamp=e.Timestamp) :> _
@@ -597,7 +597,7 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
             c.ReadConnection
         let runPipeline =
             EventStoreSource.Run(
-                log, sink, checkpoints, connect, spec, categorize, tryMapEvent streamFilter,
+                log, sink, checkpoints, connect, spec, tryMapEvent streamFilter,
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
 

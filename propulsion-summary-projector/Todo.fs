@@ -3,6 +3,9 @@
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
+    let [<Literal>] CategoryId = "Todos"
+    let (|ForClientId|) (id : ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString id)
+
     type ItemData =     { id : int; order : int; title : string; completed : bool }
     type DeletedData =  { id : int }
     type ClearedData =  { nextId : int }
@@ -15,8 +18,6 @@ module Events =
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] category = "Todos"
-    let (|For|) (id : ClientId) = Equinox.AggregateId(category, ClientId.toString id)
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Fold =
@@ -44,7 +45,7 @@ module Fold =
 /// Defines operations that a Controller or Projector can perform on a Todo List
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve (Events.ForClientId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     /// Load and render the state
     member __.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =

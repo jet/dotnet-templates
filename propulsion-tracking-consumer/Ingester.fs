@@ -36,11 +36,9 @@ type Stats(log, ?statsInterval, ?stateInterval) =
             log.Information(" Used {ok} Ignored {skipped}", ok, skipped)
             ok <- 0; skipped <- 0
 
-let (|SkuId|) = SkuId.parse
-
 /// Starts a processing loop accumulating messages by stream - each time we handle all the incoming updates for a give Sku as a single transaction
 let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger) (service : SkuSummary.Service) maxDop =
-    let ingestIncomingSummaryMessage(SkuId skuId, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+    let ingestIncomingSummaryMessage(FsCodec.StreamName.CategoryAndId (_,SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
         let items =
             [ for e in span.events do
                 let x = Contract.parse e.Data
@@ -57,6 +55,5 @@ let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger)
     }
     let stats = Stats(log)
     // No categorization required, our inputs are all one big family defying categorization
-    let category _streamName = "Sku"
     let sequencer = Propulsion.Kafka.Core.StreamKeyEventSequencer()
-    Propulsion.Kafka.StreamsConsumer.Start(log, config, sequencer.ToStreamEvent, ingestIncomingSummaryMessage, maxDop, stats, category)
+    Propulsion.Kafka.StreamsConsumer.Start(log, config, sequencer.ToStreamEvent, ingestIncomingSummaryMessage, maxDop, stats)

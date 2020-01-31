@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using FsCodec;
 
 namespace TodoBackendTemplate
 {
@@ -72,8 +73,8 @@ namespace TodoBackendTemplate
             public static Tuple<string, byte[]> Encode(Event e) => Tuple.Create(e.GetType().Name, Codec.Encode(e));
 
             /// Maps a ClientId to the Target that specifies the Stream in which the data for that client will be held
-            public static Target For(ClientId id) =>
-                Target.NewAggregateId("Todos", id?.ToString() ?? "1");
+            public static string For(ClientId id) =>
+                StreamNameModule.create("Todos", id?.ToString() ?? "1");
         }
 
         /// Present state of the Todo List as inferred from the Events we've seen to date
@@ -245,7 +246,7 @@ namespace TodoBackendTemplate
             /// Maps a ClientId to Handler for the relevant stream
             readonly Func<ClientId, Handler> _stream;
 
-            public Service(ILogger handlerLog, Func<Target, IStream<Event, State>> resolve) =>
+            public Service(ILogger handlerLog, Func<string, IStream<Event, State>> resolve) =>
                 _stream = id => new Handler(handlerLog, resolve(Event.For(id)));
 
             //

@@ -8,14 +8,27 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
-    public static class HandlerExtensions
+    public class Accumulator<TEvent,TState>
     {
-        public static void Execute<TEvent, TState>(this Accumulator<TEvent, TState> that, Func<TState, IEnumerable<TEvent>> f) =>
-            that.Transact(FuncConvert.FromFunc<TState, FSharpList<TEvent>>(s => ListModule.OfSeq(f(s))));
+        readonly Func<TState, IEnumerable<TEvent>, TState> _fold;
+        readonly TState _state;
+        public List<TEvent> Accumulated { get; } = new List<TEvent>();
+
+        public Accumulator(Func<TState,IEnumerable<TEvent>,TState> fold, TState state)
+        {
+            _fold = fold;
+            _state = state;
+        }
+
+        public TState State => _fold(_state,Accumulated);
+
+        public void Execute(Func<TState, IEnumerable<TEvent>> f) => Accumulated.AddRange(f(State));
+
     }
 
     public class EquinoxStream<TEvent, TState> : Stream<TEvent, TState>
@@ -35,9 +48,9 @@ namespace TodoBackendTemplate
         {
             FSharpList<TEvent> decide_(TState state)
             {
-                var a = new Accumulator<TEvent, TState>(FuncConvert.FromFunc(_fold), state);
+                var a = new Accumulator<TEvent, TState>(_fold, state);
                 a.Execute(interpret);
-                return a.Accumulated;
+                return ListModule.OfSeq(a.Accumulated);
             }
             return await FSharpAsync.StartAsTask(Transact(FuncConvert.FromFunc<TState, FSharpList<TEvent>>(decide_)), null, null);
         }
@@ -47,9 +60,9 @@ namespace TodoBackendTemplate
         {
             Tuple<T, FSharpList<TEvent>> decide_(TState state)
             {
-                var a = new Accumulator<TEvent, TState>(FuncConvert.FromFunc(_fold), state);
+                var a = new Accumulator<TEvent, TState>(_fold, state);
                 var r = decide(a);
-                return Tuple.Create(r, a.Accumulated);
+                return Tuple.Create(r, ListModule.OfSeq(a.Accumulated));
             }
             return await FSharpAsync.StartAsTask<T>(Transact(FuncConvert.FromFunc<TState, Tuple<T, FSharpList<TEvent>>>(decide_)), null, null);
         }

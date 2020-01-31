@@ -10,8 +10,8 @@ namespace TodoBackendTemplate
 {
     public abstract class EquinoxContext
     {
-        public abstract Func<Target, Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IUnionEncoder<TEvent, byte[], object> codec,
+        public abstract Func<string, Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
+            FsCodec.IEventCodec<TEvent, byte[], object> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
@@ -22,7 +22,7 @@ namespace TodoBackendTemplate
 
     public static class EquinoxCodec
     {
-        public static FsCodec.IUnionEncoder<TEvent, byte[], object> Create<TEvent>(
+        public static FsCodec.IEventCodec<TEvent, byte[], object> Create<TEvent>(
             Func<TEvent, Tuple<string, byte[]>> encode,
             Func<string, byte[], TEvent> tryDecode,
             JsonSerializerSettings settings = null) where TEvent: class
@@ -33,7 +33,7 @@ namespace TodoBackendTemplate
             FSharpOption<TEvent> TryDecodeImpl(Tuple<string, byte[]> encoded) => OptionModule.OfObj(tryDecode(encoded.Item1, encoded.Item2));
         }
 
-        public static FsCodec.IUnionEncoder<TEvent, byte[], object> Create<TEvent>(JsonSerializerSettings settings = null) where TEvent: UnionContract.IUnionContract =>
+        public static FsCodec.IEventCodec<TEvent, byte[], object> Create<TEvent>(JsonSerializerSettings settings = null) where TEvent: UnionContract.IUnionContract =>
             FsCodec.NewtonsoftJson.Codec.Create<TEvent>(settings);
     }
 }

@@ -3,6 +3,9 @@
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
+    let [<Literal>] CategoryId = "SkuSummary"
+    let (|ForSkuId|) (id : SkuId) = FsCodec.StreamName.create CategoryId (SkuId.toString id)
+
     type ItemData =
         {   locationId : string
             messageIndex : int64
@@ -14,8 +17,6 @@ module Events =
         | Snapshotted of ItemData[]
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] category = "SkuSummary"
-    let (|For|) (id : SkuId) = Equinox.AggregateId(category, SkuId.toString id)
 
 module Fold =
 
@@ -51,7 +52,7 @@ let interpret command (state : Fold.State) =
 
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve (Events.ForSkuId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     /// <returns>count of items</returns>
     member __.Ingest(skuId, items) : Async<int> =

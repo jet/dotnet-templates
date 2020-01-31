@@ -3,6 +3,9 @@
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
+    let [<Literal>] CategoryId = "TodoSummary"
+    let (|ForClientId|) (clientId: ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString clientId)
+
     type ItemData = { id: int; order: int; title: string; completed: bool }
     type SummaryData = { items : ItemData[] }
     type IngestedData = { version : int64; value : SummaryData }
@@ -10,8 +13,6 @@ module Events =
         | Ingested of IngestedData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] category = "TodoSummary"
-    let (|For|) (clientId: ClientId) = Equinox.AggregateId(category, ClientId.toString clientId)
 
 module Fold =
 
@@ -45,7 +46,7 @@ let render : Fold.State -> Item[] = function
 /// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve (Events.ForClientId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
     member __.Ingest(clientId, version, value) : Async<bool> =
         let stream = resolve clientId

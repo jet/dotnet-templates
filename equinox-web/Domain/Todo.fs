@@ -3,6 +3,10 @@
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
+    let [<Literal>] CategoryId = "Todos"
+    /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
+    let (|ForClientId|) (clientId: ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString clientId)
+
     type ItemData =     { id : int; order : int; title : string; completed : bool }
     type DeletedData =  { id : int }
     type ClearedData =  { nextId : int }
@@ -19,9 +23,6 @@ module Events =
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-    let [<Literal>] category = "Todos"
-    /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|For|) (clientId: ClientId) = Equinox.AggregateId(category, ClientId.toString clientId)
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Fold =
@@ -77,21 +78,20 @@ type View = { id: int; order: int; title: string; completed: bool }
 /// Defines operations that a Controller can perform on a Todo List
 type Service internal (log, resolve, maxAttempts) =
 
-    /// Maps a ClientId to Handler for the relevant stream
-    let (|Stream|) (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve (Events.ForClientId streamId) = Equinox.Stream(log, resolve streamId, maxAttempts = maxAttempts)
 
-    /// Execute `command`; does not emit the post state
-    let execute (Stream stream) command : Async<unit> =
+    let execute clientId command =
+        let stream = resolve clientId
         stream.Transact(interpret command)
-    /// Handle `command`, return the items after the command's intent has been applied to the stream
-    let handle (Stream stream) command : Async<Events.ItemData list> =
-        stream.Transact(fun state ->
-            let ctx = Equinox.Accumulator(Fold.fold, state)
-            ctx.Transact(interpret command)
-            ctx.State.items, ctx.Accumulated)
-    /// Establish the present state of the Stream, project from that as specified by `projection`
-    let query (Stream stream) (projection : Fold.State -> 't) : Async<'t> =
+    let query clientId projection =
+        let stream = resolve clientId
         stream.Query projection
+    let handle clientId command =
+        let stream = resolve clientId
+        stream.Transact(fun state ->
+            let events = interpret command state
+            let state' = Fold.fold state events
+            state'.items,events)
 
     let render (item: Events.ItemData) : View =
         {   id = item.id

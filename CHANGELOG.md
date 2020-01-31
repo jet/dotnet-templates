@@ -10,6 +10,10 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Target `Equinox`.* v `2.0.0-rc9`, `Propulsion`.* v `2.0.0-rc1`, `FsCodec`.* v `2.0.0-rc3`
+- Standardize Aggregate layouts
+
 ### Removed
 ### Fixed
 

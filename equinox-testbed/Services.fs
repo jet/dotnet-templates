@@ -8,6 +8,8 @@ module Domain =
         // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
         module Events =
 
+            let (|ForClientId|) (id : ClientId) = FsCodec.StreamName.create "Favorites" (ClientId.toString id)
+
             type Favorited =                            { date: System.DateTimeOffset; skuId: SkuId }
             type Unfavorited =                          { skuId: SkuId }
             module Compaction =
@@ -19,7 +21,6 @@ module Domain =
                 | Unfavorited                           of Unfavorited
                 interface TypeShape.UnionContract.IUnionContract
             let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
-            let (|For|) (id : ClientId) = Equinox.AggregateId("Favorites", ClientId.toString id)
 
         module Fold =
 
@@ -64,7 +65,7 @@ module Domain =
 
         type Service internal (log, resolve, maxAttempts) =
 
-            let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+            let resolve (Events.ForClientId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
             member __.Execute(clientId, command) =
                 let stream = resolve clientId
@@ -86,7 +87,7 @@ open Microsoft.Extensions.DependencyInjection
 
 type StreamResolver(storage) =
     member __.Resolve
-        (   codec : FsCodec.IUnionEncoder<'event, byte[], _>,
+        (   codec : FsCodec.IEventCodec<'event, byte[], _>,
             fold: ('state -> 'event seq -> 'state),
             initial: 'state,
             snapshot: (('event -> bool) * ('state -> 'event))) =

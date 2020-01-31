@@ -96,7 +96,7 @@ module Services =
     /// Builds a Stream Resolve function appropriate to the store being used
     type StreamResolver(storage : Storage.Instance) =
         member __.Resolve
-            (   codec : FsCodec.IUnionEncoder<'event, byte[], _>,
+            (   codec : FsCodec.IEventCodec<'event, byte[], _>,
                 fold: ('state -> 'event seq -> 'state),
                 initial: 'state,
                 snapshot: (('event -> bool) * ('state -> 'event))) =
@@ -136,8 +136,8 @@ module Services =
         // TODO implement Service builders, e.g. 
         //member __.CreateThingService() =
         //   let codec = genCodec<Thing.Events.Event>()
-        //   let fold, initial = Thing.Fold.fold, Thing.Folds.initial
-        //   let snapshot = Thing.Folds.isOrigin, Thing.Folds.compact
+        //   let fold, initial = Thing.Fold.fold, Thing.Fold.initial
+        //   let snapshot = Thing.Fold.isOrigin, Thing.Fold.compact
         //   Thing.Service(handlerLog, resolver.Resolve(codec, fold, initial, snapshot))
 //#endif
 

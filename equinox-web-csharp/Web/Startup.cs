@@ -140,10 +140,10 @@ namespace TodoBackendTemplate.Web
 //                _handlerLog,
 //                _context.Resolve(
 //                    EquinoxCodec.Create<Thing.Events.Event>(), // Requires Union following IUnionContract pattern, see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
-//                    Thing.Folds.Fold,
-//                    Thing.Folds.Initial,
-//                    Thing.Folds.IsOrigin,
-//                    Thing.Folds.Snapshot));
+//                    Thing.Fold.Fold,
+//                    Thing.Fold.Initial,
+//                    Thing.Fold.IsOrigin,
+//                    Thing.Fold.Snapshot));
 #endif
     }
 }

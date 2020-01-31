@@ -203,8 +203,6 @@ let build (args : CmdParser.Arguments) =
         return span
             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize }
-    let categorize (streamName : string) =
-        streamName.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
     let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
     let projector =
         Propulsion.Kafka.StreamsProducerSink.Start(
@@ -217,11 +215,10 @@ let build (args : CmdParser.Arguments) =
         let r = Random()
         let ms = r.Next(1, span.events.Length)
         do! Async.Sleep ms }
-    let categorize (streamName : string) = streamName.Split([|'-'|], 2, StringSplitOptions.RemoveEmptyEntries).[0]
     let sink =
         Propulsion.Streams.StreamsProjector.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, project,
-            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+            statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
 #endif
     let runSourcePipeline =

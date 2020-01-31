@@ -330,8 +330,8 @@ let build (args : CmdParser.Arguments) =
         let resolveCheckpointStream =
             let codec = FsCodec.NewtonsoftJson.Codec.Create()
             let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Folds.isOrigin, Checkpoint.Folds.transmute)
-            fun target -> Equinox.Cosmos.Resolver(context, codec, Checkpoint.Folds.fold, Checkpoint.Folds.initial, caching, access).Resolve(target, Equinox.AllowStale)
+            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
+            fun target -> Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve(target, Equinox.AllowStale)
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, Log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
         let service =
             let connection = srcE.Connect(Log.Logger, Log.Logger, appName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
@@ -341,7 +341,7 @@ let build (args : CmdParser.Arguments) =
 
         let sink =
             Propulsion.Streams.Sync.StreamsSync.Start(
-                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, category,
+                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
                  statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
         let connect () = let c = srcE.Connect(Log.Logger, Log.Logger, appName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave) in c.ReadConnection
         let tryMapEvent (x : EventStore.ClientAPI.ResolvedEvent) =
@@ -349,7 +349,7 @@ let build (args : CmdParser.Arguments) =
             | e when not e.IsJson || e.EventStreamId.StartsWith "$" -> None
             | PropulsionStreamEvent e -> Some e
         sink, EventStoreSource.Run(
-            Log.Logger, sink, checkpoints, connect, spec, category, tryMapEvent,
+            Log.Logger, sink, checkpoints, connect, spec, tryMapEvent,
             args.MaxReadAhead, args.StatsInterval)
     | Choice2Of2 (_srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
         let service = Todo.Cosmos.create (context, cache)
@@ -357,7 +357,7 @@ let build (args : CmdParser.Arguments) =
 
         let sink =
              Propulsion.Streams.Sync.StreamsSync.Start(
-                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, category,
+                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
                  statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
         let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
             docs |> Seq.collect EquinoxCosmosParser.enumStreamEvents
