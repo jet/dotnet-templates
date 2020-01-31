@@ -13,6 +13,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - Target `Equinox`.* v `2.0.0-rc9`, `Propulsion`.* v `2.0.0-rc1`, `FsCodec`.* v `2.0.0-rc3`
 - Standardize Aggregate layouts
+- Apply encapsulation techniques from https://github.com/jet/FsCodec#decoding-events in consumers [#43](https://github.com/jet/dotnet-templates/pull/43)
 
 ### Removed
 ### Fixed
