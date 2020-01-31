@@ -1,7 +1,6 @@
 ﻿namespace ConsumerTemplate
 
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
-open System
 
 module EventCodec =
 
