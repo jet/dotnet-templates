@@ -6,16 +6,17 @@ open System
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) (log : Serilog.ILogger) streamName (x : FsCodec.ITimelineEvent<byte[]>) =
+    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x : FsCodec.ITimelineEvent<byte[]>) =
         match codec.TryDecode x with
         | None ->
-            if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
+            if Serilog.Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
+                Serilog.Log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
                     .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
             None
         | x -> x
 
 module Guid =
+
     let inline toStringN (x : Guid) = x.ToString "N"
 
 /// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant

@@ -1,4 +1,3 @@
-using Equinox;
 using Equinox.MemoryStore;
 using Equinox.Core;
 using Microsoft.FSharp.Core;

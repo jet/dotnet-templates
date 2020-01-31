@@ -5,6 +5,9 @@ module Events =
 
     let [<Literal>] CategoryId = "Todos"
     let (|ForClientId|) (id : ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString id)
+    let (|MatchesCategory|_|) = function
+        | FsCodec.StreamName.CategoryAndId (CategoryId, ClientId.Parse clientId) -> Some clientId
+        | _ -> None
 
     type ItemData =     { id : int; order : int; title : string; completed : bool }
     type DeletedData =  { id : int }
@@ -18,6 +21,11 @@ module Events =
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
+        span.events |> Seq.choose (EventCodec.tryDecode codec stream)
+    let (|Match|_|) = function
+        | (MatchesCategory clientId, _) & (Decode events) -> Some (clientId, events)
+        | _ -> None
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Fold =

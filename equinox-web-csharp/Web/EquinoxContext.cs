@@ -1,4 +1,3 @@
-using Equinox;
 using Microsoft.FSharp.Core;
 using Newtonsoft.Json;
 using System;
