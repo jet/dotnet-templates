@@ -10,13 +10,20 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+### Removed
+### Fixed
+
+<a name="3.9.0"></a>
+## [3.9.0] - 2020-01-31
+
+### Added
+
+- Apply encapsulation techniques from https://github.com/jet/FsCodec#decoding-events in consumers [#43](https://github.com/jet/dotnet-templates/pull/43)
+
+### Changed
 
 - Target `Equinox`.* v `2.0.0-rc9`, `Propulsion`.* v `2.0.0-rc1`, `FsCodec`.* v `2.0.0-rc3`
 - Standardize Aggregate layouts
-- Apply encapsulation techniques from https://github.com/jet/FsCodec#decoding-events in consumers [#43](https://github.com/jet/dotnet-templates/pull/43)
-
-### Removed
-### Fixed
 
 <a name="3.8.0"></a>
 ## [3.8.0] - 2019-12-07
@@ -246,7 +253,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.8.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.9.0...HEAD
+[3.9.0]: https://github.com/jet/dotnet-templates/compare/3.8.0...3.9.0
 [3.8.0]: https://github.com/jet/dotnet-templates/compare/3.7.0...3.8.0
 [3.7.0]: https://github.com/jet/dotnet-templates/compare/3.6.1...3.7.0
 [3.6.1]: https://github.com/jet/dotnet-templates/compare/3.6.0...3.6.1
