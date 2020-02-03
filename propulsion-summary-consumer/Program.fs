@@ -33,7 +33,7 @@ module CmdParser =
     module Cosmos =
         open Equinox.Cosmos
         type [<NoEquality; NoComparison>] Parameters =
-            | [<AltCommandLine "-cm">]      ConnectionMode of ConnectionMode
+            | [<AltCommandLine "-m">]       ConnectionMode of ConnectionMode
             | [<AltCommandLine "-s">]       Connection of string
             | [<AltCommandLine "-d">]       Database of string
             | [<AltCommandLine "-c">]       Container of string
@@ -78,7 +78,7 @@ module CmdParser =
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
 
         | [<AltCommandLine "-w"; Unique>]   MaxDop of int
-        | [<AltCommandLine "-v"; Unique>]   Verbose
+        | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
 
         interface IArgParserTemplate with

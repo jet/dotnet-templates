@@ -39,7 +39,7 @@ module CmdParser =
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
 
         | [<AltCommandLine "-w"; Unique>]   MaxDop of int
-        | [<AltCommandLine "-v"; Unique>]   Verbose
+        | [<AltCommandLine "-V"; Unique>]   Verbose
 
         interface IArgParserTemplate with
             member a.Usage = a |> function

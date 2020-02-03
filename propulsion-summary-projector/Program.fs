@@ -92,7 +92,7 @@ module CmdParser =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-g"; Unique>]   Gorge of int
         | [<AltCommandLine "-t"; Unique>]   Tail of intervalS: float
-        | [<AltCommandLine "-force"; Unique>] ForceRestart
+        | [<AltCommandLine "--force"; Unique>] ForceRestart
         | [<AltCommandLine "-m"; Unique>]   BatchSize of int
         | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-pos"; Unique>] Position of int64
@@ -171,7 +171,7 @@ module CmdParser =
             | _ -> raise (MissingArg "Must specify `cosmos` checkpoint store source is `es`")
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-s">]           Connection of string
-        | [<AltCommandLine "-cm">]          ConnectionMode of ConnectionMode
+        | [<AltCommandLine "-m">]           ConnectionMode of ConnectionMode
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
         | [<AltCommandLine "-o">]           Timeout of float
@@ -211,11 +211,11 @@ module CmdParser =
             | _ -> raise (MissingArg "Must specify `kafka` arguments")
      and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
-        | [<AltCommandLine "-m"; Unique>]   MaxDocuments of int
+        | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
 
-        | [<AltCommandLine "-cm">]          ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c"; Unique>]   Container of string // Actually Mandatory, but stating that is not supported

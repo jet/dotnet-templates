@@ -34,7 +34,7 @@ module CmdParser =
     module Cosmos =
         open Equinox.Cosmos
         type [<NoEquality; NoComparison>] Parameters =
-            | [<AltCommandLine "-cm">]      ConnectionMode of Equinox.Cosmos.ConnectionMode
+            | [<AltCommandLine "-m">]       ConnectionMode of Equinox.Cosmos.ConnectionMode
             | [<AltCommandLine "-s">]       Connection of string
             | [<AltCommandLine "-d">]       Database of string
             | [<AltCommandLine "-c">]       Container of string
@@ -75,8 +75,8 @@ module CmdParser =
         (* ChangeFeed Args*)
         | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
         | [<AltCommandLine "-as"; Unique>]  LeaseContainerSuffix of string
-        | [<AltCommandLine "-z"; Unique>]   FromTail
-        | [<AltCommandLine "-m"; Unique>]   MaxDocuments of int
+        | [<AltCommandLine "-Z"; Unique>]   FromTail
+        | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
@@ -93,7 +93,7 @@ module CmdParser =
             member a.Usage =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | LeaseContainerSuffix _ ->  "specify Container Name suffix for Leases container. Default: `-aux`."
+                | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container. Default: `-aux`."
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
@@ -112,7 +112,7 @@ module CmdParser =
         member val Target =                 TargetInfo a
 //#endif
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.Suffix =                   a.GetResult(LeaseContainerSuffix, "-aux")
+        member __.Suffix =                  a.GetResult(LeaseContainerSuffix, "-aux")
         member __.Verbose =                 a.Contains Verbose
         member __.VerboseConsole =          a.Contains VerboseConsole
         member __.MaxDocuments =            a.TryGetResult MaxDocuments
@@ -151,7 +151,9 @@ module Logging =
 
     let initialize verbose changeLogVerbose =
         Log.Logger <-
-            LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
+            LoggerConfiguration()
+                .Destructure.FSharpTypes()
+                .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             // LibLog writes to the global logger, so we need to control the emission
             |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning

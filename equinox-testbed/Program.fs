@@ -176,7 +176,9 @@ module LoadTest =
 //#endif
 
 let createDomainLog verbose verboseConsole maybeSeqEndpoint =
-    let c = LoggerConfiguration().Destructure.FSharpTypes().Enrich.FromLogContext()
+    let c = LoggerConfiguration()
+                .Destructure.FSharpTypes()
+                .Enrich.FromLogContext()
     let c = if verbose then c.MinimumLevel.Debug() else c
 //#if eventStore
     let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())

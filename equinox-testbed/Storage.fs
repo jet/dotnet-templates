@@ -40,7 +40,7 @@ module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]       VerboseStore
-        | [<AltCommandLine "-cm">]      ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-m">]       ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-o">]       Timeout of float
         | [<AltCommandLine "-r">]       Retries of int
         | [<AltCommandLine "-rt">]      RetriesWaitTime of float
