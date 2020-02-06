@@ -531,13 +531,15 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let (broker, topic, producers) = kafka.BuildTargetParams()
-                    let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) = async {
-                        return span
+                    let render (stream: FsCodec.StreamName, span: Propulsion.Streams.StreamSpan<_>) = async {
+                        let value =
+                            span
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
-                            |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize }
+                            |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
+                        return FsCodec.StreamName.toString stream, value }
                     let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic, degreeOfParallelism = producers)
                     StreamsProducerSink.Start(
-                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, categorize,
+                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer,
                         statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 1., maxBytes=maxBytes, maxEvents=maxEvents),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->

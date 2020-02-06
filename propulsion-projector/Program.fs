@@ -170,7 +170,7 @@ module Logging =
 
 let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
     if x.Data.Length < 900_000 then x
-    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp) :> _
+    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp)
 
 let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
     { stream = e.stream; event = replaceLongDataWithNull e.event }
@@ -201,15 +201,17 @@ let build (args : CmdParser.Arguments) =
         Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producer, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
 #else
-    let render (stream: string, span: Propulsion.Streams.StreamSpan<_>) = async {
-        return span
+    let render (stream: FsCodec.StreamName, span: Propulsion.Streams.StreamSpan<_>) = async {
+        let value =
+            span
             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
-            |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize }
+            |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
+        return FsCodec.StreamName.toString stream, value }
     let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
     let projector =
         Propulsion.Kafka.StreamsProducerSink.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, render, producer,
-            categorize, statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
+            statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
 #endif
 #else
