@@ -123,15 +123,15 @@ module Logging =
                         else c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}|{Properties}{NewLine}{Exception}")
             |> fun c -> c.CreateLogger()
 
-let [<Literal>] appName = "ConsumerTemplate"
+let [<Literal>] AppName = "ConsumerTemplate"
 
 let start (args : CmdParser.Arguments) =
-    let context = args.Cosmos.Connect(appName) |> Async.RunSynchronously
-    let cache = Equinox.Cache (appName, sizeMb = 10) // here rather than in SkuSummary aggregate as it can be shared with other Aggregates
+    let context = args.Cosmos.Connect(AppName) |> Async.RunSynchronously
+    let cache = Equinox.Cache (AppName, sizeMb = 10) // here rather than in SkuSummary aggregate as it can be shared with other Aggregates
     let service = SkuSummary.Cosmos.create (context, cache)
     let config =
         FsKafka.KafkaConsumerConfig.Create(
-            appName, args.Broker, [args.Topic], args.Group,
+            AppName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     Ingester.startConsumer config Log.Logger service args.MaxDop
 

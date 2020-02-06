@@ -185,7 +185,7 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
 type ExampleOutput = { Id : string }
 #endif
 
-let [<Literal>] appName = "ProjectorTemplate"
+let [<Literal>] AppName = "ProjectorTemplate"
 
 let build (args : CmdParser.Arguments) =
     let discovery, source, connector = args.Cosmos.BuildConnectionDetails()
@@ -196,7 +196,7 @@ let build (args : CmdParser.Arguments) =
     let render (doc : Microsoft.Azure.Documents.Document) : string * string =
         let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
         equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
-    let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
+    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
     let projector =
         Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producer, statsInterval=TimeSpan.FromMinutes 1.)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
@@ -207,7 +207,7 @@ let build (args : CmdParser.Arguments) =
             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
         return FsCodec.StreamName.toString stream, value }
-    let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic)
+    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
     let projector =
         Propulsion.Kafka.StreamsProducerSink.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, render, producer,
@@ -227,7 +227,7 @@ let build (args : CmdParser.Arguments) =
 #endif
     let runSourcePipeline =
         CosmosSource.Run(
-            Log.Logger, connector.CreateClient(appName, discovery), source,
+            Log.Logger, connector.CreateClient(AppName, discovery), source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     sink, runSourcePipeline

@@ -512,7 +512,7 @@ let transformOrFilter catFilter (changeFeedDocument: Microsoft.Azure.Documents.D
             yield e }
 //#endif
 
-let [<Literal>] appName = "SyncTemplate"
+let [<Literal>] AppName = "SyncTemplate"
 
 let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
     let maybeDstCosmos, sink, streamFilter =
@@ -520,7 +520,7 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
         | Choice1Of2 cosmos ->
             let containers = Containers(cosmos.Database, cosmos.Container)
             let connect connIndex = async {
-                let! c = cosmos.Connect appName connIndex
+                let! c = cosmos.Connect AppName connIndex
                 let lfc = storeLog.ForContext("ConnId", connIndex)
                 return c, Equinox.Cosmos.Core.Context(c, containers, lfc) }
             let all = Array.init args.MaxConnections connect |> Async.Parallel |> Async.RunSynchronously
@@ -550,7 +550,7 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = storeLog.ForContext("ConnId", connIndex)
-                let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, appName, connIndex)
+                let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, AppName, connIndex)
                 return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
             let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
@@ -564,9 +564,9 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
 #endif
         let runPipeline =
-            CosmosSource.Run(log, connector.CreateClient(appName, discovery), source, aux,
+            CosmosSource.Run(log, connector.CreateClient(AppName, discovery), source, aux,
                 leaseId, startFromTail, createObserver,
-                ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=connector.CreateClient(appName, auxDiscovery))
+                ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=connector.CreateClient(AppName, auxDiscovery))
         sink, runPipeline
     | Choice2Of2 (srcE, spec) ->
         match maybeDstCosmos with
@@ -577,7 +577,7 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
             let context = Equinox.Cosmos.Context(mainConn, containers)
             let codec = FsCodec.NewtonsoftJson.Codec.Create()
             let caching =
-                let c = Equinox.Cache(appName, sizeMb = 1)
+                let c = Equinox.Cache(AppName, sizeMb = 1)
                 Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
             Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve
@@ -595,7 +595,7 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
                     Some { e with event = withNullData e.event }
                 else Some e
         let connect () =
-            let c = srcE.Connect(log, log, appName, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) |> Async.RunSynchronously
+            let c = srcE.Connect(log, log, AppName, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) |> Async.RunSynchronously
             c.ReadConnection
         let runPipeline =
             EventStoreSource.Run(
