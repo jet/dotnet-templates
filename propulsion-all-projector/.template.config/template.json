@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Event Sourcing",
+    "Equinox",
+    "Propulsion",
+    "EventStore",
+    "Kafka"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Propulsion.Template.AllProjector",
+  "name": "Propulsion EventStore $all Projector",
+  "shortName": "proAllProjector",
+  "sourceName": "ProjectorTemplate",
+  "preferNameDirectory": true,
+
+  "symbols": {
+    "kafka": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Include code projecting to Kafka."
+    }
+  }
+}

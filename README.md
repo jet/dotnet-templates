@@ -15,6 +15,12 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
   `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
   `-p` shows parallel consumption mode (where source is not stream-oriented; i.e. is not from `Equinox.Cosmos`)
 
+- [`proAllProjector`](propulsion-all-projector/README.md) - Boilerplate for an EventStore `$all` stream projector (projecting from an EventStore using `Propulsion.EventStore`.EventStore
+
+  **NOTE At present, checkpoint storage is only implemented for Azure CosmosDB - help wanted ;)**
+
+  `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
+
 - [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion). (typically consuming from an app produced with `dotnet new proProjector -k`)
 
 ## Templates combining usage of Equinox and Propulsion
