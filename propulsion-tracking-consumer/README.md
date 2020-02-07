@@ -14,7 +14,7 @@ This project was generated using:
 
         $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
         $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
-        $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use - c
+        $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use -c
 
 2. To run an instance of the Consumer:
 

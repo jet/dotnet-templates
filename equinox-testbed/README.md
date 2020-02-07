@@ -49,7 +49,7 @@ This project was generated using:
         # establish CosmosDb settings
         $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
         $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
-        $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use - c
+        $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use -c
 
         dotnet tool install -g Equinox.Tool # only needed once
         eqx init -ru 1000 cosmos

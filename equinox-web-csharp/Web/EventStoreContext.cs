@@ -56,12 +56,12 @@ namespace TodoBackendTemplate
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
-            Func<TState, TEvent> compact = null)
+            Func<TState, TEvent> toSnapshot = null)
         {
             var accessStrategy =
-                isOrigin == null && compact == null
+                isOrigin == null && toSnapshot == null
                     ? null
-                    : AccessStrategy<TEvent, TState>.NewRollingSnapshots(FuncConvert.FromFunc(isOrigin), FuncConvert.FromFunc(compact));
+                    : AccessStrategy<TEvent, TState>.NewRollingSnapshots(FuncConvert.FromFunc(isOrigin), FuncConvert.FromFunc(toSnapshot));
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));

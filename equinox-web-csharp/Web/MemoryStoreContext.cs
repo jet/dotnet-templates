@@ -19,7 +19,7 @@ namespace TodoBackendTemplate
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
-            Func<TState, TEvent> compact = null)
+            Func<TState, TEvent> toSnapshot = null)
         {
             var resolver = new Resolver<TEvent, TState, object, object>(_store, FsCodec.Box.Codec.Create<TEvent>(), FuncConvert.FromFunc(fold), initial);
             return target => resolver.Resolve(target);
