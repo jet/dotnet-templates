@@ -9,9 +9,9 @@ namespace TodoBackendTemplate
 {
     public class MemoryStoreContext : EquinoxContext
     {
-        readonly VolatileStore<object> _store;
+        readonly VolatileStore<byte[]> _store;
 
-        public MemoryStoreContext(VolatileStore<object> store) =>
+        public MemoryStoreContext(VolatileStore<byte[]> store) =>
             _store = store;
 
         public override Func<string, IStream<TEvent, TState>> Resolve<TEvent, TState>(
@@ -21,7 +21,7 @@ namespace TodoBackendTemplate
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> toSnapshot = null)
         {
-            var resolver = new Resolver<TEvent, TState, object, object>(_store, FsCodec.Box.Codec.Create<TEvent>(), FuncConvert.FromFunc(fold), initial);
+            var resolver = new Resolver<TEvent, TState, byte[], object>(_store, codec, FuncConvert.FromFunc(fold), initial);
             return target => resolver.Resolve(target);
         }
 

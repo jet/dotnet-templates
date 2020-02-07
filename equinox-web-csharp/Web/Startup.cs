@@ -92,7 +92,7 @@ namespace TodoBackendTemplate.Web
             return new CosmosContext(config);
 #endif
 #if (!cosmos && !eventStore)
-            return new MemoryStoreContext(new Equinox.MemoryStore.VolatileStore<object>());
+            return new MemoryStoreContext(new Equinox.MemoryStore.VolatileStore<byte[]>());
 #endif
 #if (!memoryStore && !cosmos && !eventStore)
             //return new MemoryStoreContext(new Equinox.MemoryStore.VolatileStore());

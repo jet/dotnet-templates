@@ -13,7 +13,7 @@ namespace TodoBackendTemplate
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
-            Func<TState, TEvent> toSnapshot = null) where TEvent : TypeShape.UnionContract.IUnionContract;
+            Func<TState, TEvent> toSnapshot = null);
 
         internal abstract Task Connect();
     }
@@ -22,8 +22,7 @@ namespace TodoBackendTemplate
     {
         public static FsCodec.IEventCodec<TEvent, byte[], object> Create<TEvent>(
             Func<TEvent, Tuple<string, byte[]>> encode,
-            Func<string, byte[], TEvent> tryDecode,
-            JsonSerializerSettings settings = null) where TEvent: class
+            Func<string, byte[], TEvent> tryDecode) where TEvent: class
         {
             return FsCodec.Codec.Create(
                 FuncConvert.FromFunc(encode),

@@ -13,6 +13,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
+- Fix compiler errors in `eqxwebcs` re [#44](https://github.com/jet/dotnet-templates/issue/44)
+
 <a name="3.9.0"></a>
 ## [3.9.0] - 2020-01-31
 
