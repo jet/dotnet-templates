@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Add `proAllProjector` [#45](https://github.com/jet/dotnet-templates/pulls/45)
+
 ### Changed
 ### Removed
 ### Fixed

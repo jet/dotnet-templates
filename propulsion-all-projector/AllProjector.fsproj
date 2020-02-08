@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>netcoreapp2.1</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Include="README.md" />
+        <!--#if (!kafka && !blank) -->
+        <Compile Include="Infrastructure.fs" />
+        <Compile Include="Todo.fs" />
+        <Compile Include="Contract.fs" />
+        <Compile Include="TodoSummary.fs" />
+        <!--#endif-->
+        <!--#if (!kafka) -->
+        <Compile Include="Ingester.fs" />
+        <!--#endif-->
+        <Compile Include="Handler.fs" />
+        <Compile Include="Program.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Argu" Version="5.4.0" />
+        <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
+        <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc9" />
+        <PackageReference Include="Propulsion.EventStore" Version="2.0.0-rc3" />
+        <!--#if (kafka)-->
+        <PackageReference Include="Propulsion.Kafka" Version="2.0.0-rc3" />
+        <!--#endif-->
+        <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
+    </ItemGroup>
+
+</Project>
