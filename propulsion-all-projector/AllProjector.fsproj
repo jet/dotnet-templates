@@ -8,6 +8,13 @@
 
     <ItemGroup>
         <None Include="README.md" />
+        <Compile Include="Infrastructure.fs" />
+        <!--#if (kafka)-->
+        <Compile Include="Todo.fs" />
+        <Compile Include="Contract.fs" />
+        <Compile Include="TodoSummary.fs" />
+        <Compile Include="Ingester.fs" />
+        <!--#endif-->
         <Compile Include="Handler.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
@@ -17,7 +24,9 @@
         <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
         <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc9" />
         <PackageReference Include="Propulsion.EventStore" Version="2.0.0-rc2" />
+        <!--#if (kafka)-->
         <PackageReference Include="Propulsion.Kafka" Version="2.0.0-rc2" />
+        <!--#endif-->
         <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
     </ItemGroup>
 

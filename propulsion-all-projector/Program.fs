@@ -1,4 +1,4 @@
-﻿module ProjectorTemplate.Program
+﻿module AllTemplate.Program
 
 open Propulsion.EventStore
 open Serilog
@@ -267,6 +267,7 @@ module EventStoreContext =
 
 let build (args : CmdParser.Arguments) =
     let (srcE, cosmos, spec) = args.SourceParams()
+    let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
     let filterByStreamName = args.FilterFunction()
     let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
 
@@ -289,13 +290,17 @@ let build (args : CmdParser.Arguments) =
             Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, Handler.render, producer,
             statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
 #else
+    let esConn = connectEs ()
+    let dstCache = Equinox.Cache(AppName, sizeMb = 10)
+    let srcService = Todo.EventStore.create (EventStoreContext.create esConn,dstCache)
+    let dstService = TodoSummary.Cosmos.create (context, cache)
+    let handle = Ingester.handleStreamEvents (srcService, dstService)
     let sink =
         Propulsion.Streams.StreamsProjector.Start(
-            Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, Handler.handle,
-            statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
+            Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = Ingester.Stats(Log.Logger))
 #endif
 
-    let connect () = let c = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave) in c.ReadConnection
+    let connect () = let c = connectEs () in c.ReadConnection
     sink, EventStoreSource.Run(
         Log.Logger, sink, checkpoints, connect, spec, Handler.tryMapEvent filterByStreamName,
         args.MaxReadAhead, args.StatsInterval)

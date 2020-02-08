@@ -14,7 +14,7 @@
   "identity": "Propulsion.Template.AllProjector",
   "name": "Propulsion EventStore $all Projector",
   "shortName": "proAllProjector",
-  "sourceName": "ProjectorTemplate",
+  "sourceName": "AllTemplate",
   "preferNameDirectory": true,
 
   "symbols": {

@@ -15,16 +15,18 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
   `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
   `-p` shows parallel consumption mode (where source is not stream-oriented; i.e. is not from `Equinox.Cosmos`)
 
-- [`proAllProjector`](propulsion-all-projector/README.md) - Boilerplate for an EventStore `$all` stream projector (projecting from an EventStore using `Propulsion.EventStore`.EventStore
-
-  **NOTE At present, checkpoint storage is only implemented for Azure CosmosDB - help wanted ;)**
-
-  `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
-
 - [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion). (typically consuming from an app produced with `dotnet new proProjector -k`)
 
 ## Templates combining usage of Equinox and Propulsion
 
+- [`proAllProjector`](propulsion-all-projector/README.md) - Boilerplate for an EventStore `$all` stream projector (projecting from an EventStore using `Propulsion.EventStore`.EventStore
+
+  **NOTE At present, checkpoint storage is only implemented for Azure CosmosDB - help wanted ;)**
+
+   Standard processing shows importing (in summary form) from `EventStore` to `Cosmos`.
+   
+   `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
+  
 - [`summaryProjector`](propulsion-summary-projector/README.md) - Boilerplate for an a Projector that can consume from a) Azure CosmosDb ChangeFeedProcessor b) EventStore generating versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed from an `Equinox.Cosmos`/`.EventStore` store using `Propulsion.Cosmos`/`.EventStore`.
 
 - [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new summaryProjector`)
