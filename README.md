@@ -23,7 +23,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
   **NOTE At present, checkpoint storage is only implemented for Azure CosmosDB - help wanted ;)**
 
-   Standard processing shows importing (in summary form) from `EventStore` to `Cosmos`.
+   Standard processing shows importing (in summary form) from `EventStore` to `Cosmos` (use `-b` to remove, yielding a minimal projector)
    
    `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
   
