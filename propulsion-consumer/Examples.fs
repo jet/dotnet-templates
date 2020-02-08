@@ -67,7 +67,7 @@ module MultiStreams =
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
         let tryDecode = EventCodec.tryDecode codec
 
-    type Stat = Faves of int | Saves of int | OtherCategory of string * int | OtherMessage of string
+    type Stat = Faves of int | Saves of int | OtherCategory of string * int
 
     // Maintains a denormalized view cache per stream (in-memory, unbounded). TODO: keep in a persistent store
     type InMemoryHandler() =
@@ -77,7 +77,7 @@ module MultiStreams =
         let faves, saves = ConcurrentDictionary<string, HashSet<SkuId>>(), ConcurrentDictionary<string, SkuId list>()
 
         // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
-        let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|UnknownMessage|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
+        let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
             let decode tryDecode = span.events |> Seq.choose (tryDecode log streamName) |> Array.ofSeq
             match streamName with
             | FsCodec.StreamName.CategoryAndId (Favorites.CategoryId, id) ->
@@ -87,14 +87,12 @@ module MultiStreams =
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
                 SavedForLaterEvents (id, s, decode SavedForLater.tryDecode)
             | FsCodec.StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span.events)
-            | _ as streamName -> UnknownMessage (FsCodec.StreamName.toString streamName)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
         member __.Handle(streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
             match streamName, span with
             | OtherCategory (cat, count) -> return OtherCategory (cat, count)
-            | UnknownMessage messageKey -> return OtherMessage messageKey
-            | FavoritesEvents (id, s, xs) -> 
+            | FavoritesEvents (id, s, xs) ->
                 let folder (s : HashSet<_>) = function
                     | Favorites.Favorited e -> s.Add(e.skuId) |> ignore; s
                     | Favorites.Unfavorited e -> s.Remove(e.skuId) |> ignore; s
@@ -124,23 +122,21 @@ module MultiStreams =
         inherit Propulsion.Kafka.StreamsConsumerStats<Stat>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 
         let mutable faves, saves = 0, 0
-        let otherCats, otherKeys = Propulsion.Streams.Internal.CatStats(), Propulsion.Streams.Internal.CatStats()
+        let otherCats = Propulsion.Streams.Internal.CatStats()
 
         override __.HandleOk res = res |> function
             | Faves count -> faves <- faves + count
             | Saves count -> saves <- saves + count
             | OtherCategory (cat, count) -> otherCats.Ingest(cat, int64 count)
-            | OtherMessage messageKey -> otherKeys.Ingest messageKey
 
         // Dump stats relating to the nature of the message processing throughput
         override __.DumpStats () =
             if faves <> 0 || saves <> 0 then
                 log.Information(" Processed Faves {faves} Saves {s}", faves, saves)
                 faves <- 0; saves <- 0
-            if otherCats.Any || otherKeys.Any then
-                log.Information(" Ignored Categories {ignoredCats} Streams {ignoredStreams}",
-                    Seq.truncate 5 otherCats.StatsDescending, Seq.truncate 5 otherKeys.StatsDescending)
-                otherCats.Clear(); otherKeys.Clear()
+            if otherCats.Any then
+                log.Information(" Ignored Categories {ignoredCats}", Seq.truncate 5 otherCats.StatsDescending)
+                otherCats.Clear()
 
     let private parseStreamEvents(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
@@ -182,8 +178,7 @@ module MultiMessages =
             match streamName with
             | StreamName.CategoryAndId (Favorites.CategoryId, _) -> yield! decode Favorites.tryDecode Fave
             | StreamName.CategoryAndId (SavedForLater.CategoryId, _) -> yield! decode SavedForLater.tryDecode Save
-            | StreamName.CategoryAndId (otherCategoryName, _) -> yield OtherCat (otherCategoryName, Seq.length span.e)
-            | _ as streamName -> yield Unclassified (StreamName.toString streamName) }
+            | StreamName.CategoryAndId (otherCategoryName, _) -> yield OtherCat (otherCategoryName, Seq.length span.e) }
 
         // NB can be called in parallel, so must be thread-safe
         member __.Handle(streamName : StreamName, spanJson : string) =
