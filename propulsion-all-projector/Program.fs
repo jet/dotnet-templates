@@ -193,7 +193,9 @@ module CmdParser =
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
+//#if kafka
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Kafka of ParseResults<KafkaSinkParameters>
+//#endif
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
@@ -290,11 +292,16 @@ let build (args : CmdParser.Arguments) =
             Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, Handler.render, producer,
             statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
 #else
+#if blank
+    // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
+    let handle = Ingester.handleStreamEvents Ingester.tryHandle
+#else
     let esConn = connectEs ()
     let dstCache = Equinox.Cache(AppName, sizeMb = 10)
     let srcService = Todo.EventStore.create (EventStoreContext.create esConn,dstCache)
     let dstService = TodoSummary.Cosmos.create (context, cache)
-    let handle = Ingester.handleStreamEvents (srcService, dstService)
+    let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
+#endif
     let sink =
         Propulsion.Streams.StreamsProjector.Start(
             Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = Ingester.Stats(Log.Logger))

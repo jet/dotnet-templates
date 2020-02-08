@@ -16,7 +16,6 @@
   "shortName": "proAllProjector",
   "sourceName": "AllTemplate",
   "preferNameDirectory": true,
-
   "symbols": {
     "kafka": {
       "type": "parameter",
@@ -24,6 +23,34 @@
       "isRequired": false,
       "defaultValue": "false",
       "description": "Include code projecting to Kafka."
+    },
+    "blank": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Remove example code."
     }
-  }
+  },
+  "sources": [
+    {
+      "modifiers": [
+        {
+          "condition": "kafka || blank",
+          "exclude": [
+            "Infrastructure.fs",
+            "Todo.fs",
+            "Contract.fs",
+            "TodoSummary.fs"
+          ]
+        },
+        {
+          "condition": "kafka",
+          "exclude": [
+            "Ingester.fs"
+          ]
+        }
+      ]
+    }
+  ]
 }

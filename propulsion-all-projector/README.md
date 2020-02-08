@@ -1,7 +1,7 @@
 //#if kafka
-# Propulsion EventStore -> Kafka Projector
+# Propulsion EventStore $all  -> Kafka Projector
 //#else
-# Propulsion EventStore Projector (without Kafka emission)
+# Propulsion EventStore $all Projector (without Kafka emission)
 //#endif
 
 This project was generated using:

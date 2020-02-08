@@ -8,8 +8,8 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
     match x.Event with
     | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
     | PropulsionStreamEvent e -> Some e
-
 //#if kafka
+
 /// Responsible for wrapping a span of events for a specific stream into an envelope (we use the well-known Propulsion.Codec form)
 /// Most manipulation should take place before events enter the scheduler
 let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
@@ -18,4 +18,4 @@ let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
         |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
     return FsCodec.StreamName.toString stream, value }
-//#if kafka
+//#endif

@@ -21,6 +21,17 @@ type Stats(log, ?statsInterval, ?stateInterval) =
             log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
             ok <- 0; na <- 0 ; redundant <- 0
 
+#if blank
+let tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option*Outcome> = async {
+    match stream, span with
+    | FsCodec.StreamName.CategoryAndId ("Todos",id), _ ->
+        let ok, version' = true, None
+        // "TODO: add handler code"
+        match ok with
+        | true -> return version', Outcome.Ok span.events.Length
+        | false -> return version', Outcome.Skipped span.events.Length
+    | _ -> return None, Outcome.NoRelevantEvents span.events.Length }
+#else
 // map from external contract to internal contract defined by the aggregate
 let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryData =
     { items =
@@ -38,9 +49,10 @@ let tryHandle
         | true -> return Some version', Outcome.Ok span.events.Length
         | false -> return Some version', Outcome.Skipped span.events.Length
     | _ -> return None, Outcome.NoRelevantEvents span.events.Length }
+#endif
 
-let handleStreamEvents (service, summaryService) (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64*Outcome> = async {
-    match! tryHandle service summaryService (stream, span) with
+let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64*Outcome> = async {
+    match! tryHandle (stream, span) with
     // We need to yield the next write position, which will be after the version we've just generated the summary based on
     | Some version', outcome -> return version'+1L, outcome
     // If we're ignoring the events, we mark the next write position to be one beyond the last one offered
