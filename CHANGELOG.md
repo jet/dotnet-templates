@@ -9,6 +9,16 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+- Fix compiler errors in `eqxwebcs` re [#44](https://github.com/jet/dotnet-templates/issue/44)
+
+<a name="3.10.0"></a>
+## [3.10.0] - 2020-02-08
+
+### Added
 
 - Add `proAllProjector` [#45](https://github.com/jet/dotnet-templates/pulls/45)
 
@@ -16,10 +26,10 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - Target `Propulsion`.* v `2.0.0-rc3`
 
-### Removed
 ### Fixed
 
 - Fix compiler errors in `eqxwebcs` re [#44](https://github.com/jet/dotnet-templates/issue/44)
+- Removed impossible cases in `Examples.fs`
 
 <a name="3.9.0"></a>
 ## [3.9.0] - 2020-01-31
@@ -261,7 +271,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.9.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.10.0...HEAD
+[3.10.0]: https://github.com/jet/dotnet-templates/compare/3.9.0...3.10.0
 [3.9.0]: https://github.com/jet/dotnet-templates/compare/3.8.0...3.9.0
 [3.8.0]: https://github.com/jet/dotnet-templates/compare/3.7.0...3.8.0
 [3.7.0]: https://github.com/jet/dotnet-templates/compare/3.6.1...3.7.0
