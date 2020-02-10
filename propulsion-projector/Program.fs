@@ -168,23 +168,6 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
-    if x.Data.Length < 900_000 then x
-    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp)
-
-let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
-    { stream = e.stream; event = replaceLongDataWithNull e.event }
-
-let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
-    docs
-    |> Seq.collect EquinoxCosmosParser.enumStreamEvents
-    // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
-    // |> Seq.map hackDropBigBodies
-
-#if kafka && nostreams
-type ExampleOutput = { Id : string }
-#endif
-
 let [<Literal>] AppName = "ProjectorTemplate"
 
 let build (args : CmdParser.Arguments) =
@@ -192,38 +175,23 @@ let build (args : CmdParser.Arguments) =
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
 #if kafka
     let (broker, topic) = args.Target.BuildTargetParams()
+    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
 #if parallelOnly
-    let render (doc : Microsoft.Azure.Documents.Document) : string * string =
-        let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
-        equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
-    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
-    let projector =
-        Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, render, producer, statsInterval=TimeSpan.FromMinutes 1.)
-    let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, fun x -> upcast x)
+    let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, statsInterval=TimeSpan.FromMinutes 1.)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, fun x -> upcast x)
 #else
-    let render (stream: FsCodec.StreamName, span: Propulsion.Streams.StreamSpan<_>) = async {
-        let value =
-            span
-            |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
-            |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
-        return FsCodec.StreamName.toString stream, value }
-    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
-    let projector =
+    let sink =
         Propulsion.Kafka.StreamsProducerSink.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, render, producer,
+            Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer,
             statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
-    let createObserver () = CosmosSource.CreateObserver(Log.Logger, projector.StartIngester, mapToStreamItems)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
 #else
-    let project (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
-        let r = Random()
-        let ms = r.Next(1, span.events.Length)
-        do! Async.Sleep ms }
     let sink =
         Propulsion.Streams.StreamsProjector.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, project,
+            Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle,
             statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
-    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
     let runSourcePipeline =
         CosmosSource.Run(

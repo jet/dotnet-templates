@@ -23,6 +23,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - Target `Propulsion`.* v `2.0.0-rc3`
+- `proProjector`: extract `Handler.fs`
 
 ### Fixed
 
