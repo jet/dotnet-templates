@@ -11,10 +11,12 @@ module Events =
 
     type CarriedForward = { initial : int }
     type Delta = { value : int }
+    type Value = { value : int }
     type Event =
         | CarriedForward of CarriedForward
         | Closed
         | Delta of Delta
+        | Reset of Value
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
@@ -28,9 +30,10 @@ module Fold =
         match event, state with
         | Events.CarriedForward e, Initial -> Open { count = 0; value = e.initial }
         | Events.Delta e, Open bal -> Open { count = bal.count + 1; value = bal.value + e.value }
+        | Events.Reset e, Open bal -> Open { count = bal.count + 1; value = e.value }
         | Events.Closed, Open { value = bal } -> Closed bal
         | Events.CarriedForward _, (Open _|Closed _ as x) -> failwithf "CarriedForward : Unexpected %A" x
-        | Events.Delta _, (Initial|Closed _ as x) -> failwithf "Delta : Unexpected %A" x
+        | (Events.Delta _|Events.Reset _), (Initial|Closed _ as x) -> failwithf "Delta : Unexpected %A" x
         | Events.Closed, (Initial|Closed _ as x) -> failwithf "Closed : Unexpected %A" x
     let fold = Seq.fold evolve
 
@@ -47,7 +50,7 @@ type Result<'t> = { balance : Fold.Balance; result : 't option; isOpen : bool }
 
 let sync (balanceCarriedForward : Fold.Balance option) (decide : (Fold.Balance -> 't*Events.Event list)) shouldClose state : Result<'t>*Events.Event list =
     let acc = Accumulator()
-    // We always want to have a CarriedForward event at the start of any Epoch's event stream
+    // We require a CarriedForward event at the start of any Epoch's event stream
     let (), state =
         acc.Ingest state <|
             match state with

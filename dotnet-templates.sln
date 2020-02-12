@@ -80,6 +80,15 @@ EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Equinox.Templates", "src\Equinox.Templates\Equinox.Templates.fsproj", "{8C92B728-85A5-4231-863A-E4236E46CC36}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fc", "fc", "{4946576F-1558-49ED-A272-6F4D92FB0031}"
+ProjectSection(SolutionItems) = preProject
+	equinox-fc\.template.config\template.json = equinox-fc\.template.config\template.json
+EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-fc\Domain\Domain.fsproj", "{B3CFC965-6AB9-47E8-AA47-548A8D8A2E2C}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "equinox-fc\Domain.Tests\Domain.Tests.fsproj", "{49890A45-D6C2-4EF6-87AD-39960E03E254}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -132,6 +141,14 @@ Global
 		{8C92B728-85A5-4231-863A-E4236E46CC36}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8C92B728-85A5-4231-863A-E4236E46CC36}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8C92B728-85A5-4231-863A-E4236E46CC36}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3CFC965-6AB9-47E8-AA47-548A8D8A2E2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3CFC965-6AB9-47E8-AA47-548A8D8A2E2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3CFC965-6AB9-47E8-AA47-548A8D8A2E2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3CFC965-6AB9-47E8-AA47-548A8D8A2E2C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{49890A45-D6C2-4EF6-87AD-39960E03E254}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{49890A45-D6C2-4EF6-87AD-39960E03E254}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{49890A45-D6C2-4EF6-87AD-39960E03E254}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{49890A45-D6C2-4EF6-87AD-39960E03E254}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
@@ -145,5 +162,7 @@ Global
 		{D7ACBDF8-5F24-420F-9657-20096CE08B49} = {818D28A6-E6AB-4416-BDA6-1577C5D54447}
 		{B6389F9E-A8E4-4BD7-B4C0-703B1A69BEA1} = {E7434881-8655-4C22-82CD-91ADB5123A73}
 		{36C2D70A-F292-4481-8ADA-5066A80F92B2} = {1F3C9245-F973-43A3-97C9-5E527B93060C}
+		{B3CFC965-6AB9-47E8-AA47-548A8D8A2E2C} = {4946576F-1558-49ED-A272-6F4D92FB0031}
+		{49890A45-D6C2-4EF6-87AD-39960E03E254} = {4946576F-1558-49ED-A272-6F4D92FB0031}
 	EndGlobalSection
 EndGlobal
