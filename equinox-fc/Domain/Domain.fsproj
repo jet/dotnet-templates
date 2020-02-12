@@ -11,6 +11,9 @@
         <Compile Include="LocationSeries.fs" />
         <Compile Include="LocationEpoch.fs" />
         <Compile Include="Location.fs" />
+        <Compile Include="InventorySeries.fs" />
+        <Compile Include="InventoryEpoch.fs" />
+        <Compile Include="Inventory.fs" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc8" />

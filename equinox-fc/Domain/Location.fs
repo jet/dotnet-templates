@@ -6,7 +6,7 @@ type Wip<'R> =
     | Complete of 'R
 
 /// Manages a Series of Epochs, with a running total being carried forward to the next Epoch when it's Closed
-type LocationService internal (zeroBalance, shouldClose, series : Series.Service, epochs : Epoch.Service) =
+type Service internal (zeroBalance, shouldClose, series : Series.Service, epochs : Epoch.Service) =
 
     let rec execute locationId originEpochId =
         let rec aux epochId balanceToCarryForward wip = async {
@@ -25,7 +25,7 @@ type LocationService internal (zeroBalance, shouldClose, series : Series.Service
         aux
 
     member __.Execute(locationId, decide) = async {
-        let! activeEpoch = series.Read locationId
+        let! activeEpoch = series.ReadIngestionEpoch locationId
         let originEpochId, epochId, balanceCarriedForward =
             match activeEpoch with
             | None -> LocationEpochId.parse -1, LocationEpochId.parse 0, Some zeroBalance
@@ -36,7 +36,7 @@ type LocationService internal (zeroBalance, shouldClose, series : Series.Service
 module Helpers =
 
     let create (zeroBalance, shouldClose) (series, epochs) =
-        LocationService(zeroBalance, shouldClose, series, epochs)
+        Service(zeroBalance, shouldClose, series, epochs)
 
 module Cosmos =
 
