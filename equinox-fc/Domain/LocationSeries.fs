@@ -1,11 +1,11 @@
-module Location.Series
+module Fc.Location.Series
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
 
-    let [<Literal>] category = "LocationSeries"
-    let (|For|) id = Equinox.AggregateId (category, LocationId.toString id)
+    let [<Literal>] CategoryId = "LocationSeries"
+    let (|For|) id = FsCodec.StreamName.create CategoryId (LocationId.toString id)
 
     type Started = { epochId : LocationEpochId }
     type Event =

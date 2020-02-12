@@ -1,21 +1,21 @@
-namespace Domain.Inventory
+namespace Fc.Inventory
 
 open Equinox.Core // we use Equinox's AsyncCacheCell helper below
 open FSharp.UMX
 
-type internal TicketsCache() =
-    let all = System.Collections.Concurrent.ConcurrentDictionary<TransferId,unit>() // Bounded only by relatively low number of physical pick tickets IRL
-    static member Create init = let x = TicketsCache() in x.Add init; x
-    member __.Add tickets = for x in tickets do all.[x] <- ()
-    member __.Contains ticket = all.ContainsKey ticket
+type internal IdsCache<'Id>() =
+    let all = System.Collections.Concurrent.ConcurrentDictionary<'Id,unit>() // Bounded only by relatively low number of physical pick tickets IRL
+    static member Create init = let x = IdsCache() in x.Add init; x
+    member __.Add ids = for x in ids do all.[x] <- ()
+    member __.Contains id = all.ContainsKey id
 
 /// Maintains active BatchId in a thread-safe manner while ingesting items into the chain of `batches` indexed by the `transmissions`
 /// Prior to first add, reads `lookBack` batches to seed the cache, in order to minimize the number of duplicated pickTickets we transmit
-type Ingester internal (fcId, batches : Batch.Service, transmissions : Transmissions.Service, lookBack, capacity) =
+type Ingester internal (fcId, series : Series.Service, epochs : Epoch.Service, lookBack, capacity) =
 
     let log = Serilog.Log.ForContext<Ingester>()
-    // Maintains what we believe to be the currently open BatchId.
-    // Guaranteed to be set only after `previousTicket.AwaitValue()`
+    // Maintains what we believe to be the currently open EpochId
+    // Guaranteed to be set only after `previousIds.AwaitValue()`
     let mutable activeId = Unchecked.defaultof<_>
 
     // We want max one request in flight to establish the pre-existing Batches from which the tickets cache will be seeded
@@ -26,13 +26,13 @@ type Ingester internal (fcId, batches : Batch.Service, transmissions : Transmiss
         return [ for b in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> AsyncCacheCell(readBatch %b) ] }
 
     // Tickets cache - used to maintain a list of tickets that have already been ingested in order to avoid db round-trips
-    let previousTickets : AsyncCacheCell<TicketsCache> = AsyncCacheCell <| async {
+    let previousIds : AsyncCacheCell<IdsCache> = AsyncCacheCell <| async {
         let! batches = previousBatches.AwaitValue()
-        let! tickets = seq { for x in batches -> x.AwaitValue() } |> Async.Parallel
-        return TicketsCache.Create(Seq.concat tickets) }
+        let! ids = seq { for x in batches -> x.AwaitValue() } |> Async.Parallel
+        return IdsCache.Create(Seq.concat ids) }
 
     let tryIngest items = async {
-        let! previousTickets = previousTickets.AwaitValue()
+        let! previousTickets = previousIds.AwaitValue()
         let firstBatchId = %activeId
 
         let rec aux batchId totalIngestedTickets items = async {

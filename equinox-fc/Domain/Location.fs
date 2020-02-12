@@ -1,8 +1,8 @@
-namespace Location
+namespace Fc.Location
 
 [<NoComparison; NoEquality>]
 type Wip<'R> =
-    | Pending of decide : (Epoch.Fold.Balance -> 'R*Epoch.Events.Event list)
+    | Pending of decide : (Epoch.Fold.Balance -> 'R * Epoch.Events.Event list)
     | Complete of 'R
 
 /// Manages a Series of Epochs, with a running total being carried forward to the next Epoch when it's Closed

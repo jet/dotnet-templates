@@ -1,21 +1,20 @@
-module Location.Epoch
+module Fc.Location.Epoch
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
 
-    let [<Literal>] category = "LocationEpoch"
-    let (|For|) (locationId, epochId) =
-        let id = sprintf "%s_%s" (LocationId.toString locationId) (LocationEpochId.toString epochId)
-        Equinox.AggregateId (category, id)
+    let [<Literal>] CategoryId = "LocationEpoch"
+    let (|For|) (locationId, epochId) = FsCodec.StreamName.compose CategoryId [LocationId.toString locationId; LocationEpochId.toString epochId]
 
     type CarriedForward = { initial : int }
-    type Delta = { value : int }
-    type Value = { value : int }
+    type Delta = { delta : int; transaction : InventoryTransactionId }
+    type Value = { value : int; transaction : InventoryTransactionId }
     type Event =
         | CarriedForward of CarriedForward
         | Closed
-        | Delta of Delta
+        | Added of Delta
+        | Removed of Delta
         | Reset of Value
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
@@ -29,12 +28,12 @@ module Fold =
     let evolve state event =
         match event, state with
         | Events.CarriedForward e, Initial -> Open { count = 0; value = e.initial }
-        | Events.Delta e, Open bal -> Open { count = bal.count + 1; value = bal.value + e.value }
+        | Events.Added e, Open bal -> Open { count = bal.count + 1; value = bal.value + e.delta }
+        | Events.Removed e, Open bal -> Open { count = bal.count + 1; value = bal.value - e.delta }
         | Events.Reset e, Open bal -> Open { count = bal.count + 1; value = e.value }
         | Events.Closed, Open { value = bal } -> Closed bal
         | Events.CarriedForward _, (Open _|Closed _ as x) -> failwithf "CarriedForward : Unexpected %A" x
-        | (Events.Delta _|Events.Reset _), (Initial|Closed _ as x) -> failwithf "Delta : Unexpected %A" x
-        | Events.Closed, (Initial|Closed _ as x) -> failwithf "Closed : Unexpected %A" x
+        | (Events.Added _|Events.Removed _|Events.Reset _|Events.Closed) as e, (Initial|Closed _ as s) -> failwithf "Unexpected %A when %A" e s
     let fold = Seq.fold evolve
 
 /// Holds events accumulated from a series of decisions while also evolving the presented `state` to reflect the pended events
