@@ -15,25 +15,22 @@ module Events =
 
 module Fold =
 
-    type State = LocationEpochId
-    let initial = LocationEpochId.parse -1
+    type State = LocationEpochId option
+    let initial = None
     let private evolve _state = function
-        | Events.Started e -> e.epochId
+        | Events.Started e -> Some e.epochId
     let fold = Seq.fold evolve
 
 let interpretActivateEpoch epochId (state : Fold.State) =
-    [if state < epochId then yield Events.Started { epochId = epochId }]
-
-let toActiveEpoch state =
-    if state = Fold.initial then None else Some state
+    [if state |> Option.forall (fun s -> s < epochId) then yield Events.Started { epochId = epochId }]
 
 type Service internal (log, resolve, maxAttempts) =
 
     let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
 
-    member __.Read(locationId) : Async<LocationEpochId option> =
+    member __.ReadIngestionEpoch(locationId) : Async<LocationEpochId option> =
         let stream = resolve locationId
-        stream.Query toActiveEpoch
+        stream.Query id
 
     member __.ActivateEpoch(locationId, epochId) : Async<unit> =
         let stream = resolve locationId

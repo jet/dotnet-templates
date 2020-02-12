@@ -14,3 +14,22 @@ module LocationEpochId =
     let parse (value : int) : LocationEpochId = %value
     let next (value : LocationEpochId) : LocationEpochId = % (%value + 1)
     let toString (value : LocationEpochId) : string = string %value
+
+type InventoryId = string<inventoryId>
+and [<Measure>] inventoryId
+module InventoryId =
+    let parse (value : string) : InventoryId = %value
+    let toString (value : InventoryId) : string = %value
+
+type InventoryEpochId = int<inventoryEpochId>
+and [<Measure>] inventoryEpochId
+module InventoryEpochId =
+    let parse (value : int) : InventoryEpochId = %value
+    let next (value : InventoryEpochId) : InventoryEpochId = % (%value + 1)
+    let toString (value : InventoryEpochId) : string = string %value
+
+type InventoryTransactionId = string<inventoryTransactionId>
+and [<Measure>] inventoryTransactionId
+module InventoryTransactionId =
+    let parse (value : string) : InventoryTransactionId = %value
+    let toString (value : InventoryTransactionId) : string = %value
