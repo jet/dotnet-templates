@@ -1,4 +1,4 @@
-module Fc.Inventory.Epoch
+module Fc.InventoryTransaction
 
 open System
 
@@ -6,32 +6,58 @@ open System
 [<RequireQualifiedAccess>]
 module Events =
 
-    let [<Literal>] CategoryId = "InventoryEpoch"
-    let (|For|) (inventoryId, epochId) = FsCodec.StreamName.compose CategoryId [InventoryId.toString inventoryId; InventoryEpochId.toString epochId]
+    let [<Literal>] CategoryId = "Transfer"
+    let (|For|) (inventoryId, transactionId) =
+        FsCodec.StreamName.compose CategoryId [InventoryId.toString inventoryId; InventoryTransactionId.toString transactionId]
 
-    type TransactionInfo = { transactionId : InventoryTransactionId }
-
-    type Snapshotted = { closed: bool; ids : InventoryTransactionId[] }
+    type TransferRequested = { source : LocationId; destination : LocationId; quantity : int }
+    type Removed = { balance : int }
+    type Added = { balance : int }
+    type AdjustmentRequested = { location : LocationId; quantity : int }
 
     type Event =
-        | Adjusted of TransactionInfo
-        | Transferred of TransactionInfo
-        | Closed
-        | Snapshotted of Snapshotted
+        | AdjustmentRequested of AdjustmentRequested
+        | Adjusted
+        | TransferRequested of TransferRequested
+        | Failed
+        | Removed of Removed
+        | Added of Added
+        | Completed
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 module Fold =
 
-    type State = { closed : bool; ids : Set<InventoryTransactionId> }
-    let initial = { closed = false; ids = Set.empty }
+    type Removed = { request : Events.TransferRequested; removed : Events.Removed }
+    type Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
+    type State =
+        | Initial
+        | Adjusting of Events.AdjustmentRequested
+        | Adjusted of Events.AdjustmentRequested
+        | Transferring of Events.TransferRequested
+        | Failed
+        | Adding of Removed
+        | Added of Added
+        | Completed
+    let initial = Initial
     let evolve state = function
-        | (Events.Adjusted e | Events.Transferred e) -> { state with ids = Set.add e.transactionId state.ids }
-        | Events.Closed -> { state with closed = true }
-        | Events.Snapshotted e -> { closed = e.closed; ids = Set.ofArray e.ids }
+        | Events.AdjustmentRequested e -> Adjusting e
+        | Events.Adjusted as ee ->
+            match state with
+            | Adjusting s -> Adjusted s
+            | x -> failwithf "Unexpected %A when %A " ee state
+        | Events.TransferRequested e -> Transferring e
+        | Events.Failed -> Failed
+        | Events.Removed e as ee ->
+            match state with
+            | Transferring s -> Adding { request = s; removed = e  }
+            | x -> failwithf "Unexpected %A when %A " ee state
+        | Events.Added e as ee ->
+            match state with
+            | Adding s -> Added { request = s.request; removed = s.removed; added = e  }
+            | x -> failwithf "Unexpected %A when %A " ee state
+        | Events.Completed -> Completed
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
-    let isOrigin = function Events.Snapshotted _ -> true | _ -> false
-    let snapshot s = Events.Snapshotted { closed = s.closed; ids = Array.ofSeq s.ids }
 
 type Result =
     {   /// Indicates whether this epoch is closed (either previously or as a side-effect this time)

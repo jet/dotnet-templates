@@ -1,11 +1,11 @@
-module Domain.Inventory.Series
+module Fc.Inventory.Series
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
 
-    let [<Literal>] categoryId = "InventorySeries"
-    let (|For|) inventoryId = Equinox.AggregateId(categoryId, InventoryId.toString inventoryId)
+    let [<Literal>] CategoryId = "InventorySeries"
+    let (|For|) inventoryId = FsCodec.StreamName.create CategoryId (InventoryId.toString inventoryId)
 
     type Epoch = { epoch : InventoryEpochId }
     type Checkpoint = { epoch : InventoryEpochId; index : int64 }
@@ -30,7 +30,7 @@ module Fold =
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let snapshot s = Events.Snapshotted { writing = s.writing; checkpoint = s.checkpoint }
-    // TODO transmute to remove checkpoints (a la propulsion?)
+    // TODO transmute to remove checkpoints a la Propulsion
 
 let interpretMarkWriting epochId (state : Fold.State) =
     if state.writing >= epochId then []
@@ -48,19 +48,21 @@ type Service internal (log, resolve, maxAttempts) =
         let stream = resolve inventoryId
         stream.Transact(interpretMarkWriting epochId)
 
+    // TODO checkpoint writing
+
 let createService resolve =
     Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 2)
 
 module Cosmos =
 
     open Equinox.Cosmos
-    let resolve (context,cache) =
+    let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // For this stream, we uniformly use stale reads as:
         // a) we don't require any information from competing writers
         // b) while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
-        let accessStrategy = AccessStrategy.Snapshot(Fold.isOrigin,Fold.snapshot)
+        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
         fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id,opt)
-    let createService (context,cache) =
-        createService (resolve (context,cache))
+    let createService (context, cache) =
+        createService (resolve (context, cache))

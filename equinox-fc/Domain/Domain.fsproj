@@ -14,10 +14,10 @@
         <Compile Include="InventorySeries.fs" />
         <Compile Include="InventoryEpoch.fs" />
         <Compile Include="Inventory.fs" />
+        <Compile Include="InventoryTransaction.fs" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc8" />
-        <PackageReference Include="FSharp.UMX" Version="1.0.0" />
+        <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc9" />
     </ItemGroup>
 
 </Project>
