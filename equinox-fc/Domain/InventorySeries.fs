@@ -21,7 +21,7 @@ module Fold =
 
     type State = { writing : InventoryEpochId; checkpoint : Events.Checkpoint option }
 
-    let initial = { writing = 0<inventoryEpochId>; checkpoint = None }
+    let initial = { writing = InventoryEpochId.parse 0; checkpoint = None }
     let evolve state = function
         | Events.Started e -> { state with writing = e.epoch }
         | Events.Checkpointed e -> { state with checkpoint = Some e }
@@ -32,7 +32,7 @@ module Fold =
     let snapshot s = Events.Snapshotted { writing = s.writing; checkpoint = s.checkpoint }
     // TODO transmute to remove checkpoints a la Propulsion
 
-let interpretMarkWriting epochId (state : Fold.State) =
+let interpretAdvanceIngestionEpoch epochId (state : Fold.State) =
     if state.writing >= epochId then []
     else [Events.Started { epoch = epochId }]
 
@@ -44,9 +44,9 @@ type Service internal (log, resolve, maxAttempts) =
         let stream = resolve inventoryId
         stream.Query(fun s -> s.writing)
 
-    member __.UpdateEpoch(inventoryId, epochId) : Async<unit> =
+    member __.AdvanceIngestionEpoch(inventoryId, epochId) : Async<unit> =
         let stream = resolve inventoryId
-        stream.Transact(interpretMarkWriting epochId)
+        stream.Transact(interpretAdvanceIngestionEpoch epochId)
 
     // TODO checkpoint writing
 
@@ -56,6 +56,7 @@ let createService resolve =
 module Cosmos =
 
     open Equinox.Cosmos
+
     let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // For this stream, we uniformly use stale reads as:
@@ -63,6 +64,6 @@ module Cosmos =
         // b) while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
         let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id,opt)
+        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
     let createService (context, cache) =
         createService (resolve (context, cache))

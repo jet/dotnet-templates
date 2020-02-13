@@ -108,7 +108,7 @@ module Cosmos =
 
     open Equinox.Cosmos
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-    let resolve (context,cache) =
+    let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let createService (context,cache) = createService (resolve (context,cache))
+    let createService (context, cache) = createService (resolve (context,cache))
