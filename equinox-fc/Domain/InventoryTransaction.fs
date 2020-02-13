@@ -36,17 +36,17 @@ module Events =
 
 module Fold =
 
-    type Removed = { request : Events.TransferRequested; removed : Events.Removed }
-    type Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
     type State =
         | Initial
         | Adjusting of Events.AdjustmentRequested
         | Adjusted of Events.AdjustmentRequested
         | Transferring of Events.TransferRequested
-        | Failed
+        | Rejected
         | Adding of Removed
         | Added of Added
         | Completed
+    and Removed = { request : Events.TransferRequested; removed : Events.Removed }
+    and Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
     let initial = Initial
     let evolve state = function
         | Events.AdjustmentRequested e -> Adjusting e
@@ -55,7 +55,7 @@ module Fold =
             | Adjusting s -> Adjusted s
             | x -> failwithf "Unexpected %A when %A " ee state
         | Events.TransferRequested e -> Transferring e
-        | Events.Failed -> Failed
+        | Events.Failed -> Rejected
         | Events.Removed e as ee ->
             match state with
             | Transferring s -> Adding { request = s; removed = e  }
