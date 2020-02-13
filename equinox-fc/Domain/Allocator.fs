@@ -8,6 +8,9 @@ let streamName allocatorId = FsCodec.StreamName.create Category (AllocatorId.toS
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
+    let [<Literal>] CategoryId = "Allocator"
+    let (|For|) id = FsCodec.StreamName.create CategoryId (AllocatorId.toString id)
+
     type Commenced =    { allocationId : AllocationId; cutoff : DateTimeOffset }
     type Completed =    { allocationId : AllocationId; reason : Reason }
     and  [<Newtonsoft.Json.JsonConverter(typeof<FsCodec.NewtonsoftJson.TypeSafeEnumConverter>)>]

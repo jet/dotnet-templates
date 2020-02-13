@@ -6,6 +6,9 @@ let streamName listId = FsCodec.StreamName.create Category (TicketListId.toStrin
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
+    let [<Literal>] CategoryId = "TicketList"
+    let (|For|) id = FsCodec.StreamName.create CategoryId (TicketListId.toString id)
+
     type Allocated =    { allocatorId : AllocatorId; ticketIds : TicketId[] }
     type Snapshotted =  { ticketIds : TicketId[] }
     type Event =
