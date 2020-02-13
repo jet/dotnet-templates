@@ -1,3 +1,6 @@
+/// Manages the ingestion (and deduplication based on a TransactionId) of events reflecting transfers or stock adjustments
+///   that have been effected across a given set of Inventory
+/// See Inventory.Service for surface level API which manages the ingestion, including transitioning to a new Epoch when an epoch reaches 'full' state
 module Fc.Inventory.Epoch
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care

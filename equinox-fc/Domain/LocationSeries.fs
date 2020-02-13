@@ -1,3 +1,4 @@
+/// Manages the active epoch for a given Location
 module Fc.Location.Series
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
