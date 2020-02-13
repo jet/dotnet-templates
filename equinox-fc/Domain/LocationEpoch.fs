@@ -1,3 +1,6 @@
+/// Manages Stock adjustments and deltas for a given Location
+/// Provides for controlled opening and closing of an epoch, carrying forward incoming balances when a given Epoch reaches a 'full' state
+/// See Location.Service for the logic that allows competing readers/writers to co-operate in bringing this about
 module Fc.Location.Epoch
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care

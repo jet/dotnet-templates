@@ -5,7 +5,7 @@ type Wip<'R> =
     | Pending of decide : (Epoch.Fold.Balance -> 'R * Epoch.Events.Event list)
     | Complete of 'R
 
-/// Manages a Series of Epochs, with a running total being carried forward to the next Epoch when it's Closed
+/// Manages Reads and Writes for a Series of Epochs, with a running total being carried forward to the next Epoch when it's marked Closed
 type Service internal (zeroBalance, shouldClose, series : Series.Service, epochs : Epoch.Service) =
 
     let rec execute locationId originEpochId =

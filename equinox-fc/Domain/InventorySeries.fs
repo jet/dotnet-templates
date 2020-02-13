@@ -1,3 +1,7 @@
+/// Manages a) the ingestion epoch id b) the current checkpointed read position for a long-running Inventory Series
+/// See InventoryEpoch for the logic managing the actual events logged within a given epoch
+/// See Inventory.Service for the surface API which manages the writing
+
 module Fc.Inventory.Series
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
