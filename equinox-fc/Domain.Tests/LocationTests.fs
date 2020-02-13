@@ -1,8 +1,8 @@
-module LocationTests
+module Fc.LocationTests
 
 open FsCheck.Xunit
 open FSharp.UMX
-open Location
+open Fc.Location
 open Swensen.Unquote
 open System
 
@@ -27,7 +27,7 @@ module Location =
             let epochs = Epoch.create (Epoch.resolve store) maxAttempts
             create (zeroBalance, shouldClose) (series, epochs)
 
-let run (service : LocationService) (IdsAtLeastOne locations, deltas : _[]) = Async.RunSynchronously <| async {
+let run (service : Location.Service) (IdsAtLeastOne locations, deltas : _[], transactionId) = Async.RunSynchronously <| async {
     let runId = mkId () // Need to make making state in store unique when replaying or shrinking
     let locations = locations |> Array.map (fun x -> % (sprintf "%O_%O" x runId))
 
@@ -38,7 +38,8 @@ let run (service : LocationService) (IdsAtLeastOne locations, deltas : _[]) = As
     let adjust delta (bal : Epoch.Fold.Balance) =
         let value = max -bal delta
         if value = 0 then 0, []
-        else value, [Location.Epoch.Events.Delta { value = value }]
+        elif value < 0 then value, [Epoch.Events.Removed { delta = -value; transaction = transactionId }]
+        else value, [Epoch.Events.Added { delta = value; transaction = transactionId }]
     let! appliedDeltas = seq { for loc,x in updates -> async { let! _,eff = service.Execute(loc, adjust x) in return loc,eff } } |> Async.Parallel
     let expectedBalances = Seq.append (seq { for l in locations -> l, 0}) appliedDeltas |> Seq.groupBy fst |> Seq.map (fun (l,xs) -> l, xs |> Seq.sumBy snd) |> Set.ofSeq
 
@@ -57,7 +58,7 @@ let [<Property>] ``MemoryStore properties`` maxEvents args =
 
 type Cosmos(testOutput) =
 
-    let context,cache = Cosmos.connect ()
+    let context, cache = Cosmos.connect ()
 
     let log = testOutput |> TestOutputAdapter |> createLogger
     do Serilog.Log.Logger <- log
@@ -66,5 +67,5 @@ type Cosmos(testOutput) =
         let zeroBalance = 0
         let maxEvents = max 1 maxEvents
         let shouldClose (state : Epoch.Fold.OpenState) = state.count > maxEvents
-        let service = Location.Cosmos.createService (zeroBalance, shouldClose) (context,cache,Int32.MaxValue)
+        let service = Location.Cosmos.createService (zeroBalance, shouldClose) (context, cache, 50)
         run service args

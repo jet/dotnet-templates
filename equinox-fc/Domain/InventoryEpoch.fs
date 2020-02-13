@@ -1,7 +1,5 @@
 module Fc.Inventory.Epoch
 
-open System
-
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
@@ -21,6 +19,11 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
+    /// Used for deduplicating input events
+    let chooseInventoryTransactionId = function
+       | Adjusted { transactionId = id } | Transferred { transactionId = id } -> Some id
+       | Closed | Snapshotted _ -> None
+
 module Fold =
 
     type State = { closed : bool; ids : Set<InventoryTransactionId> }
@@ -39,14 +42,16 @@ type Result =
         /// Count of items added to this epoch. May be less than requested due to removal of duplicates and/or rejected items
         added : int
         /// residual items that [are not duplicates and] were not accepted into this epoch
-        rejected : Events.Event list }
+        rejected : Events.Event list
+        /// identifiers for all items in this epoch
+        transactionIds : Set<InventoryTransactionId> }
 
-let decideSync capacity requested (state : Fold.State) : Result * Events.Event list =
+let decideSync capacity events (state : Fold.State) : Result * Events.Event list =
     let isFresh = function
         | Events.Adjusted { transactionId = id }
         | Events.Transferred { transactionId = id } -> (not << state.ids.Contains) id
         | Events.Closed | Events.Snapshotted _ -> false
-    let news = requested |> Seq.filter isFresh |> List.ofSeq
+    let news = events |> Seq.filter isFresh |> List.ofSeq
     let closed,allowing,markClosed,residual =
         let newCount = List.length news
         if state.closed then
@@ -61,18 +66,18 @@ let decideSync capacity requested (state : Fold.State) : Result * Events.Event l
         [ if allowing <> 0 then yield! news
           if markClosed then yield Events.Closed ]
     let state' = Fold.fold state events
-    { isClosed = closed; added = allowing; rejected = residual },events
+    { isClosed = closed; added = allowing; rejected = residual; transactionIds = state'.ids },events
 
 type Service internal (log, resolve, maxAttempts) =
 
     let resolve (Events.For streamId) = Equinox.Stream<Events.Event,Fold.State>(log, resolve streamId, maxAttempts)
 
     /// Attempt ingestion of `events` into the cited Epoch.
-    /// - No `items` will be accepted if the Epoch is `closed`
+    /// - None will be accepted if the Epoch is `closed`
     /// - The `capacity` function will be passed a non-closed `state` in order to determine number of items that can be admitted prior to closing
     /// - If the computed capacity result is >= the number of items being submitted (which may be 0), the Epoch will be marked Closed
     /// NOTE the result may include rejected items (which the caller is expected to feed into a successor epoch)
-    member __.IngestShipped(inventoryId, epochId, capacity, events) : Async<Result> =
+    member __.TryIngest(inventoryId, epochId, capacity, events) : Async<Result> =
         let stream = resolve (inventoryId, epochId)
         stream.Transact(decideSync capacity events)
 
@@ -81,8 +86,9 @@ let createService resolve = Service(Serilog.Log.ForContext<Service>(), resolve, 
 module Cosmos =
 
     open Equinox.Cosmos
+
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-    let resolve (context,cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+    let resolve (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let createService (context,cache) = createService (resolve (context,cache))
+    let createService (context, cache) = createService (resolve (context, cache))

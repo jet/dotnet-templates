@@ -47,7 +47,8 @@ type private Accumulator() =
 
 type Result<'t> = { balance : Fold.Balance; result : 't option; isOpen : bool }
 
-let sync (balanceCarriedForward : Fold.Balance option) (decide : (Fold.Balance -> 't*Events.Event list)) shouldClose state : Result<'t>*Events.Event list =
+let sync (balanceCarriedForward : Fold.Balance option) (decide : Fold.Balance -> 't*Events.Event list) shouldClose state : Result<'t>*Events.Event list =
+
     let acc = Accumulator()
     // We require a CarriedForward event at the start of any Epoch's event stream
     let (), state =
@@ -85,8 +86,9 @@ let create resolve maxAttempts = Service(Serilog.Log.ForContext<Service>(), reso
 module Cosmos =
 
     open Equinox.Cosmos
-    let resolve (context,cache) =
+
+    let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.Unoptimized).Resolve
-    let createService (context,cache,maxAttempts) =
-        create (resolve (context,cache)) maxAttempts
+    let createService (context, cache, maxAttempts) =
+        create (resolve (context, cache)) maxAttempts
