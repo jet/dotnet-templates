@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Add handling for `-T` TCP/IP switch on EventStore args [#46](https://github.com/jet/dotnet-templates/pulls/46)
+
 ### Changed
 ### Removed
 ### Fixed

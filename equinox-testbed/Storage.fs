@@ -104,7 +104,8 @@ module EventStore =
         | [<AltCommandLine "-V">]       VerboseStore
         | [<AltCommandLine "-o">]       Timeout of float
         | [<AltCommandLine "-r">]       Retries of int
-        | [<AltCommandLine "-g">]       Host of string
+        | [<AltCommandLine "-T">]       Tcp
+        | [<AltCommandLine "-h">]       Host of string
         | [<AltCommandLine "-u">]       Username of string
         | [<AltCommandLine "-p">]       Password of string
         | [<AltCommandLine "-c">]       ConcurrentOperationsLimit of int
@@ -114,7 +115,8 @@ module EventStore =
                 | VerboseStore ->       "include low level Store logging."
                 | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->          "specify operation retries. Default: 1."
-                | Host _ ->             "specify a DNS query, using Gossip-driven discovery against all A records returned. Default: localhost."
+                | Tcp ->                "Request connecting direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
+                | Host _ ->             "TCP mode: specify a hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
                 | Username _ ->         "specify a username. Default: admin."
                 | Password _ ->         "specify a Password. Default: changeit."
                 | ConcurrentOperationsLimit _ -> "max concurrent operations in flight. Default: 5000."

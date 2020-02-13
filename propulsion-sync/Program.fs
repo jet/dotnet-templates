@@ -228,6 +228,7 @@ module CmdParser =
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-oh">]          HeartbeatTimeout of float
+        | [<AltCommandLine "-T">]           Tcp
         | [<AltCommandLine "-h">]           Host of string
         | [<AltCommandLine "-x">]           Port of int
         | [<AltCommandLine "-u">]           Username of string
@@ -249,8 +250,9 @@ module CmdParser =
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
 
                 | Verbose ->                "Include low level Store logging."
-                | Host _ ->                 "specify a DNS query, using Gossip-driven discovery against all A records returned. (optional if environment variable EQUINOX_ES_HOST specified)"
-                | Port _ ->                 "specify a custom port. Defaults: envvar:EQUINOX_ES_PORT, 30778."
+                | Tcp ->                    "Request connecting direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
+                | Host _ ->                 "TCP mode: specify a hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
+                | Port _ ->                 "specify a custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
                 | Username _ ->             "specify a username. (optional if environment variable EQUINOX_ES_USERNAME specified)"
                 | Password _ ->             "specify a Password. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
@@ -274,7 +276,15 @@ module CmdParser =
             | None, None, None, true ->     StartPos.TailOrCheckpoint
             | None, None, None, _ ->        StartPos.StartOrCheckpoint
 
-        member __.Discovery =               match __.Port with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
+        member __.Discovery =
+            match __.Tcp, __.Port with
+            | false, None ->   Discovery.GossipDns            __.Host
+            | false, Some p -> Discovery.GossipDnsCustomPort (__.Host, p)
+            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", __.Host).Uri)
+            | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", __.Host, p).Uri)
+        member __.Tcp =
+            a.Contains EsSourceParameters.Tcp
+            || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
         member __.Port =                    match a.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
         member __.Host =                    a.TryGetResult EsSourceParameters.Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
         member __.User =                    a.TryGetResult EsSourceParameters.Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
@@ -352,6 +362,7 @@ module CmdParser =
 #endif
     and [<NoEquality; NoComparison>] EsSinkParameters =
         | [<AltCommandLine "-V">]           Verbose
+        | [<AltCommandLine "-T">]           Tcp
         | [<AltCommandLine "-h">]           Host of string
         | [<AltCommandLine "-x">]           Port of int
         | [<AltCommandLine "-u">]           Username of string
@@ -362,15 +373,24 @@ module CmdParser =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose ->                "Include low level Store logging."
-                | Host _ ->                 "specify a DNS query, using Gossip-driven discovery against all A records returned. (optional if environment variable EQUINOX_ES_HOST specified)"
-                | Port _ ->                 "specify a custom port. Defaults: envvar:EQUINOX_ES_PORT, 30778."
+                | Tcp ->                    "Request connecting direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
+                | Host _ ->                 "TCP mode: specify a hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
+                | Port _ ->                 "specify a custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
                 | Username _ ->             "specify a username. (optional if environment variable EQUINOX_ES_USERNAME specified)"
                 | Password _ ->             "specify a password. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
                 | Retries _ ->              "specify operation retries. Default: 3."
                 | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
     and EsSinkArguments(a : ParseResults<EsSinkParameters>) =
-        member __.Discovery =               match __.Port with Some p -> Discovery.GossipDnsCustomPort (__.Host, p) | None -> Discovery.GossipDns __.Host
+        member __.Discovery =
+            match __.Tcp, __.Port with
+            | false, None ->   Discovery.GossipDns            __.Host
+            | false, Some p -> Discovery.GossipDnsCustomPort (__.Host, p)
+            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", __.Host).Uri)
+            | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", __.Host, p).Uri)
+        member __.Tcp =
+            a.Contains EsSinkParameters.Tcp
+            || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
         member __.Port =                    match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
         member __.Host =                    a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
         member __.User =                    a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
