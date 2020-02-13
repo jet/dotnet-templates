@@ -66,6 +66,7 @@ let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAtte
 module EventStore =
 
     open Equinox.EventStore // Everything until now is independent of a concrete store
+
     let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve

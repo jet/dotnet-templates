@@ -73,6 +73,7 @@ let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAtte
 module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
+
     let private resolve (context, cache) =
         // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
         let accessStrategy = AccessStrategy.Snapshot(Fold.isOrigin, Fold.snapshot)

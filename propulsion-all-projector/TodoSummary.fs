@@ -22,8 +22,8 @@ module Fold =
         | Events.Ingested e -> { version = e.version; value = Some e.value }
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let snapshot state = Events.Ingested { version = state.version; value = state.value.Value }
-    let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingState snapshot
 
+// TODO collapse this unless you actually end up with >1 kind of ingestion Command
 type Command =
     | Consume of version : int64 * value : Events.SummaryData
 
@@ -61,7 +61,9 @@ let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAtte
 module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
+
     let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, Fold.accessStrategy).Resolve
+        let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingState Fold.snapshot
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
     let create (context, cache) = create (resolve (context, cache))
