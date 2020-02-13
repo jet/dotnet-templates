@@ -15,7 +15,7 @@
         <Compile Include="InventorySeries.fs" />
         <Compile Include="InventoryEpoch.fs" />
         <Compile Include="Inventory.fs" />
-<!--        <Compile Include="InventoryTransaction.fs" />-->
+        <Compile Include="InventoryTransaction.fs" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc9" />
