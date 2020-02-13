@@ -1,4 +1,4 @@
-module LocationSeriesTests
+module Fc.LocationSeriesTests
 
 open FsCheck.Xunit
 open FSharp.UMX
@@ -6,7 +6,7 @@ open Swensen.Unquote
 open Location.Series
 
 let [<Property>] properties c1 c2 =
-    let events = interpretActivateEpoch c1 Fold.initial
+    let events = interpretAdvanceIngestionEpoch c1 Fold.initial
     let state1 = Fold.fold Fold.initial events
     let epoch0 = %0
     match c1, events, state1 with
@@ -20,7 +20,7 @@ let [<Property>] properties c1 c2 =
     | _, l, _ ->
         test <@ List.isEmpty l @>
 
-    let events = interpretActivateEpoch c2 state1
+    let events = interpretAdvanceIngestionEpoch c2 state1
     let state2 = Fold.fold state1 events
     match state1, c2, events, state2 with
     // Started events are not written for < 0

@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module Infrastructure
+module Fc.Infrastructure
 
 open Serilog
 open System
@@ -32,7 +32,8 @@ module Cosmos =
 
 /// Adapts the XUnit ITestOutputHelper to be a Serilog Sink
 type TestOutputAdapter(testOutput : Xunit.Abstractions.ITestOutputHelper) =
-    let formatter = Serilog.Formatting.Display.MessageTemplateTextFormatter("{Timestamp:HH:mm:ss.fff zzz} [{Level:u3}] {Message} {Properties}{NewLine}{Exception}", null);
+    let template = "{Timestamp:HH:mm:ss.fff zzz} [{Level:u3}] {Message} {Properties}{NewLine}{Exception}"
+    let formatter = Serilog.Formatting.Display.MessageTemplateTextFormatter(template, null);
     let writeSerilogEvent logEvent =
         use writer = new System.IO.StringWriter()
         formatter.Format(logEvent, writer)

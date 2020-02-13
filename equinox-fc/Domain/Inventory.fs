@@ -1,5 +1,6 @@
 namespace Fc.Inventory
 
+open Epoch
 open Equinox.Core // we use Equinox's AsyncCacheCell helper below
 open FSharp.UMX
 
@@ -9,75 +10,75 @@ type internal IdsCache<'Id>() =
     member __.Add ids = for x in ids do all.[x] <- ()
     member __.Contains id = all.ContainsKey id
 
-/// Maintains active BatchId in a thread-safe manner while ingesting items into the chain of `batches` indexed by the `transmissions`
-/// Prior to first add, reads `lookBack` batches to seed the cache, in order to minimize the number of duplicated pickTickets we transmit
-type Ingester internal (fcId, series : Series.Service, epochs : Epoch.Service, lookBack, capacity) =
+/// Maintains active Epoch Id in a thread-safe manner while ingesting items into the `series` of `epochs`
+/// Prior to first add, reads `lookBack` epochs to seed the cache, in order to minimize the number of duplicated Ids we ingest
+type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Service, lookBack, capacity) =
 
-    let log = Serilog.Log.ForContext<Ingester>()
+    let log = Serilog.Log.ForContext<Service>()
+
     // Maintains what we believe to be the currently open EpochId
     // Guaranteed to be set only after `previousIds.AwaitValue()`
-    let mutable activeId = Unchecked.defaultof<_>
+    let mutable activeEpochId = Unchecked.defaultof<_>
 
     // We want max one request in flight to establish the pre-existing Batches from which the tickets cache will be seeded
-    let previousBatches = AsyncCacheCell<AsyncCacheCell<PickTicketId list> list> <| async {
-        let! startingId = transmissions.ReadIngestionBatchId(fcId)
-        activeId <- %startingId
-        let readBatch batchId = async { let! r = batches.IngestShipped(fcId,batchId,(fun _ -> 1),Seq.empty) in return r.batchContent }
-        return [ for b in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> AsyncCacheCell(readBatch %b) ] }
+    let previousEpochs = AsyncCacheCell<AsyncCacheCell<Set<InventoryTransactionId>> list> <| async {
+        let! startingId = series.ReadIngestionEpochId(inventoryId)
+        activeEpochId <- %startingId
+        let read epochId = async { let! r = epochs.TryIngest(inventoryId, epochId, (fun _ -> 1),Seq.empty) in return r.transactionIds }
+        return [ for epoch in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> AsyncCacheCell(read %epoch) ] }
 
-    // Tickets cache - used to maintain a list of tickets that have already been ingested in order to avoid db round-trips
-    let previousIds : AsyncCacheCell<IdsCache> = AsyncCacheCell <| async {
-        let! batches = previousBatches.AwaitValue()
+    // TransactionIds cache - used to maintain a list of transactions that have already been ingested in order to avoid db round-trips
+    let previousIds : AsyncCacheCell<IdsCache<_>> = AsyncCacheCell <| async {
+        let! batches = previousEpochs.AwaitValue()
         let! ids = seq { for x in batches -> x.AwaitValue() } |> Async.Parallel
         return IdsCache.Create(Seq.concat ids) }
 
-    let tryIngest items = async {
-        let! previousTickets = previousIds.AwaitValue()
-        let firstBatchId = %activeId
+    let tryIngest events = async {
+        let! previousIds = previousIds.AwaitValue()
+        let initialEpochId = %activeEpochId
 
-        let rec aux batchId totalIngestedTickets items = async {
-            let dup,fresh = items |> List.partition previousTickets.Contains
+        let rec aux epochId totalIngested items = async {
+            let SeqPartition f = Seq.toArray >> Array.partition f
+            let dup,fresh = items |> SeqPartition (Epoch.Events.chooseInventoryTransactionId >> Option.exists previousIds.Contains)
             let fullCount = List.length items
-            let dropping = fullCount - List.length fresh
-            if dropping <> 0 then log.Information("Ignoring {count}/{fullCount} duplicate ids: {ids} for {batchId}", dropping, fullCount, dup, batchId)
-            if List.isEmpty fresh then
-                return totalIngestedTickets
+            let dropping = fullCount - Array.length fresh
+            if dropping <> 0 then log.Information("Ignoring {count}/{fullCount} duplicate ids: {ids} for {epochId}", dropping, fullCount, dup, epochId)
+            if Array.isEmpty fresh then
+                return totalIngested
             else
-                let! res = batches.IngestShipped(fcId,batchId,capacity,fresh)
-                log.Information("Added {count} items to {fcId:l}/{batchId}", res.added, fcId, batchId)
+                let! res = epochs.TryIngest(inventoryId, epochId, capacity, fresh)
+                log.Information("Added {count} items to {inventoryId:l}/{epochId}", res.added, inventoryId, epochId)
                 // The adding is potentially redundant; we don't care
-                previousTickets.Add res.batchContent
-                // Any writer noticing we've moved to a new batch shares the burden of marking it active
-                if not res.isClosed && activeId < %batchId then
-                    log.Information("Marking {fcId:l}/{batchId} active", fcId, batchId)
-                    do! transmissions.MarkIngestionBatchId(fcId,batchId)
-                    System.Threading.Interlocked.CompareExchange(&activeId,%batchId,activeId) |> ignore
-                let totalIngestedTickets = totalIngestedTickets + res.added
+                previousIds.Add res.transactionIds
+                // Any writer noticing we've moved to a new epoch shares the burden of marking it active
+                if not res.isClosed && activeEpochId < %epochId then
+                    log.Information("Marking {inventoryId:l}/{epochId} active", inventoryId, epochId)
+                    do! series.AdvanceIngestionEpoch(inventoryId, epochId)
+                    System.Threading.Interlocked.CompareExchange(&activeEpochId, %epochId,activeEpochId) |> ignore
+                let totalIngestedTickets = totalIngested + res.added
                 match res.rejected with
                 | [] -> return totalIngestedTickets
-                | rej -> return! aux (BatchId.next batchId) totalIngestedTickets rej }
-        return! aux firstBatchId 0 items
+                | rej -> return! aux (InventoryEpochId.next epochId) totalIngestedTickets rej }
+        return! aux initialEpochId 0 events
     }
 
     /// Upon startup, we initialize the PickTickets cache with recent batches; we want to kick that process off before our first ingest
-    member __.Initialize() = previousBatches.AwaitValue() |> Async.Ignore
+    member __.Initialize() = previousIds.AwaitValue() |> Async.Ignore
 
-    /// Feeds the items into the sequence of batches. Returns the number of items actually added [excluding duplicates]
-    member __.Ingest(items : PickTicketId list) : Async<int> = tryIngest items
+    /// Feeds the events into the sequence of batches. Returns the number of items actually added [excluding duplicates]
+    member __.Ingest(events : Epoch.Events.Event list) : Async<int> = tryIngest events
 
-module PickTicketsIngester =
+module internal Helpers =
 
-    let create fcId maxPickTicketsPerBatch lookBackLimit batchesResolve (epochOverride,transmissionsResolve) =
-        let remainingBatchCapacity (state: Financial.Batch.Fold.State) =
-            let l = state.ItemCount
-            max 0 (maxPickTicketsPerBatch-l)
-        let batches = Financial.Batch.createService batchesResolve
-        let transmissions = Financial.Transmissions.createService epochOverride transmissionsResolve
-        Ingester(fcId, batches, transmissions, lookBack=lookBackLimit, capacity=remainingBatchCapacity)
+    let create inventoryId maxTransactionsPerBatch lookBackLimit (series, epochs) =
+        let remainingBatchCapacity (state: Epoch.Fold.State) =
+            let currentLen = state.ids.Count
+            max 0 (maxTransactionsPerBatch - currentLen)
+        Service(inventoryId, series, epochs, lookBack = lookBackLimit, capacity = remainingBatchCapacity)
 
-    module Cosmos =
+module Cosmos =
 
-        let create epochOverride fcId maxPickTicketsPerBatch lookBackLimit (context,cache) =
-            let batchesResolve = Financial.Batch.Cosmos.resolve (context,cache)
-            let transmissionsResolve = Financial.Transmissions.Cosmos.resolve (context,cache)
-            create fcId maxPickTicketsPerBatch lookBackLimit batchesResolve (epochOverride,transmissionsResolve)
+    let create inventoryId maxTransactionsPerBatch lookBackLimit (context, cache) =
+        let series = Series.Cosmos.createService (context, cache)
+        let epochs = Epoch.Cosmos.createService (context, cache)
+        Helpers.create inventoryId maxTransactionsPerBatch lookBackLimit (series, epochs)

@@ -14,7 +14,7 @@ type Service internal (zeroBalance, shouldClose, series : Series.Service, epochs
             match! epochs.Sync(locationId, epochId, balanceToCarryForward, decide, shouldClose) with
             | { balance = bal; result = Some res; isOpen = true } ->
                 if originEpochId <> epochId then
-                    do! series.ActivateEpoch(locationId, epochId)
+                    do! series.AdvanceIngestionEpoch(locationId, epochId)
                 return bal, res
             | { balance = bal; result = Some res } ->
                 let successorEpochId = LocationEpochId.next epochId
@@ -25,7 +25,7 @@ type Service internal (zeroBalance, shouldClose, series : Series.Service, epochs
         aux
 
     member __.Execute(locationId, decide) = async {
-        let! activeEpoch = series.ReadIngestionEpoch locationId
+        let! activeEpoch = series.TryReadIngestionEpoch locationId
         let originEpochId, epochId, balanceCarriedForward =
             match activeEpoch with
             | None -> LocationEpochId.parse -1, LocationEpochId.parse 0, Some zeroBalance
