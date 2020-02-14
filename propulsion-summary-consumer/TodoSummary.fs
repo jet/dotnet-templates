@@ -62,8 +62,8 @@ module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
 
+    let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingState Fold.snapshot
     let private resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingState Fold.snapshot
         Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
     let create (context, cache) = create (resolve (context, cache))

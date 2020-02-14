@@ -74,9 +74,8 @@ module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store
 
+    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
     let private resolve (context, cache) =
-        // We don't want to write any events, so here we supply the `transmute` function to teach it how to treat our events as snapshots
-        let accessStrategy = AccessStrategy.Snapshot(Fold.isOrigin, Fold.snapshot)
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
     let create (context, cache) = create (resolve (context, cache))
