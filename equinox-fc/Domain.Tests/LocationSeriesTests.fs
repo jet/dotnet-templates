@@ -39,6 +39,6 @@ let [<Property>] properties c1 c2 =
         test <@ List.isEmpty l @>
 
 let [<Property>] ``codec can roundtrip`` event =
-    let ee = Events.codec.Encode(None,event)
+    let ee = Events.codec.Encode(None, event)
     let ie = FsCodec.Core.TimelineEvent.Create(0L, ee.EventType, ee.Data)
     test <@ Some event = Events.codec.TryDecode ie @>
