@@ -29,7 +29,7 @@ module Location =
 
 let run (service : Location.Service) (IdsAtLeastOne locations, deltas : _[], transactionId) = Async.RunSynchronously <| async {
     let runId = mkId () // Need to make making state in store unique when replaying or shrinking
-    let locations = locations |> Array.map (fun x -> % (sprintf "%O_%O" x runId))
+    let locations = locations |> Array.map (fun x -> % (sprintf "%O/%O" x runId))
 
     let updates = deltas |> Seq.mapi (fun i x -> locations.[i % locations.Length], x) |> Seq.cache
 
