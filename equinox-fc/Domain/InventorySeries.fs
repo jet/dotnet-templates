@@ -61,13 +61,13 @@ module Cosmos =
 
     open Equinox.Cosmos
 
+    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
     let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // For this stream, we uniformly use stale reads as:
         // a) we don't require any information from competing writers
         // b) while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
-        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
         fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
     let createService (context, cache) =
         createService (resolve (context, cache))
