@@ -26,7 +26,7 @@ module Cosmos =
             let context = Context(connection, d, c)
             let cache = Equinox.Cache (appName, 10)
             context, cache
-        | s,d,c ->
+        | s, d, c ->
             failwithf "Connection, Database and Container EQUINOX_COSMOS_* Environment variables are required (%b,%b,%b)"
                 (Option.isSome s) (Option.isSome d) (Option.isSome c)
 
