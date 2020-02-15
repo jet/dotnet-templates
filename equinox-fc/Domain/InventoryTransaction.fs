@@ -14,7 +14,7 @@ module Fc.InventoryTransaction
 module Events =
 
     let [<Literal>] CategoryId = "InventoryTransaction"
-    let (|For|) (inventoryId, transactionId) = FsCodec.StreamName.create CategoryId (InventoryTransactionId.toString transactionId)
+    let (|For|) transactionId = FsCodec.StreamName.create CategoryId (InventoryTransactionId.toString transactionId)
 
     type AdjustmentRequested = { location : LocationId; quantity : int }
     type TransferRequested = { source : LocationId; destination : LocationId; quantity : int }
@@ -83,7 +83,6 @@ module Fold =
 
         (* Any disallowed state changes represent gaps in the model, so we fail fast *)
         | state, event -> failwithf "Unexpected %A when %A" event state
-
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
 type Command =
@@ -112,7 +111,11 @@ let decide command updates (state : Fold.State) : Result * Events.Event list =
             match state, command with
             | Fold.Initial, Adjust e -> true, [ Events.AdjustmentRequested e ]
             | Fold.Initial, Transfer e -> true, [ Events.TransferRequested e ]
+
+            // TOCONSIDER validate conflicts
+
             | _ -> false, []
+
     { complete = false }, acc.Accumulated
 
 type Service internal (log, resolve, maxAttempts) =
@@ -120,7 +123,7 @@ type Service internal (log, resolve, maxAttempts) =
     let resolve (Events.For streamId) = Equinox.Stream<Events.Event,Fold.State>(log, resolve streamId, maxAttempts)
 
     member __.IngestShipped(inventoryId, transactionId, command, updates) : Async<Result> =
-        let stream = resolve (inventoryId, transactionId)
+        let stream = resolve transactionId
         stream.Transact(decide command updates)
 
 let createService resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 2)
