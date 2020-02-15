@@ -1,8 +1,8 @@
 module Fc.LocationTests
 
+open Fc.Location
 open FsCheck.Xunit
 open FSharp.UMX
-open Fc.Location
 open Swensen.Unquote
 open System
 
