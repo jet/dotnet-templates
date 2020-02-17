@@ -66,8 +66,8 @@ let decideSync capacity events (state : Fold.State) : Result * Events.Event list
             let residual = List.skip accepting news
             closing, accepting, closing, residual
     let events =
-        [ if allowing <> 0 then yield! news
-          if markClosed then yield Events.Closed ]
+        [   if allowing <> 0 then yield! news
+            if markClosed then yield Events.Closed ]
     let state' = Fold.fold state events
     { isClosed = closed; added = allowing; rejected = residual; transactionIds = state'.ids }, events
 

@@ -20,7 +20,7 @@ type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Serv
     // Guaranteed to be set only after `previousIds.AwaitValue()`
     let mutable activeEpochId = Unchecked.defaultof<_>
 
-    // We want max one request in flight to establish the pre-existing Batches from which the tickets cache will be seeded
+    // We want max one request in flight to establish the pre-existing Events from which the TransactionIds cache will be seeded
     let previousEpochs = AsyncCacheCell<AsyncCacheCell<Set<InventoryTransactionId>> list> <| async {
         let! startingId = series.ReadIngestionEpoch(inventoryId)
         activeEpochId <- %startingId
@@ -29,8 +29,8 @@ type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Serv
 
     // TransactionIds cache - used to maintain a list of transactions that have already been ingested in order to avoid db round-trips
     let previousIds : AsyncCacheCell<IdsCache<_>> = AsyncCacheCell <| async {
-        let! batches = previousEpochs.AwaitValue()
-        let! ids = seq { for x in batches -> x.AwaitValue() } |> Async.Parallel
+        let! previousEpochs = previousEpochs.AwaitValue()
+        let! ids = seq { for x in previousEpochs -> x.AwaitValue() } |> Async.Parallel
         return IdsCache.Create(Seq.concat ids) }
 
     let tryIngest events = async {
@@ -55,30 +55,30 @@ type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Serv
                     log.Information("Marking {inventoryId:l}/{epochId} active", inventoryId, epochId)
                     do! series.AdvanceIngestionEpoch(inventoryId, epochId)
                     System.Threading.Interlocked.CompareExchange(&activeEpochId, %epochId, activeEpochId) |> ignore
-                let totalIngestedTickets = totalIngested + res.added
+                let totalIngestedTransactions = totalIngested + res.added
                 match res.rejected with
-                | [] -> return totalIngestedTickets
-                | rej -> return! aux (InventoryEpochId.next epochId) totalIngestedTickets rej }
+                | [] -> return totalIngestedTransactions
+                | rej -> return! aux (InventoryEpochId.next epochId) totalIngestedTransactions rej }
         return! aux initialEpochId 0 events
     }
 
-    /// Upon startup, we initialize the PickTickets cache with recent batches; we want to kick that process off before our first ingest
+    /// Upon startup, we initialize the TransactionIds cache with recent epochs; we want to kick that process off before our first ingest
     member __.Initialize() = previousIds.AwaitValue() |> Async.Ignore
 
-    /// Feeds the events into the sequence of batches. Returns the number of items actually added [excluding duplicates]
+    /// Feeds the events into the sequence of transactions. Returns the number actually added [excluding duplicates]
     member __.Ingest(events : Epoch.Events.Event list) : Async<int> = tryIngest events
 
 module internal Helpers =
 
-    let create inventoryId maxTransactionsPerBatch lookBackLimit (series, epochs) =
-        let remainingBatchCapacity (state: Epoch.Fold.State) =
+    let create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs) =
+        let remainingEpochCapacity (state: Epoch.Fold.State) =
             let currentLen = state.ids.Count
-            max 0 (maxTransactionsPerBatch - currentLen)
-        Service(inventoryId, series, epochs, lookBack = lookBackLimit, capacity = remainingBatchCapacity)
+            max 0 (maxTransactionsPerEpoch - currentLen)
+        Service(inventoryId, series, epochs, lookBack = lookBackLimit, capacity = remainingEpochCapacity)
 
 module Cosmos =
 
-    let create inventoryId maxTransactionsPerBatch lookBackLimit (context, cache) =
+    let create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache) =
         let series = Series.Cosmos.createService (context, cache)
         let epochs = Epoch.Cosmos.createService (context, cache)
-        Helpers.create inventoryId maxTransactionsPerBatch lookBackLimit (series, epochs)
+        Helpers.create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs)
