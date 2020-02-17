@@ -32,7 +32,7 @@ let interpretAdvanceIngestionEpoch epochId (state : Fold.State) =
 
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.For streamId) = Equinox.Stream<Events.Event,Fold.State>(log, resolve streamId, maxAttempts)
+    let resolve (Events.For streamId) = Equinox.Stream<Events.Event, Fold.State>(log, resolve streamId, maxAttempts)
 
     member __.ReadIngestionEpoch(inventoryId) : Async<InventoryEpochId> =
         let stream = resolve inventoryId
