@@ -3,8 +3,8 @@
     <PropertyGroup>
         <TargetFramework>netcoreapp2.1</TargetFramework>
         <WarningLevel>5</WarningLevel>
-        <RootNamespace>Fc.Domain.Tests</RootNamespace>
         <IsPackable>false</IsPackable>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     </PropertyGroup>
 
     <ItemGroup>

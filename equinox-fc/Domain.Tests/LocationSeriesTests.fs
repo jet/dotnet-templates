@@ -14,7 +14,7 @@ let [<Property>] properties c1 c2 =
     | n, [], activeEpoch when n < epoch0 ->
         test <@ None = activeEpoch @>
     // Any >=0 value should trigger a Started event, initially
-    | n, [Events.Started { epochId = ee }], Some activatedEpoch ->
+    | n, [Events.Started { epoch = ee }], Some activatedEpoch ->
         test <@ n >= epoch0 && n = ee && n = activatedEpoch @>
     // Nothing else should yield events
     | _, l, _ ->
@@ -27,11 +27,11 @@ let [<Property>] properties c1 c2 =
     | None, n, [], activeEpoch when n < epoch0 ->
         test <@ None = activeEpoch @>
     // Any >= 0 epochId should trigger a Started event if first command didnt do anything
-    | None, n, [Events.Started { epochId = ee }], Some activatedEpoch ->
+    | None, n, [Events.Started { epoch = ee }], Some activatedEpoch ->
         let eEpoch = %ee
         test <@ n >= epoch0 && n = eEpoch && n = activatedEpoch @>
     // Any higher epochId should trigger a Started event (gaps are fine - we are only tying to reduce walks)
-    | Some s1, n, [Events.Started { epochId = ee }], Some activatedEpoch ->
+    | Some s1, n, [Events.Started { epoch = ee }], Some activatedEpoch ->
         let eEpoch = %ee
         test <@ n > s1 && n = eEpoch && n > epoch0 && n = activatedEpoch @>
     // Nothing else should yield events

@@ -22,7 +22,7 @@ type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Serv
 
     // We want max one request in flight to establish the pre-existing Batches from which the tickets cache will be seeded
     let previousEpochs = AsyncCacheCell<AsyncCacheCell<Set<InventoryTransactionId>> list> <| async {
-        let! startingId = series.ReadIngestionEpochId(inventoryId)
+        let! startingId = series.ReadIngestionEpoch(inventoryId)
         activeEpochId <- %startingId
         let read epochId = async { let! r = epochs.TryIngest(inventoryId, epochId, (fun _ -> 1),Seq.empty) in return r.transactionIds }
         return [ for epoch in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> AsyncCacheCell(read %epoch) ] }
