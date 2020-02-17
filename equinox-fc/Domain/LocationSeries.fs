@@ -48,6 +48,6 @@ module Cosmos =
     let resolve (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let opt = Equinox.ResolveOption.AllowStale
-        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id,opt)
+        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id, opt)
     let createService (context, cache, maxAttempts) =
         create (resolve (context, cache)) maxAttempts

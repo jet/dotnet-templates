@@ -55,25 +55,25 @@ let decideSync capacity events (state : Fold.State) : Result * Events.Event list
         | Events.Transferred { transactionId = id } -> (not << state.ids.Contains) id
         | Events.Closed | Events.Snapshotted _ -> false
     let news = events |> Seq.filter isFresh |> List.ofSeq
-    let closed,allowing,markClosed,residual =
+    let closed, allowing, markClosed, residual =
         let newCount = List.length news
         if state.closed then
-            true,0,false,news
+            true, 0, false, news
         else
             let capacityNow = capacity state
             let accepting = min capacityNow newCount
             let closing = accepting = capacityNow
             let residual = List.skip accepting news
-            closing,accepting,closing,residual
+            closing, accepting, closing, residual
     let events =
         [ if allowing <> 0 then yield! news
           if markClosed then yield Events.Closed ]
     let state' = Fold.fold state events
-    { isClosed = closed; added = allowing; rejected = residual; transactionIds = state'.ids },events
+    { isClosed = closed; added = allowing; rejected = residual; transactionIds = state'.ids }, events
 
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.For streamId) = Equinox.Stream<Events.Event,Fold.State>(log, resolve streamId, maxAttempts)
+    let resolve (Events.For streamId) = Equinox.Stream<Events.Event, Fold.State>(log, resolve streamId, maxAttempts)
 
     /// Attempt ingestion of `events` into the cited Epoch.
     /// - None will be accepted if the Epoch is `closed`

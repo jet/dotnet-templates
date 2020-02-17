@@ -10,7 +10,7 @@ type Service internal (zeroBalance, shouldClose, series : Series.Service, epochs
 
     let rec execute locationId originEpochId =
         let rec aux epochId balanceToCarryForward wip = async {
-            let decide state = match wip with Complete r -> r,[] | Pending decide -> decide state
+            let decide state = match wip with Complete r -> r, [] | Pending decide -> decide state
             match! epochs.Sync(locationId, epochId, balanceToCarryForward, decide, shouldClose) with
             | { balance = bal; result = Some res; isOpen = true } ->
                 if originEpochId <> epochId then

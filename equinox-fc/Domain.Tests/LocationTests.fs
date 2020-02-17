@@ -40,12 +40,12 @@ let run (service : Location.Service) (IdsAtLeastOne locations, deltas : _[], tra
         if value = 0 then 0, []
         elif value < 0 then value, [Epoch.Events.Removed { delta = -value; transaction = transactionId }]
         else value, [Epoch.Events.Added { delta = value; transaction = transactionId }]
-    let! appliedDeltas = seq { for loc,x in updates -> async { let! _,eff = service.Execute(loc, adjust x) in return loc,eff } } |> Async.Parallel
-    let expectedBalances = Seq.append (seq { for l in locations -> l, 0}) appliedDeltas |> Seq.groupBy fst |> Seq.map (fun (l,xs) -> l, xs |> Seq.sumBy snd) |> Set.ofSeq
+    let! appliedDeltas = seq { for loc, x in updates -> async { let! _, eff = service.Execute(loc, adjust x) in return loc,eff } } |> Async.Parallel
+    let expectedBalances = Seq.append (seq { for l in locations -> l, 0}) appliedDeltas |> Seq.groupBy fst |> Seq.map (fun (l, xs) -> l, xs |> Seq.sumBy snd) |> Set.ofSeq
 
     (* Verify loading yields identical state *)
 
-    let! balances = seq { for loc in locations -> async { let! bal,() = service.Execute(loc,(fun _ -> (),[])) in return loc,bal } } |> Async.Parallel
+    let! balances = seq { for loc in locations -> async { let! bal, () = service.Execute(loc,(fun _ -> (), [])) in return loc,bal } } |> Async.Parallel
     test <@ expectedBalances = Set.ofSeq balances @> }
 
 let [<Property>] ``MemoryStore properties`` maxEvents args =

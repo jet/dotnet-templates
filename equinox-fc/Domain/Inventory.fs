@@ -5,7 +5,7 @@ open Equinox.Core // we use Equinox's AsyncCacheCell helper below
 open FSharp.UMX
 
 type internal IdsCache<'Id>() =
-    let all = System.Collections.Concurrent.ConcurrentDictionary<'Id,unit>() // Bounded only by relatively low number of physical pick tickets IRL
+    let all = System.Collections.Concurrent.ConcurrentDictionary<'Id, unit>() // Bounded only by relatively low number of physical pick tickets IRL
     static member Create init = let x = IdsCache() in x.Add init; x
     member __.Add ids = for x in ids do all.[x] <- ()
     member __.Contains id = all.ContainsKey id
@@ -24,7 +24,7 @@ type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Serv
     let previousEpochs = AsyncCacheCell<AsyncCacheCell<Set<InventoryTransactionId>> list> <| async {
         let! startingId = series.ReadIngestionEpoch(inventoryId)
         activeEpochId <- %startingId
-        let read epochId = async { let! r = epochs.TryIngest(inventoryId, epochId, (fun _ -> 1),Seq.empty) in return r.transactionIds }
+        let read epochId = async { let! r = epochs.TryIngest(inventoryId, epochId, (fun _ -> 1), Seq.empty) in return r.transactionIds }
         return [ for epoch in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> AsyncCacheCell(read %epoch) ] }
 
     // TransactionIds cache - used to maintain a list of transactions that have already been ingested in order to avoid db round-trips
@@ -39,7 +39,7 @@ type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Serv
 
         let rec aux epochId totalIngested items = async {
             let SeqPartition f = Seq.toArray >> Array.partition f
-            let dup,fresh = items |> SeqPartition (Epoch.Events.chooseInventoryTransactionId >> Option.exists previousIds.Contains)
+            let dup, fresh = items |> SeqPartition (Epoch.Events.chooseInventoryTransactionId >> Option.exists previousIds.Contains)
             let fullCount = List.length items
             let dropping = fullCount - Array.length fresh
             if dropping <> 0 then log.Information("Ignoring {count}/{fullCount} duplicate ids: {ids} for {epochId}", dropping, fullCount, dup, epochId)
@@ -54,7 +54,7 @@ type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Serv
                 if not res.isClosed && activeEpochId < %epochId then
                     log.Information("Marking {inventoryId:l}/{epochId} active", inventoryId, epochId)
                     do! series.AdvanceIngestionEpoch(inventoryId, epochId)
-                    System.Threading.Interlocked.CompareExchange(&activeEpochId, %epochId,activeEpochId) |> ignore
+                    System.Threading.Interlocked.CompareExchange(&activeEpochId, %epochId, activeEpochId) |> ignore
                 let totalIngestedTickets = totalIngested + res.added
                 match res.rejected with
                 | [] -> return totalIngestedTickets
