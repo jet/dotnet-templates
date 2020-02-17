@@ -2,7 +2,7 @@
 /// - Coordinate competing attempts to transfer quantities from stock; if balance is 3 one of contesting requests to remove 2 or 3 items must reach `Failed`
 /// - maintain rolling balance of stock levels per Location
 /// - while recording any transfers or adjustment in an overall Inventory record
-/// The Process is driven by two actors:
+/// The Process is driven by two collaborating actors:
 /// 1) The 'happy path', where a given actor is executing the known steps of the command flow
 ///    In the normal case, such an actor will bring the flow to a terminal state (Completed or Failed)
 /// 2) A watchdog-projector, which reacts to observed events in this Category by stepping in to complete in-flight requests that have stalled
@@ -51,13 +51,12 @@ module Fold =
         | Failed of Events.TransferRequested
         | Adding of Removed
         | Added of Added
+    and Removed = { request : Events.TransferRequested; removed : Events.Removed }
+    and Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
     and TerminalState =
         | Adjusted of Events.AdjustmentRequested
         | Transferred of Added
         | TransferFailed of Events.TransferRequested
-    and AdjustState = Events.AdjustmentRequested
-    and Removed = { request : Events.TransferRequested; removed : Events.Removed }
-    and Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
     let initial = Initial
     let evolve state event =
         match state, event with
@@ -120,7 +119,7 @@ let decide command updates (state : Fold.State) : Result * Events.Event list =
 
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.For streamId) = Equinox.Stream<Events.Event,Fold.State>(log, resolve streamId, maxAttempts)
+    let resolve (Events.For streamId) = Equinox.Stream<Events.Event, Fold.State>(log, resolve streamId, maxAttempts)
 
     member __.IngestShipped(inventoryId, transactionId, command, updates) : Async<Result> =
         let stream = resolve transactionId

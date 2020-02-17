@@ -64,7 +64,7 @@ let sync (balanceCarriedForward : Fold.Balance option) (decide : Fold.Balance ->
         acc.Ingest state <|
             match state with
             | Fold.Initial -> failwith "We've just guaranteed not Initial"
-            | Fold.Open { value = bal } -> let r,es = decide bal in Some r,es
+            | Fold.Open { value = bal } -> let r, es = decide bal in Some r, es
             | Fold.Closed _ -> None, []
     // Finally (iff we're `Open`, have run a `decide` and `shouldClose`), we generate a Closed event
     let (balance, isOpen), _ =
