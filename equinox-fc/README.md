@@ -19,7 +19,7 @@ The `Location`* `module`s illustrates a way to approach the modelling of a long-
 
 - Referencing an `Equinox.*` Store module from the `Domain` project is not mandatory; it's common to defer all wiring and configuration of the elements in `module Cosmos`, `module EventStore` etc. and instead maintain that alongside the Composition Root, outside of the `Domain` project
 
-- While using an `AccessStrategy` such as `Snapshotting` may in some cases be relevant too, in the general case, using the `Equinox.Cache`, combined with having a compact Fold `State` and a sufficiently constrained maximum number/size of events means the state can be established within a predictable latency range.
+- While using an `AccessStrategy` such as `Snapshot` may in some cases be relevant too, in the general case, using the `Equinox.Cache`, combined with having a compact Fold `State` and a sufficiently constrained maximum number/size of events means the state can be established within a predictable latency range.
 
 - Representing a long-running state in this fashion is no panacea; in modeling a system, the ideal is to have streams that have a naturally constrained number of events over their lifetime.
 

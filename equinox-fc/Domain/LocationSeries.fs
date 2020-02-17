@@ -6,9 +6,9 @@ module Fc.Location.Series
 module Events =
 
     let [<Literal>] CategoryId = "LocationSeries"
-    let (|For|) id = FsCodec.StreamName.create CategoryId (LocationId.toString id)
+    let (|For|) locationId = FsCodec.StreamName.create CategoryId (LocationId.toString locationId)
 
-    type Started = { epochId : LocationEpochId }
+    type Started = { epoch : LocationEpochId }
     type Event =
         | Started of Started
         interface TypeShape.UnionContract.IUnionContract
@@ -19,13 +19,13 @@ module Fold =
     type State = LocationEpochId option
     let initial : State = None
     let private evolve _state = function
-        | Events.Started e -> Some e.epochId
+        | Events.Started e -> Some e.epoch
     let fold = Seq.fold evolve
 
 let interpretAdvanceIngestionEpoch (epochId : LocationEpochId) (state : Fold.State) =
     if epochId < LocationEpochId.parse 0 then [] else
 
-    [if state |> Option.forall (fun s -> s < epochId) then yield Events.Started { epochId = epochId }]
+    [if state |> Option.forall (fun s -> s < epochId) then yield Events.Started { epoch = epochId }]
 
 type Service internal (log, resolve, maxAttempts) =
 
