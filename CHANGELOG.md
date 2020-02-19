@@ -22,7 +22,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- Target `Propulsion`.*, `Equinox`.*, `FsCodec`.* v `2.0.0`
+- Target `Propulsion`, `Equinox`, `FsCodec`.* v `2.0.0`
 
 <a name="3.10.0"></a>
 ## [3.10.0] - 2020-02-08
@@ -281,7 +281,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.10.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.11.0...HEAD
+[3.11.0]: https://github.com/jet/dotnet-templates/compare/3.10.0...3.11.0
 [3.10.0]: https://github.com/jet/dotnet-templates/compare/3.9.0...3.10.0
 [3.9.0]: https://github.com/jet/dotnet-templates/compare/3.8.0...3.9.0
 [3.8.0]: https://github.com/jet/dotnet-templates/compare/3.7.0...3.8.0
