@@ -12,7 +12,7 @@
   },
   "identity": "Equinox.Fc",
   "name": "Equinox Fc Example",
-  "shortName": "eqxFc",
+  "shortName": "fcInventory",
   "sourceName": "Fc",
   "preferNameDirectory": true
 }
