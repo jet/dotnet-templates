@@ -59,7 +59,7 @@ type Service internal (log, resolve, maxAttempts) =
     member __.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =
         let stream = resolve clientId
         // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
-        stream.QueryEx(fun v s -> v, render s)
+        stream.QueryEx(fun c -> c.Version, render c.State)
 
 let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
 

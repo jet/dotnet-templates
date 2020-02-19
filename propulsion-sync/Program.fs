@@ -503,6 +503,7 @@ module EventV0Parser =
             member x.EventType = x.t
             member x.Data = x.d
             member __.Meta = null
+            member __.EventId = Guid.Empty
             member x.Timestamp = x.c
             member __.CorrelationId = null
             member __.CausationId = null
