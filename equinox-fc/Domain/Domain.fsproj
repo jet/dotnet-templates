@@ -17,7 +17,7 @@
         <Compile Include="InventoryTransaction.fs" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Equinox.Cosmos" Version="2.0.0-rc9" />
+        <PackageReference Include="Equinox.Cosmos" Version="2.0.0" />
     </ItemGroup>
 
 </Project>
