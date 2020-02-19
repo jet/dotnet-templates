@@ -70,7 +70,7 @@ type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Serv
 
 module internal Helpers =
 
-    let create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs) =
+    let createService inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs) =
         let remainingEpochCapacity (state: Epoch.Fold.State) =
             let currentLen = state.ids.Count
             max 0 (maxTransactionsPerEpoch - currentLen)
@@ -81,4 +81,19 @@ module Cosmos =
     let create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache) =
         let series = Series.Cosmos.createService (context, cache)
         let epochs = Epoch.Cosmos.createService (context, cache)
-        Helpers.create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs)
+        Helpers.createService inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs)
+
+module Processor =
+
+    type Service(transactions : Transaction.Service, locations : Fc.Location.Service, inventory : Service) =
+
+        member __.Apply(inventoryId, transactionId, update) = async {
+            let! action = transactions.Apply(transactionId, update)
+            match action with
+            | Transaction.Adjust (loc, qty) -> locations.Execute
+            | Remove of LocationId * int
+            | Add of LocationId * int
+            | Log of TerminalState
+            | Finish
+            service.Ingest
+        }

@@ -7,7 +7,7 @@
 ///    In the normal case, such an actor will bring the flow to a terminal state (Completed or Failed)
 /// 2) A watchdog-projector, which reacts to observed events in this Category by stepping in to complete in-flight requests that have stalled
 ///    This represents the case where a 'happy path' actor died, or experienced another impediment on the path.
-module Fc.InventoryTransaction
+module Fc.Inventory.Transaction
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -38,6 +38,18 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
+type TerminalState =
+    | Adjusted of Events.AdjustmentRequested
+    | Transferred of Added
+    | TransferFailed of Events.TransferRequested
+and Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
+type Action =
+    | Adjust of LocationId * int
+    | Remove of LocationId * int
+    | Add of LocationId * int
+    | Log of TerminalState
+    | Finish
+
 module Fold =
 
     type State =
@@ -50,15 +62,8 @@ module Fold =
         | Transfer of TransferState
     and TransferState =
         | Requested of Events.TransferRequested
-        | Failed of Events.TransferRequested
         | Adding of Removed
-        | Added of Added
     and Removed = { request : Events.TransferRequested; removed : Events.Removed }
-    and Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
-    and TerminalState =
-        | Adjusted of Events.AdjustmentRequested
-        | Transferred of Added
-        | TransferFailed of Events.TransferRequested
     let initial = Initial
     let evolve state event =
         match state, event with
@@ -78,9 +83,7 @@ module Fold =
         | Running (Transfer (Requested s)), Events.Removed e ->
             Running (Transfer (Adding { request = s; removed = e }))
         | Running (Transfer (Adding s)), Events.Added e ->
-            Running (Transfer (Added { request = s.request; removed = s.removed; added = e  }))
-        | Running (Transfer (Added s)), Events.Completed ->
-            Logging (Transferred s)
+            Logging (Transferred { request = s.request; removed = s.removed; added = e  })
 
         (* Log result *)
         | Logging s, Events.Logged ->
@@ -103,17 +106,26 @@ module Fold =
             [event]
         | _ -> []
 
+    /// Determines the next action (if any) to be carried out in this workflwo
+    let nextAction : State -> Action = function
+        | Initial -> failwith "Cannot interpret Initial state"
+        | Running (Adjust r) -> Action.Adjust (r.location, r.quantity)
+        | Running (Transfer (Requested r)) -> Action.Remove (r.source, r.quantity)
+        | Running (Transfer (Adding r)) -> Action.Add (r.request.destination, r.request.quantity)
+        | Logging s -> Action.Log s
+        | Completed _ -> Finish
+
 /// Given an event from the Process's timeline, yields the State, in order that it can be completed
-let decide update (state : Fold.State) : Fold.State * Events.Event list =
+let decide update (state : Fold.State) : Action * Events.Event list =
     let events = Fold.filter update state
     let state' = Fold.fold state events
-    state', events
+    Fold.nextAction state', events
 
 type Service internal (log, resolve, maxAttempts) =
 
     let resolve (Events.For streamId) = Equinox.Stream<Events.Event, Fold.State>(log, resolve streamId, maxAttempts)
 
-    member __.Apply(transactionId, update) : Async<Fold.State> =
+    member __.Apply(transactionId, update) : Async<Action> =
         let stream = resolve transactionId
         stream.Transact(decide update)
 

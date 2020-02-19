@@ -80,7 +80,7 @@ EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Equinox.Templates", "src\Equinox.Templates\Equinox.Templates.fsproj", "{8C92B728-85A5-4231-863A-E4236E46CC36}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fc", "fc", "{4946576F-1558-49ED-A272-6F4D92FB0031}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fcInventory", "fcInventory", "{4946576F-1558-49ED-A272-6F4D92FB0031}"
 ProjectSection(SolutionItems) = preProject
 	equinox-fc\.template.config\template.json = equinox-fc\.template.config\template.json
 	equinox-fc\README.md = equinox-fc\README.md
