@@ -9,15 +9,20 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="3.11.0"></a>
+## [3.11.0] - 2020-02-19
+
+### Added
 
 - Add handling for `-T` TCP/IP switch on EventStore args [#46](https://github.com/jet/dotnet-templates/pulls/46)
 
 ### Changed
 
 - Target `Propulsion`.*, `Equinox`.*, `FsCodec`.* v `2.0.0`
-
-### Removed
-### Fixed
 
 <a name="3.10.0"></a>
 ## [3.10.0] - 2020-02-08
