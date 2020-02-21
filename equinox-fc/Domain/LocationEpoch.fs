@@ -10,71 +10,121 @@ module Events =
     let [<Literal>] CategoryId = "LocationEpoch"
     let (|For|) (locationId, epochId) = FsCodec.StreamName.compose CategoryId [LocationId.toString locationId; LocationEpochId.toString epochId]
 
-    type CarriedForward = { initial : int }
-    type Delta = { delta : int; transaction : InventoryTransactionId }
-    type Value = { value : int; transaction : InventoryTransactionId }
+    type CarriedForward =   { initial : int; recentTransactions : InventoryTransactionId[] }
     type Event =
         | CarriedForward of CarriedForward
+        | Added          of {| delta : int; id : InventoryTransactionId |}
+        | Removed        of {| delta : int; id : InventoryTransactionId |}
+        | Reset          of {| value : int; id : InventoryTransactionId |}
         | Closed
-        | Added of Delta
-        | Removed of Delta
-        | Reset of Value
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 module Fold =
 
-    type Balance = int
-    type OpenState = { count : int; value : Balance }
-    type State = Initial | Open of OpenState | Closed of Balance
+    type State =
+        | Initial
+        | Open   of Record list    // reverse order, i.e. most revent first
+        | Closed of Record list    // trimmed
+    and Record =
+        | Init of Events.CarriedForward
+        | Step of Step
+    and Step = { balance : Balance; id : InventoryTransactionId }
+    and Balance = int
     let initial = Initial
+    let (|Current|) = function
+        | (Init { initial = bal } | Step { balance = bal }) :: _ -> bal
+        | [] -> failwith "Cannot transact when no CarriedForward"
     let evolve state event =
         match event, state with
-        | Events.CarriedForward e, Initial -> Open { count = 0; value = e.initial }
-        | Events.Added e, Open bal -> Open { count = bal.count + 1; value = bal.value + e.delta }
-        | Events.Removed e, Open bal -> Open { count = bal.count + 1; value = bal.value - e.delta }
-        | Events.Reset e, Open bal -> Open { count = bal.count + 1; value = e.value }
-        | Events.Closed, Open { value = bal } -> Closed bal
-        | Events.CarriedForward _, (Open _|Closed _ as x) -> failwithf "CarriedForward : Unexpected %A" x
-        | (Events.Added _|Events.Removed _|Events.Reset _|Events.Closed) as e, (Initial|Closed _ as s) -> failwithf "Unexpected %A when %A" e s
+        | Events.CarriedForward e, Initial                   -> Open [Init e]
+        | Events.Added e,          Open (Current cur as log) -> Open (Step { id = e.id ; balance = cur + e.delta } :: log)
+        | Events.Removed e,        Open (Current cur as log) -> Open (Step { id = e.id ; balance = cur - e.delta } :: log)
+        | Events.Reset e,          Open log                  -> Open (Step { id = e.id ; balance = e.value       } :: log)
+        | Events.Closed,           Open log                  -> Closed log
+        | Events.CarriedForward _, (Open _ | Closed _ as x)  -> failwithf "CarriedForward : Unexpected %A" x
+        | (Events.Added _ | Events.Removed _ | Events.Reset _ | Events.Closed) as e, (Initial | Closed _ as s) ->
+                                                                failwithf "Unexpected %A when %A" e s
     let fold = Seq.fold evolve
 
 /// Holds events accumulated from a series of decisions while also evolving the presented `state` to reflect the pended events
 type private Accumulator() =
     let acc = ResizeArray()
     member __.Ingest state : 'res * Events.Event list -> 'res * Fold.State = function
-        | res, [] ->                   res, state
-        | res, [e] -> acc.Add e;       res, Fold.evolve state e
-        | res, xs ->  acc.AddRange xs; res, Fold.fold state (Seq.ofList xs)
+        | res, [] ->                         res, state
+        | res, [e] -> acc.Add e;             res, Fold.evolve state e
+        | res, xs ->  acc.AddRange xs;       res, Fold.fold state (Seq.ofList xs)
     member __.Accumulated = List.ofSeq acc
 
-type Result<'t> = { balance : Fold.Balance; result : 't option; isOpen : bool }
+type Result<'t> = { history : Fold.Record list; result : 't option; isOpen : bool }
 
-let sync (balanceCarriedForward : Fold.Balance option) (decide : Fold.Balance -> 't*Events.Event list) shouldClose state : Result<'t>*Events.Event list =
+let sync (carriedForward : Events.CarriedForward option)
+    (decide : Fold.State -> 't * Events.Event list)
+    shouldClose
+    state
+    : Result<'t> * Events.Event list =
 
     let acc = Accumulator()
-    // We require a CarriedForward event at the start of any Epoch's event stream
+    // 1. Guarantee a CarriedForward event at the start of any Epoch's event stream
     let (), state =
         acc.Ingest state <|
             match state with
-            | Fold.Initial -> (), [Events.CarriedForward { initial = Option.get balanceCarriedForward }]
+            | Fold.Initial ->                (), [Events.CarriedForward (Option.get carriedForward )]
             | Fold.Open _ | Fold.Closed _ -> (), []
-    // Run, unless we determine we're in Closed state
+    // 2. Transact (unless we determine we're in Closed state)
     let result, state =
         acc.Ingest state <|
             match state with
-            | Fold.Initial -> failwith "We've just guaranteed not Initial"
-            | Fold.Open { value = bal } -> let r, es = decide bal in Some r, es
-            | Fold.Closed _ -> None, []
-    // Finally (iff we're `Open`, have run a `decide` and `shouldClose`), we generate a Closed event
-    let (balance, isOpen), _ =
+            | Fold.Initial ->                failwith "We've just guaranteed not Initial"
+            | Fold.Open history ->           let r, es = decide state in Some r, es
+            | Fold.Closed _ ->               None, []
+    // 3. Finally (iff we're `Open`, have run a `decide` and `shouldClose`), we generate a Closed event
+    let (history, isOpen), _ =
         acc.Ingest state <|
             match state with
-            | Fold.Initial -> failwith "Can't be Initial"
-            | Fold.Open ({ value = bal } as openState) when shouldClose openState -> (bal, false), [Events.Closed]
-            | Fold.Open { value = bal } -> (bal, true), []
-            | Fold.Closed bal -> (bal, false), []
-    { balance = balance; result = result; isOpen = isOpen }, acc.Accumulated
+            | Fold.Initial ->                failwith "Can't be Initial"
+            | Fold.Open history ->
+                if shouldClose history then  (history, false), [Events.Closed]
+                else                         (history, true),  []
+            | Fold.Closed history ->         (history, false), []
+    { history = history; result = result; isOpen = isOpen }, acc.Accumulated
+
+type DupCheckResult = NotDuplicate | IdempotentInsert of Fold.Balance | DupCarriedForward
+let private tryFindDup transactionId (history : Fold.Record list) =
+    let tryMatch : Fold.Record -> Fold.Balance option option = function
+        | Fold.Step { balance = bal; id = id } when id = transactionId -> Some (Some bal)
+        | Fold.Init { recentTransactions = prevs } when prevs |> Array.contains transactionId -> Some None
+        | _ -> None
+    match history |> Seq.tryPick tryMatch with
+    | None -> NotDuplicate
+    | Some None -> DupCarriedForward
+    | Some (Some bal) -> IdempotentInsert bal
+
+type Command =
+    | Reset  of value : int
+    | Add    of delta : int
+    | Remove of delta : int
+
+type Result = Accepted of Fold.Balance | DupFromPreviousEpoch
+
+let decide transactionId command (state: Fold.State) =
+    match state with
+    | Fold.Closed _ | Fold.Initial -> failwithf "Cannot apply in state %A" state
+    | Fold.Open history ->
+
+    match tryFindDup transactionId history with
+    | IdempotentInsert bal    -> Accepted bal,         []
+    | DupCarriedForward       -> DupFromPreviousEpoch, []
+    | NotDuplicate ->
+
+    let e =
+        match command with
+        | Reset  value -> Events.Reset   {| value = value; id = transactionId |}
+        | Add    delta -> Events.Added   {| delta = delta; id = transactionId |}
+        | Remove delta -> Events.Removed {| delta = delta; id = transactionId |}
+    match Fold.evolve state e with
+    | Fold.Open (Fold.Current cur) -> Accepted cur, []
+    | s -> failwithf "Unexpected state %A" s
 
 type Service internal (log, resolve, maxAttempts) =
 
