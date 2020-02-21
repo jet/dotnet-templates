@@ -38,8 +38,8 @@ let run (service : Location.Service) (IdsAtLeastOne locations, deltas : _[], tra
     let adjust delta (bal : Epoch.Fold.Balance) =
         let value = max -bal delta
         if value = 0 then 0, []
-        elif value < 0 then value, [Epoch.Events.Removed { delta = -value; transaction = transactionId }]
-        else value, [Epoch.Events.Added { delta = value; transaction = transactionId }]
+        elif value < 0 then value, [Epoch.Events.Removed {| delta = -value; id = transactionId |}]
+        else value, [Epoch.Events.Added {| delta = value; id = transactionId |}]
     let! appliedDeltas = seq { for loc, x in updates -> async { let! _, eff = service.Execute(loc, adjust x) in return loc,eff } } |> Async.Parallel
     let expectedBalances = Seq.append (seq { for l in locations -> l, 0}) appliedDeltas |> Seq.groupBy fst |> Seq.map (fun (l, xs) -> l, xs |> Seq.sumBy snd) |> Set.ofSeq
 
