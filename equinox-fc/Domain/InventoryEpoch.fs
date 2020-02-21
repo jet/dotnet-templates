@@ -10,13 +10,12 @@ module Events =
     let [<Literal>] CategoryId = "InventoryEpoch"
     let (|For|) (inventoryId, epochId) = FsCodec.StreamName.compose CategoryId [InventoryId.toString inventoryId; InventoryEpochId.toString epochId]
 
-    type TransactionInfo = { transactionId : InventoryTransactionId }
-
+    type TransactionRef = { transactionId : InventoryTransactionId }
     type Snapshotted = { closed: bool; ids : InventoryTransactionId[] }
 
     type Event =
-        | Adjusted of TransactionInfo
-        | Transferred of TransactionInfo
+        | Adjusted    of TransactionRef
+        | Transferred of TransactionRef
         | Closed
         | Snapshotted of Snapshotted
         interface TypeShape.UnionContract.IUnionContract

@@ -38,24 +38,23 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
-type TerminalState =
-    | Adjusted of Events.AdjustmentRequested
-    | Transferred of Added
-    | TransferFailed of Events.TransferRequested
-and Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
 type Action =
     | Adjust of LocationId * int
     | Remove of LocationId * int
     | Add of LocationId * int
-    | Log of TerminalState
+    | Log of LoggingState
     | Finish
+and LoggingState =
+    | Adjusted of Events.AdjustmentRequested
+    | Transferred of Added
+and Added = { request : Events.TransferRequested; removed : Events.Removed; added : Events.Added }
 
 module Fold =
 
     type State =
         | Initial
         | Running of RunningState
-        | Logging of TerminalState
+        | Logging of LoggingState
         | Completed of TerminalState
     and RunningState =
         | Adjust of Events.AdjustmentRequested
@@ -63,6 +62,10 @@ module Fold =
     and TransferState =
         | Requested of Events.TransferRequested
         | Adding of Removed
+    and TerminalState =
+        | Adjusted of Events.AdjustmentRequested
+        | Transferred of Added
+        | TransferFailed of Events.TransferRequested
     and Removed = { request : Events.TransferRequested; removed : Events.Removed }
     let initial = Initial
     let evolve state event =
@@ -71,7 +74,7 @@ module Fold =
         | Initial, Events.AdjustmentRequested r ->
             Running (Adjust r)
         | Running (Adjust r), Events.Adjusted ->
-            Logging (Adjusted r)
+            Logging (LoggingState.Adjusted r)
 
         (* Transfer Process *)
         | Initial, Events.TransferRequested e ->
@@ -83,11 +86,13 @@ module Fold =
         | Running (Transfer (Requested s)), Events.Removed e ->
             Running (Transfer (Adding { request = s; removed = e }))
         | Running (Transfer (Adding s)), Events.Added e ->
-            Logging (Transferred { request = s.request; removed = s.removed; added = e  })
+            Logging (LoggingState.Transferred { request = s.request; removed = s.removed; added = e  })
 
         (* Log result *)
-        | Logging s, Events.Logged ->
-            Completed s
+        | Logging (LoggingState.Adjusted s), Events.Logged ->
+            Completed (Adjusted s)
+        | Logging (LoggingState.Transferred s), Events.Logged ->
+            Completed (Transferred s)
 
         (* Any disallowed state changes represent gaps in the model, so we fail fast *)
         | state, event -> failwithf "Unexpected %A when %A" event state
