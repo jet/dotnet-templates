@@ -7,8 +7,8 @@ open Swensen.Unquote
 let interpret transactionId delta _balance =
     match delta with
     | 0 -> (), []
-    | delta when delta < 0 -> (), [Events.Removed { delta = -delta; transaction = transactionId }]
-    | delta -> (), [Events.Added { delta = delta; transaction = transactionId }]
+    | delta when delta < 0 -> (), [Events.Removed {| delta = -delta; id = transactionId |}]
+    | delta -> (), [Events.Added {| delta = delta; id = transactionId |}]
 
 let validateAndInterpret transactionId expectedBalance delta balance =
     test <@ expectedBalance = balance @>
@@ -28,7 +28,7 @@ let [<Property>] properties transactionId carriedForward delta1 closeImmediately
     let cfEvents events = events |> List.filter (function Events.CarriedForward _ -> true | _ -> false)
     let closeEvents events = events |> List.filter (function Events.Closed -> true | _ -> false)
     let state1 = Fold.fold Fold.initial events
-    let expectedBalance = carriedForward + delta1
+    let expectedBalance = carriedForward.initial + delta1
     // Only expect closing if it was requested
     let expectImmediateClose = closeImmediately
     test <@ Option.isSome res.result
