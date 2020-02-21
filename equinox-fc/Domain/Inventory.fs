@@ -12,9 +12,9 @@ type internal IdsCache<'Id>() =
 
 /// Maintains active Epoch Id in a thread-safe manner while ingesting items into the `series` of `epochs`
 /// Prior to first add, reads `lookBack` epochs to seed the cache, in order to minimize the number of duplicated Ids we ingest
-type Service internal (inventoryId, series : Series.Service, epochs : Epoch.Service, lookBack, capacity) =
+type Service2 internal (inventoryId, series : Series.Service, epochs : Epoch.Service, lookBack, capacity) =
 
-    let log = Serilog.Log.ForContext<Service>()
+    let log = Serilog.Log.ForContext<Service2>()
 
     // Maintains what we believe to be the currently open EpochId
     // Guaranteed to be set only after `previousIds.AwaitValue()`
@@ -74,7 +74,7 @@ module internal Helpers =
         let remainingEpochCapacity (state: Epoch.Fold.State) =
             let currentLen = state.ids.Count
             max 0 (maxTransactionsPerEpoch - currentLen)
-        Service(inventoryId, series, epochs, lookBack = lookBackLimit, capacity = remainingEpochCapacity)
+        Service2(inventoryId, series, epochs, lookBack = lookBackLimit, capacity = remainingEpochCapacity)
 
 module Cosmos =
 
@@ -85,15 +85,35 @@ module Cosmos =
 
 module Processor =
 
-    type Service(transactions : Transaction.Service, locations : Fc.Location.Service, inventory : Service) =
+    type Service(transactions : Transaction.Service, locations : Fc.Location.Service, inventory : Service2) =
 
-        member __.Apply(inventoryId, transactionId, update) = async {
-            let! action = transactions.Apply(transactionId, update)
-            match action with
-            | Transaction.Adjust (loc, qty) -> locations.Execute
-            | Remove of LocationId * int
-            | Add of LocationId * int
-            | Log of TerminalState
-            | Finish
-            service.Ingest
-        }
+        let execute transactionId =
+            let f = Fc.Location.Epoch.decide transactionId
+            let rec aux update = async {
+                let! action = transactions.Apply(transactionId, update)
+                match action with
+                | Transaction.Adjust (loc, bal) ->
+                    match! locations.Execute(loc, f (Fc.Location.Epoch.Reset bal)) with
+                    | Fc.Location.Epoch.Accepted _ -> do! aux (Transaction.Events.Adjusted)
+                    | Fc.Location.Epoch.DupFromPreviousEpoch -> failwith "TODO walk back to previous epoch"
+                | Transaction.Remove (loc, delta) ->
+                    match! locations.Execute(loc, f (Fc.Location.Epoch.Remove delta)) with
+                    | Fc.Location.Epoch.Accepted bal -> do! aux (Transaction.Events.Removed { balance = bal })
+                    | Fc.Location.Epoch.DupFromPreviousEpoch -> failwith "TODO walk back to previous epoch"
+                | Transaction.Add    (loc, delta) ->
+                    match! locations.Execute(loc, f (Fc.Location.Epoch.Add delta)) with
+                    | Fc.Location.Epoch.Accepted bal -> do! aux (Transaction.Events.Added   { balance = bal })
+                    | Fc.Location.Epoch.DupFromPreviousEpoch -> failwith "TODO walk back to previous epoch"
+                | Transaction.Log (Transaction.Adjusted e) ->
+                    let! _count = inventory.Ingest([Fc.Inventory.Epoch.Events.Adjusted    { transactionId = transactionId }])
+                    do! aux Transaction.Events.Logged
+                | Transaction.Log (Transaction.Transferred e) ->
+                    let! _count = inventory.Ingest([Fc.Inventory.Epoch.Events.Transferred { transactionId = transactionId }])
+                    do! aux Transaction.Events.Logged
+                | Transaction.Finish ->
+                    ()
+            }
+            aux
+
+        member __.Apply(transactionId, update) =
+            execute transactionId update
