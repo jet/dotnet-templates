@@ -9,15 +9,19 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
-
-- Add `Propulsion.Cosmos` support to `proAllProjector` [#47](https://github.com/jet/dotnet-templates/pulls/47)
-- Add `-noEventStore` flag to `proAllProjector` [#47](https://github.com/jet/dotnet-templates/pulls/47)
-
 ### Changed
 ### Removed
 ### Fixed
 
-<a name="3.11.0"></a>
+<a name="3.12.0"></a>
+## [3.12.0] - 2020-02-23
+
+### Added
+
+- Add `Propulsion.Cosmos` support to `proAllProjector` [#47](https://github.com/jet/dotnet-templates/pulls/47)
+- Add `-noEventStore` flag to `proAllProjector` [#47](https://github.com/jet/dotnet-templates/pulls/47)
+
+### Added<a name="3.11.0"></a>
 ## [3.11.0] - 2020-02-19
 
 ### Added
@@ -285,7 +289,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.11.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.12.0...HEAD
+[3.12.0]: https://github.com/jet/dotnet-templates/compare/3.11.0...3.12.0
 [3.11.0]: https://github.com/jet/dotnet-templates/compare/3.10.0...3.11.0
 [3.10.0]: https://github.com/jet/dotnet-templates/compare/3.9.0...3.10.0
 [3.9.0]: https://github.com/jet/dotnet-templates/compare/3.8.0...3.9.0
