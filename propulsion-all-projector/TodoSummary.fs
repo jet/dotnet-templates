@@ -58,6 +58,17 @@ type Service internal (log, resolve, maxAttempts) =
 
 let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
 
+//#if (!noEventStore)
+module EventStore =
+
+    open Equinox.EventStore // Everything until now is independent of a concrete store
+
+    let private resolve (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
+    let create (context, cache) = resolve (context, cache) |> create
+
+//#endif
 module Cosmos =
 
     open Equinox.Cosmos // Everything until now is independent of a concrete store

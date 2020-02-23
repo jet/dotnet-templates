@@ -2,6 +2,7 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
+    "Cosmos",
     "Event Sourcing",
     "Equinox",
     "Propulsion",
@@ -12,11 +13,18 @@
     "language": "F#"
   },
   "identity": "Propulsion.Template.AllProjector",
-  "name": "Propulsion EventStore $all Projector",
+  "name": "Propulsion EventStore and/or CosmosDB Projector",
   "shortName": "proAllProjector",
   "sourceName": "AllTemplate",
   "preferNameDirectory": true,
   "symbols": {
+    "noEventStore": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Disable projecting from EventStore."
+    },
     "kafka": {
       "type": "parameter",
       "datatype": "bool",
