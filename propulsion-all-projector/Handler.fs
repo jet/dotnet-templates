@@ -1,6 +1,6 @@
 module AllTemplate.Handler
-
 //#if (!noEventStore)
+
 open Propulsion.EventStore
 
 /// Responsible for inspecting and then either dropping or tweaking events coming from EventStore

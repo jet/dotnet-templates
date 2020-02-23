@@ -17,12 +17,12 @@ This project was generated using:
 //#if kafka
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new proAllProjector -noEventStore -k # -k => include Kafka projection logic
+    dotnet new proAllProjector --noEventStore -k # -k => include Kafka projection logic
 //#else
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
-    dotnet new proAllProjector -noEventStore # use --help to see options
+    dotnet new proAllProjector --noEventStore # use --help to see options
 //#endif
 //#else
 //#if kafka
@@ -63,8 +63,8 @@ This project was generated using:
     NOTE when projecting from EventStore, the current implementation stores the checkpoints within the CosmosDB store in order to remove feedback effects.
 
     (Yes, someone should do a PR to store the checkpoints in EventStore itself; this is extracted from working code, which can assume there's always a CosmosDB around)
-//#endif
 
+//#endif
 3. To run an instance of the Projector from a CosmosDb ChangeFeed
 
 //#if kafka

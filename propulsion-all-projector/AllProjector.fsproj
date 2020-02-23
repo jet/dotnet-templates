@@ -17,7 +17,9 @@
         <!--#if (!kafka) -->
         <Compile Include="Ingester.fs" />
         <!--#endif-->
+        <!--#if (!noEventStore || kafka) -->
         <Compile Include="Handler.fs" />
+        <!--#endif-->
         <Compile Include="Program.fs" />
     </ItemGroup>
 
