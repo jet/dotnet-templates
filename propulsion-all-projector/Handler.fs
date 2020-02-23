@@ -1,5 +1,6 @@
 module AllTemplate.Handler
 
+//#if (!noEventStore)
 open Propulsion.EventStore
 
 /// Responsible for inspecting and then either dropping or tweaking events coming from EventStore
@@ -8,6 +9,7 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
     match x.Event with
     | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
     | PropulsionStreamEvent e -> Some e
+//#endif
 //#if kafka
 
 /// Responsible for wrapping a span of events for a specific stream into an envelope (we use the well-known Propulsion.Codec form)

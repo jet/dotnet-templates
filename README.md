@@ -26,13 +26,14 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 - [`trackingConsumer`](propulsion-tracking-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest accumulating changes in an `Equinox.Cosmos` store idempotently.
 
-- [`proAllProjector`](propulsion-all-projector/README.md) - Boilerplate for an EventStore `$all` stream projector (projecting from an EventStore using `Propulsion.EventStore`.EventStore
+- [`proAllProjector`](propulsion-all-projector/README.md) - Boilerplate for a dual mode CosmosDB ChangeFeed Processor and/or EventStore `$all` stream projector using `Propulsion.Cosmos`/`Propulsion.EventStore`
 
-  **NOTE At present, checkpoint storage is only implemented for Azure CosmosDB - help wanted ;)**
+  **NOTE At present, checkpoint storage when projecting from EventStore uses Azure CosmosDB - help wanted ;)**
 
-   Standard processing shows importing (in summary form) from `EventStore` to `Cosmos` (use `-b` to remove, yielding a minimal projector)
+   Standard processing shows importing (in summary form) from an aggregate in `EventStore` or `Cosmos` to a Summary form in `Cosmos` (use `-b`(`lank`) to remove, yielding a minimal projector)
    
-   `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
+   `-k` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store).
+   `-noEventStore` removes support for projecting from EventStore from the emitted code
   
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 

@@ -9,6 +9,10 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Add `Propulsion.Cosmos` support to `proAllProjector` [#47](https://github.com/jet/dotnet-templates/pulls/47)
+- Add `-noEventStore` flag to `proAllProjector` [#47](https://github.com/jet/dotnet-templates/pulls/47)
+
 ### Changed
 ### Removed
 ### Fixed
