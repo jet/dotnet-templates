@@ -76,8 +76,8 @@ namespace TodoBackendTemplate.Web
             // Provisioning Steps:
             // 1) Set the 3x environment variables EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABASE, EQUINOX_COSMOS_CONTAINER
             // 2) Provision a container using the following command sequence:
-            //     dotnet tool install -g Equinox.Cli
-            //     Equinox.Cli init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
+            //     dotnet tool install -g Equinox.Tool
+            //     eqx init -ru 400 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
             const string connVar = "EQUINOX_COSMOS_CONNECTION";
             var conn = Environment.GetEnvironmentVariable(connVar);
             const string dbVar = "EQUINOX_COSMOS_DATABASE";
