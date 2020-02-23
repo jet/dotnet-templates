@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Target SDK v `3.1.101`
+
 ### Removed
 ### Fixed
 
