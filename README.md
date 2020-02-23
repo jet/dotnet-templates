@@ -124,7 +124,6 @@ There's [no integration test for the templates yet](https://github.com/jet/dotne
         $ mkdir -p ~/scratch/templs/t1
         $ cd ~/scratch/templs/t1
     
-
     c. test a variant (i.e. per `symbol` in the config)
 
         $ dotnet new proAllProjector -k # an example - in general you only need to test stuff you're actually changing

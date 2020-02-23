@@ -3,11 +3,11 @@
   <PropertyGroup>
     <Authors>@jet @bartelink contributors</Authors>
     <Company>Jet.com</Company>
-    <Description>Equinox and Propulsion templates: dotnet new eqxweb, eqxwebcs, eqxtestbed, proConsumer, proProjector, proSync</Description>
+    <Description>Equinox and Propulsion templates: dotnet new eqxweb, eqxwebcs, eqxtestbed, proConsumer, proProjector, proAllProjector, proSync</Description>
     <PackageProjectUrl>https://github.com/jet/dotnet-templates</PackageProjectUrl>
     <PackageTags>equinox fsharp eventsourcing cosmosdb eventstore changefeedprocessor kafka benchmark</PackageTags>
     <PackageLicense>Apache-2.0</PackageLicense>
-    <Copyright>Copyright © 2018-9</Copyright>
+    <Copyright>Copyright © 2018-20</Copyright>
 
     <TargetFramework>netstandard2.0</TargetFramework>
     <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MinVer" Version="1.0.0" PrivateAssets="All" />
+    <PackageReference Include="MinVer" Version="2.1.0" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>

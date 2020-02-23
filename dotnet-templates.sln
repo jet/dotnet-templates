@@ -85,6 +85,8 @@ ProjectSection(SolutionItems) = preProject
 	propulsion-tracking-consumer\.template.config\template.json = propulsion-tracking-consumer\.template.config\template.json
 EndProjectSection
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Equinox.Templates", "src\Equinox.Templates\Equinox.Templates.fsproj", "{8C92B728-85A5-4231-863A-E4236E46CC36}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -137,6 +139,10 @@ Global
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8C92B728-85A5-4231-863A-E4236E46CC36}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C92B728-85A5-4231-863A-E4236E46CC36}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C92B728-85A5-4231-863A-E4236E46CC36}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C92B728-85A5-4231-863A-E4236E46CC36}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
