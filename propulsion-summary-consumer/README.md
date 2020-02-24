@@ -7,7 +7,7 @@ This project was generated using:
 
 ## Usage instructions
 
-0. Create and run an instance of the Projector in the source Container (see README in `dotnet new summaryProjector` for details)
+0. Create and run an instance of the Projector in the source Container (see README in `dotnet new proReactor --kafka` for details)
 
 1. establish connection strings for the target container into which the summaries will synced. per https://github.com/jet/equinox README
 

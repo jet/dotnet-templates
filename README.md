@@ -34,7 +34,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 ## Consumer Templates combining usage of Equinox and Propulsion
 
-- [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new summaryProjector`
+- [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new proReactor --kafka`
 
 - [`trackingConsumer`](propulsion-tracking-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest accumulating changes in an `Equinox.Cosmos` store idempotently.
 
@@ -72,11 +72,11 @@ To use from the command line, the outline is:
     start README.md
 
     # ... to add a Summary Projector
-    md -p ../SummaryProjector | Set-Location
+    md -p ../SummaryProducer | Set-Location
     dotnet new proReactor --kafka
     start README.md
 
-    # ... to add a Summary Consumer (ingesting output from `SummaryProjector`)
+    # ... to add a Summary Consumer (ingesting output from `SummaryProducer`)
     md -p ../SummaryConsumer | Set-Location
     dotnet new summaryConsumer
     start README.md

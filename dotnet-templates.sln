@@ -6,7 +6,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Consumer", "propulsion-cons
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SummaryConsumer", "propulsion-summary-consumer\SummaryConsumer.fsproj", "{A30A8D80-49DF-46BD-B65E-4C11B404E236}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Reactor", "propulsion-all-projector\Reactor.fsproj", "{D3A5A09B-95D2-4C52-8356-61D44BBBE446}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Reactor", "propulsion-reactor\Reactor.fsproj", "{D3A5A09B-95D2-4C52-8356-61D44BBBE446}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Sync", "propulsion-sync\Sync.fsproj", "{D7ACBDF8-5F24-420F-9657-20096CE08B49}"
 EndProject
@@ -45,7 +45,7 @@ EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proReactor", "proReactor", "{24080834-2B0A-452D-941B-234B54E2E712}"
 ProjectSection(SolutionItems) = preProject
-	propulsion-all-projector\.template.config\template.json = propulsion-all-projector\.template.config\template.json
+	propulsion-reactor\.template.config\template.json = propulsion-reactor\.template.config\template.json
 EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proProjector", "proProjector", "{C80353DE-0B5E-4D55-B406-317843D90DA0}"
