@@ -46,8 +46,10 @@ module CmdParser =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-C"; Unique>]   VerboseConsole
 
+//#if (!noFilter)
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
+//#endif
 
 //#if (!noEventStore)
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSourceParameters>
@@ -61,8 +63,10 @@ module CmdParser =
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 64."
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off."
+//#if (!noFilter)
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
+//#endif
 //#if (!noEventStore)
                 | Es _ ->                   "specify EventStore input parameters."
 //#endif
@@ -75,6 +79,9 @@ module CmdParser =
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 64)
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.FilterFunction(?excludeLong, ?longOnly): string -> bool =
+#if noFilter
+            true
+#else
             let isLong (streamName : string) =
                 streamName.StartsWith "Inventory-" // Too long
                 || streamName.StartsWith "InventoryCount-" // No Longer used
@@ -99,7 +106,7 @@ module CmdParser =
             | bad, [] ->    let black = Set.ofList bad in Log.Warning("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
             | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
             | _, _ -> raise (MissingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
-
+#endif
 
 #if (!noEventStore)
         member val Source : Choice<EsSourceArguments, CosmosSourceArguments> =

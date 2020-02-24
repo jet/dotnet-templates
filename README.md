@@ -73,7 +73,7 @@ To use from the command line, the outline is:
 
     # ... to add a Summary Projector
     md -p ../SummaryProducer | Set-Location
-    dotnet new proReactor --kafka
+    dotnet new proReactor --kafka --noFilter
     start README.md
 
     # ... to add a Summary Consumer (ingesting output from `SummaryProducer`)
