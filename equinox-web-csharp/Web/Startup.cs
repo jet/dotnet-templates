@@ -1,8 +1,8 @@
 using System;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Serilog;
 
 namespace TodoBackendTemplate.Web
@@ -11,7 +11,7 @@ namespace TodoBackendTemplate.Web
     class Startup
     {
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IHostEnvironment env)
         {
             if (env.IsDevelopment())
                 app.UseDeveloperExceptionPage();
@@ -23,14 +23,14 @@ namespace TodoBackendTemplate.Web
                 // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
                 .UseCors(x => x.WithOrigins("https://www.todobackend.com").AllowAnyHeader().AllowAnyMethod())
 #endif
-                .UseMvc();
+                .UseEndpoints(endpoints => endpoints.MapControllers());
         }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
 
         {
-            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
+            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Latest);
             var equinoxContext = ConfigureStore();
             ConfigureServices(services, equinoxContext);
         }
