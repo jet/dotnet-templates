@@ -12,6 +12,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - Target SDK v `3.1.101`
+- Target `netcoreapp3.1` [#9](https://github.com/jet/dotnet-templates/issues/9) [#48](https://github.com/jet/dotnet-templates/pulls/48)
 
 ### Removed
 ### Fixed
