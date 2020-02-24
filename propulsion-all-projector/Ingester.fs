@@ -1,4 +1,4 @@
-module AllTemplate.Ingester
+module ReactorTemplate.Ingester
 
 open System
 

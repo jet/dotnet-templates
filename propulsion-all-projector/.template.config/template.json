@@ -2,20 +2,23 @@
   "$schema": "http://json.schemastore.org/template",
   "author": "@jet @bartelink",
   "classifications": [
-    "Cosmos",
+    "CosmosDb",
+    "ChangeFeed",
+    "ChangeFeedProcessor",
     "Event Sourcing",
     "Equinox",
-    "Propulsion",
     "EventStore",
-    "Kafka"
+    "Kafka",
+    "Propulsion",
+    "Reactor"
   ],
   "tags": {
     "language": "F#"
   },
-  "identity": "Propulsion.Template.AllProjector",
-  "name": "Propulsion EventStore and/or CosmosDB Projector",
-  "shortName": "proAllProjector",
-  "sourceName": "AllTemplate",
+  "identity": "Propulsion.Template.Reactor",
+  "name": "Propulsion EventStore/Cosmos Reactor",
+  "shortName": "proReactor",
+  "sourceName": "ReactorTemplate",
   "preferNameDirectory": true,
   "symbols": {
     "noEventStore": {
@@ -25,6 +28,13 @@
       "defaultValue": "false",
       "description": "Disable projecting from EventStore."
     },
+    "blank": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Remove Ingestion sample code. (Not applicable if --kafka selected)"
+    },
     "kafka": {
       "type": "parameter",
       "datatype": "bool",
@@ -32,23 +42,28 @@
       "defaultValue": "false",
       "description": "Include code projecting to Kafka."
     },
-    "blank": {
+    "raw": {
       "type": "parameter",
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Remove example code."
+      "description": "Emit raw stream jevents directly, rather than producing a versioned summary. (Only applicable if --kafka selected)"
     }
   },
   "sources": [
     {
       "modifiers": [
         {
-          "condition": "kafka || blank",
+          "condition": "(kafka && raw) || blank",
           "exclude": [
             "Infrastructure.fs",
             "Todo.fs",
             "Contract.fs",
+          ]
+        },
+        {
+          "condition": "kafka",
+          "exclude": [
             "TodoSummary.fs"
           ]
         },

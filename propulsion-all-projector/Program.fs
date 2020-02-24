@@ -1,4 +1,4 @@
-﻿module AllTemplate.Program
+﻿module ReactorTemplate.Program
 
 open Propulsion.Cosmos
 //#if (!noEventStore)
@@ -381,7 +381,7 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let [<Literal>] AppName = "AllTemplate"
+let [<Literal>] AppName = "ReactorTemplate"
 
 //#if (!noEventStore)
 module EventStoreContext =
@@ -407,20 +407,34 @@ let build (args : CmdParser.Arguments) =
             fun target -> Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve(target, Equinox.AllowStale)
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, Log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
 #if kafka
-        let (broker, topic) = cosmos.Sink.BuildTargetParams()
+        let (broker, topic) = srcE.Cosmos.Sink.BuildTargetParams()
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
+#if raw
         let sink =
             Propulsion.Kafka.StreamsProducerSink.Start(
                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, Handler.render, producer,
                 statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
+#else
+        let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
+            producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
+        let esConn = connectEs ()
+        let srcCache = Equinox.Cache(AppName, sizeMb = 10)
+        let srcService = Todo.EventStore.create (EventStoreContext.create esConn,srcCache)
+        let handle = Handler.handleStreamEvents (srcService, produceSummary)
+
+        let sink =
+             Propulsion.Streams.Sync.StreamsSync.Start(
+                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
+                 statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
+#endif
 #else
 #if blank
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
         let handle = Ingester.handleStreamEvents Ingester.tryHandle
 #else
         let esConn = connectEs ()
-        let dstCache = Equinox.Cache(AppName, sizeMb = 10)
-        let srcService = Todo.EventStore.create (EventStoreContext.create esConn,dstCache)
+        let srcCache = Equinox.Cache(AppName, sizeMb = 10)
+        let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
         let dstService = TodoSummary.Cosmos.create (context, cache)
         let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
 #endif
@@ -445,20 +459,35 @@ let build (args : CmdParser.Arguments) =
 #if kafka
         let (broker, topic) = srcCosmos.Cosmos.Sink.BuildTargetParams()
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
+#if raw
         let sink =
             Propulsion.Kafka.StreamsProducerSink.Start(
                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, Handler.render, producer,
                 statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
+#else
+        let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
+            producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
+        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+        let context = Equinox.Cosmos.Context (connection, database, container)
+        let cache = Equinox.Cache(AppName, sizeMb = 10)
+        let service = Todo.Cosmos.create (context, cache)
+        let handle = Handler.handleStreamEvents (service, produceSummary)
+
+        let sink =
+             Propulsion.Streams.Sync.StreamsSync.Start(
+                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
+                 statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
+#endif
 #else
 #if blank
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
         let handle = Ingester.handleStreamEvents Ingester.tryHandle
 #else
         let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        let cosmos = Equinox.Cosmos.Context (connection, database, container)
+        let context = Equinox.Cosmos.Context (connection, database, container)
         let cache = Equinox.Cache(AppName, sizeMb = 10)
-        let srcService = Todo.Cosmos.create (cosmos, cache)
-        let dstService = TodoSummary.Cosmos.create (cosmos, cache)
+        let srcService = Todo.Cosmos.create (context, cache)
+        let dstService = TodoSummary.Cosmos.create (context, cache)
         let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
 #endif
         let sink =
