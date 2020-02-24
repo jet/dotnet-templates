@@ -1,9 +1,9 @@
 namespace TodoBackendTemplate.Web
 
 open Microsoft.AspNetCore.Builder
-open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Mvc
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Hosting
 open Serilog
 open System
 //#if (aggregate || todos)
@@ -167,7 +167,7 @@ module Services =
 type Startup() =
     // This method gets called by the runtime. Use this method to add services to the container.
     member __.ConfigureServices(services: IServiceCollection) : unit =
-        services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1) |> ignore
+        services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Latest) |> ignore
 
 //#if (cosmos || eventStore)
         // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
@@ -224,13 +224,15 @@ type Startup() =
         Services.register(services, storeConfig)
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-    member __.Configure(app: IApplicationBuilder, env: IHostingEnvironment) : unit =
+    member __.Configure(app: IApplicationBuilder, env: IHostEnvironment) : unit =
         if env.IsDevelopment() then app.UseDeveloperExceptionPage() |> ignore
         else app.UseHsts() |> ignore
 
         app.UseHttpsRedirection()
+            .UseRouting()
 #if todos        
             // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
             .UseCors(fun x -> x.WithOrigins([|"https://www.todobackend.com"|]).AllowAnyHeader().AllowAnyMethod() |> ignore)
 #endif        
-            .UseMvc() |> ignore
+            .UseEndpoints(fun endpoints -> endpoints.MapControllers() |> ignore)
+            |> ignore
