@@ -10,14 +10,18 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+### Removed
+### Fixed
+
+<a name="4.0.0"></a>
+## [4.0.0] - 2020-02-25
+
+### Changed
 
 - Target SDK v `3.1.101`
 - Target `netcoreapp3.1` [#9](https://github.com/jet/dotnet-templates/issues/9) [#48](https://github.com/jet/dotnet-templates/pulls/48)
 - Merge `proSummaryProjector`, `proAllProjector` to form `proReactor` [#49](https://github.com/jet/dotnet-templates/pulls/49)
 - Add `--noFilter`, `--raw` switches to `proReactor` [#49](https://github.com/jet/dotnet-templates/pulls/49)
-
-### Removed
-### Fixed
 
 <a name="3.12.0"></a>
 ## [3.12.0] - 2020-02-23
@@ -295,7 +299,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/3.12.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.0.0...HEAD
+[4.0.0]: https://github.com/jet/dotnet-templates/compare/3.12.0...4.0.0
 [3.12.0]: https://github.com/jet/dotnet-templates/compare/3.11.0...3.12.0
 [3.11.0]: https://github.com/jet/dotnet-templates/compare/3.10.0...3.11.0
 [3.10.0]: https://github.com/jet/dotnet-templates/compare/3.9.0...3.10.0
