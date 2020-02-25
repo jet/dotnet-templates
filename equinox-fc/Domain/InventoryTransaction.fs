@@ -43,7 +43,7 @@ type Action =
     | Remove of LocationId * int
     | Add of LocationId * int
     | Log of LoggingState
-    | Finish
+    | Finish of success : bool
 and LoggingState =
     | Adjusted of Events.AdjustmentRequested
     | Transferred of Added
@@ -118,7 +118,8 @@ module Fold =
         | Running (Transfer (Requested r)) -> Action.Remove (r.source, r.quantity)
         | Running (Transfer (Adding r)) -> Action.Add (r.request.destination, r.request.quantity)
         | Logging s -> Action.Log s
-        | Completed _ -> Finish
+        | Completed (TransferFailed _) -> Finish false
+        | Completed (Transferred _ | Adjusted _) -> Finish true
 
 /// Given an event from the Process's timeline, yields the State, in order that it can be completed
 let decide update (state : Fold.State) : Action * Events.Event list =

@@ -105,25 +105,26 @@ type Command =
     | Add    of delta : int
     | Remove of delta : int
 
-type Result = Accepted of Fold.Balance | DupFromPreviousEpoch
+type Result = Denied | Accepted of Fold.Balance | DupFromPreviousEpoch
 
 let decide transactionId command (state: Fold.State) =
     match state with
     | Fold.Closed _ | Fold.Initial -> failwithf "Cannot apply in state %A" state
-    | Fold.Open history ->
+    | Fold.Open (Fold.Current cur as history) ->
 
     match tryFindDup transactionId history with
     | IdempotentInsert bal    -> Accepted bal,         []
     | DupCarriedForward       -> DupFromPreviousEpoch, []
     | NotDuplicate ->
 
-    let e =
+    let accepted, events =
         match command with
-        | Reset  value -> Events.Reset   {| value = value; id = transactionId |}
-        | Add    delta -> Events.Added   {| delta = delta; id = transactionId |}
-        | Remove delta -> Events.Removed {| delta = delta; id = transactionId |}
-    match Fold.evolve state e with
-    | Fold.Open (Fold.Current cur) -> Accepted cur, []
+        | Reset  value -> true, [Events.Reset   {| value = value; id = transactionId |}]
+        | Add    delta -> true, [Events.Added   {| delta = delta; id = transactionId |}]
+        | Remove delta when delta > cur -> false, []
+        | Remove delta -> true, [Events.Removed {| delta = delta; id = transactionId |}]
+    match Fold.fold state events with
+    | Fold.Open (Fold.Current cur) -> (if accepted then Accepted cur else Denied), events
     | s -> failwithf "Unexpected state %A" s
 
 type Service internal (log, resolve, maxAttempts) =
