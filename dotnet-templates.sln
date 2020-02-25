@@ -6,9 +6,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Consumer", "propulsion-cons
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SummaryConsumer", "propulsion-summary-consumer\SummaryConsumer.fsproj", "{A30A8D80-49DF-46BD-B65E-4C11B404E236}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SummaryProjector", "propulsion-summary-projector\SummaryProjector.fsproj", "{D7735C20-6EFE-437E-B33C-F88F1675D5BB}"
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "AllProjector", "propulsion-all-projector\AllProjector.fsproj", "{D3A5A09B-95D2-4C52-8356-61D44BBBE446}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Reactor", "propulsion-reactor\Reactor.fsproj", "{D3A5A09B-95D2-4C52-8356-61D44BBBE446}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Sync", "propulsion-sync\Sync.fsproj", "{D7ACBDF8-5F24-420F-9657-20096CE08B49}"
 EndProject
@@ -45,9 +43,9 @@ ProjectSection(SolutionItems) = preProject
 	equinox-web\.template.config\template.json = equinox-web\.template.config\template.json
 EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proAllProjector", "proAllProjector", "{24080834-2B0A-452D-941B-234B54E2E712}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proReactor", "proReactor", "{24080834-2B0A-452D-941B-234B54E2E712}"
 ProjectSection(SolutionItems) = preProject
-	propulsion-all-projector\.template.config\template.json = propulsion-all-projector\.template.config\template.json
+	propulsion-reactor\.template.config\template.json = propulsion-reactor\.template.config\template.json
 EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proProjector", "proProjector", "{C80353DE-0B5E-4D55-B406-317843D90DA0}"
@@ -58,11 +56,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proConsumer", "proConsumer", "{FC23C841-A0F6-4BCA-AC8F-3B63FBFD1520}"
 ProjectSection(SolutionItems) = preProject
 	propulsion-consumer\.template.config\template.json = propulsion-consumer\.template.config\template.json
-EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "summaryProjector", "summaryProjector", "{05BA53CF-9759-46D4-B19D-3C05056FA84F}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-summary-projector\.template.config\template.json = propulsion-summary-projector\.template.config\template.json
 EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "summaryConsumer", "summaryConsumer", "{488821B9-BBC2-4768-9B63-36036BA6B765}"
@@ -97,10 +90,6 @@ Global
 		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D7735C20-6EFE-437E-B33C-F88F1675D5BB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D7735C20-6EFE-437E-B33C-F88F1675D5BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D7735C20-6EFE-437E-B33C-F88F1675D5BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D7735C20-6EFE-437E-B33C-F88F1675D5BB}.Release|Any CPU.Build.0 = Release|Any CPU
 		{FA48F72B-0245-49D4-AA09-44A59282978E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{FA48F72B-0245-49D4-AA09-44A59282978E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FA48F72B-0245-49D4-AA09-44A59282978E}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -152,7 +141,6 @@ Global
 		{D3A5A09B-95D2-4C52-8356-61D44BBBE446} = {24080834-2B0A-452D-941B-234B54E2E712}
 		{C3A5A09B-95D1-4C52-8356-61D44BBBE445} = {C80353DE-0B5E-4D55-B406-317843D90DA0}
 		{FA48F72B-0245-49D4-AA09-44A59282978E} = {FC23C841-A0F6-4BCA-AC8F-3B63FBFD1520}
-		{D7735C20-6EFE-437E-B33C-F88F1675D5BB} = {05BA53CF-9759-46D4-B19D-3C05056FA84F}
 		{A30A8D80-49DF-46BD-B65E-4C11B404E236} = {488821B9-BBC2-4768-9B63-36036BA6B765}
 		{D7ACBDF8-5F24-420F-9657-20096CE08B49} = {818D28A6-E6AB-4416-BDA6-1577C5D54447}
 		{B6389F9E-A8E4-4BD7-B4C0-703B1A69BEA1} = {E7434881-8655-4C22-82CD-91ADB5123A73}

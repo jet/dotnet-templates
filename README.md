@@ -18,24 +18,25 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 - [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion). (typically consuming from an app produced with `dotnet new proProjector -k`)
 
-## Templates combining usage of Equinox and Propulsion
+## Producer/Reactor Templates combining usage of Equinox and Propulsion
 
-- [`summaryProjector`](propulsion-summary-projector/README.md) - Boilerplate for an a Projector that can consume from a) Azure CosmosDb ChangeFeedProcessor b) EventStore generating versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed from an `Equinox.Cosmos`/`.EventStore` store using `Propulsion.Cosmos`/`.EventStore`.
-
-- [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new summaryProjector`
-
-- [`trackingConsumer`](propulsion-tracking-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest accumulating changes in an `Equinox.Cosmos` store idempotently.
-
-- [`proAllProjector`](propulsion-all-projector/README.md) - Boilerplate for a dual mode CosmosDB ChangeFeed Processor and/or EventStore `$all` stream projector using `Propulsion.Cosmos`/`Propulsion.EventStore`
+- [`proReactor`](propulsion-reactor/README.md) - Boilerplate for a dual mode CosmosDB ChangeFeed Processor and/or EventStore `$all` stream projector/reactor using `Propulsion.Cosmos`/`Propulsion.EventStore`
 
   **NOTE At present, checkpoint storage when projecting from EventStore uses Azure CosmosDB - help wanted ;)**
 
    Standard processing shows importing (in summary form) from an aggregate in `EventStore` or `Cosmos` to a Summary form in `Cosmos` (use `-b`(`lank`) to remove, yielding a minimal projector)
    
-   `--kafka` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store).
+   `--kafka` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store). Produces versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed.
+   `--raw` (custom option for `--kafka`) emits the raw events encountered on the stream, rather than producing versioned summaries.
    `--noEventStore` removes support for projecting from EventStore from the emitted code
   
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
+
+## Consumer Templates combining usage of Equinox and Propulsion
+
+- [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new proReactor --kafka`
+
+- [`trackingConsumer`](propulsion-tracking-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest accumulating changes in an `Equinox.Cosmos` store idempotently.
 
 ## Walkthrough
 
@@ -71,11 +72,11 @@ To use from the command line, the outline is:
     start README.md
 
     # ... to add a Summary Projector
-    md -p ../SummaryProjector | Set-Location
-    dotnet new summaryProjector
+    md -p ../SummaryProducer | Set-Location
+    dotnet new proReactor --kafka --noFilter
     start README.md
 
-    # ... to add a Summary Consumer (ingesting output from `summaryProjector`)
+    # ... to add a Summary Consumer (ingesting output from `SummaryProducer`)
     md -p ../SummaryConsumer | Set-Location
     dotnet new summaryConsumer
     start README.md
@@ -127,7 +128,7 @@ There's [no integration test for the templates yet](https://github.com/jet/dotne
     
     c. test a variant (i.e. per `symbol` in the config)
 
-        $ dotnet new proAllProjector -k # an example - in general you only need to test stuff you're actually changing
+        $ dotnet new proReactor -k # an example - in general you only need to test stuff you're actually changing
         $ dotnet build # test it compiles
         $ # REPEAT N TIMES FOR COMBINATIONS OF SYMBOLS
 

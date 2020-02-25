@@ -1,4 +1,4 @@
-﻿module AllTemplate.TodoSummary
+﻿module ReactorTemplate.TodoSummary
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =

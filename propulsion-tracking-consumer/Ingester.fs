@@ -1,5 +1,5 @@
 /// Follows a feed of messages representing items being added/updated on an aggregate that maintains a list of child items
-/// Compared to the Ingester in the `summaryProjector` template, each event is potentially relevant
+/// Compared to the Ingester in the `proReactor` template, each event is potentially relevant
 module ConsumerTemplate.Ingester
 
 open System

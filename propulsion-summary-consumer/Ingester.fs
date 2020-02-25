@@ -4,7 +4,7 @@ module ConsumerTemplate.Ingester
 
 open System
 
-/// Defines the contract we share with the SummaryProjector's published feed
+/// Defines the contract we share with the proReactor --'s published feed
 module Contract =
 
     let [<Literal>] CategoryId = "TodoSummary"
