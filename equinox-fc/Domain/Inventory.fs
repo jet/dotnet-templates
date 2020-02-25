@@ -94,26 +94,29 @@ module Processor =
                 match action with
                 | Transaction.Adjust (loc, bal) ->
                     match! locations.Execute(loc, f (Fc.Location.Epoch.Reset bal)) with
-                    | Fc.Location.Epoch.Accepted _ -> do! aux (Transaction.Events.Adjusted)
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> failwith "TODO walk back to previous epoch"
+                    | Fc.Location.Epoch.Accepted _ -> return! aux (Transaction.Events.Adjusted)
+                    | Fc.Location.Epoch.Denied -> return failwith "Cannot Deny Reset"
+                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Remove (loc, delta) ->
                     match! locations.Execute(loc, f (Fc.Location.Epoch.Remove delta)) with
-                    | Fc.Location.Epoch.Accepted bal -> do! aux (Transaction.Events.Removed { balance = bal })
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> failwith "TODO walk back to previous epoch"
+                    | Fc.Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Removed { balance = bal })
+                    | Fc.Location.Epoch.Denied -> return! aux Transaction.Events.Failed
+                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Add    (loc, delta) ->
                     match! locations.Execute(loc, f (Fc.Location.Epoch.Add delta)) with
-                    | Fc.Location.Epoch.Accepted bal -> do! aux (Transaction.Events.Added   { balance = bal })
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> failwith "TODO walk back to previous epoch"
-                | Transaction.Log (Transaction.Adjusted e) ->
+                    | Fc.Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Added   { balance = bal })
+                    | Fc.Location.Epoch.Denied -> return failwith "Cannot Deny Add"
+                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
+                | Transaction.Log (Transaction.Adjusted _) ->
                     let! _count = inventory.Ingest([Fc.Inventory.Epoch.Events.Adjusted    { transactionId = transactionId }])
-                    do! aux Transaction.Events.Logged
-                | Transaction.Log (Transaction.Transferred e) ->
+                    return! aux Transaction.Events.Logged
+                | Transaction.Log (Transaction.Transferred _) ->
                     let! _count = inventory.Ingest([Fc.Inventory.Epoch.Events.Transferred { transactionId = transactionId }])
-                    do! aux Transaction.Events.Logged
-                | Transaction.Finish ->
-                    ()
+                    return! aux Transaction.Events.Logged
+                | Transaction.Finish success ->
+                    return success
             }
             aux
 
-        member __.Apply(transactionId, update) =
+        member __.TryApply(transactionId, update) =
             execute transactionId update
