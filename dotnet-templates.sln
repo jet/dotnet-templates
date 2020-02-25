@@ -99,8 +99,6 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-fc\Domain
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "equinox-fc\Domain.Tests\Domain.Tests.fsproj", "{49890A45-D6C2-4EF6-87AD-39960E03E254}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Equinox.Templates", "src\Equinox.Templates\Equinox.Templates.fsproj", "{8C92B728-85A5-4231-863A-E4236E46CC36}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -169,10 +167,6 @@ Global
 		{49890A45-D6C2-4EF6-87AD-39960E03E254}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{49890A45-D6C2-4EF6-87AD-39960E03E254}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{49890A45-D6C2-4EF6-87AD-39960E03E254}.Release|Any CPU.Build.0 = Release|Any CPU
-		{8C92B728-85A5-4231-863A-E4236E46CC36}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8C92B728-85A5-4231-863A-E4236E46CC36}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8C92B728-85A5-4231-863A-E4236E46CC36}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8C92B728-85A5-4231-863A-E4236E46CC36}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
