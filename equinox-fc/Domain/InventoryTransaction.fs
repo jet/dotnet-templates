@@ -123,7 +123,10 @@ module Fold =
 
 /// Given an event from the Process's timeline, yields the State, in order that it can be completed
 let decide update (state : Fold.State) : Action * Events.Event list =
-    let events = Fold.filter update state
+    let events =
+        match update with
+        | None -> []
+        | Some update -> Fold.filter update state
     let state' = Fold.fold state events
     Fold.nextAction state', events
 
@@ -149,3 +152,39 @@ module Cosmos =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
     let createService (context, cache) = createService (resolve (context, cache))
+
+/// Handles requirement to infer when a transaction is 'stuck'
+/// Note we don't want to couple to the state in a deep manner; thus we track:
+/// a) when the request intent is established (aka when *Requested is logged)
+/// b) when a transaction reports that it has Completed
+module Watchdog =
+
+    module Events =
+
+        // TOCONSIDER: this can be written more generically by just grabbing the time of the very first event
+        type Event =
+            | AdjustmentRequested
+            | TransferRequested
+            | Completed
+            interface TypeShape.UnionContract.IUnionContract
+        type TimestampAndEvent = System.DateTimeOffset * Event
+        let codec =
+            let up (encoded : FsCodec.ITimelineEvent<_>, message) : TimestampAndEvent = encoded.Timestamp, message
+            let down _union = failwith "Not Implemented"
+            FsCodec.NewtonsoftJson.Codec.Create<TimestampAndEvent, Event, (*'Meta*)obj>(up, down)
+
+    module Fold =
+
+        type State = Initial | Active of startTime: System.DateTimeOffset | Completed
+        let initial = Initial
+        let evolve _state = function
+            | startTime, (Events.AdjustmentRequested | Events.TransferRequested ) -> Active startTime
+            | _, Events.Completed -> Completed
+        let fold : State -> Events.TimestampAndEvent seq -> State = Seq.fold evolve
+
+    type Status = Complete | Active | Stuck
+    let categorize cutoffTime = function
+        | Fold.Initial -> Active // cover (hypothetical) corner case where we don't have any valid events yet
+        | Fold.Active startTime when startTime < cutoffTime -> Stuck
+        | Fold.Active _ -> Active
+        | Fold.Completed -> Complete

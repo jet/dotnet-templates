@@ -32,4 +32,5 @@ type InventoryTransactionId = string<inventoryTransactionId>
 and [<Measure>] inventoryTransactionId
 module InventoryTransactionId =
     let parse (value : string) : InventoryTransactionId = %value
+    let (|Parse|) = parse
     let toString (value : InventoryTransactionId) : string = %value
