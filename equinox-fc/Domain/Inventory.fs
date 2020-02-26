@@ -91,10 +91,11 @@ module Processor =
             let f = Fc.Location.Epoch.decide transactionId
             let rec aux update = async {
                 let! action = transactions.Apply(transactionId, update)
+                let aux event = aux (Some event)
                 match action with
                 | Transaction.Adjust (loc, bal) ->
                     match! locations.Execute(loc, f (Fc.Location.Epoch.Reset bal)) with
-                    | Fc.Location.Epoch.Accepted _ -> return! aux (Transaction.Events.Adjusted)
+                    | Fc.Location.Epoch.Accepted _ -> return! aux Transaction.Events.Adjusted
                     | Fc.Location.Epoch.Denied -> return failwith "Cannot Deny Reset"
                     | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Remove (loc, delta) ->
@@ -117,10 +118,14 @@ module Processor =
                     return success
             }
             aux
+        let run transactionId req = execute transactionId (Some req)
 
         member __.Adjust(transactionId, location, quantity) =
-            execute transactionId (Fc.Inventory.Transaction.Events.AdjustmentRequested { location = location; quantity = quantity })
+            run transactionId (Fc.Inventory.Transaction.Events.AdjustmentRequested { location = location; quantity = quantity })
 
         member __.TryTransfer(transactionId, source, destination, quantity) =
-            execute transactionId (Fc.Inventory.Transaction.Events.TransferRequested { source = source; destination = destination; quantity = quantity })
+            run transactionId (Fc.Inventory.Transaction.Events.TransferRequested { source = source; destination = destination; quantity = quantity })
 
+        /// Used by Watchdog to force conclusion of a transaction whose progress has stalled
+        member __.Push(transactionId) = async {
+            let! _ = execute transactionId None in () }
