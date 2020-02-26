@@ -118,5 +118,9 @@ module Processor =
             }
             aux
 
-        member __.TryApply(transactionId, update) =
-            execute transactionId update
+        member __.Adjust(transactionId, location, quantity) =
+            execute transactionId (Fc.Inventory.Transaction.Events.AdjustmentRequested { location = location; quantity = quantity })
+
+        member __.TryTransfer(transactionId, source, destination, quantity) =
+            execute transactionId (Fc.Inventory.Transaction.Events.TransferRequested { source = source; destination = destination; quantity = quantity })
+
