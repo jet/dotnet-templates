@@ -331,6 +331,21 @@ let build (args : CmdParser.Arguments) =
             let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
             fun target -> Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve(target, Equinox.AllowStale)
         let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, Log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
+        let handle (_stream, _span) : Async<int64*Handler.Outcome> = failwith "TODO" // Handler.handleStreamEvents (Handler.tryHandle driveTransaction)
+        let sink =
+            Propulsion.Streams.StreamsProjector.Start(
+                Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = Handler.Stats(Log.Logger))
+        let connect () = let c = connectEs () in c.ReadConnection
+        let runPipeline =
+            EventStoreSource.Run(
+                Log.Logger, sink, checkpoints, connect, spec, EventStoreContext.tryMapEvent isTransactionStream,
+                args.MaxReadAhead, args.StatsInterval)
+        sink, runPipeline
+    | Choice2Of2 (srcCosmos, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
+        let (discovery, database, container, connector) = srcCosmos.Cosmos.BuildConnectionDetails()
+        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+        let cache = Equinox.Cache(AppName, sizeMb = 10)
+        let context = Equinox.Cosmos.Context(connection, database, container)
         let inventoryService =
             let inventoryId = InventoryId.parse "FC000"
             let maxTransactionsPerEpoch = 100
@@ -350,18 +365,6 @@ let build (args : CmdParser.Arguments) =
         let processor = Fc.Inventory.Processor.Service(transactionService, locations, inventoryService)
 
         let handle = Handler.handleStreamEvents (Handler.tryHandle processor.Push)
-        let sink =
-            Propulsion.Streams.StreamsProjector.Start(
-                Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = Handler.Stats(Log.Logger))
-        let connect () = let c = connectEs () in c.ReadConnection
-        let runPipeline =
-            EventStoreSource.Run(
-                Log.Logger, sink, checkpoints, connect, spec, EventStoreContext.tryMapEvent isTransactionStream,
-                args.MaxReadAhead, args.StatsInterval)
-        sink, runPipeline
-    | Choice2Of2 (srcCosmos, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-        let (discovery, database, container, connector) = srcCosmos.Cosmos.BuildConnectionDetails()
-        let handle (_stream, _span) : Async<int64*Handler.Outcome> = failwith "TODO" // Handler.handleStreamEvents (Handler.tryHandle driveTransaction)
         let sink =
             Propulsion.Streams.StreamsProjector.Start(
                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = Handler.Stats(Log.Logger))
