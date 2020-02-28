@@ -167,7 +167,11 @@ module Services =
 type Startup() =
     // This method gets called by the runtime. Use this method to add services to the container.
     member __.ConfigureServices(services: IServiceCollection) : unit =
-        services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Latest) |> ignore
+        services
+            .AddMvc()
+            .SetCompatibilityVersion(CompatibilityVersion.Latest)
+            .AddNewtonsoftJson() // until FsCodec.SystemTextJson is available
+            |> ignore
 
 //#if (cosmos || eventStore)
         // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
@@ -230,7 +234,7 @@ type Startup() =
 
         app.UseHttpsRedirection()
             .UseRouting()
-#if todos        
+#if todos
             // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
             .UseCors(fun x -> x.WithOrigins([|"https://www.todobackend.com"|]).AllowAnyHeader().AllowAnyMethod() |> ignore)
 #endif        

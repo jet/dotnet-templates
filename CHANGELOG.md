@@ -13,6 +13,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
+- Fix `eqxweb`[`cs]` by adding `AddNewtonsoftJson` in order to handle Records emitted in views
+
 <a name="4.0.0"></a>
 ## [4.0.0] - 2020-02-25
 

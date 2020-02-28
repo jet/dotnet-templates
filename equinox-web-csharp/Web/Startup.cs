@@ -19,6 +19,7 @@ namespace TodoBackendTemplate.Web
                 app.UseHsts();
 
             app.UseHttpsRedirection()
+                .UseRouting()
 #if todos
                 // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
                 .UseCors(x => x.WithOrigins("https://www.todobackend.com").AllowAnyHeader().AllowAnyMethod())
@@ -30,7 +31,10 @@ namespace TodoBackendTemplate.Web
         public void ConfigureServices(IServiceCollection services)
 
         {
-            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Latest);
+            services
+                .AddMvc()
+                .SetCompatibilityVersion(CompatibilityVersion.Latest)
+                .AddNewtonsoftJson();
             var equinoxContext = ConfigureStore();
             ConfigureServices(services, equinoxContext);
         }
