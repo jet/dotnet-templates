@@ -16,12 +16,14 @@ namespace TodoBackendTemplate.Web
             {
                 Log.Logger = new LoggerConfiguration()
                     .MinimumLevel.Debug()
-                    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+                    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+                    // .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
                     .Enrich.FromLogContext()
                     .WriteTo.Console()
                     .CreateLogger();
                 var host = WebHost
                     .CreateDefaultBuilder(argv)
+                    .UseSerilog()
                     .UseStartup<Startup>()
                     .Build();
                 // Conceptually, these can run in parallel

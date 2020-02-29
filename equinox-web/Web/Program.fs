@@ -8,8 +8,8 @@ module Program =
     let createWebHostBuilder args : IWebHostBuilder =
         WebHost
             .CreateDefaultBuilder(args)
-            .UseStartup<Startup>()
             .UseSerilog()
+            .UseStartup<Startup>()
 
     [<EntryPoint>]
     let main argv =
@@ -17,7 +17,8 @@ module Program =
             Log.Logger <-
                 LoggerConfiguration()
                     .MinimumLevel.Debug()
-                    .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+                    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+//.MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
                     .Enrich.FromLogContext()
                     .WriteTo.Console()
                     .CreateLogger()

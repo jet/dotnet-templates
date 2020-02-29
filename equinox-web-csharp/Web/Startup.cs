@@ -20,6 +20,8 @@ namespace TodoBackendTemplate.Web
 
             app.UseHttpsRedirection()
                 .UseRouting()
+                .UseSerilogRequestLogging() // see https://nblumhardt.com/2019/10/serilog-in-aspnetcore-3/
+
 #if todos
                 // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
                 .UseCors(x => x.WithOrigins("https://www.todobackend.com").AllowAnyHeader().AllowAnyMethod())

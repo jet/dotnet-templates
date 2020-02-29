@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Applied [`UseSerilogRequestLogging`](https://nblumhardt.com/2019/10/serilog-in-aspnetcore-3/) in `eqxweb`[`cs]`
+
 ### Changed
 ### Removed
 ### Fixed
