@@ -80,7 +80,7 @@ module CmdParser =
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.FilterFunction(?excludeLong, ?longOnly): string -> bool =
 #if noFilter
-            true
+            fun _streamName -> true
 #else
             let isLong (streamName : string) =
                 streamName.StartsWith "Inventory-" // Too long
