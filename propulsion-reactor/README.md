@@ -1,11 +1,11 @@
 //#if kafka
-//#if noEventStore
+//#if cosmosOnly
 # Propulsion CosmosDb ChangeFeedProcessor -> Kafka Projector
 //#else
 # Propulsion EventStore $all/CosmosDb ChangeFeedProcessor -> Kafka Projector
 //#endif
 //#else
-//#if noEventStore
+//#if cosmosOnly
 # Propulsion CosmosDb ChangeFeedProcessor Projector (without Kafka emission)
 //#else
 # Propulsion EventStore $all/CosmosDb ChangeFeedProcessor Projector (without Kafka emission)
@@ -13,16 +13,16 @@
 //#endif
 
 This project was generated using:
-//#if noEventStore
+//#if cosmosOnly
 //#if kafka
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new proAllProjector --noEventStore -k # -k => include Kafka projection logic
+    dotnet new proAllProjector --cosmosOnly -k # -k => include Kafka projection logic
 //#else
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
-    dotnet new proAllProjector --noEventStore # use --help to see options
+    dotnet new proAllProjector --cosmosOnly # use --help to see options
 //#endif
 //#else
 //#if kafka
@@ -59,7 +59,7 @@ This project was generated using:
         # default name is "($EQUINOX_COSMOS_CONTAINER)-aux"
         propulsion init -ru 400 cosmos
 
-//#if (!noEventStore)
+//#if (!cosmosOnly)
     NOTE when projecting from EventStore, the current implementation stores the checkpoints within the CosmosDB store in order to remove feedback effects.
 
     (Yes, someone should do a PR to store the checkpoints in EventStore itself; this is extracted from working code, which can assume there's always a CosmosDB around)

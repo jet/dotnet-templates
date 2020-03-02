@@ -1,7 +1,7 @@
 ﻿module ReactorTemplate.Program
 
 open Propulsion.Cosmos
-//#if (!noEventStore)
+//#if (!cosmosOnly)
 open Propulsion.EventStore
 //#endif
 open Serilog
@@ -35,7 +35,7 @@ module CmdParser =
         | Some x -> x
     open Argu
     open Equinox.Cosmos
-//#if (!noEventStore)
+//#if (!cosmosOnly)
     open Equinox.EventStore
 //#endif
     [<NoEquality; NoComparison>]
@@ -51,7 +51,7 @@ module CmdParser =
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
 //#endif
 
-//#if (!noEventStore)
+//#if (!cosmosOnly)
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSourceParameters>
 //#endif
         | [<AltCommandLine "cosmos"; CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
@@ -67,7 +67,7 @@ module CmdParser =
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
 //#endif
-//#if (!noEventStore)
+//#if (!cosmosOnly)
                 | Es _ ->                   "specify EventStore input parameters."
 //#endif
                 | SrcCosmos _ ->            "specify CosmosDB input parameters."
@@ -108,7 +108,7 @@ module CmdParser =
             | _, _ -> raise (MissingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
 #endif
 
-#if (!noEventStore)
+#if (!cosmosOnly)
         member val Source : Choice<EsSourceArguments, CosmosSourceArguments> =
             match a.TryGetSubCommand() with
             | Some (Es es) -> Choice1Of2 (EsSourceArguments es)
@@ -122,7 +122,7 @@ module CmdParser =
             | _ -> raise (MissingArg "Must specify cosmos for Src")
         member x.SourceParams() =
 #endif
-#if noEventStore
+#if cosmosOnly
                 let srcC = x.Source
 #else
             match x.Source with
@@ -147,7 +147,7 @@ module CmdParser =
                     x.ConsumerGroupName, auxColl.database, auxColl.container, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
-#if (noEventStore)
+#if (cosmosOnly)
                 (srcC, (disco, auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
 #else
                 Choice2Of2 (srcC, (disco, auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
@@ -210,7 +210,7 @@ module CmdParser =
             match a.TryGetSubCommand() with
             | Some (CosmosSourceParameters.Cosmos cosmos) -> CosmosArguments cosmos
             | _ -> raise (MissingArg "Must specify cosmos details")
-//#if (!noEventStore)
+//#if (!cosmosOnly)
     and [<NoEquality; NoComparison>] EsSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-g"; Unique>]   Gorge of int
@@ -390,14 +390,14 @@ module Logging =
 
 let [<Literal>] AppName = "ReactorTemplate"
 
-//#if (!noEventStore)
+//#if (!cosmosOnly)
 module EventStoreContext =
     let cache = Equinox.Cache(AppName, sizeMb = 10)
     let create connection = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
 
 //#endif
 let build (args : CmdParser.Arguments) =
-//#if (!noEventStore)
+//#if (!cosmosOnly)
     match args.SourceParams() with
     | Choice1Of2 (srcE, cosmos, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
@@ -457,7 +457,7 @@ let build (args : CmdParser.Arguments) =
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
 //#endif
-#if (!noEventStore)
+#if (!cosmosOnly)
     | Choice2Of2 (srcCosmos, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
 #else
         let (srcCosmos, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()

@@ -19,7 +19,7 @@
         <!--#if (!kafka) -->
         <Compile Include="Ingester.fs" />
         <!--#endif-->
-        <!--#if (!noEventStore || kafka) -->
+        <!--#if (!cosmosOnly || kafka) -->
         <Compile Include="Handler.fs" />
         <!--#endif-->
         <Compile Include="Program.fs" />
@@ -29,7 +29,7 @@
         <PackageReference Include="Argu" Version="5.4.0" />
         <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
         <PackageReference Include="Propulsion.Cosmos" Version="2.0.0" />
-        <!--#if (!noEventStore)-->
+        <!--#if (!cosmosOnly)-->
         <PackageReference Include="Propulsion.EventStore" Version="2.0.0" />
         <!--#endif-->
         <!--#if (kafka)-->

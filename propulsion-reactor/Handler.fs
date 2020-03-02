@@ -1,5 +1,5 @@
 module ReactorTemplate.Handler
-//#if (!noEventStore)
+//#if (!cosmosOnly)
 
 open Propulsion.EventStore
 

@@ -21,7 +21,7 @@
   "sourceName": "ReactorTemplate",
   "preferNameDirectory": true,
   "symbols": {
-    "noEventStore": {
+    "cosmosOnly": {
       "type": "parameter",
       "datatype": "bool",
       "isRequired": false,
@@ -54,7 +54,7 @@
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Emit raw stream jevents directly, rather than producing a versioned summary. (Only applicable if --kafka selected)"
+      "description": "Emit raw stream events directly, rather than producing a versioned summary. (Only applicable if --kafka selected)"
     }
   },
   "sources": [
@@ -81,7 +81,7 @@
           ]
         },
         {
-          "condition": "noEventStore && !kafka",
+          "condition": "cosmosOnly && !kafka",
           "exclude": [
             "Handler.fs"
           ]

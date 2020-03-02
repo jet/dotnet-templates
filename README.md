@@ -28,7 +28,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
    
    `--kafka` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store). Produces versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed.
    `--raw` (custom option for `--kafka`) emits the raw events encountered on the stream, rather than producing versioned summaries.
-   `--noEventStore` removes support for projecting from EventStore from the emitted code
+   `--cosmosOnly` removes support for projecting from EventStore from the emitted code
   
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 

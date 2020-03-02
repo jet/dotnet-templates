@@ -13,6 +13,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - Applied [`UseSerilogRequestLogging`](https://nblumhardt.com/2019/10/serilog-in-aspnetcore-3/) in `eqxweb`[`cs]`
 
 ### Changed
+
+- Renamed `proReactor`'s `--noEventStore` to `--cosmosOnly`
+
 ### Removed
 ### Fixed
 
