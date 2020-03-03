@@ -13,7 +13,7 @@ let render (item: Todo.Events.ItemData) : ItemInfo =
 let ofState (state : Todo.Fold.State) : SummaryInfo =
     { items = [| for x in state.items -> render x |]}
 
-//#if (kafka && !raw)
+//#if kafka
 /// Events we emit to third parties (kept here for ease of comparison, can be moved elsewhere in a larger app)
 type SummaryEvent =
     | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo

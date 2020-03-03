@@ -63,7 +63,7 @@ type Service internal (log, resolve, maxAttempts) =
 
 let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
 
-//#if (!cosmosOnly)
+//#if (!cosmosOnly && !fromKafka)
 module EventStore =
 
     open Equinox.EventStore // Everything until now is independent of a concrete store

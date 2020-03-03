@@ -7,19 +7,21 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!--#if (!fromKafka) -->
         <None Include="README.md" />
-        <!--#if (!(kafka && raw) && !blank) -->
+        <!--#endif-->
+        <!--#if (!blank) -->
         <Compile Include="Infrastructure.fs" />
         <Compile Include="Todo.fs" />
-        <Compile Include="Contract.fs" />
         <!--#endif-->
+        <Compile Include="Contract.fs" />
         <!--#if (!kafka && !blank) -->
         <Compile Include="TodoSummary.fs" />
         <!--#endif-->
         <!--#if (!kafka) -->
         <Compile Include="Ingester.fs" />
         <!--#endif-->
-        <!--#if (!cosmosOnly || kafka) -->
+        <!--#if (kafka || (!cosmosOnly && !fromKafka)) -->
         <Compile Include="Handler.fs" />
         <!--#endif-->
         <Compile Include="Program.fs" />
@@ -28,11 +30,15 @@
     <ItemGroup>
         <PackageReference Include="Argu" Version="5.4.0" />
         <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
+        <!--#if (fromKafka)-->
+        <PackageReference Include="Equinox.Cosmos" Version="2.0.0" />
+        <!--#else-->
         <PackageReference Include="Propulsion.Cosmos" Version="2.0.0" />
         <!--#if (!cosmosOnly)-->
         <PackageReference Include="Propulsion.EventStore" Version="2.0.0" />
         <!--#endif-->
-        <!--#if (kafka)-->
+        <!--#endif-->
+        <!--#if (kafka || fromKafka)-->
         <PackageReference Include="Propulsion.Kafka" Version="2.0.0" />
         <!--#endif-->
         <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />

@@ -21,12 +21,19 @@
   "sourceName": "ReactorTemplate",
   "preferNameDirectory": true,
   "symbols": {
+    "fromKafka": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Use Kafka EventSpan feed as input (overrides --cosmosOnly)."
+    },
     "cosmosOnly": {
       "type": "parameter",
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Disable projecting from EventStore."
+      "description": "Disable projecting from EventStore (not applicable if --fromKafka in use."
     },
     "noFilter": {
       "type": "parameter",
@@ -48,13 +55,6 @@
       "isRequired": false,
       "defaultValue": "false",
       "description": "Include code projecting to Kafka."
-    },
-    "raw": {
-      "type": "parameter",
-      "datatype": "bool",
-      "isRequired": false,
-      "defaultValue": "false",
-      "description": "Emit raw stream events directly, rather than producing a versioned summary. (Only applicable if --kafka selected)"
     }
   },
   "sources": [
@@ -81,9 +81,15 @@
           ]
         },
         {
-          "condition": "cosmosOnly && !kafka",
+          "condition": "(cosmosOnly || fromKafka) && !kafka",
           "exclude": [
             "Handler.fs"
+          ]
+        },
+        {
+          "condition": "fromKafka",
+          "exclude": [
+            "README.md"
           ]
         }
       ]

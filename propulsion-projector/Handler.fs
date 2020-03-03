@@ -23,12 +23,15 @@ let render (doc : Microsoft.Azure.Documents.Document) : string * string =
     let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
     equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
 #else
-let render (stream: FsCodec.StreamName, span: Propulsion.Streams.StreamSpan<_>) = async {
+/// Responsible for wrapping a span of events for a specific stream into an envelope (we use the well-known Propulsion.Codec form)
+/// Most manipulation should take place before events enter the scheduler
+let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
     let value =
         span
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
         |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
     return FsCodec.StreamName.toString stream, value }
+//#endif
 #endif
 #else
 let handle (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
