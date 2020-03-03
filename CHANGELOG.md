@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.1.0"></a>
+## [4.1.0] - 2020-03-03
+
+### Added
 
 - Applied [`UseSerilogRequestLogging`](https://nblumhardt.com/2019/10/serilog-in-aspnetcore-3/) in `eqxweb`[`cs]`
 - `proReactor` mode for `--source kafkaEventSpans`
@@ -20,8 +28,6 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 
 - `proReactor`'s `--raw` mode
-
-### Fixed
 
 <a name="4.0.1"></a>
 ## [4.0.1] - 2020-02-28
@@ -316,7 +322,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.0.1...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.1.0...HEAD
+[4.1.0]: https://github.com/jet/dotnet-templates/compare/4.0.1...4.1.0
 [4.0.1]: https://github.com/jet/dotnet-templates/compare/4.0.0...4.0.1
 [4.0.0]: https://github.com/jet/dotnet-templates/compare/3.12.0...4.0.0
 [3.12.0]: https://github.com/jet/dotnet-templates/compare/3.11.0...3.12.0
