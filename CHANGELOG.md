@@ -11,12 +11,16 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - Applied [`UseSerilogRequestLogging`](https://nblumhardt.com/2019/10/serilog-in-aspnetcore-3/) in `eqxweb`[`cs]`
+- `proReactor` mode for `--source kafkaEventSpans`
 
 ### Changed
 
-- Renamed `proReactor`'s `--noEventStore` to `--cosmosOnly`
+- Renamed `proReactor`'s `--noEventStore` to `--source changeFeedOnly`
 
 ### Removed
+
+- `proReactor`'s `--raw` mode
+
 ### Fixed
 
 <a name="4.0.1"></a>

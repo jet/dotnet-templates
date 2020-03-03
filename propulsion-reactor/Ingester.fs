@@ -7,14 +7,14 @@ type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of 
 
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
 type Stats(log, ?statsInterval, ?stateInterval) =
-#if (!fromKafka)
+#if (!kafkaEventSpans)
     inherit Propulsion.Streams.Projector.Stats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 #else
     inherit Propulsion.Kafka.StreamsConsumerStats<int64*Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 #endif
     let mutable ok, na, redundant = 0, 0, 0
 
-#if (!fromKafka)
+#if (!kafkaEventSpans)
     override __.HandleOk res = res |> function
         | Outcome.Ok count -> ok <- ok + 1; redundant <- redundant + count - 1
         | Outcome.Skipped count -> redundant <- redundant + count

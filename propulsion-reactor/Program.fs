@@ -1,8 +1,8 @@
 ﻿module ReactorTemplate.Program
 
-//#if (!fromKafka)
+//#if (!kafkaEventSpans)
 open Propulsion.Cosmos
-//#if (!cosmosOnly)
+//#if multiSource
 open Propulsion.EventStore
 //#endif
 //#endif
@@ -37,10 +37,8 @@ module CmdParser =
         | Some x -> x
     open Argu
     open Equinox.Cosmos
-//#if (!fromKafka)
-//#if (!cosmosOnly)
+//#if multiSource
     open Equinox.EventStore
-//#endif
 //#endif
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -54,13 +52,13 @@ module CmdParser =
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
 //#endif
-#if (!fromKafka)
+#if kafkaEventSpans
+        | [<AltCommandLine "kafka"; CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] SrcKafka of ParseResults<KafkaSourceParameters>
+#else
         | [<AltCommandLine "cosmos"; CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
-//#if (!cosmosOnly)
+//#if multiSource
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSourceParameters>
 //#endif
-#else
-        | [<AltCommandLine "kafka"; CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] SrcKafka of ParseResults<KafkaSourceParameters>
 #endif
         interface IArgParserTemplate with
             member a.Usage =
@@ -74,9 +72,9 @@ module CmdParser =
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
 //#endif
-#if (!fromKafka)
+#if (!kafkaEventSpans)
                 | SrcCosmos _ ->            "specify CosmosDB input parameters."
-//#if (!cosmosOnly)
+//#if multiSource
                 | Es _ ->                   "specify EventStore input parameters."
 //#endif
 #else
@@ -89,10 +87,8 @@ module CmdParser =
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 64)
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
+//#if (!noFilter)
         member __.FilterFunction(?excludeLong, ?longOnly): string -> bool =
-#if noFilter
-            fun _streamName -> true
-#else
             let isLong (streamName : string) =
                 streamName.StartsWith "Inventory-" // Too long
                 || streamName.StartsWith "InventoryCount-" // No Longer used
@@ -117,25 +113,23 @@ module CmdParser =
             | bad, [] ->    let black = Set.ofList bad in Log.Warning("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
             | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
             | _, _ -> raise (MissingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
+//#endif
+#if changeFeedOnly
+        member val Source : CosmosSourceArguments =
+            match a.TryGetSubCommand() with
+            | Some (SrcCosmos cosmos) -> CosmosSourceArguments cosmos
+            | _ -> raise (MissingArg "Must specify cosmos for Src")
+        member x.SourceParams() =
+                let srcC = x.Source
 #endif
-#if (!fromKafka)
-#if (!cosmosOnly)
+//#if (!kafkaEventSpans)
+//#if (!changeFeedOnly)
         member val Source : Choice<EsSourceArguments, CosmosSourceArguments> =
             match a.TryGetSubCommand() with
             | Some (Es es) -> Choice1Of2 (EsSourceArguments es)
             | Some (SrcCosmos cosmos) -> Choice2Of2 (CosmosSourceArguments cosmos)
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
         member x.SourceParams() : Choice<EsSourceArguments*CosmosArguments*ReaderSpec, CosmosSourceArguments*_> =
-#else
-        member val Source : CosmosSourceArguments =
-            match a.TryGetSubCommand() with
-            | Some (SrcCosmos cosmos) -> CosmosSourceArguments cosmos
-            | _ -> raise (MissingArg "Must specify cosmos for Src")
-        member x.SourceParams() =
-#endif
-#if cosmosOnly
-                let srcC = x.Source
-#else
             match x.Source with
             | Choice1Of2 srcE ->
                 let startPos, cosmos = srcE.StartPos, srcE.Cosmos
@@ -148,7 +142,7 @@ module CmdParser =
                         forceRestart = srcE.ForceRestart
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = 0 })
             | Choice2Of2 srcC ->
-#endif
+//#endif // !changeFeedOnly
                 let disco, auxColl =
                     match srcC.LeaseContainer with
                     | None ->     srcC.Discovery, { database = srcC.Database; container = srcC.Container + "-aux" }
@@ -158,18 +152,17 @@ module CmdParser =
                     x.ConsumerGroupName, auxColl.database, auxColl.container, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
-#if (cosmosOnly)
+#if changeFeedOnly
                 (srcC, (disco, auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
 #else
                 Choice2Of2 (srcC, (disco, auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
 #endif
-#else
+//#endif // kafkaEventSpans
+#if kafkaEventSpans
         member val Source : KafkaSourceArguments =
             match a.TryGetSubCommand() with
             | Some (SrcKafka kafka) -> KafkaSourceArguments kafka
             | _ -> raise (MissingArg "Must specify kafka for Src")
-#endif
-#if fromKafka
      and [<NoEquality; NoComparison>] KafkaSourceParameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
@@ -252,7 +245,7 @@ module CmdParser =
             match a.TryGetSubCommand() with
             | Some (CosmosSourceParameters.Cosmos cosmos) -> CosmosArguments cosmos
             | _ -> raise (MissingArg "Must specify cosmos details")
-//#if (!cosmosOnly)
+//#if multiSource
     and [<NoEquality; NoComparison>] EsSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-g"; Unique>]   Gorge of int
@@ -418,7 +411,7 @@ module Logging =
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-#if (!fromKafka)
+#if (!changeFeedOnly)
             // LibLog writes to the global logger, so we need to control the emission
             |> fun c -> let cfpl = if verboseConsole then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
@@ -435,17 +428,15 @@ module Logging =
 
 let [<Literal>] AppName = "ReactorTemplate"
 
-//#if (!fromKafka)
-//#if (!cosmosOnly)
+//#if multiSource
 module EventStoreContext =
     let cache = Equinox.Cache(AppName, sizeMb = 10)
     let create connection = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
 
 //#endif
-//#endif
 let build (args : CmdParser.Arguments) =
-#if (!fromKafka)
-//#if (!cosmosOnly)
+#if (!kafkaEventSpans)
+//#if (!changeFeedOnly)
     match args.SourceParams() with
     | Choice1Of2 (srcE, cosmos, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
@@ -490,21 +481,24 @@ let build (args : CmdParser.Arguments) =
                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = Ingester.Stats(Log.Logger))
 #endif // !kafka
         let connect () = let c = connectEs () in c.ReadConnection
+#if (!noFilter)
         let filterByStreamName = args.FilterFunction()
+#else
+        let filterByStreamName _ = true
+#endif
         let runPipeline =
             EventStoreSource.Run(
                 Log.Logger, sink, checkpoints, connect, spec, Handler.tryMapEvent filterByStreamName,
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
-//#endif // cosmosOnly
-#if (!cosmosOnly)
     | Choice2Of2 (source, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-#else
+//#endif // changeFeedOnly
+#if changeFeedOnly
         let (source, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
 #endif
         let cosmos = source.Cosmos
         let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
-#else // !fromKafka -> wire up consumption from Kafka, with auxiliary `cosmos` store
+#else // !kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
         let source = args.Source
         let cosmos = source.Cosmos
         let consumerConfig =
@@ -512,7 +506,7 @@ let build (args : CmdParser.Arguments) =
                 AppName, source.Broker, [source.Topic], args.ConsumerGroupName,
                 maxInFlightBytes = source.MaxInFlightBytes, ?statisticsInterval = source.LagFrequency)
         let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
-#endif // fromKafka
+#endif // kafkaEventSpans
 
 #if kafka
         let (broker, topic) = source.Cosmos.Sink.BuildTargetParams()
@@ -542,14 +536,14 @@ let build (args : CmdParser.Arguments) =
 #if (!noFilter)
         let filterByStreamName = args.FilterFunction()
 #endif
-#if fromKafka
+#if kafkaEventSpans
         let parseStreamEvents(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
             Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
 #if (!noFilter)
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
         Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, consumerConfig, parseStreamEvents, handle, args.MaxConcurrentStreams, stats = stats)
-#else // !fromKafka => Default consumption, from CosmosDb
+#else // !kafkaEventSpans => Default consumption, from CosmosDb
         let sink =
 #if kafka
              Propulsion.Streams.Sync.StreamsSync.Start(
@@ -573,13 +567,13 @@ let build (args : CmdParser.Arguments) =
                 leaseId, startFromTail, createObserver,
                 ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=connector.CreateClient(AppName, auxDiscovery))
         sink, runPipeline
-#endif // !fromKafka
+#endif // !kafkaEventSpans
 
 let run argv =
     try let args = CmdParser.parse argv
         Logging.initialize args.Verbose args.VerboseConsole
         Settings.initialize ()
-#if (!fromKafka)
+#if (!kafkaEventSpans)
         let projector, runSourcePipeline = build args
         runSourcePipeline |> Async.Start
 #else

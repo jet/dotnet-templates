@@ -1,6 +1,5 @@
 module ReactorTemplate.Handler
-//#if (!fromKafka)
-//#if (!cosmosOnly)
+//#if multiSource
 
 open Propulsion.EventStore
 
@@ -10,7 +9,6 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
     match x.Event with
     | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
     | PropulsionStreamEvent e -> Some e
-//#endif
 //#endif
 //#if kafka
 

@@ -16,24 +16,42 @@
     "language": "F#"
   },
   "identity": "Propulsion.Template.Reactor",
-  "name": "Propulsion EventStore/Cosmos Reactor",
+  "name": "Propulsion EventStore/Cosmos/Kafka Reactor",
   "shortName": "proReactor",
   "sourceName": "ReactorTemplate",
   "preferNameDirectory": true,
   "symbols": {
-    "fromKafka": {
+    "source": {
       "type": "parameter",
-      "datatype": "bool",
-      "isRequired": false,
-      "defaultValue": "false",
-      "description": "Use Kafka EventSpan feed as input (overrides --cosmosOnly)."
+      "defaultValue": "multiSource",
+      "description": "Define sources the app is to be wired up for",
+      "datatype": "choice",
+      "choices": [
+        {
+          "choice": "kafkaEventSpans",
+          "description": "Use Kafka EventSpan feed as input"
+        },
+        {
+          "choice": "changeFeedOnly",
+          "description": "Only wire for CosmosDB ChangeFeedProcessor source"
+        },
+        {
+          "choice": "multiSource",
+          "description": "Support EventStore $all or CosmosDB ChangeFeedProcessor"
+        }
+      ]
     },
-    "cosmosOnly": {
-      "type": "parameter",
-      "datatype": "bool",
-      "isRequired": false,
-      "defaultValue": "false",
-      "description": "Disable projecting from EventStore (not applicable if --fromKafka in use."
+    "kafkaEventSpans": {
+      "type": "computed",
+      "value": "(source == \"kafkaEventSpans\")"
+    },
+    "changeFeedOnly": {
+      "type": "computed",
+      "value": "(source == \"changeFeedOnly\")"
+    },
+    "multiSource": {
+      "type": "computed",
+      "value": "(source == \"multiSource\")"
     },
     "noFilter": {
       "type": "parameter",
@@ -61,7 +79,7 @@
     {
       "modifiers": [
         {
-          "condition": "(kafka && raw) || blank",
+          "condition": "blank",
           "exclude": [
             "Infrastructure.fs",
             "Todo.fs",
@@ -81,13 +99,13 @@
           ]
         },
         {
-          "condition": "(cosmosOnly || fromKafka) && !kafka",
+          "condition": "!multiSource && !kafka",
           "exclude": [
             "Handler.fs"
           ]
         },
         {
-          "condition": "fromKafka",
+          "condition": "kafkaEventSpans",
           "exclude": [
             "README.md"
           ]
