@@ -152,32 +152,37 @@ All the templates herein attempt to adhere to a consistent structure for the roo
 
 ### `module Settings`
 
-_Responsible for: Loading secrets and configuration into Environment variables_
+_Responsible for: Loading secrets and custom configuration, supplying defaults when environment variables are not set_
 
-Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an applications data sources. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`CmdParser` section](#module-cmdparser)
+Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an application's interaction with its environment and/or data storage mechanisms. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`CmdParser` section](#module-cmdparser)
 
 The `Settings` module is responsible for the following:
 1. Feeding defaults into process-local Environment Variables, _where those are not already supplied_
 2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `CmdParser`
 
 - DO (sparingly) rely on inputs from the command line to drive the lookup process
-- DONT log values (CmdParser’s Arguments wrappers should do that as applicable as part of the wire process)
+- DONT log values (CmdParser’s Arguments wrappers should do that as applicable as part of the wireup process)
 - DONT perform redundant work to load values if they’ve already been supplied via Environment Variables
 
 ### `module CmdParser`
 
-_Responsible for: mapping Environment Variables and Command Line `argv` to an `Arguments` model_
+_Responsible for: mapping Environment Variables and the Command Line `argv` to an `Arguments` model_
 
 The `CmdParser` module fulfils three roles:
 
 1. uses [Argu](http://fsprojects.github.io/Argu/tutorial.html) to map the inputs passed via `argv` to values per argument, providing good error and/or help messages in the case of invalid inputs
-2. Is responsible for managing all defaulting of input values _including echoing them them such that an operator can infer the arguments in force_ without having to go look up defaults in a source control repo
-3. Exposes an object model that the `build` or `start` functions can use to succinctly wire up the dependencies without needing to touch `Argu`, `Settings`, or any concrete Configuration or Secrets store technology
+2. responsible for managing all defaulting of input values _including echoing them them such that an operator can infer the arguments in force_ without having to go look up defaults in a source control repo
+3. expose an object model that the `build` or `start` functions can use to succinctly wire up the dependencies without needing to touch `Argu`, `Settings`, or any concrete Configuration or Secrets storage mechanisms
 
 - DO log the values being applied, especially where defaulting is in play
 - DONT log secrets
 - DO take values via Argu or Environment Variables
-- DONT mix in any application or settings specific logic (no retrieval of values, don’t make people read the boilerplate to see if this app has custom secrets retrieval)
+- DONT mix in any application or settings specific logic (**no retrieval of values, don’t make people read the boilerplate to see if this app has custom secrets retrieval**)
+- DONT invest time changing the layout; leaving it consistent makes it easier for others to scan
+- DONT be tempted to merge blocks of variables - the intention is to (to the maximum extent possible) group arguments into clusters of 5-7 related items
+- DONT reorder types - it'll just make it harder if you ever want to remix and/or compare and contrast across a set of programs
+
+NOTE: there's a [medium term plan to submit a PR to Argu](https://github.com/fsprojects/Argu/issues/143) extending it to be able to fall back to environment variables where a value is not supplied by means of declarative attributes on the Argument specification in the DU, _including having the `--help` message automatically include a reference to the name of the environment variable that one can supply the value through_
 
 ### `module Logging`
 

@@ -68,7 +68,7 @@ This project was generated using:
 3. To run an instance of the Projector from a CosmosDb ChangeFeed
 
 //#if kafka
-        $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
+        $env:PROPULSION_KAFKA_BROKER="instance.kafka.example.com:9092" # or use -b
 
         # `-g default` defines the Projector Group identity - each id has separated state in the checkpoints store (`Sync-default` in the cited `cosmos` store)
         # `-c $env:EQUINOX_COSMOS_CONTAINER ` specifies the source (if you have specified 2x EQUINOX_COSMOS_* environment vars, no connection/database arguments are needed, but the monitored (source) container must be specified explicitly)
@@ -91,7 +91,7 @@ This project was generated using:
         $env:EQUINOX_ES_HOST="localhost" # or use -g
 
 //#if kafka
-        $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
+        $env:PROPULSION_KAFKA_BROKER="instance.kafka.example.com:9092" # or use -b
 
         # `-g default` defines the Projector Group identity - each id has separated state in the checkpoints store (`Sync-default` in the cited `cosmos` store)
         # `es` specifies the source (if you have specified 3x EQUINOX_ES_* environment vars, no arguments are needed)

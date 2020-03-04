@@ -18,7 +18,7 @@ This project was generated using:
 
 2. To run an instance of the Consumer:
 
-        $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
+        $env:PROPULSION_KAFKA_BROKER="instance.kafka.example.com:9092" # or use -b
         $env:PROPULSION_KAFKA_TOPIC="topic0" # or use -t
         $env:PROPULSION_KAFKA_GROUP="group0" # or use -g
 
