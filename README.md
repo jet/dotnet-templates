@@ -140,15 +140,20 @@ Pssst ... the above is also what implementing [#2](https://github.com/jet/dotnet
 
 # PATTERNS / GUIDANCE
 
-## Strongly typed ids
+## Use Strongly typed ids
 
-- `FSharp.UMX` is useful to transparently pin types in a message contract cheaply
+Wherever possible, the samples strongly type identifiers, particularly ones that might naturally be represented as primitives, i.e. `string` etc.
+
+- [`FSharp.UMX`](https://github.com/fsprojects/FSharp.UMX) is useful to transparently pin types in a message contract cheaply - it works well for a number of contexts:
+
+  - Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them is not a central concern as we load and fold these incontrovertible Facts)
+  - Model binding in ASP.NET (because the types de-sugar to the primitives, no special support is required). _Unlike events, there are more considerations in play in this context though; often you'll want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/). Often, Single Case Discriminated Unions can be a better tool inb that context_
 
 ## Managing Projections and Reactions with Equinox, Propulsion and FsKafka
 
-## Microservice Program.fs
+## Microservice Program.fs conventions
 
-All the templates herein attempt to adhere to a consistent structure for the root `module` (the one containing an Application’s `main`)
+All the templates herein attempt to adhere to a consistent structure for the [composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/) `module` (the one containing an Application’s `main`)
 
 ### `module Settings`
 
