@@ -60,16 +60,26 @@ To use from the command line, the outline is:
     # see readme.md in the generated code for further instructions regarding the TodoBackend the above -t switch above triggers the inclusion of
     start readme.md
 
+    # ... to add an Ingester that reacts to events, as they are written (via EventStore $all or CosmosDB ChangeFeedProcessor) summarising them and feeding them into a secondary stream
+    # (equivalent to pairing the Projector and Ingester programs we make below)
+    md -p ../DirectIngester | Set-Location
+    dotnet new proReactor
+    
     # ... to add a Projector
     md -p ../Projector | Set-Location
     # (-k emits to Kafka and hence implies having a Consumer)
     dotnet new proProjector -k
     start README.md
 
-    # ... to add a Consumer (proProjector -k emits to Kafka and hence implies having a Consumer)
+    # ... to add a Generic Consumer (proProjector -k emits to Kafka and hence implies having a Consumer)
     md -p ../Consumer | Set-Location
     dotnet new proConsumer
     start README.md
+
+    # ... to add an Ingester based on the events that Projector sends to kafka
+    # (equivalent in function to DirectIngester, above)
+    md -p ../Ingester | Set-Location
+    dotnet new proReactor --source kafkaEventSpans
 
     # ... to add a Summary Projector
     md -p ../SummaryProducer | Set-Location
