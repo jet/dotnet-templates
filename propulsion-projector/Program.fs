@@ -9,6 +9,9 @@ module EnvVar =
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
     let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
 
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-settings
+// - this is where any custom retrieval of settings not arriving via commandline arguments or environment variables should go
+// - values should be propagated by setting environment variables and/or returning them from `initialize`
 module Settings =
 
     let private initEnvVar var key loadF =
@@ -20,6 +23,13 @@ module Settings =
         // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-cmdparser
+// - this module is responsible solely for parsing/validating the commandline arguments (including falling back to values supplied via environment variables)
+// - It's expected that the properties on *Arguments types will summarize the active settings as a side effect of
+// TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
+//      you may want to regenerate it at a different time and/or facilitate comparing it with the CmdParser of other programs
+// TODO NEVER hack temporary overrides in here; if you're going to do that, use commandline arguments that fall back to environment variables
+//      or (as a last resort) supply them via code in `module Settings`
 module CmdParser =
 
     exception MissingArg of string
@@ -145,8 +155,8 @@ module CmdParser =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-// Illustrates how to emit direct to the Console using Serilog
-// Other topographies can be achieved by using various adapters and bridges, e.g., SerilogTarget or Serilog.Sinks.NLog
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
+// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
 module Logging =
 
     let initialize verbose changeLogVerbose =
