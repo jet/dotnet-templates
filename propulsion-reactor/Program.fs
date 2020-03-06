@@ -53,9 +53,9 @@ module CmdParser =
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
 //#endif
 #if kafkaEventSpans
-        | [<AltCommandLine "kafka"; CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] SrcKafka of ParseResults<KafkaSourceParameters>
+        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Kafka of ParseResults<KafkaSourceParameters>
 #else
-        | [<AltCommandLine "cosmos"; CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
+        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosSourceParameters>
 //#if multiSource
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSourceParameters>
 //#endif
@@ -73,12 +73,12 @@ module CmdParser =
                 | CategoryWhitelist _ ->    "category blacklist"
 //#endif
 #if (!kafkaEventSpans)
-                | SrcCosmos _ ->            "specify CosmosDB input parameters."
+                | Cosmos _ ->               "specify CosmosDB input parameters."
 //#if multiSource
                 | Es _ ->                   "specify EventStore input parameters."
 //#endif
 #else
-                | SrcKafka _ ->             "specify Kafka input parameters."
+                | Kafka _ ->                "specify Kafka input parameters."
 #endif
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
@@ -117,7 +117,7 @@ module CmdParser =
 #if changeFeedOnly
         member val Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
-            | Some (SrcCosmos cosmos) -> CosmosSourceArguments cosmos
+            | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments cosmos
             | _ -> raise (MissingArg "Must specify cosmos for Src")
         member x.SourceParams() =
                 let srcC = x.Source
@@ -127,7 +127,7 @@ module CmdParser =
         member val Source : Choice<EsSourceArguments, CosmosSourceArguments> =
             match a.TryGetSubCommand() with
             | Some (Es es) -> Choice1Of2 (EsSourceArguments es)
-            | Some (SrcCosmos cosmos) -> Choice2Of2 (CosmosSourceArguments cosmos)
+            | Some (Parameters.Cosmos cosmos) -> Choice2Of2 (CosmosSourceArguments cosmos)
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
         member x.SourceParams() : Choice<EsSourceArguments*CosmosArguments*ReaderSpec, CosmosSourceArguments*_> =
             match x.Source with
@@ -161,14 +161,14 @@ module CmdParser =
 #if kafkaEventSpans
         member val Source : KafkaSourceArguments =
             match a.TryGetSubCommand() with
-            | Some (SrcKafka kafka) -> KafkaSourceArguments kafka
+            | Some (Parameters.Kafka kafka) -> KafkaSourceArguments kafka
             | _ -> raise (MissingArg "Must specify kafka for Src")
      and [<NoEquality; NoComparison>] KafkaSourceParameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
         | [<AltCommandLine "-m"; Unique>]   MaxInflightMb of float
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
@@ -201,7 +201,7 @@ module CmdParser =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."

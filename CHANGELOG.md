@@ -20,6 +20,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
+-`proReactor` - fixed runtime issue due to aliasing of `cosmos` parameter; simplified [@fnipo](https://github.com/fnipo) [#52](https://github.com/jet/dotnet-templates/issues/52)
+
 <a name="4.1.0"></a>
 ## [4.1.0] - 2020-03-03
 
