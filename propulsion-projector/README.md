@@ -26,7 +26,7 @@ This project was generated using:
 
 1. Use the `eqx` tool to initialize and then run some transactions in a CosmosDb container
 
-        dotnet tool install -g Equinox.Tool --version 2.0.0-rc* # only needed once
+        dotnet tool install -g Equinox.Tool # only needed once
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
 
@@ -43,7 +43,7 @@ This project was generated using:
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
 
-        $env:PROPULSION_KAFKA_BROKER="instance.kafka.mysite.com:9092" # or use -b
+        $env:PROPULSION_KAFKA_BROKER="instance.kafka.example.com:9092" # or use -b
 
         # `-g default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
         # `-m 1000` sets the change feed maximum document limit to 1000
@@ -51,7 +51,7 @@ This project was generated using:
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         dotnet run -- -g default -m 1000 -t topic0 cosmos
 
-        # (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
+        # (assuming you've scaled up enough to have >1 physical partition range, you can run a second instance in a second console with the same arguments)
 
 3. To create a Consumer, use `dotnet new proConsumer`
 //#else
@@ -65,5 +65,5 @@ This project was generated using:
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         dotnet run -- -g default -m 1000 cosmos
 
-        # NB (assuming you've scaled up enough to have >1 range, you can run a second instance in a second console with the same arguments)
+        # NB (assuming you've scaled up enough to have >1 physical partition range, you can run a second instance in a second console with the same arguments)
 //#endif

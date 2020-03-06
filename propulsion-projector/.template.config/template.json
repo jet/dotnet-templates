@@ -25,7 +25,7 @@
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Include a code projecting to, and consuming from Kafka."
+      "description": "Include code projecting to Kafka."
     },
     "parallelOnly": {
       "type": "parameter",
