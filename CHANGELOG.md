@@ -9,10 +9,13 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Trap `ArguException` for invalid Argu options :pray: [@fnipo](https://github.com/fnipo)
+
 ### Changed
 
 - `MaxInflightMb` of `10 MiB` instead of measuring in GiB and defaulting to .5
-- `MaxConcurrentStreams` of `8` for Ingesters that write to stores (was MaxDop 1024)
+- `MaxConcurrentStreams` of `8` for ingesters that write to stores (was MaxDop 1024)
 
 ### Removed
 ### Fixed

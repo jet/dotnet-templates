@@ -207,5 +207,6 @@ let main argv =
         | _ -> failwith "Please specify a valid subcommand :- run"
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | :? Argu.ArguException as e -> eprintf "Argument parsing exception %s" e.Message; 1
         | Storage.MissingArg msg -> eprintfn "%s" msg; 1
         | e -> eprintfn "%s" e.Message; 1

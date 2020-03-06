@@ -209,6 +209,7 @@ let run argv =
         sink.AwaitCompletion() |> Async.RunSynchronously
         if sink.RanToCompletion then 0 else 2
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | :? Argu.ArguException as e -> eprintf "Argument parsing exception %s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
         | e -> Log.Fatal(e, "Exiting"); 1
 
