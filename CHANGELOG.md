@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.1.1"></a>
+## [4.1.1] - 2020-03-06
+
+### Added
 
 - Trap `ArguException` for invalid Argu options :pray: [@fnipo](https://github.com/fnipo)
 
@@ -17,7 +25,6 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - `MaxInflightMb` of `10 MiB` instead of measuring in GiB and defaulting to .5
 - `MaxConcurrentStreams` of `8` for ingesters that write to stores (was MaxDop 1024)
 
-### Removed
 ### Fixed
 
 -`proReactor` - fixed runtime issue due to aliasing of `cosmos` parameter; simplified [@fnipo](https://github.com/fnipo) [#52](https://github.com/jet/dotnet-templates/issues/52)
@@ -331,7 +338,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.1.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.1.1...HEAD
+[4.1.1]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.1.1
 [4.1.0]: https://github.com/jet/dotnet-templates/compare/4.0.1...4.1.0
 [4.0.1]: https://github.com/jet/dotnet-templates/compare/4.0.0...4.0.1
 [4.0.0]: https://github.com/jet/dotnet-templates/compare/3.12.0...4.0.0
