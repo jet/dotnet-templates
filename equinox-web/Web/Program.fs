@@ -1,30 +1,29 @@
-namespace TodoBackendTemplate.Web
+module TodoBackendTemplate.Web.Program
 
 open Microsoft.AspNetCore
 open Microsoft.AspNetCore.Hosting
 open Serilog
 
-module Program =
-    let createWebHostBuilder args : IWebHostBuilder =
-        WebHost
-            .CreateDefaultBuilder(args)
-            .UseSerilog()
-            .UseStartup<Startup>()
+let initLogging () =
+    Log.Logger <-
+        LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+            .Enrich.FromLogContext()
+            .WriteTo.Console()
+            .CreateLogger()
 
-    [<EntryPoint>]
-    let main argv =
-        try
-            Log.Logger <-
-                LoggerConfiguration()
-                    .MinimumLevel.Debug()
-                    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
-//.MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
-                    .Enrich.FromLogContext()
-                    .WriteTo.Console()
-                    .CreateLogger()
-                :> ILogger
-            createWebHostBuilder(argv).Build().Run()
-            0
-        with e ->
-            eprintfn "%s" e.Message
-            1
+let createWebHostBuilder args : IWebHostBuilder =
+    WebHost
+        .CreateDefaultBuilder(args)
+        .UseSerilog()
+        .UseStartup<Startup>()
+
+[<EntryPoint>]
+let main argv =
+    try initLogging ()
+        createWebHostBuilder(argv).Build().Run()
+        0
+    with e ->
+        eprintfn "%s" e.Message
+        1

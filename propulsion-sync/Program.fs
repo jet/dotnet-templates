@@ -33,10 +33,10 @@ module Settings =
 // - this module is responsible solely for parsing/validating the commandline arguments (including falling back to values supplied via environment variables)
 // - It's expected that the properties on *Arguments types will summarize the active settings as a side effect of
 // TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
-//      you may want to regenerate it at a different time and/or facilitate comparing it with the CmdParser of other programs
+//      you may want to regenerate it at a different time and/or facilitate comparing it with the CommandLine of other programs
 // TODO NEVER hack temporary overrides in here; if you're going to do that, use commandline arguments that fall back to environment variables
 //      or (as a last resort) supply them via code in `module Settings`
-module CmdParser =
+module CommandLine =
 
     exception MissingArg of string
     let private getEnvVarForArgumentOrThrow varName argName =
@@ -545,7 +545,7 @@ let transformOrFilter catFilter (changeFeedDocument: Microsoft.Azure.Documents.D
 
 let [<Literal>] AppName = "SyncTemplate"
 
-let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
+let build (args : CommandLine.Arguments, log, storeLog : ILogger) =
     let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
         | Choice1Of2 cosmos ->
@@ -634,20 +634,20 @@ let build (args : CmdParser.Arguments, log, storeLog : ILogger) =
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
 
-let run argv =
-    try let args = CmdParser.parse argv
-        let log, storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
-        Settings.initialize ()
-        let sink,runSourcePipeline = build (args,log,storeLog)
-        runSourcePipeline |> Async.Start
-        sink.AwaitCompletion() |> Async.RunSynchronously
-        if sink.RanToCompletion then 0 else 2
-    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | :? Argu.ArguException as e -> eprintf "Argument parsing exception %s" e.Message; 1
-        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-        | e -> Log.Fatal(e, "Exiting"); 1
+let run (args, log, storeLog) =
+    let sink,runSourcePipeline = build (args, log, storeLog)
+    runSourcePipeline |> Async.Start
+    sink.AwaitCompletion() |> Async.RunSynchronously
+    sink.RanToCompletion
 
 [<EntryPoint>]
 let main argv =
-    try run argv
-    finally Log.CloseAndFlush()
+    try let args = CommandLine.parse argv
+        try let log, storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
+            try Settings.initialize ()
+                if run (args, log, storeLog) then 0 else 3
+            with e -> Log.Fatal(e, "Exiting"); 2
+        finally Log.CloseAndFlush()
+    with CommandLine.MissingArg msg -> eprintfn "%s" msg; 1
+        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | e -> eprintf "Exception %s" e.Message; 1

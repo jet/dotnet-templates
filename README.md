@@ -169,21 +169,21 @@ All the templates herein attempt to adhere to a consistent structure for the [co
 
 _Responsible for: Loading secrets and custom configuration, supplying defaults when environment variables are not set_
 
-Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an application's interaction with its environment and/or data storage mechanisms. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`CmdParser` section](#module-cmdparser)
+Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an application's interaction with its environment and/or data storage mechanisms. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`CommandLine` section](#module-commandline)
 
 The `Settings` module is responsible for the following:
 1. Feeding defaults into process-local Environment Variables, _where those are not already supplied_
-2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `CmdParser`
+2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `CommandLine`
 
 - DO (sparingly) rely on inputs from the command line to drive the lookup process
-- DONT log values (CmdParser’s Arguments wrappers should do that as applicable as part of the wireup process)
+- DONT log values (`CommandLine`’s `Arguments` wrappers should do that as applicable as part of the wireup process)
 - DONT perform redundant work to load values if they’ve already been supplied via Environment Variables
 
-### `module CmdParser`
+### `module CommandLine`
 
 _Responsible for: mapping Environment Variables and the Command Line `argv` to an `Arguments` model_
 
-The `CmdParser` module fulfils three roles:
+The `CommandLine` module fulfils three roles:
 
 1. uses [Argu](http://fsprojects.github.io/Argu/tutorial.html) to map the inputs passed via `argv` to values per argument, providing good error and/or help messages in the case of invalid inputs
 2. responsible for managing all defaulting of input values _including echoing them them such that an operator can infer the arguments in force_ without having to go look up defaults in a source control repo
@@ -203,7 +203,7 @@ NOTE: there's a [medium term plan to submit a PR to Argu](https://github.com/fsp
 
 _Responsible for applying logging config and setting up loggers for the application_
 
-- DO allow overriding of log level via a command line argument and/or environment variable (by passing CmdParser.Arguments or values from it
+- DO allow overriding of log level via a command line argument and/or environment variable (by passing `CommandLine.Arguments` or values from it
 
 #### example
 
@@ -220,7 +220,7 @@ The `start` function contains the specific wireup relevant to the infrastructure
 #### example
 
 ```
-let start (args : CmdParser.Arguments) =
+let start (args : CommandLine.Arguments) =
 	…
 	(yields a started application loop)
 ```
@@ -234,27 +234,27 @@ The `run` function formalizes the overall pattern. It is responsible for:
 
 - DONT alter the canonical form - the processing is in this exact order for a multitude of reasons
 - DONT have any application specific wire within `run` - any such logic should live within the `start` function
+- DONT return an `int` from `run`, let main tage charge of the exit codes
 
 #### example
 
 ```
-let run argv =
-    try let args = CmdParser.parse argv
-        Logging.initialize args.Verbose
-        Settings.initialize ()
-        use consumer = start args
-        consumer.AwaitCompletion() |> Async.RunSynchronously
-        if consumer.RanToCompletion then 0 else 2
-    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | :? Argu.ArguException as e -> eprintf "Argument parsing exception %s" e.Message; 1
-        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-        // If the handler throws, we exit the app in order to let an orchestrator flag the failure
-        | e -> Log.Fatal(e, "Exiting"); 1
+let run args =
+    use consumer = start args
+    consumer.AwaitCompletion() |> Async.RunSynchronously
+    consumer.RanToCompletion
 
 [<EntryPoint>]
 let main argv =
-    try run argv
-    finally Log.CloseAndFlush()
+    try let args = CommandLine.parse argv
+        try Logging.initialize args.Verbose
+            try Settings.initialize ()
+                if run args then 0 else 3
+            with e -> Log.Fatal(e, "Exiting"); 2
+        finally Log.CloseAndFlush()
+    with CommandLine.MissingArg msg -> eprintfn "%s" msg; 1
+        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | e -> eprintf "Exception %s" e.Message; 1
 ```
 
 ## CONTRIBUTING

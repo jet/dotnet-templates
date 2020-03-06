@@ -8,7 +8,7 @@ open System
 open System.Threading
 
 [<AutoOpen>]
-module CmdParser =
+module CommandLine =
 
     type [<NoEquality; NoComparison>]
         Parameters =
@@ -140,7 +140,7 @@ module LoadTest =
                 with e -> domainLog.Warning(e, "Test threw an exception"); e.Reraise () }
         execute
     let private createResultLog fileName = LoggerConfiguration().WriteTo.File(fileName).CreateLogger()
-    let run (log: ILogger) (verbose, verboseConsole, maybeSeq) reportFilename (a : CmdParser.TestArguments) =
+    let run (log: ILogger) (verbose, verboseConsole, maybeSeq) reportFilename (a : CommandLine.TestArguments) =
         let createStoreLog verboseStore = createStoreLog verboseStore verboseConsole maybeSeq
         let storeLog, storeConfig: ILogger * Storage.StorageConfig = a.ConfigureStore(log, createStoreLog)
         let runSingleTest : ClientId -> Async<unit> =
