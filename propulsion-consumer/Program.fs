@@ -35,7 +35,7 @@ module CmdParser =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
         | [<AltCommandLine "-g"; Unique>]   Group of string
-        | [<AltCommandLine "-m"; Unique>]   MaxInflightGb of float
+        | [<AltCommandLine "-m"; Unique>]   MaxInflightMb of float
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
 
         | [<AltCommandLine "-w"; Unique>]   MaxDop of int
@@ -46,7 +46,7 @@ module CmdParser =
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)."
                 | Topic _ ->                "specify Kafka Topic name. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)."
                 | Group _ ->                "specify Kafka Consumer Group Id. (optional if environment variable PROPULSION_KAFKA_GROUP specified)."
-                | MaxInflightGb _ ->        "maximum GB of data to read ahead. Default: 0.5."
+                | MaxInflightMb _ ->        "maximum MiB of data to read ahead. Default: 10."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off."
 
                 | MaxDop _ ->               "maximum number of items to process in parallel. Default: 1024."
@@ -55,7 +55,7 @@ module CmdParser =
         member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member __.Group =                   a.TryGetResult Group  |> defaultWithEnvVar "PROPULSION_KAFKA_GROUP"  "Group"
-        member __.MaxInFlightBytes =        (match a.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
+        member __.MaxInFlightBytes =        a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
 
         member __.MaxDop =                  match a.TryGetResult MaxDop with Some x -> x | None -> 1024
@@ -98,6 +98,7 @@ let run argv =
         consumer.AwaitCompletion() |> Async.RunSynchronously
         if consumer.RanToCompletion then 0 else 2
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | :? Argu.ArguException as e -> eprintf "Argu exception %s" e.Message; 1
         | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
         // If the handler throws, we exit the app in order to let an orchestrator flag the failure
         | e -> Log.Fatal(e, "Exiting"); 1

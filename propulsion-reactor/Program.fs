@@ -166,20 +166,20 @@ module CmdParser =
      and [<NoEquality; NoComparison>] KafkaSourceParameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
-        | [<AltCommandLine "-m"; Unique>]   MaxInflightGb of float
+        | [<AltCommandLine "-m"; Unique>]   MaxInflightMb of float
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
-                | MaxInflightGb _ ->        "maximum GB of data to read ahead. Default: 0.5."
+                | MaxInflightMb _ ->        "maximum MiB of data to read ahead. Default: 10."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off."
                 | Cosmos _ ->               "CosmosDb Sink parameters."
     and KafkaSourceArguments(a : ParseResults<KafkaSourceParameters>) =
         member __.Broker =                  a.TryGetResult KafkaSourceParameters.Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
         member __.Topic =                   a.TryGetResult KafkaSourceParameters.Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
-        member __.MaxInFlightBytes =        (match a.TryGetResult MaxInflightGb with Some x -> x | None -> 0.5) * 1024. * 1024. *1024. |> int64
+        member __.MaxInFlightBytes =        a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map System.TimeSpan.FromMinutes
         member x.BuildSourceParams() =      x.Broker, x.Topic
         member val Cosmos =

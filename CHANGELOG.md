@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- `MaxInflightMb` of `10 MiB` instead of measuring in GiB and defaulting to .5
+
 ### Removed
 ### Fixed
 
