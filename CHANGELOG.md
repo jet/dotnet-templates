@@ -12,6 +12,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - `MaxInflightMb` of `10 MiB` instead of measuring in GiB and defaulting to .5
+- `MaxConcurrentStreams` of `8` for Ingesters that write to stores (was MaxDop 1024)
 
 ### Removed
 ### Fixed

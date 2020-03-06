@@ -65,7 +65,7 @@ module CmdParser =
                 match a with
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
-                | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 64."
+                | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off."
 //#if (!noFilter)
@@ -85,7 +85,7 @@ module CmdParser =
         member __.Verbose =                 a.Contains Parameters.Verbose
         member __.VerboseConsole =          a.Contains VerboseConsole
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
-        member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 64)
+        member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
 //#if (!noFilter)
         member __.FilterFunction(?excludeLong, ?longOnly): string -> bool =

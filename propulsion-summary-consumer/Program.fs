@@ -77,7 +77,7 @@ module CmdParser =
         | [<AltCommandLine "-m"; Unique>]   MaxInflightMb of float
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
 
-        | [<AltCommandLine "-w"; Unique>]   MaxDop of int
+        | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
 
@@ -89,7 +89,7 @@ module CmdParser =
                 | MaxInflightMb _ ->        "maximum MiB of data to read ahead. Default: 10."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off."
 
-                | MaxDop _ ->               "maximum number of items to process in parallel. Default: 1024."
+                | MaxWriters _ ->           "maximum number of items to process in parallel. Default: 8"
                 | Verbose _ ->              "request verbose logging."
                 | Cosmos _ ->               "specify CosmosDb input parameters"
 
@@ -101,7 +101,7 @@ module CmdParser =
         member __.MaxInFlightBytes =        a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
 
-        member __.MaxDop =                  match a.TryGetResult MaxDop with Some x -> x | None -> 1024
+        member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
         member __.Verbose =                 a.Contains Verbose
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -133,7 +133,7 @@ let start (args : CmdParser.Arguments) =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    Ingester.startConsumer config Log.Logger service args.MaxDop
+    Ingester.startConsumer config Log.Logger service args.MaxConcurrentStreams
 
 let run argv =
     try let args = CmdParser.parse argv
