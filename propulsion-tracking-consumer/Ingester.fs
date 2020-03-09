@@ -33,7 +33,7 @@ type Stats(log, ?statsInterval, ?stateInterval) =
 
     override __.DumpStats () =
         if ok <> 0 || skipped <> 0 then
-            log.Information(" Used {ok} Ignored {skipped}", ok, skipped)
+            log.Information(" Used {ok} Skipped {skipped}", ok, skipped)
             ok <- 0; skipped <- 0
 
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act

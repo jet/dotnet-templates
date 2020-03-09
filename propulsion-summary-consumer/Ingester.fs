@@ -40,17 +40,17 @@ type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of 
 type Stats(log, ?statsInterval, ?stateInterval) =
     inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 
-    let mutable ok, na, redundant = 0, 0, 0
+    let mutable ok, na, skipped = 0, 0, 0
 
     override __.HandleOk res = res |> function
-        | Outcome.Ok count -> ok <- ok + 1; redundant <- redundant + count - 1
-        | Outcome.Skipped count -> redundant <- redundant + count
+        | Outcome.Ok count -> ok <- ok + 1; skipped <- skipped + count - 1
+        | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NoRelevantEvents count -> na <- na + count
 
     override __.DumpStats () =
-        if ok <> 0 || na <> 0 || redundant <> 0 then
-            log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
-            ok <- 0; na <- 0 ; redundant <- 0
+        if ok <> 0 || skipped <> 0 || na <> 0 then
+            log.Information(" Used {ok} Skipped {skipped} N/A {na}", ok, skipped, na)
+            ok <- 0; skipped <- 0l; na <- 0
 
 /// Map from external contract to internal contract defined by the aggregate
 let map : Contract.Message -> TodoSummary.Events.SummaryData = function

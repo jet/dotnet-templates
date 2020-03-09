@@ -12,23 +12,23 @@ type Stats(log, ?statsInterval, ?stateInterval) =
 #else
     inherit Propulsion.Kafka.StreamsConsumerStats<int64*Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 #endif
-    let mutable ok, na, redundant = 0, 0, 0
+    let mutable ok, skipped, na = 0, 0, 0
 
 #if (!kafkaEventSpans)
     override __.HandleOk res = res |> function
-        | Outcome.Ok count -> ok <- ok + 1; redundant <- redundant + count - 1
-        | Outcome.Skipped count -> redundant <- redundant + count
+        | Outcome.Ok count -> ok <- ok + 1; skipped <- skipped + count - 1
+        | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NoRelevantEvents count -> na <- na + count
 #else
     override __.HandleOk res = res |> function
-        | _, Outcome.Ok count -> ok <- ok + 1; redundant <- redundant + count - 1
-        | _, Outcome.Skipped count -> redundant <- redundant + count
+        | _, Outcome.Ok count -> ok <- ok + 1; skipped <- skipped + count - 1
+        | _, Outcome.Skipped count -> skipped <- skipped + count
         | _, Outcome.NoRelevantEvents count -> na <- na + count
 #endif
     override __.DumpStats () =
-        if ok <> 0 || na <> 0 || redundant <> 0 then
-            log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
-            ok <- 0; na <- 0 ; redundant <- 0
+        if ok <> 0 || skipped <> 0 || na <> 0 then
+            log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
+            ok <- 0; skipped <- 0; na <- 0
 
 #if blank
 let tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option*Outcome> = async {
