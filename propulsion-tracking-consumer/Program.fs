@@ -145,7 +145,10 @@ let start (args : CommandLine.Arguments) =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    Ingester.startConsumer config Log.Logger service args.MaxConcurrentStreams
+    let stats = Ingester.Stats(Log.Logger)
+    // No categorization required, our inputs are all one big family defying categorization
+    let sequencer = Propulsion.Kafka.Core.StreamKeyEventSequencer()
+    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, sequencer.ToStreamEvent, Ingester.ingest service, args.MaxConcurrentStreams, stats)
 
 let run args =
     use consumer = start args

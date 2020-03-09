@@ -52,23 +52,19 @@ type Stats(log, ?statsInterval, ?stateInterval) =
             log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
             ok <- 0; na <- 0 ; redundant <- 0
 
-/// Starts a processing loop accumulating messages by stream - each time we only take the latest event as previous ones are superseded by definition
-let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger) (service : TodoSummary.Service) maxDop =
-    // map from external contract to internal contract defined by the aggregate
-    let map : Contract.Message -> TodoSummary.Events.SummaryData = function
-        | Contract.Summary x ->
-            { items =
-                [| for x in x.items ->
-                    { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
-    let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
-        match stream, span with
-        | Contract.MatchNewest (clientId, version, update) ->
-            match! service.Ingest(clientId, version, map update) with
-            | true -> return Outcome.Ok span.events.Length
-            | false -> return Outcome.Skipped span.events.Length
-        | _ -> return Outcome.NoRelevantEvents span.events.Length
-    }
-    let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse spanJson
-    let stats = Stats(log)
-    Propulsion.Kafka.StreamsConsumer.Start(log, config, parseStreamSummaries, ingestIncomingSummaryMessage, maxDop, stats)
+/// Map from external contract to internal contract defined by the aggregate
+let map : Contract.Message -> TodoSummary.Events.SummaryData = function
+    | Contract.Summary x ->
+        { items =
+            [| for x in x.items ->
+                { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
+
+/// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
+let ingest (service : TodoSummary.Service) (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+    match stream, span with
+    | Contract.MatchNewest (clientId, version, update) ->
+        match! service.Ingest(clientId, version, map update) with
+        | true -> return Outcome.Ok span.events.Length
+        | false -> return Outcome.Skipped span.events.Length
+    | _ -> return Outcome.NoRelevantEvents span.events.Length
+}
