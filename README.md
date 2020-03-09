@@ -163,7 +163,7 @@ Wherever possible, the samples strongly type identifiers, particularly ones that
 
 ## Microservice Program.fs conventions
 
-All the templates herein attempt to adhere to a consistent structure for the [composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/) `module` (the one containing an Application’s `main`)
+All the templates herein attempt to adhere to a consistent structure for the [composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/) `module` (the one containing an Application’s `main`), consisting of the following common elements:
 
 ### `module Configuration`
 
@@ -176,7 +176,7 @@ The `Settings` module is responsible for the following:
 2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `module Args`
 
 - DO (sparingly) rely on inputs from the command line to drive the lookup process
-- DONT log values (`mpdule Args`’s `Arguments` wrappers should do that as applicable as part of the wireup process)
+- DONT log values (`module Args`’s `Arguments` wrappers should do that as applicable as part of the wireup process)
 - DONT perform redundant work to load values if they’ve already been supplied via Environment Variables
 
 ### `module Args`
@@ -186,29 +186,30 @@ _Responsible for: mapping Environment Variables and the Command Line `argv` to a
 `module Args` fulfils three roles:
 
 1. uses [Argu](http://fsprojects.github.io/Argu/tutorial.html) to map the inputs passed via `argv` to values per argument, providing good error and/or help messages in the case of invalid inputs
-2. responsible for managing all defaulting of input values _including echoing them them such that an operator can infer the arguments in force_ without having to go look up defaults in a source control repo
-3. expose an object model that the `build` or `start` functions can use to succinctly wire up the dependencies without needing to touch `Argu`, `Settings`, or any concrete Configuration or Secrets storage mechanisms
+2. responsible for managing all defaulting of input values _including echoing them to console such that an operator can infer the arguments in force_ without having to go look up defaults in a source control repo
+3. expose an object model that the `build` or `start` functions can use to succinctly wire up the dependencies without needing to touch `Argu`, `Configuration`, or any concrete Configuration or Secrets storage mechanisms
 
+- DO take values via Argu or Environment Variables
 - DO log the values being applied, especially where defaulting is in play
 - DONT log secrets
-- DO take values via Argu or Environment Variables
 - DONT mix in any application or settings specific logic (**no retrieval of values, don’t make people read the boilerplate to see if this app has custom secrets retrieval**)
 - DONT invest time changing the layout; leaving it consistent makes it easier for others to scan
-- DONT be tempted to merge blocks of variables - the intention is to (to the maximum extent possible) group arguments into clusters of 5-7 related items
+- DONT be tempted to merge blocks of variables into a coupled monster - the intention is to (to the maximum extent possible) group arguments into clusters of 5-7 related items
 - DONT reorder types - it'll just make it harder if you ever want to remix and/or compare and contrast across a set of programs
 
-NOTE: there's a [medium term plan to submit a PR to Argu](https://github.com/fsprojects/Argu/issues/143) extending it to be able to fall back to environment variables where a value is not supplied by means of declarative attributes on the Argument specification in the DU, _including having the `--help` message automatically include a reference to the name of the environment variable that one can supply the value through_
+NOTE: there's a [medium term plan to submit a PR to Argu](https://github.com/fsprojects/Argu/issues/143) extending it to be able to fall back to environment variables where a value is not supplied, by means of declarative attributes on the Argument specification in the DU, _including having the `--help` message automatically include a reference to the name of the environment variable that one can supply the value through_
 
 ### `module Logging`
 
 _Responsible for applying logging config and setting up loggers for the application_
 
-- DO allow overriding of log level via a command line argument and/or environment variable (by passing `Args.Arguments` or values from it
+- DO allow overriding of log level via a command line argument and/or environment variable (by passing `Args.Arguments` or values from it)
 
 #### example
 
 ```
 module Logging =
+
     let initialize verbose =
 	Log.Logger <- LoggerConfiguration(….)
 ```
@@ -221,20 +222,20 @@ The `start` function contains the specific wireup relevant to the infrastructure
 
 ```
 let start (args : Args.Arguments) =
-	…
-	(yields a started application loop)
+    …
+    (yields a started application loop)
 ```
 
 ### `run`,  `main` functions
 
 The `run` function formalizes the overall pattern. It is responsible for:
 
-1. Managing the correct sequencing of the startup procedure, weaving together the above elements,
+1. Managing the correct sequencing of the startup procedure, weaving together the above elements
 2. managing the emission of startup or abnormal termination messages to the console
 
 - DONT alter the canonical form - the processing is in this exact order for a multitude of reasons
-- DONT have any application specific wire within `run` - any such logic should live within the `start` function
-- DONT return an `int` from `run`, let main tage charge of the exit codes
+- DONT have any application specific wire within `run` - any such logic should live within the `start` and/or `build` functions
+- DONT return an `int` from `run`; let `main` define the exit codes in one place
 
 #### example
 
