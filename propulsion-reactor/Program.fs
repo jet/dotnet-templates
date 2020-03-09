@@ -1,5 +1,6 @@
 ﻿module ReactorTemplate.Program
 
+open Equinox.Cosmos
 //#if (!kafkaEventSpans)
 open Propulsion.Cosmos
 //#if multiSource
@@ -46,7 +47,6 @@ module Args =
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
     open Argu
-    open Equinox.Cosmos
 //#if multiSource
     open Equinox.EventStore
 //#endif

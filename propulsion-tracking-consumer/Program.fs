@@ -1,5 +1,6 @@
 ﻿module ConsumerTemplate.Program
 
+open Equinox.Cosmos
 open Serilog
 open System
 
@@ -40,7 +41,6 @@ module Args =
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
     open Argu
-    open Equinox.Cosmos
     type [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-m">]       ConnectionMode of ConnectionMode
         | [<AltCommandLine "-s">]       Connection of string

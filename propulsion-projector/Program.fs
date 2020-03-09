@@ -1,5 +1,6 @@
 ﻿module ProjectorTemplate.Program
 
+open Equinox.Cosmos
 open Propulsion.Cosmos
 open Serilog
 open System
@@ -41,7 +42,6 @@ module Args =
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
     open Argu
-    open Equinox.Cosmos
     type [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-m">]       ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]       Connection of string
