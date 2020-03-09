@@ -22,14 +22,14 @@ module Settings =
         // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-commandline
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
 // - this module is responsible solely for parsing/validating the commandline arguments (including falling back to values supplied via environment variables)
 // - It's expected that the properties on *Arguments types will summarize the active settings as a side effect of
 // TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
-//      you may want to regenerate it at a different time and/or facilitate comparing it with the CommandLine of other programs
+//      you may want to regenerate it at a different time and/or facilitate comparing it with the `module Args` of other programs
 // TODO NEVER hack temporary overrides in here; if you're going to do that, use commandline arguments that fall back to environment variables
 //      or (as a last resort) supply them via code in `module Settings`
-module CommandLine =
+module Args =
 
     exception MissingArg of string
     let private getEnvVarForArgumentOrThrow varName argName =
@@ -91,7 +91,7 @@ module Logging =
                         c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
             |> fun c -> c.CreateLogger()
 
-let start (args : CommandLine.Arguments) =
+let start (args : Args.Arguments) =
     let c =
         FsKafka.KafkaConsumerConfig.Create(
             "ConsumerTemplate",
@@ -109,12 +109,12 @@ let run args =
 
 [<EntryPoint>]
 let main argv =
-    try let args = CommandLine.parse argv
+    try let args = Args.parse argv
         try Logging.initialize args.Verbose
             try Settings.initialize ()
                 if run args then 0 else 3
             with e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with CommandLine.MissingArg msg -> eprintfn "%s" msg; 1
+    with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1

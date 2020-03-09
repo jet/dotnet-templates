@@ -169,21 +169,21 @@ All the templates herein attempt to adhere to a consistent structure for the [co
 
 _Responsible for: Loading secrets and custom configuration, supplying defaults when environment variables are not set_
 
-Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an application's interaction with its environment and/or data storage mechanisms. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`CommandLine` section](#module-commandline)
+Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an application's interaction with its environment and/or data storage mechanisms. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`module Args` section](#module-args)
 
 The `Settings` module is responsible for the following:
 1. Feeding defaults into process-local Environment Variables, _where those are not already supplied_
-2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `CommandLine`
+2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `module Args`
 
 - DO (sparingly) rely on inputs from the command line to drive the lookup process
-- DONT log values (`CommandLine`’s `Arguments` wrappers should do that as applicable as part of the wireup process)
+- DONT log values (`mpdule Args`’s `Arguments` wrappers should do that as applicable as part of the wireup process)
 - DONT perform redundant work to load values if they’ve already been supplied via Environment Variables
 
-### `module CommandLine`
+### `module Args`
 
 _Responsible for: mapping Environment Variables and the Command Line `argv` to an `Arguments` model_
 
-The `CommandLine` module fulfils three roles:
+`module Args` fulfils three roles:
 
 1. uses [Argu](http://fsprojects.github.io/Argu/tutorial.html) to map the inputs passed via `argv` to values per argument, providing good error and/or help messages in the case of invalid inputs
 2. responsible for managing all defaulting of input values _including echoing them them such that an operator can infer the arguments in force_ without having to go look up defaults in a source control repo
@@ -203,7 +203,7 @@ NOTE: there's a [medium term plan to submit a PR to Argu](https://github.com/fsp
 
 _Responsible for applying logging config and setting up loggers for the application_
 
-- DO allow overriding of log level via a command line argument and/or environment variable (by passing `CommandLine.Arguments` or values from it
+- DO allow overriding of log level via a command line argument and/or environment variable (by passing `Args.Arguments` or values from it
 
 #### example
 
@@ -220,7 +220,7 @@ The `start` function contains the specific wireup relevant to the infrastructure
 #### example
 
 ```
-let start (args : CommandLine.Arguments) =
+let start (args : Args.Arguments) =
 	…
 	(yields a started application loop)
 ```
@@ -246,13 +246,13 @@ let run args =
 
 [<EntryPoint>]
 let main argv =
-    try let args = CommandLine.parse argv
+    try let args = Args.parse argv
         try Logging.initialize args.Verbose
             try Settings.initialize ()
                 if run args then 0 else 3
             with e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with CommandLine.MissingArg msg -> eprintfn "%s" msg; 1
+    with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1
 ```
