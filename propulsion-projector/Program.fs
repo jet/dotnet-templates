@@ -41,44 +41,43 @@ module Args =
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
     open Argu
-    module Cosmos =
-        open Equinox.Cosmos
-        type [<NoEquality; NoComparison>] Parameters =
-            | [<AltCommandLine "-m">]       ConnectionMode of Equinox.Cosmos.ConnectionMode
-            | [<AltCommandLine "-s">]       Connection of string
-            | [<AltCommandLine "-d">]       Database of string
-            | [<AltCommandLine "-c">]       Container of string
-            | [<AltCommandLine "-o">]       Timeout of float
-            | [<AltCommandLine "-r">]       Retries of int
-            | [<AltCommandLine "-rt">]      RetriesWaitTime of float
-            interface IArgParserTemplate with
-                member a.Usage =
-                    match a with
-                    | ConnectionMode _ ->   "override the connection mode. Default: Direct."
-                    | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                    | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                    | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
-                    | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
-                    | Retries _ ->          "specify operation retries. Default: 1."
-                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
-        type Arguments(a : ParseResults<Parameters>) =
-            member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-            member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
-            member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
-            member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
+    open Equinox.Cosmos
+    type [<NoEquality; NoComparison>] CosmosParameters =
+        | [<AltCommandLine "-m">]       ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-s">]       Connection of string
+        | [<AltCommandLine "-d">]       Database of string
+        | [<AltCommandLine "-c">]       Container of string
+        | [<AltCommandLine "-o">]       Timeout of float
+        | [<AltCommandLine "-r">]       Retries of int
+        | [<AltCommandLine "-rt">]      RetriesWaitTime of float
+        interface IArgParserTemplate with
+            member a.Usage =
+                match a with
+                | ConnectionMode _ ->   "override the connection mode. Default: Direct."
+                | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
+                | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
+                | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
+                | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
+                | Retries _ ->          "specify operation retries. Default: 1."
+                | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
+    type CosmosArguments(a : ParseResults<CosmosParameters>) =
+        member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
+        member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
+        member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
 
-            member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-            member __.Retries =             a.GetResult(Retries, 1)
-            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        member __.Retries =             a.GetResult(Retries, 1)
+        member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
-            member x.BuildConnectionDetails() =
-                let (Discovery.UriAndKey (endpointUri, _) as discovery) = Discovery.FromConnectionString x.Connection
-                Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
-                    x.Mode, endpointUri, x.Database, x.Container)
-                Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                    (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-                let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-                discovery, { database = x.Database; container = x.Container }, connector
+        member x.BuildConnectionDetails() =
+            let (Discovery.UriAndKey (endpointUri, _) as discovery) = Discovery.FromConnectionString x.Connection
+            Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
+                x.Mode, endpointUri, x.Database, x.Container)
+            Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
+            let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
+            discovery, { database = x.Database; container = x.Container }, connector
 
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -98,7 +97,7 @@ module Args =
         | [<AltCommandLine "-t"; Unique>]   Topic of string
 //#endif
         (* Cosmos Source Args *)
-        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
+        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
@@ -117,7 +116,7 @@ module Args =
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(a : ParseResults<Parameters>) =
-        member val Cosmos =                 Cosmos.Arguments(a.GetResult Cosmos)
+        member val Cosmos =                 CosmosArguments(a.GetResult Cosmos)
 //#if kafka
         member val Target =                 TargetInfo a
 //#endif
