@@ -34,11 +34,7 @@ let interpret c (state : Fold.State) =
 
 type View = { sorted : bool }
 
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve id =
-        let stream = resolve (streamName id)
-        Equinox.Stream<Events.Event, Fold.State>(log, stream, maxAttempts)
+type Service internal (resolve : string -> Equinox.Stream<Events.Event,Fold.State>) =
 
     /// Read the present state
     // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
@@ -51,4 +47,8 @@ type Service internal (log, resolve, maxAttempts) =
         let stream = resolve clientId
         stream.Transact(interpret command)
 
-let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
+let create resolve =
+    let resolver id =
+        let stream = resolve (streamName id)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+    Service(resolver)

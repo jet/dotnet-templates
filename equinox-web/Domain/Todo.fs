@@ -76,11 +76,7 @@ let interpret c (state : Fold.State) =
 type View = { id: int; order: int; title: string; completed: bool }
 
 /// Defines operations that a Controller can perform on a Todo List
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve clientId =
-        let stream = resolve (streamName clientId)
-        Equinox.Stream(log, stream, maxAttempts = maxAttempts)
+type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     let execute clientId command =
         let stream = resolve clientId
@@ -129,4 +125,8 @@ type Service internal (log, resolve, maxAttempts) =
         let! state' = handle clientId (Update (id, value))
         return state' |> List.find (fun x -> x.id = id) |> render}
 
-let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
+let create resolve =
+    let resolve clientId =
+        let stream = resolve (streamName clientId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+    Service(resolve)

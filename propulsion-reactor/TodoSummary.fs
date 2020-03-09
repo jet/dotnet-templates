@@ -44,11 +44,7 @@ let render : Fold.State -> Item[] = function
     | _ -> [||]
 
 /// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve clientId =
-        let stream = resolve (streamName clientId)
-        Equinox.Stream<Events.Event, Fold.State>(log, stream, maxAttempts)
+type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     member __.Ingest(clientId, version, value) : Async<bool> =
         let stream = resolve clientId
@@ -58,7 +54,11 @@ type Service internal (log, resolve, maxAttempts) =
         let stream = resolve clientId
         stream.Query render
 
-let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
+let create resolve =
+    let resolve clientId =
+        let stream = resolve (streamName clientId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+    Service(resolve)
 
 //#if multiSource
 module EventStore =

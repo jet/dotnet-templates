@@ -52,11 +52,7 @@ module Fold =
     let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve clientId =
-        let stream = resolve (streamName clientId)
-        Equinox.Stream<Events.Event, Fold.State>(log, stream, maxAttempts)
+type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     /// Load and render the state
     member __.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =
@@ -64,7 +60,11 @@ type Service internal (log, resolve, maxAttempts) =
         // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
         stream.QueryEx(fun c -> c.Version, render c.State)
 
-let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
+let create resolve =
+    let resolve clientId =
+        let stream = resolve (streamName clientId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+    Service(resolve)
 
 //#if multiSource
 module EventStore =
