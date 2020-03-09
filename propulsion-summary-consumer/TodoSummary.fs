@@ -59,7 +59,7 @@ let create resolver =
         let stream = resolver (streamName clientId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
 
-    Service resolve
+    Service(resolve)
 
 module Cosmos =
 
