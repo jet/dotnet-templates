@@ -10,12 +10,16 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
-
-- Lots of coding style fine-tuning [#53](https://github.com/jet/dotnet-templates/pulls/53) 
-- Clean up `resolve`/`resolver` helper template [#54](https://github.com/jet/dotnet-templates/pulls/54) 
-
 ### Removed
 ### Fixed
+
+<a name="4.2.0></a>
+## [4.2.0] - 2020-03-09
+
+### Changed
+
+- Coding style fine-tuning [#53](https://github.com/jet/dotnet-templates/pulls/53) 
+- Clean up `resolve`/`resolver` helper template [#54](https://github.com/jet/dotnet-templates/pulls/54) 
 
 <a name="4.1.1"></a>
 ## [4.1.1] - 2020-03-06
@@ -342,7 +346,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.1.1...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.2.0...HEAD
+[4.2.0]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.2.0
 [4.1.1]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.1.1
 [4.1.0]: https://github.com/jet/dotnet-templates/compare/4.0.1...4.1.0
 [4.0.1]: https://github.com/jet/dotnet-templates/compare/4.0.0...4.0.1
