@@ -260,7 +260,7 @@ let main argv =
 
 ## CONTRIBUTING
 
-Please don't hesitate to [create a GitHub issue](https://github.com/jet/dotnet-templates/issues/new) for any questions so others can benefit from the discussion. For any significant planned changes or additions, please err on the side of [reaching out early](https://github.com/jet/dotnet-templates/issues/new) so we can align expectations - there's nothing more frustrating than having your hard work not yielding a mutually agreeable result ;)
+Please don't hesitate to [create a GitHub issue](https://github.com/jet/dotnet-templates/issues/new) for any questions, so others can benefit from the discussion. For any significant planned changes or additions, please err on the side of [reaching out early](https://github.com/jet/dotnet-templates/issues/new) so we can align expectations - there's nothing more frustrating than having your hard work not yielding a mutually agreeable result ;)
 
 See [the Equinox repo's CONTRIBUTING section](https://github.com/jet/equinox/blob/master/README.md#contributing) for general guidelines wrt how contributions are considered specifically wrt Equinox.
 
@@ -271,10 +271,10 @@ The following sorts of things are top of the list for the templates:
 - support for additional languages in the templates
 - further straightforward starter projects
 
-While there is no rigid or defined limit to what makes sense to add, it should be borne in mind that `dotnet new eqx*` is often going to be a new user's first interaction with Equinox and/or [asp]dotnetcore. Hence there's a delicate (and intrinsically subjective) balance to be struck between:
+While there is no rigid or defined limit to what makes sense to add, it should be borne in mind that `dotnet new eqx/pro*` is sometimes going to be a new user's first interaction with Equinox and/or [asp]dotnetcore. Hence there's a delicate (and intrinsically subjective) balance to be struck between:
 
   1. simplicity of programming techniques used / beginner friendliness
   2. brevity of the generated code
   3. encouraging good design practices
 
-  In other words, there's lots of subtlety to what should and shouldn't go into a template - so discussing changes before investing time is encouraged; and agreed changes will generally be rolled out across the repo
+  In other words, there's lots of subtlety to what should and shouldn't go into a template - so discussing changes before investing time is encouraged; agreed changes will generally be rolled out across the repo.
