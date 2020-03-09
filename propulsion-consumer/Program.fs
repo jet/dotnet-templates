@@ -8,10 +8,10 @@ module EnvVar =
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
     let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-settings
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-configuration
 // - this is where any custom retrieval of settings not arriving via commandline arguments or environment variables should go
 // - values should be propagated by setting environment variables and/or returning them from `initialize`
-module Settings =
+module Configuration =
 
     let private initEnvVar var key loadF =
         if None = EnvVar.tryGet var then
@@ -28,7 +28,7 @@ module Settings =
 // TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
 //      you may want to regenerate it at a different time and/or facilitate comparing it with the `module Args` of other programs
 // TODO NEVER hack temporary overrides in here; if you're going to do that, use commandline arguments that fall back to environment variables
-//      or (as a last resort) supply them via code in `module Settings`
+//      or (as a last resort) supply them via code in `module Configuration`
 module Args =
 
     exception MissingArg of string
@@ -111,7 +111,7 @@ let run args =
 let main argv =
     try let args = Args.parse argv
         try Logging.initialize args.Verbose
-            try Settings.initialize ()
+            try Configuration.initialize ()
                 if run args then 0 else 3
             with e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

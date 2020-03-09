@@ -165,7 +165,7 @@ Wherever possible, the samples strongly type identifiers, particularly ones that
 
 All the templates herein attempt to adhere to a consistent structure for the [composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/) `module` (the one containing an Application’s `main`)
 
-### `module Settings`
+### `module Configuration`
 
 _Responsible for: Loading secrets and custom configuration, supplying defaults when environment variables are not set_
 
@@ -248,7 +248,7 @@ let run args =
 let main argv =
     try let args = Args.parse argv
         try Logging.initialize args.Verbose
-            try Settings.initialize ()
+            try Configuration.initialize ()
                 if run args then 0 else 3
             with e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
