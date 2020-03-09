@@ -54,29 +54,25 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
         let stream = resolve clientId
         stream.Query render
 
-let create resolve =
+let create resolver =
     let resolve clientId =
-        let stream = resolve (streamName clientId)
+        let stream = resolver (streamName clientId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
     Service(resolve)
 
 //#if multiSource
 module EventStore =
 
-    open Equinox.EventStore // Everything until now is independent of a concrete store
-
-    let private resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
-    let create (context, cache) = resolve (context, cache) |> create
+    let private resolver (context, cache) =
+        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
+    let create (context, cache) = create (resolver (context, cache))
 
 //#endif
 module Cosmos =
 
-    open Equinox.Cosmos // Everything until now is independent of a concrete store
-
     let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingState Fold.snapshot
-    let private resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) = create (resolve (context, cache))
+    let private resolver (context, cache) =
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
+    let create (context, cache) = create (resolver (context, cache))

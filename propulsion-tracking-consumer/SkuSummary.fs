@@ -66,18 +66,16 @@ type Service internal (resolve : SkuId -> Equinox.Stream<Events.Event, Fold.Stat
         let stream = resolve skuId
         stream.Query id
 
-let create resolve =
+let create resolver =
     let resolve skuId =
-        let stream = resolve (streamName skuId)
+        let stream = resolver (streamName skuId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
     Service(resolve)
 
 module Cosmos =
 
-    open Equinox.Cosmos // Everything until now is independent of a concrete store
-
-    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-    let private resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) = create (resolve (context, cache))
+    let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
+    let private resolver (context, cache) =
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
+    let create (context, cache) = create (resolver (context, cache))
