@@ -7,9 +7,9 @@ open System
 /// Defines the contract we share with the proReactor --'s published feed
 module Contract =
 
-    let [<Literal>] CategoryId = "TodoSummary"
+    let [<Literal>] Category = "TodoSummary"
     let (|MatchesCategory|_|) = function
-        | FsCodec.StreamName.CategoryAndId (CategoryId, ClientId.Parse clientId) -> Some clientId
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
         | _ -> None
 
     /// A single Item in the Todo List

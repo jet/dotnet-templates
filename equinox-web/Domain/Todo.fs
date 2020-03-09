@@ -1,11 +1,11 @@
 ﻿module TodoBackendTemplate.Todo
 
+let [<Literal>] Category = "Todos"
+/// Maps a ClientId to the StreamName where data for that client will be held
+let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
-
-    let [<Literal>] CategoryId = "Todos"
-    /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|ForClientId|) (clientId: ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString clientId)
 
     type ItemData =     { id : int; order : int; title : string; completed : bool }
     type DeletedData =  { id : int }
@@ -78,7 +78,9 @@ type View = { id: int; order: int; title: string; completed: bool }
 /// Defines operations that a Controller can perform on a Todo List
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.ForClientId streamId) = Equinox.Stream(log, resolve streamId, maxAttempts = maxAttempts)
+    let resolve clientId =
+        let stream = resolve (streamName clientId)
+        Equinox.Stream(log, stream, maxAttempts = maxAttempts)
 
     let execute clientId command =
         let stream = resolve clientId

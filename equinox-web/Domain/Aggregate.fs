@@ -1,9 +1,10 @@
 ﻿module TodoBackendTemplate.Aggregate
 
+let [<Literal>] Category = "Aggregate"
+let streamName (id: string) = FsCodec.StreamName.create Category id
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
-
-    let (|For|) (id: string) = FsCodec.StreamName.create "Aggregate" id
 
     type SnapshottedData = { happened: bool }
 
@@ -35,7 +36,9 @@ type View = { sorted : bool }
 
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve id =
+        let stream = resolve (streamName id)
+        Equinox.Stream<Events.Event, Fold.State>(log, stream, maxAttempts)
 
     /// Read the present state
     // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections

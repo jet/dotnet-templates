@@ -1,10 +1,10 @@
 ﻿module ConsumerTemplate.SkuSummary
 
+let [<Literal>] Category = "SkuSummary"
+let streamName (id : SkuId) = FsCodec.StreamName.create Category (SkuId.toString id)
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
-
-    let [<Literal>] CategoryId = "SkuSummary"
-    let (|ForSkuId|) (id : SkuId) = FsCodec.StreamName.create CategoryId (SkuId.toString id)
 
     type ItemData =
         {   locationId : string
@@ -52,7 +52,9 @@ let interpret command (state : Fold.State) =
 
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.ForSkuId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve skuId =
+        let stream = resolve (streamName skuId)
+        Equinox.Stream<Events.Event, Fold.State>(log, stream, maxAttempts)
 
     /// <returns>count of items</returns>
     member __.Ingest(skuId, items) : Async<int> =

@@ -1,10 +1,10 @@
 ﻿module ReactorTemplate.TodoSummary
 
+let [<Literal>] Category = "TodoSummary"
+let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
-
-    let [<Literal>] CategoryId = "TodoSummary"
-    let (|ForClientId|) (clientId: ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString clientId)
 
     type ItemData = { id: int; order: int; title: string; completed: bool }
     type SummaryData = { items : ItemData[] }
@@ -46,7 +46,9 @@ let render : Fold.State -> Item[] = function
 /// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.ForClientId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve clientId =
+        let stream = resolve (streamName clientId)
+        Equinox.Stream<Events.Event, Fold.State>(log, stream, maxAttempts)
 
     member __.Ingest(clientId, version, value) : Async<bool> =
         let stream = resolve clientId

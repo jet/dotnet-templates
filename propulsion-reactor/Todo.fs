@@ -1,12 +1,13 @@
 module ReactorTemplate.Todo
 
+let [<Literal>] Category = "Todos"
+let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    let [<Literal>] CategoryId = "Todos"
-    let (|ForClientId|) (id : ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString id)
     let (|MatchesCategory|_|) = function
-        | FsCodec.StreamName.CategoryAndId (CategoryId, ClientId.Parse clientId) -> Some clientId
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
         | _ -> None
 
     type ItemData =     { id : int; order : int; title : string; completed : bool }
@@ -53,7 +54,9 @@ module Fold =
 /// Defines operations that a Controller or Projector can perform on a Todo List
 type Service internal (log, resolve, maxAttempts) =
 
-    let resolve (Events.ForClientId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+    let resolve clientId =
+        let stream = resolve (streamName clientId)
+        Equinox.Stream<Events.Event, Fold.State>(log, stream, maxAttempts)
 
     /// Load and render the state
     member __.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =
