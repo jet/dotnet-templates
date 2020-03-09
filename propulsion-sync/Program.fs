@@ -29,7 +29,7 @@ module Settings =
         // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-cmdparser
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-commandline
 // - this module is responsible solely for parsing/validating the commandline arguments (including falling back to values supplied via environment variables)
 // - It's expected that the properties on *Arguments types will summarize the active settings as a side effect of
 // TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
