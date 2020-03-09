@@ -5,10 +5,10 @@ open System
 module Domain =
     module Favorites =
 
+        let streamName (id : ClientId) = FsCodec.StreamName.create "Favorites" (ClientId.toString id)
+
         // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
         module Events =
-
-            let (|ForClientId|) (id : ClientId) = FsCodec.StreamName.create "Favorites" (ClientId.toString id)
 
             type Favorited =                            { date: System.DateTimeOffset; skuId: SkuId }
             type Unfavorited =                          { skuId: SkuId }
@@ -63,9 +63,7 @@ module Domain =
                 if doesntHave skuId then [] else
                 [ Events.Unfavorited { skuId = skuId } ]
 
-        type Service internal (log, resolve, maxAttempts) =
-
-            let resolve (Events.ForClientId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+        type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event,Fold.State>) =
 
             member __.Execute(clientId, command) =
                 let stream = resolve clientId
@@ -81,7 +79,11 @@ module Domain =
                 let stream = resolve clientId
                 stream.Query id
 
-        let create log resolve = Service(log, resolve, maxAttempts = 3)
+        let create log resolve =
+            let resolve clientId =
+                let stream = resolve (streamName clientId)
+                Equinox.Stream(log, stream, maxAttempts = 3)
+            Service(resolve)
 
 open Microsoft.Extensions.DependencyInjection
 

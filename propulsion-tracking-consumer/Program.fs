@@ -8,10 +8,10 @@ module EnvVar =
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
     let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-settings
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-configuration
 // - this is where any custom retrieval of settings not arriving via commandline arguments or environment variables should go
 // - values should be propagated by setting environment variables and/or returning them from `initialize`
-module Settings =
+module Configuration =
 
     let private initEnvVar var key loadF =
         if None = EnvVar.tryGet var then
@@ -22,14 +22,14 @@ module Settings =
         // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-cmdparser
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
 // - this module is responsible solely for parsing/validating the commandline arguments (including falling back to values supplied via environment variables)
 // - It's expected that the properties on *Arguments types will summarize the active settings as a side effect of
 // TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
-//      you may want to regenerate it at a different time and/or facilitate comparing it with the CmdParser of other programs
+//      you may want to regenerate it at a different time and/or facilitate comparing it with the `module Args` of other programs
 // TODO NEVER hack temporary overrides in here; if you're going to do that, use commandline arguments that fall back to environment variables
-//      or (as a last resort) supply them via code in `module Settings`
-module CmdParser =
+//      or (as a last resort) supply them via code in `module Configuration`
+module Args =
 
     exception MissingArg of string
     let private getEnvVarForArgumentOrThrow varName argName =
@@ -40,44 +40,43 @@ module CmdParser =
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
     open Argu
-    module Cosmos =
-        open Equinox.Cosmos
-        type [<NoEquality; NoComparison>] Parameters =
-            | [<AltCommandLine "-m">]       ConnectionMode of ConnectionMode
-            | [<AltCommandLine "-s">]       Connection of string
-            | [<AltCommandLine "-d">]       Database of string
-            | [<AltCommandLine "-c">]       Container of string
-            | [<AltCommandLine "-o">]       Timeout of float
-            | [<AltCommandLine "-r">]       Retries of int
-            | [<AltCommandLine "-rt">]      RetriesWaitTime of float
-            interface IArgParserTemplate with
-                member a.Usage =
-                    match a with
-                    | ConnectionMode _ ->   "override the connection mode. Default: Direct."
-                    | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                    | Database _ ->         "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                    | Container _ ->        "specify a container name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
-                    | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
-                    | Retries _ ->          "specify operation retries (default: 1)."
-                    | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-        type Arguments(a : ParseResults<Parameters>) =
-            member __.Mode =                a.GetResult(ConnectionMode, ConnectionMode.Direct)
-            member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
-            member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
-            member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
+    open Equinox.Cosmos
+    type [<NoEquality; NoComparison>] CosmosParameters =
+        | [<AltCommandLine "-m">]       ConnectionMode of ConnectionMode
+        | [<AltCommandLine "-s">]       Connection of string
+        | [<AltCommandLine "-d">]       Database of string
+        | [<AltCommandLine "-c">]       Container of string
+        | [<AltCommandLine "-o">]       Timeout of float
+        | [<AltCommandLine "-r">]       Retries of int
+        | [<AltCommandLine "-rt">]      RetriesWaitTime of float
+        interface IArgParserTemplate with
+            member a.Usage =
+                match a with
+                | ConnectionMode _ ->   "override the connection mode. Default: Direct."
+                | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
+                | Database _ ->         "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
+                | Container _ ->        "specify a container name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
+                | Timeout _ ->          "specify operation timeout in seconds (default: 5)."
+                | Retries _ ->          "specify operation retries (default: 1)."
+                | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
+    type CosmosArguments(a : ParseResults<CosmosParameters>) =
+        member __.Mode =                a.GetResult(ConnectionMode, ConnectionMode.Direct)
+        member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
+        member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
+        member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
 
-            member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-            member __.Retries =             a.GetResult(Retries, 1)
-            member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        member __.Retries =             a.GetResult(Retries, 1)
+        member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
-            member x.Connect(clientId) = async {
-                let (Discovery.UriAndKey (endpointUri, _) as discovery) = Discovery.FromConnectionString x.Connection
-                Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
-                    x.Mode, endpointUri, x.Database, x.Container)
-                Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                    (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-                let! connection = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode).Connect(clientId, discovery)
-                return Context(connection, x.Database, x.Container) }
+        member x.Connect(clientId) = async {
+            let (Discovery.UriAndKey (endpointUri, _) as discovery) = Discovery.FromConnectionString x.Connection
+            Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
+                x.Mode, endpointUri, x.Database, x.Container)
+            Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
+            let! connection = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode).Connect(clientId, discovery)
+            return Context(connection, x.Database, x.Container) }
 
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -89,7 +88,7 @@ module CmdParser =
 
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<Cosmos.Parameters>
+        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosParameters>
 
         interface IArgParserTemplate with
             member a.Usage = a |> function
@@ -104,7 +103,7 @@ module CmdParser =
                 | Cosmos _ ->               "specify CosmosDb input parameters"
 
     type Arguments(a : ParseResults<Parameters>) =
-        member val Cosmos =                 Cosmos.Arguments(a.GetResult Cosmos)
+        member val Cosmos =                 CosmosArguments(a.GetResult Cosmos)
         member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member __.Group =                   a.TryGetResult Group  |> defaultWithEnvVar "PROPULSION_KAFKA_GROUP"  "Group"
@@ -137,7 +136,7 @@ module Logging =
 
 let [<Literal>] AppName = "ConsumerTemplate"
 
-let start (args : CmdParser.Arguments) =
+let start (args : Args.Arguments) =
     let context = args.Cosmos.Connect(AppName) |> Async.RunSynchronously
     let cache = Equinox.Cache (AppName, sizeMb = 10) // here rather than in SkuSummary aggregate as it can be shared with other Aggregates
     let service = SkuSummary.Cosmos.create (context, cache)
@@ -145,22 +144,24 @@ let start (args : CmdParser.Arguments) =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    Ingester.startConsumer config Log.Logger service args.MaxConcurrentStreams
+    let stats = Ingester.Stats(Log.Logger)
+    // No categorization required, our inputs are all one big family defying categorization
+    let sequencer = Propulsion.Kafka.Core.StreamKeyEventSequencer()
+    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, sequencer.ToStreamEvent, Ingester.ingest service, args.MaxConcurrentStreams, stats)
 
-let run argv =
-    try let args = CmdParser.parse argv
-        Logging.initialize args.Verbose
-        Settings.initialize ()
-        use consumer = start args
-        consumer.AwaitCompletion() |> Async.RunSynchronously
-        if consumer.RanToCompletion then 0 else 2
-    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | :? Argu.ArguException as e -> eprintf "Argument parsing exception %s" e.Message; 1
-        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-        // If the handler throws, we exit the app in order to let an orchestrator flag the failure
-        | e -> Log.Fatal(e, "Exiting"); 1
+let run args =
+    use consumer = start args
+    consumer.AwaitCompletion() |> Async.RunSynchronously
+    if consumer.RanToCompletion then 0 else 3
 
 [<EntryPoint>]
 let main argv =
-    try run argv
-    finally Log.CloseAndFlush()
+    try let args = Args.parse argv
+        try Logging.initialize args.Verbose
+            try Configuration.initialize ()
+                run args
+            with e -> Log.Fatal(e, "Exiting"); 2
+        finally Log.CloseAndFlush()
+    with Args.MissingArg msg -> eprintfn "%s" msg; 1
+        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | e -> eprintf "Exception %s" e.Message; 1

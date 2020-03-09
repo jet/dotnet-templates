@@ -10,6 +10,10 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Lots of coding style fine-tuning [#53](https://github.com/jet/dotnet-templates/pulls/53) 
+- Clean up `resolve`/`resolver` helper template [#54](https://github.com/jet/dotnet-templates/pulls/54) 
+
 ### Removed
 ### Fixed
 

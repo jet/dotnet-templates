@@ -31,7 +31,7 @@ module MultiStreams =
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module SavedForLater =
 
-        let [<Literal>] CategoryId = "SavedForLater"
+        let [<Literal>] Category = "SavedForLater"
 
         type Item =             { skuId : SkuId; dateSaved : DateTimeOffset }
 
@@ -55,7 +55,7 @@ module MultiStreams =
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module Favorites =
 
-        let [<Literal>] CategoryId = "Favorites"
+        let [<Literal>] Category = "Favorites"
 
         type Favorited =        { date: DateTimeOffset; skuId: SkuId }
         type Unfavorited =      { skuId: SkuId }
@@ -80,10 +80,10 @@ module MultiStreams =
         let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
             let decode tryDecode = span.events |> Seq.choose (tryDecode log streamName) |> Array.ofSeq
             match streamName with
-            | FsCodec.StreamName.CategoryAndId (Favorites.CategoryId, id) ->
+            | FsCodec.StreamName.CategoryAndId (Favorites.Category, id) ->
                 let s = match faves.TryGetValue id with true, value -> value | false, _ -> new HashSet<SkuId>()
                 FavoritesEvents (id, s, decode Favorites.tryDecode)
-            | FsCodec.StreamName.CategoryAndId (SavedForLater.CategoryId, id) ->
+            | FsCodec.StreamName.CategoryAndId (SavedForLater.Category, id) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
                 SavedForLaterEvents (id, s, decode SavedForLater.tryDecode)
             | FsCodec.StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span.events)
@@ -176,8 +176,8 @@ module MultiMessages =
             let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
             let decode tryDecode wrap = RenderedSpan.enum span |> Seq.choose (fun x -> x.event |> tryDecode log streamName |> Option.map wrap)
             match streamName with
-            | StreamName.CategoryAndId (Favorites.CategoryId, _) -> yield! decode Favorites.tryDecode Fave
-            | StreamName.CategoryAndId (SavedForLater.CategoryId, _) -> yield! decode SavedForLater.tryDecode Save
+            | StreamName.CategoryAndId (Favorites.Category, _) -> yield! decode Favorites.tryDecode Fave
+            | StreamName.CategoryAndId (SavedForLater.Category, _) -> yield! decode SavedForLater.tryDecode Save
             | StreamName.CategoryAndId (otherCategoryName, _) -> yield OtherCat (otherCategoryName, Seq.length span.e) }
 
         // NB can be called in parallel, so must be thread-safe

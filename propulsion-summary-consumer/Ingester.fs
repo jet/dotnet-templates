@@ -7,9 +7,9 @@ open System
 /// Defines the contract we share with the proReactor --'s published feed
 module Contract =
 
-    let [<Literal>] CategoryId = "TodoSummary"
+    let [<Literal>] Category = "TodoSummary"
     let (|MatchesCategory|_|) = function
-        | FsCodec.StreamName.CategoryAndId (CategoryId, ClientId.Parse clientId) -> Some clientId
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
         | _ -> None
 
     /// A single Item in the Todo List
@@ -40,35 +40,31 @@ type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of 
 type Stats(log, ?statsInterval, ?stateInterval) =
     inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
 
-    let mutable ok, na, redundant = 0, 0, 0
+    let mutable ok, na, skipped = 0, 0, 0
 
     override __.HandleOk res = res |> function
-        | Outcome.Ok count -> ok <- ok + 1; redundant <- redundant + count - 1
-        | Outcome.Skipped count -> redundant <- redundant + count
+        | Outcome.Ok count -> ok <- ok + 1; skipped <- skipped + count - 1
+        | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NoRelevantEvents count -> na <- na + count
 
     override __.DumpStats () =
-        if ok <> 0 || na <> 0 || redundant <> 0 then
-            log.Information(" Used {ok} Ignored {skipped} N/A {na}", ok, redundant, na)
-            ok <- 0; na <- 0 ; redundant <- 0
+        if ok <> 0 || skipped <> 0 || na <> 0 then
+            log.Information(" Used {ok} Skipped {skipped} N/A {na}", ok, skipped, na)
+            ok <- 0; skipped <- 0l; na <- 0
 
-/// Starts a processing loop accumulating messages by stream - each time we only take the latest event as previous ones are superseded by definition
-let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger) (service : TodoSummary.Service) maxDop =
-    // map from external contract to internal contract defined by the aggregate
-    let map : Contract.Message -> TodoSummary.Events.SummaryData = function
-        | Contract.Summary x ->
-            { items =
-                [| for x in x.items ->
-                    { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
-    let ingestIncomingSummaryMessage (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
-        match stream, span with
-        | Contract.MatchNewest (clientId, version, update) ->
-            match! service.Ingest(clientId, version, map update) with
-            | true -> return Outcome.Ok span.events.Length
-            | false -> return Outcome.Skipped span.events.Length
-        | _ -> return Outcome.NoRelevantEvents span.events.Length
-    }
-    let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse spanJson
-    let stats = Stats(log)
-    Propulsion.Kafka.StreamsConsumer.Start(log, config, parseStreamSummaries, ingestIncomingSummaryMessage, maxDop, stats)
+/// Map from external contract to internal contract defined by the aggregate
+let map : Contract.Message -> TodoSummary.Events.SummaryData = function
+    | Contract.Summary x ->
+        { items =
+            [| for x in x.items ->
+                { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
+
+/// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
+let ingest (service : TodoSummary.Service) (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+    match stream, span with
+    | Contract.MatchNewest (clientId, version, update) ->
+        match! service.Ingest(clientId, version, map update) with
+        | true -> return Outcome.Ok span.events.Length
+        | false -> return Outcome.Skipped span.events.Length
+    | _ -> return Outcome.NoRelevantEvents span.events.Length
+}

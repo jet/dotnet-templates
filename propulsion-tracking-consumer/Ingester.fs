@@ -33,27 +33,22 @@ type Stats(log, ?statsInterval, ?stateInterval) =
 
     override __.DumpStats () =
         if ok <> 0 || skipped <> 0 then
-            log.Information(" Used {ok} Ignored {skipped}", ok, skipped)
+            log.Information(" Used {ok} Skipped {skipped}", ok, skipped)
             ok <- 0; skipped <- 0
 
-/// Starts a processing loop accumulating messages by stream - each time we handle all the incoming updates for a give Sku as a single transaction
-let startConsumer (config : FsKafka.KafkaConsumerConfig) (log : Serilog.ILogger) (service : SkuSummary.Service) maxDop =
-    let ingestIncomingSummaryMessage(FsCodec.StreamName.CategoryAndId (_,SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
-        let items =
-            [ for e in span.events do
-                let x = Contract.parse e.Data
-                for o in x.purchaseOrderInfo do
-                    let x : SkuSummary.Events.ItemData =
-                        {   locationId = x.locationId
-                            messageIndex = x.messageIndex
-                            picketTicketId = x.pickTicketId
-                            poNumber = o.poNumber
-                            reservedQuantity = o.reservedUnitQuantity }
-                    yield x ]
-        let! used = service.Ingest(skuId, items)
-        return Outcome.Completed(used, List.length items)
-    }
-    let stats = Stats(log)
-    // No categorization required, our inputs are all one big family defying categorization
-    let sequencer = Propulsion.Kafka.Core.StreamKeyEventSequencer()
-    Propulsion.Kafka.StreamsConsumer.Start(log, config, sequencer.ToStreamEvent, ingestIncomingSummaryMessage, maxDop, stats)
+/// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
+let ingest (service : SkuSummary.Service) (FsCodec.StreamName.CategoryAndId (_,SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+    let items =
+        [ for e in span.events do
+            let x = Contract.parse e.Data
+            for o in x.purchaseOrderInfo do
+                let x : SkuSummary.Events.ItemData =
+                    {   locationId = x.locationId
+                        messageIndex = x.messageIndex
+                        picketTicketId = x.pickTicketId
+                        poNumber = o.poNumber
+                        reservedQuantity = o.reservedUnitQuantity }
+                yield x ]
+    let! used = service.Ingest(skuId, items)
+    return Outcome.Completed(used, List.length items)
+}

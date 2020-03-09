@@ -1,11 +1,11 @@
 ﻿module TodoBackendTemplate.Todo
 
+let [<Literal>] Category = "Todos"
+/// Maps a ClientId to the StreamName where data for that client will be held
+let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
-
-    let [<Literal>] CategoryId = "Todos"
-    /// Maps a ClientId to the AggregateId that specifies the Stream in which the data for that client will be held
-    let (|ForClientId|) (clientId: ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString clientId)
 
     type ItemData =     { id : int; order : int; title : string; completed : bool }
     type DeletedData =  { id : int }
@@ -76,9 +76,7 @@ let interpret c (state : Fold.State) =
 type View = { id: int; order: int; title: string; completed: bool }
 
 /// Defines operations that a Controller can perform on a Todo List
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve (Events.ForClientId streamId) = Equinox.Stream(log, resolve streamId, maxAttempts = maxAttempts)
+type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     let execute clientId command =
         let stream = resolve clientId
@@ -127,4 +125,8 @@ type Service internal (log, resolve, maxAttempts) =
         let! state' = handle clientId (Update (id, value))
         return state' |> List.find (fun x -> x.id = id) |> render}
 
-let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
+let create resolver =
+    let resolve clientId =
+        let stream = resolver (streamName clientId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+    Service(resolve)

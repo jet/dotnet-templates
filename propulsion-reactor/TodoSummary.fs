@@ -1,10 +1,10 @@
 ﻿module ReactorTemplate.TodoSummary
 
+let [<Literal>] Category = "TodoSummary"
+let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
-
-    let [<Literal>] CategoryId = "TodoSummary"
-    let (|ForClientId|) (clientId: ClientId) = FsCodec.StreamName.create CategoryId (ClientId.toString clientId)
 
     type ItemData = { id: int; order: int; title: string; completed: bool }
     type SummaryData = { items : ItemData[] }
@@ -44,9 +44,7 @@ let render : Fold.State -> Item[] = function
     | _ -> [||]
 
 /// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve (Events.ForClientId id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     member __.Ingest(clientId, version, value) : Async<bool> =
         let stream = resolve clientId
@@ -56,25 +54,25 @@ type Service internal (log, resolve, maxAttempts) =
         let stream = resolve clientId
         stream.Query render
 
-let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
+let create resolver =
+    let resolve clientId =
+        let stream = resolver (streamName clientId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+    Service(resolve)
 
 //#if multiSource
 module EventStore =
 
-    open Equinox.EventStore // Everything until now is independent of a concrete store
-
-    let private resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
-    let create (context, cache) = resolve (context, cache) |> create
+    let private resolver (context, cache) =
+        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
+    let create (context, cache) = create (resolver (context, cache))
 
 //#endif
 module Cosmos =
 
-    open Equinox.Cosmos // Everything until now is independent of a concrete store
-
     let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingState Fold.snapshot
-    let private resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) = create (resolve (context, cache))
+    let private resolver (context, cache) =
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
+    let create (context, cache) = create (resolver (context, cache))

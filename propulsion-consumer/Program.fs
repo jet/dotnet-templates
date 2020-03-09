@@ -8,10 +8,10 @@ module EnvVar =
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
     let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-settings
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-configuration
 // - this is where any custom retrieval of settings not arriving via commandline arguments or environment variables should go
 // - values should be propagated by setting environment variables and/or returning them from `initialize`
-module Settings =
+module Configuration =
 
     let private initEnvVar var key loadF =
         if None = EnvVar.tryGet var then
@@ -22,14 +22,14 @@ module Settings =
         // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-cmdparser
+// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
 // - this module is responsible solely for parsing/validating the commandline arguments (including falling back to values supplied via environment variables)
 // - It's expected that the properties on *Arguments types will summarize the active settings as a side effect of
 // TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
-//      you may want to regenerate it at a different time and/or facilitate comparing it with the CmdParser of other programs
+//      you may want to regenerate it at a different time and/or facilitate comparing it with the `module Args` of other programs
 // TODO NEVER hack temporary overrides in here; if you're going to do that, use commandline arguments that fall back to environment variables
-//      or (as a last resort) supply them via code in `module Settings`
-module CmdParser =
+//      or (as a last resort) supply them via code in `module Configuration`
+module Args =
 
     exception MissingArg of string
     let private getEnvVarForArgumentOrThrow varName argName =
@@ -91,7 +91,7 @@ module Logging =
                         c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
             |> fun c -> c.CreateLogger()
 
-let start (args : CmdParser.Arguments) =
+let start (args : Args.Arguments) =
     let c =
         FsKafka.KafkaConsumerConfig.Create(
             "ConsumerTemplate",
@@ -102,20 +102,19 @@ let start (args : CmdParser.Arguments) =
     //NultiMessages.Parallel.Start(c, args.MaxDop)
     MultiStreams.start(c, args.MaxDop)
 
-let run argv =
-    try let args = CmdParser.parse argv
-        Logging.initialize args.Verbose
-        Settings.initialize ()
-        use consumer = start args
-        consumer.AwaitCompletion() |> Async.RunSynchronously
-        if consumer.RanToCompletion then 0 else 2
-    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | :? Argu.ArguException as e -> eprintf "Argument parsing exception %s" e.Message; 1
-        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
-        // If the handler throws, we exit the app in order to let an orchestrator flag the failure
-        | e -> Log.Fatal(e, "Exiting"); 1
+let run args =
+    use consumer = start args
+    consumer.AwaitCompletion() |> Async.RunSynchronously
+    consumer.RanToCompletion
 
 [<EntryPoint>]
 let main argv =
-    try run argv
-    finally Log.CloseAndFlush()
+    try let args = Args.parse argv
+        try Logging.initialize args.Verbose
+            try Configuration.initialize ()
+                if run args then 0 else 3
+            with e -> Log.Fatal(e, "Exiting"); 2
+        finally Log.CloseAndFlush()
+    with Args.MissingArg msg -> eprintfn "%s" msg; 1
+        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | e -> eprintf "Exception %s" e.Message; 1
