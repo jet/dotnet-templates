@@ -52,11 +52,7 @@ module Fold =
     let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve clientId =
-        let stream = resolve (streamName clientId)
-        Equinox.Stream<Events.Event, Fold.State>(log, stream, maxAttempts)
+type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     /// Load and render the state
     member __.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =
@@ -64,25 +60,25 @@ type Service internal (log, resolve, maxAttempts) =
         // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
         stream.QueryEx(fun c -> c.Version, render c.State)
 
-let create resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
+let create resolver =
+    let resolve clientId =
+        let stream = resolver (streamName clientId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+    Service(resolve)
 
 //#if multiSource
 module EventStore =
 
-    open Equinox.EventStore // Everything until now is independent of a concrete store
-
-    let private resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
-    let create (context, cache) = resolve (context, cache) |> create
+    let private resolver (context, cache) =
+        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
+    let create (context, cache) = create (resolver (context, cache))
 
 //#endif
 module Cosmos =
 
-    open Equinox.Cosmos // Everything until now is independent of a concrete store
-
-    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-    let private resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) = resolve (context, cache) |> create
+    let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
+    let private resolver (context, cache) =
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
+    let create (context, cache) = create (resolver (context, cache))
