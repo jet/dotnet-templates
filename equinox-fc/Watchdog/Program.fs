@@ -312,7 +312,7 @@ module EventStoreContext =
         | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (isWhitelisted e.EventStreamId) -> None
         | PropulsionStreamEvent e -> Some e
 
-let transactionStreamPrefix = sprintf "%s-" Fc.Inventory.Transaction.Events.CategoryId
+let transactionStreamPrefix = sprintf "%s-" Fc.Inventory.Transaction.Category
 let isTransactionStream : string -> bool = function sn -> sn.StartsWith transactionStreamPrefix
 
 let build (args : CmdParser.Arguments) =
@@ -355,8 +355,8 @@ let build (args : CmdParser.Arguments) =
         let locations =
             let zeroBalance : Fc.Location.Epoch.Events.CarriedForward = { initial = 0; recentTransactions = [||] }
             let chooseTransactionIds = function
-                | Fc.Location.Epoch.Fold.Init { recentTransactions = ids }  -> Seq.ofArray ids
-                | Fc.Location.Epoch.Fold.Step { id = id }  -> Seq.singleton id
+                | Fc.Location.Epoch.Fold.Init { recentTransactions = ids } -> Seq.ofArray ids
+                | Fc.Location.Epoch.Fold.Step { id = id } -> Seq.singleton id
             let toBalanceCarriedForward (Fc.Location.Epoch.Fold.Current cur as records) : Fc.Location.Epoch.Events.CarriedForward =
                 { initial = cur; recentTransactions = records |> Seq.collect chooseTransactionIds |> Seq.truncate 5 |> Seq.toArray }
             let shouldClose x = false

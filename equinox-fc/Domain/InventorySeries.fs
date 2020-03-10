@@ -3,12 +3,12 @@
 /// See Inventory.Service for the surface API which manages the writing
 module Fc.Inventory.Series
 
+let [<Literal>] Category = "InventorySeries"
+let streamName inventoryId = FsCodec.StreamName.create Category (InventoryId.toString inventoryId)
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
-
-    let [<Literal>] CategoryId = "InventorySeries"
-    let (|For|) inventoryId = FsCodec.StreamName.create CategoryId (InventoryId.toString inventoryId)
 
     type Started = { epoch : InventoryEpochId }
     type Event =
@@ -30,9 +30,7 @@ let interpretAdvanceIngestionEpoch epochId (state : Fold.State) =
     if queryActiveEpoch state >= epochId then []
     else [Events.Started { epoch = epochId }]
 
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve (Events.For streamId) = Equinox.Stream<Events.Event, Fold.State>(log, resolve streamId, maxAttempts)
+type Service internal (resolve : InventoryId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     member __.ReadIngestionEpoch(inventoryId) : Async<InventoryEpochId> =
         let stream = resolve inventoryId
@@ -42,19 +40,21 @@ type Service internal (log, resolve, maxAttempts) =
         let stream = resolve inventoryId
         stream.Transact(interpretAdvanceIngestionEpoch epochId)
 
-let createService resolve =
-    Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 2)
+let create resolver =
+    let resolve locationId =
+        let stream = resolver (streamName locationId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
+    Service (resolve)
 
 module Cosmos =
 
-    open Equinox.Cosmos
-
+    let accessStrategy = Equinox.Cosmos.AccessStrategy.LatestKnownEvent
     let resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // For this stream, we uniformly use stale reads as:
         // a) we don't require any information from competing writers
         // b) while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
-        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.LatestKnownEvent).Resolve(id, opt)
-    let createService (context, cache) =
-        createService (resolve (context, cache))
+        fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
+    let create (context, cache) =
+        create (resolve (context, cache))

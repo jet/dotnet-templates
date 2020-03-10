@@ -22,18 +22,10 @@ type Stats(log, ?statsInterval, ?stateInterval) =
 
 open Fc.Inventory.Transaction
 
-let fold : Watchdog.Events.TimestampAndEvent seq -> Watchdog.Fold.State =
-    Watchdog.Fold.fold Watchdog.Fold.initial
-
-let (|FoldToWatchdogState|) (span : Propulsion.Streams.StreamSpan<_>) : Watchdog.Fold.State =
-    span.events
-    |> Seq.choose Watchdog.Events.codec.TryDecode
-    |> fold
-
 let tryHandle driveTransaction (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
     let processingStuckCutoff = let now = DateTimeOffset.UtcNow in now.AddSeconds -10.
-    match stream, span with
-    | FsCodec.StreamName.CategoryAndId (Events.CategoryId, InventoryTransactionId.Parse transId), FoldToWatchdogState state ->
+    match stream, span.events with
+    | Watchdog.Match (transId, state) ->
         match Watchdog.categorize processingStuckCutoff state with
         | Watchdog.Complete ->
             return Outcome.Completed

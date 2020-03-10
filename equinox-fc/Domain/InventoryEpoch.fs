@@ -3,12 +3,12 @@
 /// See Inventory.Service for surface level API which manages the ingestion, including transitioning to a new Epoch when an epoch reaches 'full' state
 module Fc.Inventory.Epoch
 
+let [<Literal>] Category = "InventoryEpoch"
+let streamName (inventoryId, epochId) = FsCodec.StreamName.compose Category [InventoryId.toString inventoryId; InventoryEpochId.toString epochId]
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
-
-    let [<Literal>] CategoryId = "InventoryEpoch"
-    let (|For|) (inventoryId, epochId) = FsCodec.StreamName.compose CategoryId [InventoryId.toString inventoryId; InventoryEpochId.toString epochId]
 
     type TransactionRef = { transactionId : InventoryTransactionId }
     type Snapshotted = { closed: bool; ids : InventoryTransactionId[] }
@@ -70,9 +70,7 @@ let decideSync capacity events (state : Fold.State) : Result * Events.Event list
     let state' = Fold.fold state events
     { isClosed = closed; added = allowing; rejected = residual; transactionIds = state'.ids }, events
 
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve (Events.For streamId) = Equinox.Stream<Events.Event, Fold.State>(log, resolve streamId, maxAttempts)
+type Service internal (resolve : InventoryId * InventoryEpochId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     /// Attempt ingestion of `events` into the cited Epoch.
     /// - None will be accepted if the Epoch is `closed`
@@ -83,14 +81,16 @@ type Service internal (log, resolve, maxAttempts) =
         let stream = resolve (inventoryId, epochId)
         stream.Transact(decideSync capacity events)
 
-let createService resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 2)
+let create resolver =
+    let resolve locationId =
+        let stream = resolver (streamName locationId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
+    Service (resolve)
 
 module Cosmos =
 
-    open Equinox.Cosmos
-
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
     let resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let createService (context, cache) = createService (resolve (context, cache))
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
+    let create (context, cache) = create (resolve (context, cache))

@@ -44,5 +44,5 @@ module Cosmos =
 
     let createService (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts) =
         let series = Series.Cosmos.createService (context, cache, maxAttempts)
-        let epochs = Epoch.Cosmos.createService (context, cache, maxAttempts)
+        let epochs = Epoch.Cosmos.create (context, cache, maxAttempts)
         create (zeroBalance, toBalanceCarriedForward, shouldClose) (series, epochs)
