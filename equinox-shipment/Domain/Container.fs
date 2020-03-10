@@ -49,3 +49,8 @@ let interpret (command: Command) (state: Fold.State): Events.Event list =
         [ Events.ContainerCreated containerId ]
     | Finalize shipmentIds  ->
         [ if not state.finalized then yield Events.ContainerFinalized shipmentIds ]
+
+type Service internal (resolve : string -> Equinox.Stream<Events.Event, Fold.State>) =
+    member __.Execute(shipment, command : Command) : Async<unit> =
+        let stream = resolve shipment
+        stream.Transact(interpret command)
