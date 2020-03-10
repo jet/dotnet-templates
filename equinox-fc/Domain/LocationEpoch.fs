@@ -3,12 +3,12 @@
 /// See Location.Service for the logic that allows competing readers/writers to co-operate in bringing this about
 module Fc.Location.Epoch
 
+let [<Literal>] Category = "LocationEpoch"
+let streamName (locationId, epochId) = FsCodec.StreamName.compose Category [LocationId.toString locationId; LocationEpochId.toString epochId]
+
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
-
-    let [<Literal>] CategoryId = "LocationEpoch"
-    let (|For|) (locationId, epochId) = FsCodec.StreamName.compose CategoryId [LocationId.toString locationId; LocationEpochId.toString epochId]
 
     type CarriedForward =   { initial : int; recentTransactions : InventoryTransactionId[] }
     type Event =
@@ -24,7 +24,7 @@ module Fold =
 
     type State =
         | Initial
-        | Open   of Record list    // reverse order, i.e. most revent first
+        | Open   of Record list    // reverse order, i.e. most recent first
         | Closed of Record list    // trimmed
     and Record =
         | Init of Events.CarriedForward
@@ -127,22 +127,23 @@ let decide transactionId command (state: Fold.State) =
     | Fold.Open (Fold.Current cur) -> (if accepted then Accepted cur else Denied), events
     | s -> failwithf "Unexpected state %A" s
 
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+type Service internal (resolve : LocationId * LocationEpochId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     member __.Sync<'R>(locationId, epochId, prevEpochBalanceCarriedForward, decide, shouldClose) : Async<Result<'R>> =
         let stream = resolve (locationId, epochId)
         stream.Transact(sync prevEpochBalanceCarriedForward decide shouldClose)
 
-let create resolve maxAttempts = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = maxAttempts)
+let create resolver maxAttempts =
+    let resolve locId =
+        let stream = resolver (streamName locId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = maxAttempts)
+    Service (resolve)
 
 module Cosmos =
 
-    open Equinox.Cosmos
-
+    let accessStrategy = Equinox.Cosmos.AccessStrategy.Unoptimized
     let resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, AccessStrategy.Unoptimized).Resolve
-    let createService (context, cache, maxAttempts) =
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
+    let create (context, cache, maxAttempts) =
         create (resolve (context, cache)) maxAttempts

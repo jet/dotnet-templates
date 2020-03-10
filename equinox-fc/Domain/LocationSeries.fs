@@ -1,12 +1,12 @@
 /// Manages the active epoch for a given Location
 module Fc.Location.Series
 
+let [<Literal>] Category = "LocationSeries"
+let streamName locationId = FsCodec.StreamName.create Category (LocationId.toString locationId)
+
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
-
-    let [<Literal>] CategoryId = "LocationSeries"
-    let (|For|) locationId = FsCodec.StreamName.create CategoryId (LocationId.toString locationId)
 
     type Started = { epoch : LocationEpochId }
     type Event =
@@ -27,9 +27,7 @@ let interpretAdvanceIngestionEpoch (epochId : LocationEpochId) (state : Fold.Sta
 
     [if state |> Option.forall (fun s -> s < epochId) then yield Events.Started { epoch = epochId }]
 
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve (Events.For id) = Equinox.Stream<Events.Event, Fold.State>(log, resolve id, maxAttempts)
+type Service internal (resolve : LocationId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     member __.TryReadIngestionEpoch(locationId) : Async<LocationEpochId option> =
         let stream = resolve locationId
@@ -39,7 +37,11 @@ type Service internal (log, resolve, maxAttempts) =
         let stream = resolve locationId
         stream.Transact(interpretAdvanceIngestionEpoch epochId)
 
-let create resolve maxAttempts = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts)
+let create resolver maxAttempts =
+    let resolve locId =
+        let stream = resolver (streamName locId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = maxAttempts)
+    Service (resolve)
 
 module Cosmos =
 

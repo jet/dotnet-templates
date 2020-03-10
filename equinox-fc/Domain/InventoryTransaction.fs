@@ -9,12 +9,12 @@
 ///    This represents the case where a 'happy path' actor died, or experienced another impediment on the path.
 module Fc.Inventory.Transaction
 
+let [<Literal>] Category = "InventoryTransaction"
+let streamName transactionId = FsCodec.StreamName.create Category (InventoryTransactionId.toString transactionId)
+
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
-
-    let [<Literal>] CategoryId = "InventoryTransaction"
-    let (|For|) transactionId = FsCodec.StreamName.create CategoryId (InventoryTransactionId.toString transactionId)
 
     type AdjustmentRequested = { location : LocationId; quantity : int }
     type TransferRequested = { source : LocationId; destination : LocationId; quantity : int }
@@ -130,28 +130,28 @@ let decide update (state : Fold.State) : Action * Events.Event list =
     let state' = Fold.fold state events
     Fold.nextAction state', events
 
-type Service internal (log, resolve, maxAttempts) =
-
-    let resolve (Events.For streamId) = Equinox.Stream<Events.Event, Fold.State>(log, resolve streamId, maxAttempts)
+type Service internal (resolve : InventoryTransactionId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     member __.Apply(transactionId, update) : Async<Action> =
         let stream = resolve transactionId
         stream.Transact(decide update)
 
-let createService resolve = Service(Serilog.Log.ForContext<Service>(), resolve, maxAttempts = 3)
+let create resolver =
+    let resolve inventoryTransactionId =
+        let stream = resolver (streamName inventoryTransactionId)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
+    Service (resolve)
 
 module Cosmos =
-
-    open Equinox.Cosmos
 
     // in the happy path case, the event stream will typically be short, and the state cached, so snapshotting is less critical
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Unoptimized
     // ... and there will generally be a single actor touching it at a given time, so we don't need to do a load (which would be more expensive than normal given the `accessStrategy`) before we sync
     let opt = Equinox.AllowStale
     let resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        fun id -> Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
-    let createService (context, cache) = createService (resolve (context, cache))
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
+    let createService (context, cache) = create (resolve (context, cache))
 
 /// Handles requirement to infer when a transaction is 'stuck'
 /// Note we don't want to couple to the state in a deep manner; thus we track:
@@ -188,3 +188,16 @@ module Watchdog =
         | Fold.Active startTime when startTime < cutoffTime -> Stuck
         | Fold.Active _ -> Active
         | Fold.Completed -> Complete
+
+    let fold : Events.TimestampAndEvent seq -> Fold.State =
+        Fold.fold Fold.initial
+
+    let (|FoldToWatchdogState|) events : Fold.State =
+        events
+        |> Seq.choose Events.codec.TryDecode
+        |> fold
+
+    let (|Match|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, InventoryTransactionId.Parse transId), FoldToWatchdogState state ->
+            Some (transId, state)
+        | _ -> None
