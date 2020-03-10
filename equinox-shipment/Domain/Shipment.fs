@@ -1,5 +1,7 @@
 ﻿module Shipment
 
+open System
+
 type Shipment = { id: string; containerId: string }
 
 module Events =
@@ -45,5 +47,7 @@ type Command =
 
 let interpret (command: Command) (state: Fold.State): Events.Event list =
     match command with
-    | Create shipmentId  -> [ Events.ShipmentCreated  shipmentId  ]
-    | Assign containerId -> [ Events.ShipmentAssigned containerId ]
+    | Create shipmentId ->
+        [ Events.ShipmentCreated  shipmentId ]
+    | Assign containerId ->
+        [ if String.IsNullOrWhiteSpace state.containerId then yield Events.ShipmentAssigned containerId ]

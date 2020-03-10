@@ -1,6 +1,6 @@
 module Container
 
-type Container = { id: string; shipmentIds: string[] }
+type Container = { id: string; shipmentIds: string[]; finalized: bool }
 
 module Events =
 
@@ -20,7 +20,7 @@ module Fold =
 
     type State = Container
 
-    let initial: State = { id = null; shipmentIds = [||] }
+    let initial: State = { id = null; shipmentIds = [||]; finalized = false }
 
     let evolve (state: State) (event: Events.Event): State =
         match event with
@@ -45,5 +45,7 @@ type Command =
 
 let interpret (command: Command) (state: Fold.State): Events.Event list =
     match command with
-    | Create   containerId  -> [ Events.ContainerCreated   containerId ]
-    | Finalize shipmentIds  -> [ Events.ContainerFinalized shipmentIds ]
+    | Create containerId  ->
+        [ Events.ContainerCreated containerId ]
+    | Finalize shipmentIds  ->
+        [ if not state.finalized then yield Events.ContainerFinalized shipmentIds ]
