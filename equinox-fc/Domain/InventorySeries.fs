@@ -49,7 +49,7 @@ let create resolver =
 module Cosmos =
 
     let accessStrategy = Equinox.Cosmos.AccessStrategy.LatestKnownEvent
-    let resolve (context, cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // For this stream, we uniformly use stale reads as:
         // a) we don't require any information from competing writers
@@ -57,4 +57,4 @@ module Cosmos =
         let opt = Equinox.ResolveOption.AllowStale
         fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
     let create (context, cache) =
-        create (resolve (context, cache))
+        create (resolver (context, cache))

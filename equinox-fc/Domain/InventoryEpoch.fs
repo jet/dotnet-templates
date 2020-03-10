@@ -82,15 +82,15 @@ type Service internal (resolve : InventoryId * InventoryEpochId -> Equinox.Strea
         stream.Transact(decideSync capacity events)
 
 let create resolver =
-    let resolve locationId =
-        let stream = resolver (streamName locationId)
+    let resolve ids =
+        let stream = resolver (streamName ids)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
-    Service (resolve)
+    Service(resolve)
 
 module Cosmos =
 
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-    let resolve (context, cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) = create (resolve (context, cache))
+    let create (context, cache) = create (resolver (context, cache))
