@@ -134,16 +134,16 @@ type Service internal (resolve : LocationId * LocationEpochId -> Equinox.Stream<
         stream.Transact(sync prevEpochBalanceCarriedForward decide shouldClose)
 
 let create resolver maxAttempts =
-    let resolve locId =
-        let stream = resolver (streamName locId)
+    let resolve locationId =
+        let stream = resolver (streamName locationId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = maxAttempts)
     Service (resolve)
 
 module Cosmos =
 
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Unoptimized
-    let resolve (context, cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
     let create (context, cache, maxAttempts) =
-        create (resolve (context, cache)) maxAttempts
+        create (resolver (context, cache)) maxAttempts

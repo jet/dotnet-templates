@@ -148,10 +148,10 @@ module Cosmos =
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Unoptimized
     // ... and there will generally be a single actor touching it at a given time, so we don't need to do a load (which would be more expensive than normal given the `accessStrategy`) before we sync
     let opt = Equinox.AllowStale
-    let resolve (context, cache) =
+    let resolver (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
-    let createService (context, cache) = create (resolve (context, cache))
+    let createService (context, cache) = create (resolver (context, cache))
 
 /// Handles requirement to infer when a transaction is 'stuck'
 /// Note we don't want to couple to the state in a deep manner; thus we track:

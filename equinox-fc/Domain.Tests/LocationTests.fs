@@ -15,16 +15,16 @@ module Location =
 
         module Series =
 
-            let resolve store = Resolver(store, Series.Events.codec, Series.Fold.fold, Series.Fold.initial).Resolve
+            let resolver store = Resolver(store, Series.Events.codec, Series.Fold.fold, Series.Fold.initial).Resolve
 
         module Epoch =
 
-            let resolve store = Resolver(store, Epoch.Events.codec, Epoch.Fold.fold, Epoch.Fold.initial).Resolve
+            let resolver store = Resolver(store, Epoch.Events.codec, Epoch.Fold.fold, Epoch.Fold.initial).Resolve
 
         let createService (zeroBalance, shouldClose) store =
             let maxAttempts = Int32.MaxValue
-            let series = Series.create (Series.resolve store) maxAttempts
-            let epochs = Epoch.create (Epoch.resolve store) maxAttempts
+            let series = Series.create (Series.resolver store) maxAttempts
+            let epochs = Epoch.create (Epoch.resolver store) maxAttempts
             create (zeroBalance, shouldClose) (series, epochs)
 
 let run (service : Location.Service) (IdsAtLeastOne locations, deltas : _[], transactionId) = Async.RunSynchronously <| async {
