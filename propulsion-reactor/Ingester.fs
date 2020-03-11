@@ -15,7 +15,7 @@ type Stats(log, statsInterval, stateInterval) =
 #if (!kafkaEventSpans)
     inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
-    inherit Propulsion.Kafka.StreamsConsumerStats<int64 * Outcome>(log, statsInterval, stateInterva)
+    inherit Propulsion.Kafka.StreamsConsumerStats<int64 * Outcome>(log, statsInterval, stateInterval)
 #endif
     let mutable ok, skipped, na = 0, 0, 0
 
@@ -42,7 +42,7 @@ let tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 op
         let ok, version' = true, None
         // "TODO: add handler code"
         match ok with
-        | true -> return version', Outcome.Ok (1, span.events.Length-1)
+        | true -> return version', Outcome.Ok (1, span.events.Length - 1)
         | false -> return version', Outcome.Skipped span.events.Length
     | _ -> return None, Outcome.NotApplicable span.events.Length }
 #else
@@ -60,7 +60,7 @@ let tryHandle
     | Todo.Events.Match (clientId, events) when events |> Seq.exists Todo.Fold.impliesStateChange ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
-        | true -> return Some version', Outcome.Ok (1, span.events.Length-1)
+        | true -> return Some version', Outcome.Ok (1, span.events.Length - 1)
         | false -> return Some version', Outcome.Skipped span.events.Length
     | _ -> return None, Outcome.NotApplicable span.events.Length }
 #endif

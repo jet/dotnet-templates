@@ -17,8 +17,8 @@
   <ItemGroup>
     <PackageReference Include="Argu" Version="5.4.0" />
     <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
-    <PackageReference Include="Propulsion.Cosmos" Version="2.0.0" />
-    <PackageReference Include="Propulsion.Kafka" Version="2.0.0" />
+    <PackageReference Include="Propulsion.Cosmos" Version="2.1.0" />
+    <PackageReference Include="Propulsion.Kafka" Version="2.1.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
 

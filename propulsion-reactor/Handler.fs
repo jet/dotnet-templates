@@ -25,13 +25,25 @@ let mins x = System.TimeSpan.FromMinutes x
 
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
 type Stats(log, statsInterval, stateInterval) =
+#if (!kafkaEventSpans)
     inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
+#else
+    inherit Propulsion.Kafka.StreamsConsumerStats<int64 * Outcome>(log, statsInterval, stateInterval)
+#endif
+
     let mutable ok, skipped, na = 0, 0, 0
 
+#if (!kafkaEventSpans)
     override __.HandleOk res = res |> function
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
+#else
+    override __.HandleOk res = res |> function
+        | _, Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
+        | _, Outcome.Skipped count -> skipped <- skipped + count
+        | _, Outcome.NotApplicable count -> na <- na + count
+#endif
     override __.DumpStats () =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
@@ -51,15 +63,15 @@ let tryHandle
             let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
             let wrapped = generate stream version' summary
             let! _ = produceSummary wrapped
-            return Some version', Outcome.Ok (1,events.Length-1)
+            return Some version', Outcome.Ok (1,events.Length - 1)
         else
             return None, Outcome.Skipped events.Length
     | _ -> return None, Outcome.NotApplicable span.events.Length }
 
-let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome*int64> = async {
+let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 * Outcome> = async {
     match! tryHandle (stream, span) with
     // We need to yield the next write position, which will be after the version we've just generated the summary based on
-    | Some version', outcome -> return outcome, version'+1L
+    | Some version', outcome -> return version' + 1L, outcome
     // If we're ignoring the events, we mark the next write position to be one beyond the last one offered
-    | _, outcome -> return outcome, span.index + span.events.LongLength }
+    | _, outcome -> return span.index + span.events.LongLength, outcome }
 //#endif
