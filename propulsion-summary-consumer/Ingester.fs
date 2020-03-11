@@ -2,17 +2,12 @@
 /// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
 module ConsumerTemplate.Ingester
 
-open System
-
 /// Defines the contract we share with the proReactor --'s published feed
 module Contract =
 
     let [<Literal>] Category = "TodoSummary"
-    let (|MatchesCategory|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
-        | _ -> None
 
-    /// A single Item in the Todo List
+    /// A single Item in the list
     type ItemInfo = { id : int; order : int; title : string; completed : bool }
 
     /// All data summarized for Summary Event Stream
@@ -29,23 +24,32 @@ module Contract =
         FsCodec.NewtonsoftJson.Codec.Create<VersionAndMessage, Message, (*'Meta*)obj>(up, down)
     let (|DecodeNewest|_|) (stream, span : Propulsion.Streams.StreamSpan<_>) : VersionAndMessage option =
         span.events |> Seq.rev |> Seq.tryPick (EventCodec.tryDecode codec stream)
+    let (|MatchesCategory|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
+        | _ -> None
     let (|MatchNewest|_|) = function
         | (MatchesCategory clientId,_) & DecodeNewest (version, update) -> Some (clientId, version, update)
         | _ -> None
 
 [<RequireQualifiedAccess>]
-type Outcome = NoRelevantEvents of count : int | Ok of count : int | Skipped of count : int
+type Outcome =
+    /// Handler processed the span, with counts of used vs unused known event types
+    | Ok of used : int * unused : int
+    /// Handler processed the span, but idempotency checks resulted in no writes being applied; includes count of decoded events
+    | Skipped of count : int
+    /// Handler determined the events were not relevant to its duties and performed no decoding or processing
+    | NotApplicable of count : int
 
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
-type Stats(log, ?statsInterval, ?stateInterval) =
-    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
+type Stats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable ok, na, skipped = 0, 0, 0
 
     override __.HandleOk res = res |> function
-        | Outcome.Ok count -> ok <- ok + 1; skipped <- skipped + count - 1
+        | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
-        | Outcome.NoRelevantEvents count -> na <- na + count
+        | Outcome.NotApplicable count -> na <- na + count
 
     override __.DumpStats () =
         if ok <> 0 || skipped <> 0 || na <> 0 then
@@ -63,8 +67,7 @@ let map : Contract.Message -> TodoSummary.Events.SummaryData = function
 let ingest (service : TodoSummary.Service) (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
     match stream, span with
     | Contract.MatchNewest (clientId, version, update) ->
-        match! service.Ingest(clientId, version, map update) with
-        | true -> return Outcome.Ok span.events.Length
+        match! service.TryIngest(clientId, version, map update) with
+        | true -> return Outcome.Ok (1, span.events.Length - 1)
         | false -> return Outcome.Skipped span.events.Length
-    | _ -> return Outcome.NoRelevantEvents span.events.Length
-}
+    | _ -> return Outcome.NotApplicable span.events.Length }

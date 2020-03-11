@@ -6,10 +6,6 @@ let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (Client
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    let (|MatchesCategory|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
-        | _ -> None
-
     type ItemData =     { id : int; order : int; title : string; completed : bool }
     type DeletedData =  { id : int }
     type ClearedData =  { nextId : int }
@@ -23,7 +19,10 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
-        span.events |> Seq.choose (EventCodec.tryDecode codec stream)
+        span.events |> Array.choose (EventCodec.tryDecode codec stream)
+    let (|MatchesCategory|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
+        | _ -> None
     let (|Match|_|) = function
         | (MatchesCategory clientId, _) & (Decode events) -> Some (clientId, events)
         | _ -> None

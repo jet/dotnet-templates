@@ -2,8 +2,6 @@
 /// Compared to the Ingester in the `proReactor` template, each event is potentially relevant
 module ConsumerTemplate.Ingester
 
-open System
-
 /// Defines the shape of input messages on the topic we're consuming
 module Contract =
 
@@ -19,17 +17,16 @@ module Contract =
         System.Text.Encoding.UTF8.GetString(utf8)
         |> FsCodec.NewtonsoftJson.Serdes.Deserialize<Message>
 
-type Outcome = Completed of used : int * total : int
+type Outcome = Completed of used : int * unused : int
 
 /// Gathers stats based on the outcome of each Span processed for emission at intervals controlled by `StreamsConsumer`
-type Stats(log, ?statsInterval, ?stateInterval) =
-    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>
-        (log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
+type Stats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable ok, skipped = 0, 0
 
     override __.HandleOk res = res |> function
-        | Completed (used, total) -> ok <- ok + used; skipped <- skipped + (total-used)
+        | Completed (used, unused) -> ok <- ok + used; skipped <- skipped + unused
 
     override __.DumpStats () =
         if ok <> 0 || skipped <> 0 then
@@ -50,5 +47,4 @@ let ingest (service : SkuSummary.Service) (FsCodec.StreamName.CategoryAndId (_,S
                         reservedQuantity = o.reservedUnitQuantity }
                 yield x ]
     let! used = service.Ingest(skuId, items)
-    return Outcome.Completed(used, List.length items)
-}
+    return Outcome.Completed(used, items.Length - used) }
