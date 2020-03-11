@@ -1,6 +1,6 @@
 module ReactorTemplate.Contract
 
-/// A single Item in the Todo List
+/// A single Item in the list
 type ItemInfo = { id: int; order: int; title: string; completed: bool }
 
 type SummaryInfo = { items : ItemInfo[] }

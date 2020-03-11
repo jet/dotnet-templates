@@ -488,9 +488,8 @@ let build (args : Args.Arguments) =
         let dstService = TodoSummary.Cosmos.create (context, cache)
         let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
 #endif // blank
-        let sink =
-            Propulsion.Streams.StreamsProjector.Start(
-                Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = Ingester.Stats(Log.Logger))
+        let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
+        let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
 #endif // !kafka
         let connect () = let c = connectEs () in c.ReadConnection
 #if (!noFilter)
@@ -530,7 +529,7 @@ let build (args : Args.Arguments) =
         let cache = Equinox.Cache(AppName, sizeMb = 10)
         let service = Todo.Cosmos.create (context, cache)
         let handle = Handler.handleStreamEvents (Handler.tryHandle service produceSummary)
-        let stats = Propulsion.Streams.Scheduling.StreamSchedulerStats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.)
+        let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.)
 #else // !kafka -> Ingester only
 #if (!blank)
         let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
@@ -543,7 +542,7 @@ let build (args : Args.Arguments) =
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
         let handle = Ingester.handleStreamEvents Ingester.tryHandle
 #endif // blank
-        let stats = Ingester.Stats(Log.Logger)
+        let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
 #endif // kafka
 #if (!noFilter)
         let filterByStreamName = args.FilterFunction()

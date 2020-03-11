@@ -46,7 +46,8 @@ let render : Fold.State -> Item[] = function
 /// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
 type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-    member __.Ingest(clientId, version, value) : Async<bool> =
+    /// Returns false if the ingestion was rejected due to being an older version of the data than is presently being held
+    member __.TryIngest(clientId, version, value) : Async<bool> =
         let stream = resolve clientId
         stream.Transact(decide (Consume (version, value)))
 
