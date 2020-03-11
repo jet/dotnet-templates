@@ -39,32 +39,32 @@ type Service internal (resolve : TicketListId -> Equinox.Stream<Events.Event, Fo
         let stream = resolve pickListId
         stream.Transact(interpret (allocatorId, assignedTickets))
 
-let create resolver =
+let create resolve =
     let resolve pickListId =
-        let stream = resolver (streamName pickListId)
+        let stream = resolve (streamName pickListId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
-    Service (resolve)
+    Service(resolve)
 
 module EventStore =
 
-    let resolver (context, cache) =
-        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        // while there are competing writers (which might cause us to have to retry a Transact and discover it is redundant), there is never a cost to being wrong
-        let opt = Equinox.ResolveOption.AllowStale
-        // we _could_ use this Access Strategy, but because we are only generally doing a single shot write, its unwarranted
-        // let accessStrategy = AccessStrategy.RollingSnapshots (Folds.isOrigin, Folds.snapshot)
-        fun id -> Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve(id,opt)
+    // we _could_ use this Access Strategy, but because we are only generally doing a single shot write, its unwarranted
+    // let accessStrategy = AccessStrategy.RollingSnapshots (Folds.isOrigin, Folds.snapshot)
+    // while there are competing writers (which might cause us to have to retry a Transact and discover it is redundant), there is never a cost to being wrong
+    let opt = Equinox.ResolveOption.AllowStale
     let create (context, cache) =
-        create (resolver (context, cache))
+        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
+        let resolve id = resolver.Resolve(id,opt)
+        create resolve
 
 module Cosmos =
 
-    let resolver (context, cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        // while there are competing writers (which might cause us to have to retry a Transact and discover it is redundant), there is never a cost to being wrong
-        let opt = Equinox.ResolveOption.AllowStale
-        // we want reads and writes (esp idempotent ones) to have optimal RU efficiency so we go the extra mile to do snapshotting into the Tip
-        let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-        fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
+    // while there are competing writers (which might cause us to have to retry a Transact and discover it is redundant), there is never a cost to being wrong
+    let opt = Equinox.ResolveOption.AllowStale
+    // we want reads and writes (esp idempotent ones) to have optimal RU efficiency so we go the extra mile to do snapshotting into the Tip
+    let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
     let create (context, cache)=
-        create (resolver (context, cache))
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolve id = resolver.Resolve(id, opt)
+        create resolve

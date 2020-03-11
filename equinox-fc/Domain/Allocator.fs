@@ -52,30 +52,30 @@ type Service internal (resolve : AllocatorId  -> Equinox.Stream<Events.Event, Fo
         let stream = resolve allocatorId
         stream.Transact(decideComplete allocationId reason)
 
-let create resolver =
+let create resolve =
     let resolve pickListId =
-        let stream = resolver (streamName pickListId)
+        let stream = resolve (streamName pickListId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
-    Service (resolve)
+    Service(resolve)
 
 module EventStore =
 
     let accessStrategy = Equinox.EventStore.AccessStrategy.LatestKnownEvent
-    let resolver (context, cache) =
+    let create (context, cache) =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
         let opt = Equinox.ResolveOption.AllowStale
-        fun id -> Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id,opt)
-    let create (context, cache) =
-        create (resolver (context, cache))
+        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolve id = resolver.Resolve(id,opt)
+        create resolve
 
 module Cosmos =
 
     let accessStrategy = Equinox.Cosmos.AccessStrategy.LatestKnownEvent
-    let resolver (context,cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
-        let opt = Equinox.ResolveOption.AllowStale
-        fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id,opt)
+    // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
+    let opt = Equinox.ResolveOption.AllowStale
     let create (context, cache) =
-        create (resolver (context, cache))
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolve id = resolver.Resolve(id,opt)
+        create resolve

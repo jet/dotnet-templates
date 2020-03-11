@@ -226,32 +226,32 @@ type Service internal (resolve : AllocationId -> Equinox.Stream<Events.Event, Fo
         let stream = resolve allocationId
         stream.Transact(sync (updates, command))
 
-let create resolver =
+let create resolve =
     let resolve pickListId =
-        let stream = resolver (streamName pickListId)
+        let stream = resolve (streamName pickListId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
-    Service (resolve)
+    Service(resolve)
 
 module EventStore =
 
-    let resolver (context, cache) =
-        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
-        let opt = Equinox.ResolveOption.AllowStale
-        // We should be reaching Completed state frequently so no actual Snapshots should get written
-        fun id -> Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve(id,opt)
+    // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
+    let opt = Equinox.ResolveOption.AllowStale
     let create (context, cache) =
-        create (resolver (context, cache))
+        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        // We should be reaching Completed state frequently so no actual Snapshots should get written
+        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
+        let resolve id = resolver.Resolve(id, opt)
+        create resolve
 
 module Cosmos =
 
-    let resolver (context, cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
-        let opt = Equinox.ResolveOption.AllowStale
-        // TODO impl snapshots
-        let makeEmptyUnfolds events _state = events, []
-        let accessStrategy = Equinox.Cosmos.AccessStrategy.Custom (Fold.isOrigin,makeEmptyUnfolds)
-        fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id,opt)
+    // TODO impl snapshots
+    let makeEmptyUnfolds events _state = events, []
+    let accessStrategy = Equinox.Cosmos.AccessStrategy.Custom (Fold.isOrigin,makeEmptyUnfolds)
+    // while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
+    let opt = Equinox.ResolveOption.AllowStale
     let create (context, cache) =
-        create (resolver (context, cache))
+        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolve id = resolver.Resolve(id,opt)
+        create resolve

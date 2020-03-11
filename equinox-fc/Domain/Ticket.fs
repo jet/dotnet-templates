@@ -60,29 +60,27 @@ type Service internal (resolve : TicketId -> Equinox.Stream<Events.Event, Fold.S
         let stream = resolve pickTicketId
         stream.Transact(decide allocator command)
 
-let create resolver =
+let create resolve =
     let resolve ticketId =
-        let stream = resolver (streamName ticketId)
+        let stream = resolve (streamName ticketId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
-    Service (resolve)
+    Service(resolve)
 
 module EventStore =
 
     let accessStrategy = Equinox.EventStore.AccessStrategy.LatestKnownEvent
-    let resolver (context, cache) =
+    let create (context, cache) =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // because we only ever need the last event, we use the Equinox.EventStore access strategy that optimizes around that
-        Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) =
-        create (resolver (context, cache))
+        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create resolver.Resolve
 
 module Cosmos =
 
     let accessStrategy = Equinox.Cosmos.AccessStrategy.LatestKnownEvent
-    let resolver (context, cache) =
+    let create (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         // because we only ever need the last event to build the state, we feed the events we are writing
         // (there's always exactly one if we are writing), into the unfolds slot so a single point read with etag check gets us state in one trip
-        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) =
-        create (resolver (context, cache))
+        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create resolver.Resolve
