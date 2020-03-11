@@ -10,10 +10,13 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- `Stats` and `Outcome` management cleanup [#57](https://github.com/jet/dotnet-templates/pull/57)
+
 ### Removed
 ### Fixed
 
-<a name="4.2.0></a>
+<a name="4.2.0"></a>
 ## [4.2.0] - 2020-03-09
 
 ### Changed
