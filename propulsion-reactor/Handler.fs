@@ -26,7 +26,7 @@ let mins x = System.TimeSpan.FromMinutes x
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
 type Stats(log, statsInterval, stateInterval) =
 #if (!kafkaEventSpans)
-    inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Sync.StreamsSyncStats<Outcome>(log, statsInterval, stateInterval)
 #else
     inherit Propulsion.Kafka.StreamsConsumerStats<int64 * Outcome>(log, statsInterval, stateInterval)
 #endif
@@ -63,7 +63,7 @@ let tryHandle
             let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
             let wrapped = generate stream version' summary
             let! _ = produceSummary wrapped
-            return Some version', Outcome.Ok (1,events.Length - 1)
+            return Some version', Outcome.Ok (1, events.Length - 1)
         else
             return None, Outcome.Skipped events.Length
     | _ -> return None, Outcome.NotApplicable span.events.Length }

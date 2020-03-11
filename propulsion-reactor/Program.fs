@@ -473,10 +473,11 @@ let build (args : Args.Arguments) =
         let srcCache = Equinox.Cache(AppName, sizeMb = 10)
         let srcService = Todo.EventStore.create (EventStoreContext.create esConn,srcCache)
         let handle = Handler.handleStreamEvents (Handler.tryHandle srcService produceSummary)
+        let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.)
         let sink =
              Propulsion.Streams.Sync.StreamsSync.Start(
-                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
-                 statsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
+                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats,
+                 projectorStatsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
 #else // !kafka -> ingestion
 #if blank
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
@@ -558,8 +559,8 @@ let build (args : Args.Arguments) =
         let sink =
 #if kafka
              Propulsion.Streams.Sync.StreamsSync.Start(
-                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
-                 statsInterval = TimeSpan.FromMinutes 1., dumpExternalStats = producer.DumpStats)
+                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats,
+                 projectorStatsInterval = TimeSpan.FromMinutes 1., dumpExternalStats = producer.DumpStats)
 #else
             Propulsion.Streams.StreamsProjector.Start(
                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
