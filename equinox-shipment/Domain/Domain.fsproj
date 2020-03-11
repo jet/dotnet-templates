@@ -6,8 +6,9 @@
 
     <ItemGroup>
         <Compile Include="Shipment.fs" />
-        <Compile Include="Container.fs" />
         <Compile Include="FinalizationTransaction.fs" />
+        <Compile Include="Container.fs" />
+        <Compile Include="FinalizationTransactionProcessor.fs" />
     </ItemGroup>
 
     <ItemGroup>

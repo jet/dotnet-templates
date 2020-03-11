@@ -7,17 +7,22 @@ module Events =
     let (|ForClientId|) (clientId: string) = FsCodec.StreamName.create CategoryId clientId
 
     type Event =
-        | FinalizationRequested of shipmentIds: string[]
-        | FinalizationReverted  of shipmentIds: string[]
-        | FinalizationFailed
-        | FinalizationCompleted
+        | FinalizationRequested of containerId: string * shipmentIds: string[]
+
+        | AssignmentCompleted   of containerId: string * shipmentIds: string[]
+        | FinalizationCompleted of containerId: string
+
+        | RevertRequested       of containerId: string * shipmentIds: string[]
+        | FinalizationFailed    of containerId: string
         interface TypeShape.UnionContract.IUnionContract
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 type Action =
-    | RequestFinalization of shipmentIds: string[]
-    | RevertFinalization  of shipmentIds: string[]
+    | AssignShipments   of containerId: string * shipmentIds: string[]
+    | FinalizeContainer of containerId: string * shipmentIds: string[]
+    // Reverts the assignment of the container for the shipments provided.
+    | RevertAssignment  of containerId: string * shipmentIds: string[]
     | Finish of bool
 
 module Fold =
@@ -27,17 +32,29 @@ module Fold =
         | Running   of RunningState
         | Completed of bool
     and RunningState =
-        | Assigning of shipmentIds: string[]
-        | Reverting of shipmentIds: string[]
+        | Assigning of containerId: string * shipmentIds: string[]
+        | Assigned  of containerId: string * shipmentIds: string[]
+        | Reverting of containerId: string * shipmentIds: string[]
 
     let initial: State = Initial
 
     let evolve (_: State) (event: Events.Event): State =
         match event with
-        | Events.FinalizationRequested shipmentIds -> Running (Assigning shipmentIds)
-        | Events.FinalizationReverted  shipmentIds -> Running (Reverting shipmentIds)
-        | Events.FinalizationFailed                -> Completed false
-        | Events.FinalizationCompleted             -> Completed true
+        | Events.FinalizationRequested (containerId, shipmentIds) -> Running (Assigning (containerId, shipmentIds))
+
+        | Events.AssignmentCompleted   (containerId, shipmentIds) -> Running (Assigned  (containerId, shipmentIds))
+        | Events.FinalizationCompleted containerId                -> Completed true
+
+        | Events.RevertRequested       (containerId, shipmentIds) -> Running (Reverting (containerId, shipmentIds))
+        | Events.FinalizationFailed    containerId                -> Completed false
+
+    let nextAction (state: State): Action =
+        match state with
+        | Initial -> failwith "Cannot interpret Initial state"
+        | Running (Assigning (containerId, shipmentIds)) -> Action.AssignShipments   (containerId, shipmentIds)
+        | Running (Assigned  (containerId, shipmentIds)) -> Action.FinalizeContainer (containerId, shipmentIds)
+        | Running (Reverting (containerId, shipmentIds)) -> Action.RevertAssignment  (containerId, shipmentIds)
+        | Completed result                               -> Action.Finish result
 
     let fold: State -> Events.Event seq -> State =
         Seq.fold evolve
@@ -45,19 +62,15 @@ module Fold =
     let filterValidTransition (event: Events.Event) (state: State) =
         match state, event with
         | Initial,               Events.FinalizationRequested _
-        | Running (Assigning _), Events.FinalizationReverted _
-        | Running (Assigning _), Events.FinalizationCompleted
-        | Running (Reverting _), Events.FinalizationFailed ->
+        | Running (Assigning _), Events.AssignmentCompleted   _
+        | Running (Assigned _),  Events.FinalizationCompleted _
+        | Running (Assigning _), Events.RevertRequested       _
+        | Running (Reverting _), Events.FinalizationFailed    _ ->
             Some event
         | _ -> None
 
-    let nextAction (state: State): Action =
-        match state with
-        | Initial -> failwith "Cannot interpret Initial state"
-        | Running (Assigning ids) -> Action.RequestFinalization ids
-        | Running (Reverting ids) -> Action.RevertFinalization ids
-        | Completed v             -> Action.Finish v
-
+// When there are no event to apply to the state, it pushes the transaction manager to
+// follow up on the next action from where it was.
 let decide (update: Events.Event option) (state : Fold.State) : Action * Events.Event list =
     let events =
         update

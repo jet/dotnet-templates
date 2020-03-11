@@ -13,7 +13,7 @@ module Events =
     type Event =
         | ShipmentCreated    of shipmentId  : string
         | ShipmentAssigned   of containerId : string
-        | ShipmentUnassigned
+        | ShipmentUnassigned of containerId : string
         | Snapshotted        of Shipment
         interface TypeShape.UnionContract.IUnionContract
 
@@ -30,7 +30,7 @@ module Fold =
         | Events.Snapshotted      snapshot    -> snapshot
         | Events.ShipmentCreated  shipmentId  -> { state with id = shipmentId }
         | Events.ShipmentAssigned containerId -> { state with containerId = containerId }
-        | Events.ShipmentUnassigned           -> { state with containerId = null }
+        | Events.ShipmentUnassigned _         -> { state with containerId = null }
 
 
     let fold: State -> Events.Event seq -> State =
@@ -44,20 +44,24 @@ module Fold =
     let snapshot state = Events.Snapshotted state
 
 type Command =
-    | Create of shipmentId  : string
-    | Assign of containerId : string
-    | Unassign
+    | Create   of shipmentId  : string
+    | Assign   of containerId : string
+    | Unassign of containerId : string
 
-let interpret (command: Command) (state: Fold.State): Events.Event list =
+let interpret (command: Command) (state: Fold.State): bool * Events.Event list =
     match command with
     | Create shipmentId ->
-        [ Events.ShipmentCreated  shipmentId ]
+        true, [ Events.ShipmentCreated  shipmentId ]
     | Assign containerId ->
-        [ if String.IsNullOrWhiteSpace state.containerId then yield Events.ShipmentAssigned containerId ]
-    | Unassign ->
-        [ Events.ShipmentUnassigned ]
+        if String.IsNullOrWhiteSpace state.containerId then
+            true, [ Events.ShipmentAssigned containerId ]
+        else
+            // Assignment fails if the shipment was already assigned.
+            false, []
+    | Unassign containerId ->
+        true, [ Events.ShipmentUnassigned containerId ]
 
 type Service internal (resolve : string -> Equinox.Stream<Events.Event, Fold.State>) =
-    member __.Execute(shipment, command : Command) : Async<unit> =
+    member __.Execute(shipment, command : Command) : Async<bool> =
         let stream = resolve shipment
         stream.Transact(interpret command)
