@@ -26,7 +26,7 @@ module Fold =
         match event with
         | Events.Snapshotted        snapshot    -> snapshot
         | Events.ContainerCreated   containerId -> { state with id = containerId }
-        | Events.ContainerFinalized shipmentIds -> { state with shipmentIds = shipmentIds }
+        | Events.ContainerFinalized shipmentIds -> { state with finalized = true; shipmentIds = shipmentIds }
 
 
     let fold: State -> Events.Event seq -> State =
