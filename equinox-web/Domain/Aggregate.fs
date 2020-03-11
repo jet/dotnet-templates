@@ -47,8 +47,8 @@ type Service internal (resolve : string -> Equinox.Stream<Events.Event, Fold.Sta
         let stream = resolve clientId
         stream.Transact(interpret command)
 
-let create resolver =
+let create resolve =
     let resolve id =
-        let stream = resolver (streamName id)
+        let stream = resolve (streamName id)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
     Service(resolve)

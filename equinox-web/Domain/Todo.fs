@@ -125,8 +125,8 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
         let! state' = handle clientId (Update (id, value))
         return state' |> List.find (fun x -> x.id = id) |> render}
 
-let create resolver =
+let create resolve =
     let resolve clientId =
-        let stream = resolver (streamName clientId)
+        let stream = resolve (streamName clientId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
     Service(resolve)
