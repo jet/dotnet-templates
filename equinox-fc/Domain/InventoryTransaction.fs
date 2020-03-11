@@ -136,11 +136,11 @@ type Service internal (resolve : InventoryTransactionId -> Equinox.Stream<Events
         let stream = resolve transactionId
         stream.Transact(decide update)
 
-let create resolver =
+let create resolve =
     let resolve inventoryTransactionId =
-        let stream = resolver (streamName inventoryTransactionId)
+        let stream = resolve (streamName inventoryTransactionId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
-    Service (resolve)
+    Service(resolve)
 
 module Cosmos =
 
@@ -148,10 +148,11 @@ module Cosmos =
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Unoptimized
     // ... and there will generally be a single actor touching it at a given time, so we don't need to do a load (which would be more expensive than normal given the `accessStrategy`) before we sync
     let opt = Equinox.AllowStale
-    let resolver (context, cache) =
+    let create (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
-    let createService (context, cache) = create (resolver (context, cache))
+        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolve id = resolver.Resolve(id, opt)
+        create resolve
 
 /// Handles requirement to infer when a transaction is 'stuck'
 /// Note we don't want to couple to the state in a deep manner; thus we track:

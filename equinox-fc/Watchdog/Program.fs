@@ -351,7 +351,7 @@ let build (args : CmdParser.Arguments) =
             let maxTransactionsPerEpoch = 100
             let lookBackLimit = 10
             Fc.Inventory.Cosmos.create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache)
-        let transactionService = Fc.Inventory.Transaction.Cosmos.createService (context, cache)
+        let transactionService = Fc.Inventory.Transaction.Cosmos.create (context, cache)
         let locations =
             let zeroBalance : Fc.Location.Epoch.Events.CarriedForward = { initial = 0; recentTransactions = [||] }
             let chooseTransactionIds = function
