@@ -10,11 +10,15 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
-
-- `Stats` and `Outcome` management cleanup [#57](https://github.com/jet/dotnet-templates/pull/57)
-
 ### Removed
 ### Fixed
+
+<a name="4.3.0"></a>
+## [4.3.0] - 2020-03-12
+
+### Changed
+
+- `Stats` and `Outcome` management cleanup [#57](https://github.com/jet/dotnet-templates/pull/57)
 
 <a name="4.2.0"></a>
 ## [4.2.0] - 2020-03-09
@@ -349,7 +353,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.2.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.3.0...HEAD
+[4.3.0]: https://github.com/jet/dotnet-templates/compare/4.2.0...4.3.0
 [4.2.0]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.2.0
 [4.1.1]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.1.1
 [4.1.0]: https://github.com/jet/dotnet-templates/compare/4.0.1...4.1.0
