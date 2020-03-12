@@ -17,23 +17,23 @@ This project was generated using:
 //#if kafka
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new proAllProjector --source changeFeedOnly -k # -k => include Kafka projection logic
+    dotnet new proReactor --source changeFeedOnly -k # -k => include Kafka projection logic
 //#else
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
-    dotnet new proAllProjector --source changeFeedOnly # use --help to see options
+    dotnet new proReactor --source changeFeedOnly # use --help to see options
 //#endif
 //#else
 //#if kafka
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new proAllProjector -k # -k => include Kafka projection logic
+    dotnet new proReactor -k # -k => include Kafka projection logic
 //#else
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
-    dotnet new proAllProjector # use --help to see options
+    dotnet new proReactor # use --help to see options
 //#endif
 //#endif
 
