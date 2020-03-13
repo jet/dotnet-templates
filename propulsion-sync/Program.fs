@@ -544,6 +544,19 @@ let transformOrFilter catFilter (changeFeedDocument: Microsoft.Azure.Documents.D
 
 let [<Literal>] AppName = "SyncTemplate"
 
+module Checkpoints =
+
+    // In this implementation, we keep the checkpoints in Cosmos when consuming from EventStore
+    module Cosmos =
+
+        let codec = FsCodec.NewtonsoftJson.Codec.Create<Checkpoint.Events.Event>()
+        let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
+        let create groupName (context, cache) =
+            let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+            let resolver = Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
+            let resolve streamName = resolver.Resolve(streamName, Equinox.AllowStale)
+            Checkpoint.CheckpointSeries(groupName, resolve)
+
 let build (args : Args.Arguments, log, storeLog : ILogger) =
     let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
@@ -603,15 +616,10 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         | None -> failwith "ES->ES checkpointing E_NOTIMPL"
         | Some (mainConn, containers) ->
 
-        let resolveCheckpointStream =
-            let context = Equinox.Cosmos.Context(mainConn, containers)
-            let codec = FsCodec.NewtonsoftJson.Codec.Create()
-            let caching =
-                let c = Equinox.Cache(AppName, sizeMb = 1)
-                Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
-            Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve
-        let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
+        let context = Equinox.Cosmos.Context(mainConn, containers)
+        let cache = Equinox.Cache(AppName, sizeMb = 1)
+        let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
+
         let withNullData (e : FsCodec.ITimelineEvent<_>) : FsCodec.ITimelineEvent<_> =
             FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, null, e.Meta, timestamp=e.Timestamp) :> _
         let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
