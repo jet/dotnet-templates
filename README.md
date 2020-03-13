@@ -24,12 +24,14 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
   **NOTE At present, checkpoint storage when projecting from EventStore uses Azure CosmosDB - help wanted ;)**
 
-   Standard processing shows importing (in summary form) from an aggregate in `EventStore` or a CosmosDB ChangeFeedProcessor to a Summary form in `Cosmos` (use `-b`(`lank`) to remove, yielding a minimal projector)
+   Standard processing shows importing (in summary form) from an aggregate in `EventStore` or a CosmosDB ChangeFeedProcessor to a Summary form in `Cosmos` 
    
-   `--kafka` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store). Produces versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed.
-   `--source changeFeedOnly` removes `EventStore` wiring from commandline processing
-   `--source kafkaEventSpans` changes source to be Kafka Event Spans, as emitted from `dotnet new proProjector --kafka`
-  
+    - `--source changeFeedOnly` removes `EventStore` wiring from commandline processing
+    - `--source kafkaEventSpans` changes source to be Kafka Event Spans, as emitted from `dotnet new proProjector --kafka`
+    - `--kafka` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store). Produces versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed.
+    - `--noFilter` - removes category filtering boilerplate
+    - `--blank`: remove sample Ingester logic, yielding a minimal projector
+
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
 ## Consumer Templates combining usage of Equinox and Propulsion
