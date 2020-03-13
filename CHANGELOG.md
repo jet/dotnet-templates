@@ -15,6 +15,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - Target `Propulsion` v `2.2.0`, `FsKafka` v `1.4.1` [#64](https://github.com/jet/dotnet-templates/pull/64)
+- `proReactor`, `proSync`: Clean up `CosmosContext` and `Checkpoints` management [#58](https://github.com/jet/dotnet-templates/pull/58)
 
 ### Removed
 ### Fixed
