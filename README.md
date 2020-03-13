@@ -161,6 +161,12 @@ Wherever possible, the samples strongly type identifiers, particularly ones that
 
 ## Managing Projections and Reactions with Equinox, Propulsion and FsKafka
 
+<a name="aggregate-module"></a>
+## Aggregate module conventions
+
+There are established conventions documented in [Equinox's `module Aggregate` overview](https://github.com/jet/equinox/blob/master/DOCUMENTATION.md#aggregate-module)
+
+<a name="programfs"></a>
 ## Microservice Program.fs conventions
 
 All the templates herein attempt to adhere to a consistent structure for the [composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/) `module` (the one containing an Application’s `main`), consisting of the following common elements:
