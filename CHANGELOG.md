@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- `proReactor`: Flip default to omitting filtering logic (`--noFilter` is now `--filter`, defaulting to omitting the logic)
+
 ### Removed
 ### Fixed
 

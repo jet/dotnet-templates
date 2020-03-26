@@ -57,7 +57,7 @@ module Args =
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-C"; Unique>]   VerboseConsole
-//#if (!noFilter)
+//#if filter
 
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
@@ -78,7 +78,7 @@ module Args =
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | VerboseConsole ->         "request Verbose Console Logging. Default: off."
-//#if (!noFilter)
+//#if filter
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
 //#endif
@@ -97,7 +97,7 @@ module Args =
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
-//#if (!noFilter)
+//#if filter
         member __.FilterFunction(?excludeLong, ?longOnly): string -> bool =
             let isLong (streamName : string) =
                 streamName.StartsWith "Inventory-" // Too long
@@ -493,7 +493,7 @@ let build (args : Args.Arguments) =
         let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
 #endif // !kafka
         let connect () = let c = connectEs () in c.ReadConnection
-#if (!noFilter)
+#if filter
         let filterByStreamName = args.FilterFunction()
 #else
         let filterByStreamName _ = true
@@ -545,13 +545,13 @@ let build (args : Args.Arguments) =
 #endif // blank
         let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
 #endif // kafka
-#if (!noFilter)
+#if filter
         let filterByStreamName = args.FilterFunction()
 #endif
 #if kafkaEventSpans
         let parseStreamEvents(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
             Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
-#if (!noFilter)
+#if filter
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
         Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, consumerConfig, parseStreamEvents, handle, args.MaxConcurrentStreams, stats = stats)
@@ -569,7 +569,7 @@ let build (args : Args.Arguments) =
             // TODO: customize parsing to events if source is not an Equinox Container
             docs
             |> Seq.collect EquinoxCosmosParser.enumStreamEvents
-#if (!noFilter)
+#if filter
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
         let source = { database = database; container = container }
