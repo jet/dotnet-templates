@@ -414,7 +414,7 @@ module Args =
         parser.ParseCommandLine argv |> Arguments
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
+// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful Args.parse
 module Logging =
 
     let initialize verbose verboseConsole =
@@ -423,7 +423,7 @@ module Logging =
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-#if (!changeFeedOnly)
+#if (!kafkaEventSpans)
             // LibLog writes to the global logger, so we need to control the emission
             |> fun c -> let cfpl = if verboseConsole then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
@@ -530,7 +530,7 @@ let build (args : Args.Arguments) =
         let cache = Equinox.Cache(AppName, sizeMb = 10)
         let service = Todo.Cosmos.create (context, cache)
         let handle = Handler.handleStreamEvents (Handler.tryHandle service produceSummary)
-        let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.)
+        let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., logExternalStats = producer.DumpStats)
 #else // !kafka -> Ingester only
 #if (!blank)
         let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously

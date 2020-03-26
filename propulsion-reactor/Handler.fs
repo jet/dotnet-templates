@@ -24,7 +24,7 @@ type Outcome =
 let mins x = System.TimeSpan.FromMinutes x
 
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
-type Stats(log, statsInterval, stateInterval) =
+type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 #if (!kafkaEventSpans)
     inherit Propulsion.Streams.Sync.StreamsSyncStats<Outcome>(log, statsInterval, stateInterval)
 #else
@@ -48,6 +48,7 @@ type Stats(log, statsInterval, stateInterval) =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0
+        logExternalStats |> Option.iter log
 
 let generate stream version info =
     let event = Contract.codec.Encode(None, Contract.Summary info)
