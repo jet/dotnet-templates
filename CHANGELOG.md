@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proReactor`: Wired producer stats emission for `--kafka` modes
+
 ### Changed
 
 - `proReactor`: Flip default to omitting filtering logic (`--noFilter` is now `--filter`, defaulting to omitting the logic)
