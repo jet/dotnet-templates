@@ -477,7 +477,7 @@ let build (args : Args.Arguments) =
         let sink =
              Propulsion.Streams.Sync.StreamsSync.Start(
                  Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats,
-                 projectorStatsInterval=TimeSpan.FromMinutes 1., dumpExternalStats=producer.DumpStats)
+                 projectorStatsInterval = TimeSpan.FromMinutes 1.)
 #else // !kafka -> ingestion
 #if blank
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
@@ -539,7 +539,7 @@ let build (args : Args.Arguments) =
         let srcService = Todo.Cosmos.create (context, cache)
         let dstService = TodoSummary.Cosmos.create (context, cache)
         let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
-#else // blank -> no specific Ingester souce/destination wire-up
+#else // blank -> no specific Ingester source/destination wire-up
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
         let handle = Ingester.handleStreamEvents Ingester.tryHandle
 #endif // blank
@@ -560,7 +560,7 @@ let build (args : Args.Arguments) =
 #if kafka
              Propulsion.Streams.Sync.StreamsSync.Start(
                  Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats,
-                 projectorStatsInterval = TimeSpan.FromMinutes 1., dumpExternalStats = producer.DumpStats)
+                 projectorStatsInterval = TimeSpan.FromMinutes 1.)
 #else
             Propulsion.Streams.StreamsProjector.Start(
                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
