@@ -20,6 +20,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 ## Producer/Reactor Templates combining usage of Equinox and Propulsion
 
+<a name="proReactor"></a>
 - [`proReactor`](propulsion-reactor/README.md) - Boilerplate for an application that handles reactive actions ranging from publishing notifications via Kafka (simple, or [summarising events](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) through to driving follow-on actions implied by events (e.g., updating a denormalized view of an aggregate)
 
    Input options are:
