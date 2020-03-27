@@ -9,9 +9,18 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proReactor`: Added `--kafka --blank` mode illustrating a simple publisher [#59](https://github.com/jet/dotnet-templates/pull/59) 
+
 ### Changed
+
+- `proReactor`: Flip default to omitting filtering logic (`--noFilter` is now `--filter`, defaulting to omitting the logic)
+
 ### Removed
 ### Fixed
+
+- `proReactor`: Fixed CFP logging omission
+- `proReactor`: Wired producer stats emission for `--kafka` modes
 
 <a name="4.3.0"></a>
 ## [4.3.0] - 2020-03-12
