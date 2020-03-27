@@ -48,7 +48,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0
-        logExternalStats |> Option.iter log
+        logExternalStats |> Option.iter (fun dumpTo -> dumpTo log)
 
 let generate stream version info =
     let event = Contract.codec.Encode(None, Contract.Summary info)
