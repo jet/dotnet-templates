@@ -33,6 +33,7 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
    0. Default processing shows importing (in summary form) from an aggregate in `EventStore` or a CosmosDB ChangeFeedProcessor to a Summary form in `Cosmos` 
    1. `--blank`: remove sample Ingester logic, yielding a minimal projector
    2. `--kafka` (without `--blank`): adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store). Produces versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed.
+   3. `--kafka --blank`: provides wiring for producing to Kafka, without summary reading logic etc
     
    Miscellaneous options:
    - `--filter` - include category filtering boilerplate
@@ -93,6 +94,11 @@ To use from the command line, the outline is:
     # ... to add a Summary Projector
     md -p ../SummaryProducer | Set-Location
     dotnet new proReactor --kafka 
+    start README.md
+
+    # ... to add a Custom Projector
+    md -p ../SummaryProducer | Set-Location
+    dotnet new proReactor --kafka --blank
     start README.md
 
     # ... to add a Summary Consumer (ingesting output from `SummaryProducer`)

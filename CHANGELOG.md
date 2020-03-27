@@ -10,6 +10,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
+- `proReactor`: Added `--kafka --blank` mode illustrating a simple publisher
 - `proReactor`: Wired producer stats emission for `--kafka` modes
 
 ### Changed

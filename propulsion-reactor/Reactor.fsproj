@@ -10,11 +10,15 @@
         <!--#if (!kafkaEventSpans) -->
         <None Include="README.md" />
         <!--#endif-->
-        <!--#if (!blank) -->
+        <!--#if (kafka || !blank) -->
         <Compile Include="Infrastructure.fs" />
+        <!--#endif-->
+        <!--#if (!blank) -->
         <Compile Include="Todo.fs" />
         <!--#endif-->
+        <!--#if (kafka || !blank) -->
         <Compile Include="Contract.fs" />
+        <!--#endif-->
         <!--#if (!kafka && !blank) -->
         <Compile Include="TodoSummary.fs" />
         <!--#endif-->
