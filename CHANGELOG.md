@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.4.0"></a>
+## [4.4.0] - 2020-03-27
+
+### Added
 
 - `proReactor`: Added `--kafka --blank` mode illustrating a simple publisher [#59](https://github.com/jet/dotnet-templates/pull/59) 
 
@@ -16,7 +24,6 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - `proReactor`: Flip default to omitting filtering logic (`--noFilter` is now `--filter`, defaulting to omitting the logic)
 
-### Removed
 ### Fixed
 
 - `proReactor`: Fixed CFP logging omission
@@ -362,7 +369,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.3.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.4.0...HEAD
+[4.4.0]: https://github.com/jet/dotnet-templates/compare/4.3.0...4.4.0
 [4.3.0]: https://github.com/jet/dotnet-templates/compare/4.2.0...4.3.0
 [4.2.0]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.2.0
 [4.1.1]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.1.1
