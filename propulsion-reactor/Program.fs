@@ -473,7 +473,7 @@ let build (args : Args.Arguments) =
         let srcCache = Equinox.Cache(AppName, sizeMb = 10)
         let srcService = Todo.EventStore.create (EventStoreContext.create esConn,srcCache)
         let handle = Handler.handleStreamEvents (Handler.tryHandle srcService produceSummary)
-        let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5.)
+        let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., logExternalStats = producer.DumpStats)
         let sink =
              Propulsion.Streams.Sync.StreamsSync.Start(
                  Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats,
