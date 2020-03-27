@@ -1,7 +1,5 @@
 module ProjectorTemplate.Handler
 
-open Propulsion.Cosmos
-
 //let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
 //    if x.Data.Length < 900_000 then x
 //    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp)
@@ -11,7 +9,7 @@ open Propulsion.Cosmos
 
 let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
     docs
-    |> Seq.collect EquinoxCosmosParser.enumStreamEvents
+    |> Seq.collect  Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
     // |> Seq.map hackDropBigBodies
 
@@ -35,7 +33,6 @@ let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
         |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
     return FsCodec.StreamName.toString stream, value }
-//#endif
 #endif
 #else
 let handle (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
