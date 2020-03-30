@@ -30,25 +30,25 @@ module FinalizationProcessManager
 
                         return!
                             match failures with
-                            | [||]     -> loop (FinalizationTransaction.Events.AssignmentCompleted (containerId, shipmentIds))
-                            | failures -> loop (FinalizationTransaction.Events.RevertRequested failures)
+                            | [||]     -> loop (FinalizationTransaction.Events.AssignmentCompleted {| containerId = containerId; shipmentIds = shipmentIds |})
+                            | failures -> loop (FinalizationTransaction.Events.RevertRequested {| shipmentIds = failures |})
 
-                    | FinalizationTransaction.Action.FinalizeContainer (containerId, shipmentIds) ->
-                        do! containers.Execute (containerId, Container.Command.Finalize shipmentIds)
+                     | FinalizationTransaction.Action.FinalizeContainer (containerId, shipmentIds) ->
+                         do! containers.Execute (containerId, Container.Command.Finalize shipmentIds)
 
-                        return! loop FinalizationTransaction.Events.FinalizationCompleted
+                         return! loop FinalizationTransaction.Events.FinalizationCompleted
 
-                    | FinalizationTransaction.Action.RevertAssignment shipmentIds ->
-                        let! _ = Async.Parallel(seq { for sId in shipmentIds -> shipments.Execute(sId, Shipment.Command.Unassign)})
-                        return! loop FinalizationTransaction.Events.FinalizationFailed
+                     | FinalizationTransaction.Action.RevertAssignment shipmentIds ->
+                         let! _ = Async.Parallel(seq { for sId in shipmentIds -> shipments.Execute(sId, Shipment.Command.Unassign)})
+                         return! loop FinalizationTransaction.Events.FinalizationFailed
 
-                    | FinalizationTransaction.Action.Finish result ->
-                        return result
+                     | FinalizationTransaction.Action.Finish result ->
+                         return result
                 }
             loop
 
         member __.TryFinalize (transactionId: string, containerId: string, shipmentIds: string[]) =
-            execute transactionId (Some <| FinalizationTransaction.Events.FinalizationRequested (containerId, shipmentIds))
+            execute transactionId (Some <| FinalizationTransaction.Events.FinalizationRequested {| containerId = containerId; shipmentIds = shipmentIds |})
 
         member __.Drive (transactionId: string) =
             execute transactionId None

@@ -6,12 +6,12 @@ module Events =
     let streamName clientId = FsCodec.StreamName.create CategoryId clientId
 
     type Event =
-        | FinalizationRequested of containerId: string * shipmentIds: string[]
+        | FinalizationRequested of {| containerId : string; shipmentIds : string[] |}
 
-        | AssignmentCompleted   of containerId: string * shipmentIds: string[]
+        | AssignmentCompleted   of {| containerId : string; shipmentIds : string[] |}
         | FinalizationCompleted
 
-        | RevertRequested       of shipmentIds: string[]
+        | RevertRequested       of {| shipmentIds : string[] |}
         | FinalizationFailed
         interface TypeShape.UnionContract.IUnionContract
 
@@ -39,13 +39,13 @@ module Fold =
 
     let evolve (_: State) (event: Events.Event): State =
         match event with
-        | Events.FinalizationRequested (containerId, shipmentIds) -> Running (Assigning (containerId, shipmentIds))
+        | Events.FinalizationRequested event -> Running (Assigning (event.containerId, event.shipmentIds))
 
-        | Events.AssignmentCompleted   (containerId, shipmentIds) -> Running (Assigned  (containerId, shipmentIds))
-        | Events.FinalizationCompleted                            -> Completed true
+        | Events.AssignmentCompleted   event -> Running (Assigned  (event.containerId, event.shipmentIds))
+        | Events.FinalizationCompleted       -> Completed true
 
-        | Events.RevertRequested       shipmentIds                -> Running (Reverting shipmentIds)
-        | Events.FinalizationFailed                               -> Completed false
+        | Events.RevertRequested       event -> Running (Reverting event.shipmentIds)
+        | Events.FinalizationFailed          -> Completed false
 
     let nextAction (state: State): Action =
         match state with

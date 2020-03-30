@@ -11,7 +11,7 @@ module Events =
 
     type Event =
         | ShipmentCreated
-        | ShipmentAssigned of containerId : string
+        | ShipmentAssigned of {| containerId : string |}
         | ShipmentUnassigned
         interface TypeShape.UnionContract.IUnionContract
 
@@ -25,9 +25,9 @@ module Fold =
 
     let evolve (state: State) (event: Events.Event): State =
         match event with
-        | Events.ShipmentCreated                -> { state with created = true }
-        | Events.ShipmentAssigned   containerId -> { state with container = Some containerId }
-        | Events.ShipmentUnassigned             -> { state with container = None }
+        | Events.ShipmentCreated          -> { state with created = true }
+        | Events.ShipmentAssigned   event -> { state with container = Some event.containerId }
+        | Events.ShipmentUnassigned       -> { state with container = None }
 
 
     let fold: State -> Events.Event seq -> State =
@@ -47,7 +47,7 @@ let interpret (command: Command) (state: Fold.State): bool * Events.Event list =
         | Some _ ->
             // Assignment fails if the shipment was already assigned.
             false, []
-        | None -> true, [ Events.ShipmentAssigned containerId ]
+        | None -> true, [ Events.ShipmentAssigned {| containerId = containerId |} ]
 
     | Unassign ->
         true, [ Events.ShipmentUnassigned ]
