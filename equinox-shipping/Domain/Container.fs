@@ -1,6 +1,8 @@
 module Container
 
-type Container = { id: string; shipmentIds: string[]; finalized: bool }
+// Container state needs to be serializable as it will be stored as part of the
+// Snapshotted event data.
+type ContainerState = { finalized: bool }
 
 module Events =
 
@@ -11,22 +13,22 @@ module Events =
     type Event =
         | ContainerCreated    of containerId  : string
         | ContainerFinalized  of shipmentIds  : string[]
-        | Snapshotted         of Container
+        | Snapshotted         of ContainerState
         interface TypeShape.UnionContract.IUnionContract
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 module Fold =
 
-    type State = Container
+    type State = ContainerState
 
-    let initial: State = { id = null; shipmentIds = [||]; finalized = false }
+    let initial: ContainerState = { finalized = false }
 
     let evolve (state: State) (event: Events.Event): State =
         match event with
-        | Events.Snapshotted        snapshot    -> snapshot
-        | Events.ContainerCreated   containerId -> { state with id = containerId }
-        | Events.ContainerFinalized shipmentIds -> { state with finalized = true; shipmentIds = shipmentIds }
+        | Events.Snapshotted        snapshot -> snapshot
+        | Events.ContainerCreated   _ -> state
+        | Events.ContainerFinalized _ -> { state with finalized = true }
 
 
     let fold: State -> Events.Event seq -> State =
