@@ -3,8 +3,7 @@ module FinalizationTransaction
 module Events =
 
     let [<Literal>] CategoryId = "FinalizationTransaction"
-
-    let (|ForClientId|) (clientId: string) = FsCodec.StreamName.create CategoryId clientId
+    let streamName clientId = FsCodec.StreamName.create CategoryId clientId
 
     type Event =
         | FinalizationRequested of containerId: string * shipmentIds: string[]

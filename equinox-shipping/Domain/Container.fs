@@ -7,10 +7,10 @@ type ContainerState = { created: bool; finalized: bool }
 module Events =
 
     let [<Literal>] CategoryId = "Shipment"
-    let streamName id = FsCodec.StreamName.create CategoryId id
+    let streamName clientId = FsCodec.StreamName.create CategoryId clientId
 
     type Event =
-        | ContainerCreated    of containerId  : string
+        | ContainerCreated
         | ContainerFinalized  of shipmentIds  : string[]
         | Snapshotted         of ContainerState
         interface TypeShape.UnionContract.IUnionContract
@@ -26,7 +26,7 @@ module Fold =
     let evolve (state: State) (event: Events.Event): State =
         match event with
         | Events.Snapshotted        snapshot -> snapshot
-        | Events.ContainerCreated   _ -> { state with created = true }
+        | Events.ContainerCreated   -> { state with created = true }
         | Events.ContainerFinalized _ -> { state with finalized = true }
 
 
@@ -41,13 +41,13 @@ module Fold =
     let snapshot (state : State) = Events.Snapshotted state
 
 type Command =
-    | Create   of containerId : string
+    | Create
     | Finalize of shipmentIds : string[]
 
 let interpret (command: Command) (state: Fold.State): Events.Event list =
     match command with
-    | Create containerId  ->
-        [ if not state.created then yield Events.ContainerCreated containerId ]
+    | Create ->
+        [ if not state.created then yield Events.ContainerCreated ]
     | Finalize shipmentIds  ->
         [ if not state.finalized then yield Events.ContainerFinalized shipmentIds ]
 

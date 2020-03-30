@@ -50,5 +50,5 @@ module FinalizationProcessManager
         member __.TryFinalize (transactionId: string, containerId: string, shipmentIds: string[]) =
             execute transactionId (Some <| FinalizationTransaction.Events.FinalizationRequested (containerId, shipmentIds))
 
-        member __.Push (transactionId: string) =
+        member __.Drive (transactionId: string) =
             execute transactionId None
