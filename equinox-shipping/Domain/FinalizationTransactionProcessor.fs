@@ -30,22 +30,22 @@ module FinalizationTransactionProcessor
 
                         return!
                             if not <| Array.isEmpty failures then
-                                loop (FinalizationTransaction.Events.RevertRequested (containerId, failures))
+                                loop (FinalizationTransaction.Events.RevertRequested failures)
                             else
                                 loop (FinalizationTransaction.Events.AssignmentCompleted (containerId, shipmentIds))
 
                     | FinalizationTransaction.Action.FinalizeContainer (containerId, shipmentIds) ->
                         do! containers.Execute (containerId, Container.Command.Finalize shipmentIds)
 
-                        return! loop (FinalizationTransaction.Events.FinalizationCompleted containerId)
+                        return! loop FinalizationTransaction.Events.FinalizationCompleted
 
-                    | FinalizationTransaction.Action.RevertAssignment (containerId, shipmentIds) ->
+                    | FinalizationTransaction.Action.RevertAssignment shipmentIds ->
                         do! shipmentIds
-                            |> Array.map (fun sId -> shipments.Execute(sId, Shipment.Command.Unassign containerId))
+                            |> Array.map (fun sId -> shipments.Execute(sId, Shipment.Command.Unassign))
                             |> Async.Parallel
                             |> Async.Ignore
 
-                        return! loop (FinalizationTransaction.Events.FinalizationFailed containerId)
+                        return! loop FinalizationTransaction.Events.FinalizationFailed
 
                     | FinalizationTransaction.Action.Finish result ->
                         return result

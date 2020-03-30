@@ -10,10 +10,10 @@ module Events =
         | FinalizationRequested of containerId: string * shipmentIds: string[]
 
         | AssignmentCompleted   of containerId: string * shipmentIds: string[]
-        | FinalizationCompleted of containerId: string
+        | FinalizationCompleted
 
-        | RevertRequested       of containerId: string * shipmentIds: string[]
-        | FinalizationFailed    of containerId: string
+        | RevertRequested       of shipmentIds: string[]
+        | FinalizationFailed
         interface TypeShape.UnionContract.IUnionContract
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
@@ -22,7 +22,7 @@ type Action =
     | AssignShipments   of containerId: string * shipmentIds: string[]
     | FinalizeContainer of containerId: string * shipmentIds: string[]
     // Reverts the assignment of the container for the shipments provided.
-    | RevertAssignment  of containerId: string * shipmentIds: string[]
+    | RevertAssignment  of shipmentIds: string[]
     | Finish of bool
 
 module Fold =
@@ -34,7 +34,7 @@ module Fold =
     and RunningState =
         | Assigning of containerId: string * shipmentIds: string[]
         | Assigned  of containerId: string * shipmentIds: string[]
-        | Reverting of containerId: string * shipmentIds: string[]
+        | Reverting of shipmentIds: string[]
 
     let initial: State = Initial
 
@@ -43,17 +43,17 @@ module Fold =
         | Events.FinalizationRequested (containerId, shipmentIds) -> Running (Assigning (containerId, shipmentIds))
 
         | Events.AssignmentCompleted   (containerId, shipmentIds) -> Running (Assigned  (containerId, shipmentIds))
-        | Events.FinalizationCompleted containerId                -> Completed true
+        | Events.FinalizationCompleted                            -> Completed true
 
-        | Events.RevertRequested       (containerId, shipmentIds) -> Running (Reverting (containerId, shipmentIds))
-        | Events.FinalizationFailed    containerId                -> Completed false
+        | Events.RevertRequested       shipmentIds                -> Running (Reverting shipmentIds)
+        | Events.FinalizationFailed                               -> Completed false
 
     let nextAction (state: State): Action =
         match state with
         | Initial -> failwith "Cannot interpret Initial state"
         | Running (Assigning (containerId, shipmentIds)) -> Action.AssignShipments   (containerId, shipmentIds)
         | Running (Assigned  (containerId, shipmentIds)) -> Action.FinalizeContainer (containerId, shipmentIds)
-        | Running (Reverting (containerId, shipmentIds)) -> Action.RevertAssignment  (containerId, shipmentIds)
+        | Running (Reverting shipmentIds)                -> Action.RevertAssignment  shipmentIds
         | Completed result                               -> Action.Finish result
 
     let fold: State -> Events.Event seq -> State =
