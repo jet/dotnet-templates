@@ -7,8 +7,7 @@ type ContainerState = { created: bool; finalized: bool }
 module Events =
 
     let [<Literal>] CategoryId = "Shipment"
-
-    let (|ForClientId|) (clientId: string) = FsCodec.StreamName.create CategoryId clientId
+    let streamName id = FsCodec.StreamName.create CategoryId id
 
     type Event =
         | ContainerCreated    of containerId  : string
@@ -27,7 +26,7 @@ module Fold =
     let evolve (state: State) (event: Events.Event): State =
         match event with
         | Events.Snapshotted        snapshot -> snapshot
-        | Events.ContainerCreated   _ -> state
+        | Events.ContainerCreated   _ -> { state with created = true }
         | Events.ContainerFinalized _ -> { state with finalized = true }
 
 
@@ -48,7 +47,7 @@ type Command =
 let interpret (command: Command) (state: Fold.State): Events.Event list =
     match command with
     | Create containerId  ->
-        [ Events.ContainerCreated containerId ]
+        [ if state.created then yield Events.ContainerCreated containerId ]
     | Finalize shipmentIds  ->
         [ if not state.finalized then yield Events.ContainerFinalized shipmentIds ]
 
