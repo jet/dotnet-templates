@@ -47,7 +47,7 @@ type Command =
 let interpret (command: Command) (state: Fold.State): Events.Event list =
     match command with
     | Create containerId  ->
-        [ if state.created then yield Events.ContainerCreated containerId ]
+        [ if not state.created then yield Events.ContainerCreated containerId ]
     | Finalize shipmentIds  ->
         [ if not state.finalized then yield Events.ContainerFinalized shipmentIds ]
 

@@ -4,7 +4,7 @@ open System
 
 type ContainerId = string
 
-type Shipment = { container: ContainerId option }
+type Shipment = { created: bool; container: ContainerId option }
 
 module Events =
 
@@ -24,11 +24,11 @@ module Fold =
 
     type State = Shipment
 
-    let initial: State = { container = None }
+    let initial: State = { created = false; container = None }
 
     let evolve (state: State) (event: Events.Event): State =
         match event with
-        | Events.ShipmentCreated    _           -> state
+        | Events.ShipmentCreated    _           -> { state with created = true }
         | Events.ShipmentAssigned   containerId -> { state with container = Some containerId }
         | Events.ShipmentUnassigned _           -> { state with container = None }
 
@@ -44,7 +44,7 @@ type Command =
 let interpret (command: Command) (state: Fold.State): bool * Events.Event list =
     match command with
     | Create shipmentId ->
-        true, [ Events.ShipmentCreated shipmentId ]
+        true, [ if not state.created then yield Events.ShipmentCreated shipmentId ]
     | Assign containerId ->
         match state.container with
         | Some _ ->
