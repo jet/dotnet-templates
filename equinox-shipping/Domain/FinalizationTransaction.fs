@@ -23,7 +23,7 @@ type Action =
     | FinalizeContainer of containerId: string * shipmentIds: string[]
     // Reverts the assignment of the container for the shipments provided.
     | RevertAssignment  of shipmentIds: string[]
-    | Finish of bool
+    | Finish of success: bool
 
 module Fold =
 
@@ -73,10 +73,12 @@ module Fold =
 // follow up on the next action from where it was.
 let decide (update: Events.Event option) (state : Fold.State) : Action * Events.Event list =
     let events =
-        update
-        |> Option.bind (fun e -> Fold.filterValidTransition e state)
-        |> Option.map  (fun e -> [e])
-        |> Option.defaultValue []
+        match update with
+        | Some e ->
+            match Fold.filterValidTransition e state with
+            | Some e -> [e]
+            | None   -> []
+        | None   -> []
 
     let state' =
         Fold.fold state events

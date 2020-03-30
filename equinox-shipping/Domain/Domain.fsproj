@@ -1,14 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.1</TargetFramework>
+        <TargetFramework>netstandard2.0</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>
         <Compile Include="Shipment.fs" />
         <Compile Include="FinalizationTransaction.fs" />
         <Compile Include="Container.fs" />
-        <Compile Include="FinalizationTransactionProcessor.fs" />
+        <Compile Include="FinalizationProcessManager.fs" />
     </ItemGroup>
 
     <ItemGroup>

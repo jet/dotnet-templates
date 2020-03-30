@@ -1,4 +1,4 @@
-module FinalizationTransactionProcessor
+module FinalizationProcessManager
 
     type Service(transactions: FinalizationTransaction.Service, containers: Container.Service, shipments: Shipment.Service) =
 
@@ -14,13 +14,13 @@ module FinalizationTransactionProcessor
                     match action with
                     | FinalizationTransaction.Action.AssignShipments (containerId, shipmentIds) ->
                         let! result =
-                            shipmentIds
-                            |> Array.map (fun sId ->
-                                async {
-                                    let! res = shipments.Execute(sId, Shipment.Command.Assign containerId)
-                                    return (sId, res)
-                                }
-                            )
+                            seq {
+                                for sId in shipmentIds ->
+                                    async {
+                                        let! res = shipments.Execute(sId, Shipment.Command.Assign containerId)
+                                        return (sId, res)
+                                    }
+                            }
                             |> Async.Parallel
 
                         let failures =
@@ -29,10 +29,9 @@ module FinalizationTransactionProcessor
                             |> Array.map fst
 
                         return!
-                            if not <| Array.isEmpty failures then
-                                loop (FinalizationTransaction.Events.RevertRequested failures)
-                            else
-                                loop (FinalizationTransaction.Events.AssignmentCompleted (containerId, shipmentIds))
+                            match failures with
+                            | [||]     -> loop (FinalizationTransaction.Events.AssignmentCompleted (containerId, shipmentIds))
+                            | failures -> loop (FinalizationTransaction.Events.RevertRequested failures)
 
                     | FinalizationTransaction.Action.FinalizeContainer (containerId, shipmentIds) ->
                         do! containers.Execute (containerId, Container.Command.Finalize shipmentIds)
@@ -40,11 +39,7 @@ module FinalizationTransactionProcessor
                         return! loop FinalizationTransaction.Events.FinalizationCompleted
 
                     | FinalizationTransaction.Action.RevertAssignment shipmentIds ->
-                        do! shipmentIds
-                            |> Array.map (fun sId -> shipments.Execute(sId, Shipment.Command.Unassign))
-                            |> Async.Parallel
-                            |> Async.Ignore
-
+                        let! _ = Async.Parallel(seq { for sId in shipmentIds -> shipments.Execute(sId, Shipment.Command.Unassign)})
                         return! loop FinalizationTransaction.Events.FinalizationFailed
 
                     | FinalizationTransaction.Action.Finish result ->

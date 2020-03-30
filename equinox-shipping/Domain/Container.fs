@@ -2,7 +2,7 @@ module Container
 
 // Container state needs to be serializable as it will be stored as part of the
 // Snapshotted event data.
-type ContainerState = { finalized: bool }
+type ContainerState = { created: bool; finalized: bool }
 
 module Events =
 
@@ -22,7 +22,7 @@ module Fold =
 
     type State = ContainerState
 
-    let initial: ContainerState = { finalized = false }
+    let initial: ContainerState = { created = false; finalized = false }
 
     let evolve (state: State) (event: Events.Event): State =
         match event with
@@ -39,7 +39,7 @@ module Fold =
         | Events.Snapshotted _ -> true
         | _ -> false
 
-    let snapshot state = Events.Snapshotted state
+    let snapshot (state : State) = Events.Snapshotted state
 
 type Command =
     | Create   of containerId : string
