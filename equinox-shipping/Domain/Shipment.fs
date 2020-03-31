@@ -2,7 +2,7 @@
 
 type ContainerId = string
 
-type Shipment = { created: bool; container: ContainerId option }
+type Shipment = { created: bool; association: ContainerId option }
 
 module Events =
 
@@ -26,8 +26,8 @@ module Fold =
     let evolve (state: State) (event: Events.Event): State =
         match event with
         | Events.ShipmentCreated          -> { state with created = true }
-        | Events.ShipmentAssigned   event -> { state with container = Some event.containerId }
-        | Events.ShipmentUnassigned       -> { state with container = None }
+        | Events.ShipmentAssigned   event -> { state with association = Some event.containerId }
+        | Events.ShipmentUnassigned       -> { state with association = None }
 
 
     let fold: State -> Events.Event seq -> State =
@@ -43,7 +43,7 @@ let interpret (command: Command) (state: Fold.State): bool * Events.Event list =
     | Create ->
         true, [ if not state.created then yield Events.ShipmentCreated ]
     | Assign containerId ->
-        match state.container with
+        match state.association with
         | Some _ ->
             // Assignment fails if the shipment was already assigned.
             false, []
