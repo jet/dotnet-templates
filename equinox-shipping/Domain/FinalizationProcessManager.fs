@@ -34,12 +34,11 @@ module FinalizationProcessManager
 
                      | FinalizationTransaction.Action.FinalizeContainer (containerId, shipmentIds) ->
                          do! containers.Execute (containerId, Container.Command.Finalize shipmentIds)
-
-                         return! loop FinalizationTransaction.Events.FinalizationCompleted
+                         return! loop FinalizationTransaction.Events.Completed
 
                      | FinalizationTransaction.Action.RevertAssignment shipmentIds ->
                          let! _ = Async.Parallel(seq { for sId in shipmentIds -> shipments.Execute(sId, Shipment.Command.Unassign)})
-                         return! loop FinalizationTransaction.Events.FinalizationFailed
+                         return! loop FinalizationTransaction.Events.Completed
 
                      | FinalizationTransaction.Action.Finish result ->
                          return result

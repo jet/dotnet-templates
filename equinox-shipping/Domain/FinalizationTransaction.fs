@@ -11,45 +11,40 @@ module Events =
 
     type Event =
         | FinalizationRequested of {| containerId : string; shipmentIds : string[] |}
-
         | AssignmentCompleted   of {| containerId : string; shipmentIds : string[] |}
-        | FinalizationCompleted
-
         | RevertRequested       of {| shipmentIds : string[] |}
-        | FinalizationFailed
+        | Completed
         interface TypeShape.UnionContract.IUnionContract
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 type Action =
-    | AssignShipments   of containerId: string * shipmentIds: string[]
-    | FinalizeContainer of containerId: string * shipmentIds: string[]
+    | AssignShipments   of containerId : string * shipmentIds : string[]
+    | FinalizeContainer of containerId : string * shipmentIds : string[]
     // Reverts the assignment of the container for the shipments provided.
-    | RevertAssignment  of shipmentIds: string[]
-    | Finish of success: bool
+    | RevertAssignment  of shipmentIds : string[]
+    | Finish            of success : bool
 
 module Fold =
 
     type State =
         | Initial
         | Running   of RunningState
-        | Completed of bool
+        | Completed of success : bool
     and RunningState =
-        | Assigning of containerId: string * shipmentIds: string[]
-        | Assigned  of containerId: string * shipmentIds: string[]
-        | Reverting of shipmentIds: string[]
+        | Assigning of containerId : string * shipmentIds : string[]
+        | Assigned  of containerId : string * shipmentIds : string[]
+        | Reverting of shipmentIds : string[]
 
     let initial: State = Initial
 
-    let evolve (_ : State) (event : Events.Event): State =
-        match event with
-        | Events.FinalizationRequested event -> Running (Assigning (event.containerId, event.shipmentIds))
-
-        | Events.AssignmentCompleted   event -> Running (Assigned  (event.containerId, event.shipmentIds))
-        | Events.FinalizationCompleted       -> Completed true
-
-        | Events.RevertRequested       event -> Running (Reverting event.shipmentIds)
-        | Events.FinalizationFailed          -> Completed false
+    let evolve (state : State) (event : Events.Event): State =
+        match state, event with
+        | _, Events.FinalizationRequested event  -> Running (Assigning (event.containerId, event.shipmentIds))
+        | _, Events.AssignmentCompleted   event  -> Running (Assigned  (event.containerId, event.shipmentIds))
+        | _, Events.RevertRequested       event  -> Running (Reverting event.shipmentIds)
+        | Running (Assigned _), Events.Completed -> Completed true
+        | _,                    Events.Completed -> Completed false
 
     let nextAction (state: State): Action =
         match state with
@@ -65,11 +60,10 @@ module Fold =
     let filterValidTransition (event : Events.Event) (state : State) =
         match state, event with
         | Initial,               Events.FinalizationRequested _
-        | Running (Assigning _), Events.AssignmentCompleted   _
-        | Running (Assigning _), Events.RevertRequested       _
-        | Running (Assigned _),  Events.FinalizationCompleted _
-        | Running (Reverting _), Events.FinalizationFailed    _ ->
-            Some event
+        | Running (Assigning _), Events.AssignmentCompleted _
+        | Running (Assigning _), Events.RevertRequested _
+        | Running (Assigned _),  Events.Completed
+        | Running (Reverting _), Events.Completed -> Some event
         | _ -> None
 
 // When there are no event to apply to the state, it pushes the transaction manager to
