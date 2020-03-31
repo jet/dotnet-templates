@@ -5,14 +5,13 @@ open FSharp.UMX
 
 let [<Literal>] Category = "Shipment"
 
-type Shipment = { created: bool; association: string<containerId> option }
+type Shipment = { association: string<containerId> option }
 
 module Events =
 
     let streamName (shipmentId : string<shipmentId>) = FsCodec.StreamName.create Category (UMX.untag shipmentId)
 
     type Event =
-        | ShipmentCreated
         | ShipmentAssigned of {| containerId : string |}
         | ShipmentUnassigned
         interface TypeShape.UnionContract.IUnionContract
@@ -23,27 +22,23 @@ module Fold =
 
     type State = Shipment
 
-    let initial: State = { created = false; association = None }
+    let initial: State = { association = None }
 
     let evolve (state: State) (event: Events.Event): State =
         match event with
-        | Events.ShipmentCreated          -> { state with created = true }
-        | Events.ShipmentAssigned   event -> { state with association = Some (UMX.tag event.containerId) }
-        | Events.ShipmentUnassigned       -> { state with association = None }
+        | Events.ShipmentAssigned event -> { state with association = Some (UMX.tag event.containerId) }
+        | Events.ShipmentUnassigned     -> { state with association = None }
 
 
     let fold: State -> Events.Event seq -> State =
         Seq.fold evolve
 
 type Command =
-    | Create
     | Assign of containerId : string
     | Unassign
 
 let interpret (command: Command) (state: Fold.State): bool * Events.Event list =
     match command with
-    | Create ->
-        true, [ if not state.created then yield Events.ShipmentCreated ]
     | Assign containerId ->
         match state.association with
         | Some _ ->
