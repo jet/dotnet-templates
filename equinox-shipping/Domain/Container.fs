@@ -7,7 +7,7 @@ let [<Literal>] Category = "Container"
 
 // Container state needs to be serializable as it will be stored as part of the
 // Snapshotted event data.
-type ContainerState = { created: bool; finalized: bool }
+type ContainerState = { created : bool; finalized : bool }
 
 module Events =
 
@@ -48,7 +48,7 @@ type Command =
     | Create
     | Finalize of shipmentIds : string[]
 
-let interpret (command: Command) (state: Fold.State): Events.Event list =
+let interpret(command : Command) (state : Fold.State): Events.Event list =
     match command with
     | Create ->
         [ if not state.created then yield Events.ContainerCreated ]

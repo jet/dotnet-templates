@@ -37,7 +37,7 @@ module Fold =
 
 type Command =
     | Create
-    | Assign   of containerId : string
+    | Assign of containerId : string
     | Unassign
 
 let interpret (command: Command) (state: Fold.State): bool * Events.Event list =

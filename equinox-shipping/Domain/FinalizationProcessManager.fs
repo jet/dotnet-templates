@@ -1,9 +1,9 @@
 module FinalizationProcessManager
 
-    type Service(transactions: FinalizationTransaction.Service, containers: Container.Service, shipments: Shipment.Service) =
+    type Service(transactions : FinalizationTransaction.Service, containers : Container.Service, shipments : Shipment.Service) =
 
         // Transaction ID can be a md5 hash of all shipments ID
-        let execute (transactionId: string) : FinalizationTransaction.Events.Event option -> Async<bool> =
+        let execute (transactionId : string) : FinalizationTransaction.Events.Event option -> Async<bool> =
             let rec loop (update: FinalizationTransaction.Events.Event option) =
                 async {
                     let loop event = loop (Some event)
@@ -46,8 +46,8 @@ module FinalizationProcessManager
                 }
             loop
 
-        member __.TryFinalize (transactionId: string, containerId: string, shipmentIds: string[]) =
+        member __.TryFinalize(transactionId : string, containerId : string, shipmentIds : string[]) =
             execute transactionId (Some <| FinalizationTransaction.Events.FinalizationRequested {| containerId = containerId; shipmentIds = shipmentIds |})
 
-        member __.Drive (transactionId: string) =
+        member __.Drive(transactionId : string) =
             execute transactionId None

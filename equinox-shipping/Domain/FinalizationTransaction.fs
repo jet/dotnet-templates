@@ -41,7 +41,7 @@ module Fold =
 
     let initial: State = Initial
 
-    let evolve (_: State) (event: Events.Event): State =
+    let evolve (_ : State) (event : Events.Event): State =
         match event with
         | Events.FinalizationRequested event -> Running (Assigning (event.containerId, event.shipmentIds))
 
@@ -62,7 +62,7 @@ module Fold =
     let fold: State -> Events.Event seq -> State =
         Seq.fold evolve
 
-    let filterValidTransition (event: Events.Event) (state: State) =
+    let filterValidTransition (event : Events.Event) (state : State) =
         match state, event with
         | Initial,               Events.FinalizationRequested _
         | Running (Assigning _), Events.AssignmentCompleted   _
@@ -74,7 +74,7 @@ module Fold =
 
 // When there are no event to apply to the state, it pushes the transaction manager to
 // follow up on the next action from where it was.
-let decide (update: Events.Event option) (state : Fold.State) : Action * Events.Event list =
+let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
     let events =
         match update with
         | Some e -> Fold.filterValidTransition e state |> Option.toList
