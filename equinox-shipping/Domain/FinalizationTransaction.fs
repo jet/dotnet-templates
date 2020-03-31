@@ -1,9 +1,13 @@
 module FinalizationTransaction
 
+open Domain
+open FSharp.UMX
+
+let [<Literal>] Category = "FinalizationTransaction"
+
 module Events =
 
-    let [<Literal>] CategoryId = "FinalizationTransaction"
-    let streamName clientId = FsCodec.StreamName.create CategoryId clientId
+    let streamName (transactionId : string<transactionId>) = FsCodec.StreamName.create Category (UMX.untag transactionId)
 
     type Event =
         | FinalizationRequested of {| containerId : string; shipmentIds : string[] |}

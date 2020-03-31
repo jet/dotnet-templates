@@ -1,13 +1,15 @@
 ﻿module Shipment
 
-type ContainerId = string
+open Domain
+open FSharp.UMX
 
-type Shipment = { created: bool; association: ContainerId option }
+let [<Literal>] Category = "Shipment"
+
+type Shipment = { created: bool; association: string<containerId> option }
 
 module Events =
 
-    let [<Literal>] CategoryId = "Shipment"
-    let streamName clientId = FsCodec.StreamName.create CategoryId clientId
+    let streamName (shipmentId : string<shipmentId>) = FsCodec.StreamName.create Category (UMX.untag shipmentId)
 
     type Event =
         | ShipmentCreated
@@ -21,12 +23,12 @@ module Fold =
 
     type State = Shipment
 
-    let initial: State = { created = false; container = None }
+    let initial: State = { created = false; association = None }
 
     let evolve (state: State) (event: Events.Event): State =
         match event with
         | Events.ShipmentCreated          -> { state with created = true }
-        | Events.ShipmentAssigned   event -> { state with association = Some event.containerId }
+        | Events.ShipmentAssigned   event -> { state with association = Some (UMX.tag event.containerId) }
         | Events.ShipmentUnassigned       -> { state with association = None }
 
 

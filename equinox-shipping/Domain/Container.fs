@@ -1,13 +1,17 @@
 module Container
 
+open Domain
+open FSharp.UMX
+
+let [<Literal>] Category = "Container"
+
 // Container state needs to be serializable as it will be stored as part of the
 // Snapshotted event data.
 type ContainerState = { created: bool; finalized: bool }
 
 module Events =
 
-    let [<Literal>] CategoryId = "Shipment"
-    let streamName clientId = FsCodec.StreamName.create CategoryId clientId
+    let streamName (containerId : string<containerId>) = FsCodec.StreamName.create Category (UMX.untag containerId)
 
     type Event =
         | ContainerCreated
