@@ -15,11 +15,10 @@ module FinalizationProcessManager
                     | FinalizationTransaction.Action.AssignShipments (containerId, shipmentIds) ->
                         let! result =
                             seq {
-                                for sId in shipmentIds ->
-                                    async {
-                                        let! res = shipments.Execute(sId, Shipment.Command.Assign containerId)
-                                        return (sId, res)
-                                    }
+                                for sId in shipmentIds -> async {
+                                    let! res = shipments.Execute(sId, Shipment.Command.Assign containerId)
+                                    return (sId, res)
+                                }
                             }
                             |> Async.Parallel
 
