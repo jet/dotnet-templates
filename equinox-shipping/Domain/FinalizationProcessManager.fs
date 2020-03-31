@@ -18,6 +18,7 @@ module FinalizationProcessManager
 
                     match action with
                     | FinalizationTransaction.Action.AssignShipments (containerId, shipmentIds) ->
+                        // TODO: This needs throttling on Cosmos.
                         let! result =
                             seq {
                                 for sId in shipmentIds -> async {
