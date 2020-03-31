@@ -66,8 +66,8 @@ module Fold =
         match state, event with
         | Initial,               Events.FinalizationRequested _
         | Running (Assigning _), Events.AssignmentCompleted   _
-        | Running (Assigned _),  Events.FinalizationCompleted _
         | Running (Assigning _), Events.RevertRequested       _
+        | Running (Assigned _),  Events.FinalizationCompleted _
         | Running (Reverting _), Events.FinalizationFailed    _ ->
             Some event
         | _ -> None
