@@ -73,10 +73,7 @@ module Fold =
 let decide (update: Events.Event option) (state : Fold.State) : Action * Events.Event list =
     let events =
         match update with
-        | Some e ->
-            match Fold.filterValidTransition e state with
-            | Some e -> [e]
-            | None   -> []
+        | Some e -> Fold.filterValidTransition e state |> Option.toList
         | None   -> []
 
     let state' =
