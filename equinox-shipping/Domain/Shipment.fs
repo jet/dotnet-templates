@@ -33,7 +33,7 @@ module Fold =
         Seq.fold evolve
 
 type Command =
-    | Assign of containerId : string
+    | Assign of containerId : string<containerId>
     | Unassign
 
 let interpret (command: Command) (state: Fold.State): bool * Events.Event list =
@@ -43,12 +43,12 @@ let interpret (command: Command) (state: Fold.State): bool * Events.Event list =
         | Some _ ->
             // Assignment fails if the shipment was already assigned.
             false, []
-        | None -> true, [ Events.ShipmentAssigned {| containerId = containerId |} ]
+        | None -> true, [ Events.ShipmentAssigned {| containerId = UMX.untag containerId |} ]
 
     | Unassign ->
         true, [ Events.ShipmentUnassigned ]
 
-type Service internal (resolve : string -> Equinox.Stream<Events.Event, Fold.State>) =
+type Service internal (resolve : string<shipmentId> -> Equinox.Stream<Events.Event, Fold.State>) =
     member __.Execute(shipment, command : Command) : Async<bool> =
         let stream = resolve shipment
         stream.Transact(interpret command)

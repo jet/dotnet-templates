@@ -37,12 +37,12 @@ module Fold =
 
     let snapshot (state : State) = Events.Snapshotted state
 
-type Command = Finalize of shipmentIds : string[]
+type Command = Finalize of shipmentIds : string<shipmentId>[]
 
 let interpret (Finalize shipmentIds) (state : Fold.State): Events.Event list =
-    [ if not state.finalized then yield Events.ContainerFinalized {| shipmentIds = shipmentIds |} ]
+    [ if not state.finalized then yield Events.ContainerFinalized {| shipmentIds = shipmentIds |> Array.map UMX.untag |} ]
 
-type Service internal (resolve : string -> Equinox.Stream<Events.Event, Fold.State>) =
+type Service internal (resolve : string<containerId> -> Equinox.Stream<Events.Event, Fold.State>) =
     member __.Execute(shipment, command : Command) : Async<unit> =
         let stream = resolve shipment
         stream.Transact(interpret command)
