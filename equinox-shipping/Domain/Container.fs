@@ -10,7 +10,7 @@ module Events =
     let streamName (containerId : string<containerId>) = FsCodec.StreamName.create Category (UMX.untag containerId)
 
     type Event =
-        | ContainerFinalized  of {| shipmentIds: string[] |}
+        | ContainerFinalized
         | Snapshotted         of ContainerState
         interface TypeShape.UnionContract.IUnionContract
 
@@ -37,12 +37,13 @@ module Fold =
 
     let snapshot (state : State) = Events.Snapshotted state
 
-type Command = Finalize of shipmentIds : string<shipmentId>[]
+type Command = Finalize
 
-let interpret (Finalize shipmentIds) (state : Fold.State): Events.Event list =
-    [ if not state.finalized then yield Events.ContainerFinalized {| shipmentIds = shipmentIds |> Array.map UMX.untag |} ]
+let interpret (command: Command) (state : Fold.State): Events.Event list =
+    match command with
+    | Finalize -> [ if not state.finalized then yield Events.ContainerFinalized ]
 
 type Service internal (resolve : string<containerId> -> Equinox.Stream<Events.Event, Fold.State>) =
-    member __.Execute(shipment, command : Command) : Async<unit> =
-        let stream = resolve shipment
+    member __.Execute(containerId, command : Command) : Async<unit> =
+        let stream = resolve containerId
         stream.Transact(interpret command)

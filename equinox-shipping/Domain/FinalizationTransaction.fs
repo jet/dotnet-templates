@@ -21,7 +21,7 @@ module Events =
     let streamName (transactionId : string<transactionId>) = FsCodec.StreamName.create Category (UMX.untag transactionId)
 
     type Event =
-        | FinalizationRequested of {| containerId : string; shipmentIds : string[] |}
+        | FinalizationRequested of {| containerId: string; shipmentIds : string[] |}
         | AssignmentCompleted   of {| shipmentIds : string[] |}
         | RevertRequested       of {| shipmentIds : string[] |}
         | Completed
@@ -31,7 +31,7 @@ module Events =
 
 type Action =
     | AssignShipments   of containerId : string<containerId> * shipmentIds : string<shipmentId>[]
-    | FinalizeContainer of containerId : string<containerId> * shipmentIds : string<shipmentId>[]
+    | FinalizeContainer of containerId : string<containerId>
     // Reverts the assignment of the container for the shipments provided.
     | RevertAssignment  of shipmentIds : string<shipmentId>[]
     | Finish            of success : bool
@@ -47,7 +47,7 @@ module Fold =
 
         match state, event with
         | _, Events.FinalizationRequested event ->
-            { state with state = Running (Assigning (tag event.shipmentIds)) }
+            { container = Some (UMX.tag event.containerId); state = Running (Assigning (tag event.shipmentIds)) }
 
         | _, Events.AssignmentCompleted event ->
             { state with state = Running (Assigned (tag event.shipmentIds)) }
@@ -64,8 +64,8 @@ module Fold =
     let nextAction (state: State): Action =
         match state with
         | { container = Some cId; state = Running (Assigning shipmentIds) } -> Action.AssignShipments   (cId, shipmentIds)
-        | { container = Some cId; state = Running (Assigned  shipmentIds) } -> Action.FinalizeContainer (cId, shipmentIds)
-        | { state = Running (Reverting shipmentIds) }                       -> Action.RevertAssignment shipmentIds
+        | { container = Some cId; state = Running (Assigned  _) }           -> Action.FinalizeContainer cId
+        | { state = Running (Reverting shipmentIds) }                       -> Action.RevertAssignment  shipmentIds
         | { state = Completed result }                                      -> Action.Finish result
         | s -> failwith (sprintf "Cannot interpret state %A" s)
 
@@ -95,7 +95,6 @@ let decide (update : Events.Event option) (state : Fold.State) : Action * Events
     Fold.nextAction state', events
 
 type Service internal (resolve : string<transactionId> -> Equinox.Stream<Events.Event, Fold.State>) =
-
     member __.Apply(transactionId, update) : Async<Action> =
         let stream = resolve transactionId
         stream.Transact(decide update)

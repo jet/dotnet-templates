@@ -49,6 +49,6 @@ let interpret (command: Command) (state: Fold.State): bool * Events.Event list =
         true, [ Events.ShipmentUnassigned ]
 
 type Service internal (resolve : string<shipmentId> -> Equinox.Stream<Events.Event, Fold.State>) =
-    member __.Execute(shipment, command : Command) : Async<bool> =
-        let stream = resolve shipment
+    member __.Execute(shipmentId, command : Command) : Async<bool> =
+        let stream = resolve shipmentId
         stream.Transact(interpret command)

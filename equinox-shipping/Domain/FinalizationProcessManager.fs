@@ -28,18 +28,16 @@ module FinalizationProcessManager
                             }
                             |> Async.Parallel
 
-                        let failures =
+                        let (successes, failures) =
                             Array.partition snd result
-                            |> snd
-                            |> Array.map fst
 
                         return!
-                            match failures with
-                            | [||]     -> loop (FinalizationTransaction.Events.AssignmentCompleted {| shipmentIds = untag shipmentIds |})
-                            | failures -> loop (FinalizationTransaction.Events.RevertRequested {| shipmentIds = untag failures |})
+                            match Array.map fst failures with
+                            | [||] -> loop (FinalizationTransaction.Events.AssignmentCompleted {| shipmentIds = untag shipmentIds |})
+                            | _    -> loop (FinalizationTransaction.Events.RevertRequested     {| shipmentIds = successes |> Array.map (fst >> UMX.untag) |})
 
-                     | FinalizationTransaction.Action.FinalizeContainer (containerId, shipmentIds) ->
-                         do! containers.Execute (containerId, Container.Command.Finalize shipmentIds)
+                     | FinalizationTransaction.Action.FinalizeContainer containerId ->
+                         do! containers.Execute (containerId, Container.Command.Finalize)
                          return! loop FinalizationTransaction.Events.Completed
 
                      | FinalizationTransaction.Action.RevertAssignment shipmentIds ->
