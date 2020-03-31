@@ -10,6 +10,7 @@ module Events =
     let streamName (shipmentId : string<shipmentId>) = FsCodec.StreamName.create Category (UMX.untag shipmentId)
 
     type Event =
+        // We could introduce a reserved state for a shipment if we needed to prevent a shipment being assigned twice.
         | ShipmentAssigned of {| containerId : string |}
         | ShipmentUnassigned
         interface TypeShape.UnionContract.IUnionContract
