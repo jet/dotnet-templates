@@ -57,7 +57,7 @@ module Fold =
     let fold: State -> Events.Event seq -> State =
         Seq.fold evolve
 
-    let filterValidTransition (event : Events.Event) (state : State) =
+    let chooseValidTransition (event : Events.Event) (state : State) =
         match state, event with
         | Initial,               Events.FinalizationRequested _
         | Running (Assigning _), Events.AssignmentCompleted _
@@ -71,7 +71,7 @@ module Fold =
 let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
     let events =
         match update with
-        | Some e -> Fold.filterValidTransition e state |> Option.toList
+        | Some e -> Fold.chooseValidTransition e state |> Option.toList
         | None   -> []
 
     let state' =
