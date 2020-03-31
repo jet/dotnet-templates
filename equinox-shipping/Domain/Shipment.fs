@@ -1,11 +1,9 @@
 ﻿module Shipment
 
-open Domain
+open Types
 open FSharp.UMX
 
 let [<Literal>] Category = "Shipment"
-
-type Shipment = { association: string<containerId> option }
 
 module Events =
 
@@ -20,7 +18,7 @@ module Events =
 
 module Fold =
 
-    type State = Shipment
+    type State = ShipmentState
 
     let initial: State = { association = None }
 

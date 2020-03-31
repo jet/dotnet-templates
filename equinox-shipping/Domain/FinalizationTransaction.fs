@@ -1,6 +1,6 @@
 module FinalizationTransaction
 
-open Domain
+open Types
 open FSharp.UMX
 
 let [<Literal>] Category = "FinalizationTransaction"

@@ -1,13 +1,9 @@
 module Container
 
-open Domain
+open Types
 open FSharp.UMX
 
 let [<Literal>] Category = "Container"
-
-// Container state needs to be serializable as it will be stored as part of the
-// Snapshotted event data.
-type ContainerState = { finalized : bool }
 
 module Events =
 
