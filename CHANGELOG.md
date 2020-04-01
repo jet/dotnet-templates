@@ -10,11 +10,15 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
-
-- Clarified role of `VerboseConsole` argument for templates involving ChangeFeedVerbose (by renaming to `CfpVerbose`)
-
 ### Removed
 ### Fixed
+
+<a name="4.4.1"></a>
+## [4.4.1] - 2020-04-01
+
+### Changed
+
+- Clarified role of `VerboseConsole` argument for templates involving ChangeFeedVerbose (by renaming to `CfpVerbose`)
 
 <a name="4.4.0"></a>
 ## [4.4.0] - 2020-03-27
@@ -372,7 +376,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.4.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.4.1...HEAD
+[4.4.1]: https://github.com/jet/dotnet-templates/compare/4.4.0...4.4.1
 [4.4.0]: https://github.com/jet/dotnet-templates/compare/4.3.0...4.4.0
 [4.3.0]: https://github.com/jet/dotnet-templates/compare/4.2.0...4.3.0
 [4.2.0]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.2.0
