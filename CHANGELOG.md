@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Clarified role of `VerboseConsole` argument for templates involving ChangeFeedVerbose (by renaming to `CfpVerbose`)
+
 ### Removed
 ### Fixed
 

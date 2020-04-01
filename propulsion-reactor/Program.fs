@@ -58,7 +58,9 @@ module Args =
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-C"; Unique>]   VerboseConsole
+//#if (!kafkaEventSpans)
+        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
+//#endif
 //#if filter
 
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
@@ -79,7 +81,9 @@ module Args =
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
                 | Verbose ->                "request Verbose Logging. Default: off."
-                | VerboseConsole ->         "request Verbose Console Logging. Default: off."
+//#if (!kafkaEventSpans)
+                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off."
+//#endif
 //#if filter
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
@@ -95,7 +99,9 @@ module Args =
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
         member __.Verbose =                 a.Contains Parameters.Verbose
-        member __.VerboseConsole =          a.Contains VerboseConsole
+//#if (!kafkaEventSpans)
+        member __.CfpVerbose =              a.Contains CfpVerbose
+//#endif
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
@@ -452,7 +458,11 @@ module Args =
 // Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful Args.parse
 module Logging =
 
-    let initialize verbose verboseConsole =
+#if (!kafkaEventSpans)
+    let initialize verbose changeFeedProcessorVerbose =
+#else
+    let initialize verbose =
+#endif
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
@@ -460,14 +470,14 @@ module Logging =
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
 #if (!kafkaEventSpans)
             // LibLog writes to the global logger, so we need to control the emission
-            |> fun c -> let cfpl = if verboseConsole then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
+            |> fun c -> let cfpl = if changeFeedProcessorVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
             |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
                         let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                         let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
                         let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
                         let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                        if verboseConsole then c else c.Filter.ByExcluding(fun x -> isCfp x)
+                        if changeFeedProcessorVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
 #endif
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
@@ -650,7 +660,11 @@ let run args =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.initialize args.Verbose args.VerboseConsole
+#if (!kafkaEventSpans)
+        try Logging.initialize args.Verbose args.CfpVerbose
+#else
+        try Logging.initialize args.Verbose
+#endif
             try Configuration.initialize ()
                 if run args then 0 else 3
             with e -> Log.Fatal(e, "Exiting"); 2

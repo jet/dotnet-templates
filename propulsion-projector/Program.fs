@@ -81,6 +81,7 @@ module Args =
 
     [<NoEquality; NoComparison>]
     type Parameters =
+        | [<AltCommandLine "-V"; Unique>]   Verbose
         (* ChangeFeed Args*)
         | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
         | [<AltCommandLine "-as"; Unique>]  LeaseContainerSuffix of string
@@ -89,8 +90,7 @@ module Args =
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
-        | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-C"; Unique>]   VerboseConsole
+        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
 //#if kafka
         (* Kafka Args *)
         | [<AltCommandLine "-b"; Unique>]   Broker of string
@@ -109,21 +109,18 @@ module Args =
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | VerboseConsole ->         "request Verbose Logging from ChangeFeedProcessor. Default: off"
+                | CfpVerbose ->             "request Verbose Logging from ChangeFeedProcessor. Default: off"
 //#if kafka
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
 //#endif
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(a : ParseResults<Parameters>) =
+        member __.Verbose =                 a.Contains Verbose
         member val Cosmos =                 CosmosArguments(a.GetResult Cosmos)
-//#if kafka
-        member val Target =                 TargetInfo a
-//#endif
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
         member __.Suffix =                  a.GetResult(LeaseContainerSuffix, "-aux")
-        member __.Verbose =                 a.Contains Verbose
-        member __.VerboseConsole =          a.Contains VerboseConsole
+        member __.CfpVerbose =              a.Contains CfpVerbose
         member __.MaxDocuments =            a.TryGetResult MaxDocuments
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 64)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 1024)
@@ -142,6 +139,7 @@ module Args =
             { database = x.Cosmos.Database; container = x.AuxContainerName }, x.ConsumerGroupName, a.Contains FromTail, x.MaxDocuments, x.LagFrequency,
             (x.MaxReadAhead, x.MaxConcurrentStreams)
 //#if kafka
+        member val Target =                 TargetInfo a
     and TargetInfo(a : ParseResults<Parameters>) =
         member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
@@ -158,21 +156,21 @@ module Args =
 // Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
 module Logging =
 
-    let initialize verbose changeLogVerbose =
+    let initialize verbose changeFeedProcessorVerbose =
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             // LibLog writes to the global logger, so we need to control the emission
-            |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
+            |> fun c -> let cfpl = if changeFeedProcessorVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
             |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
                         let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                         let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
                         let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
                         let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                        if changeLogVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
+                        if changeFeedProcessorVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
@@ -218,7 +216,7 @@ let run args =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.initialize args.Verbose args.VerboseConsole
+        try Logging.initialize args.Verbose args.CfpVerbose
             try Configuration.initialize ()
                 if run args then 0 else 3
             with e -> Log.Fatal(e, "Exiting"); 2
