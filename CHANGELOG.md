@@ -13,6 +13,13 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
+<a name="4.4.2"></a>
+## [4.4.2] - 2020-04-04
+
+### Fixed
+
+- Added missing catch for `MissingArg` exceptions in all `main`s [#61](https://github.com/jet/dotnet-templates/pull/61) :pray: [@wantastic](https://github.com/wantastic84)
+
 <a name="4.4.1"></a>
 ## [4.4.1] - 2020-04-01
 
@@ -376,7 +383,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.4.1...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.4.2...HEAD
+[4.4.2]: https://github.com/jet/dotnet-templates/compare/4.4.1...4.4.2
 [4.4.1]: https://github.com/jet/dotnet-templates/compare/4.4.0...4.4.1
 [4.4.0]: https://github.com/jet/dotnet-templates/compare/4.3.0...4.4.0
 [4.3.0]: https://github.com/jet/dotnet-templates/compare/4.2.0...4.3.0
