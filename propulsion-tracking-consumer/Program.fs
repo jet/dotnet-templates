@@ -160,7 +160,8 @@ let main argv =
         try Logging.initialize args.Verbose
             try Configuration.initialize ()
                 run args
-            with e -> Log.Fatal(e, "Exiting"); 2
+            with Args.MissingArg msg -> eprintfn "%s" msg; 1
+                | e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
