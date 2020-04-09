@@ -27,33 +27,35 @@ module Events =
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
-open Events
+module Fold =
 
-let initial : State = Initial
+    type State = Events.State
+    let initial : State = State.Initial
 
-let isValidTransition (event : Events.Event) (state : State) =
-    match state, event with
-    | Initial,     FinalizationRequested _
-    | Assigning _, AssignmentCompleted _
-    | Assigning _, RevertCommenced _
-    | Assigned _,  Events.Completed
-    | Reverting _, Events.Completed -> true
-    | _ -> false
+    let isValidTransition (event : Events.Event) (state : State) =
+        match state, event with
+        | State.Initial,     Events.FinalizationRequested _
+        | State.Assigning _, Events.AssignmentCompleted _
+        | State.Assigning _, Events.RevertCommenced _
+        | State.Assigned _,  Events.Completed
+        | State.Reverting _, Events.Completed -> true
+        | _ -> false
 
-// The implementation trusts (does not spend time double checking) that events have passed an isValidTransition check
-let evolve (state : State) (event : Event) : State =
-    match state, event with
-    | _, FinalizationRequested event         -> Assigning { container = event.containerId; shipments = event.shipmentIds }
-    | Assigning state, AssignmentCompleted   -> Assigned state.container
-    | Assigning state, RevertCommenced event -> Reverting { state with shipments = event.shipmentIds }
-    | Assigned, Event.Completed              -> Completed true
-    | Reverting _state, Event.Completed      -> Completed false
-    | _, Snapshotted state                   -> state
-    | state, _                               -> state
-let fold : State -> Events.Event seq -> State = Seq.fold evolve
+    // The implementation trusts (does not spend time double checking) that events have passed an isValidTransition check
+    let evolve (state : State) (event : Events.Event) : State =
+        match state, event with
+        | _, Events.FinalizationRequested event                -> State.Assigning { container = event.containerId; shipments = event.shipmentIds }
+        | State.Assigning state,  Events.AssignmentCompleted   -> State.Assigned state.container
+        | State.Assigning state,  Events.RevertCommenced event -> State.Reverting { state with shipments = event.shipmentIds }
+        | State.Assigned,         Events.Completed             -> State.Completed true
+        | State.Reverting _state, Events.Completed             -> State.Completed false
+        | _,                      Events.Snapshotted state     -> state
+        // this shouldn't happen, but, if we did produce invalid events, we'll just ignore them
+        | state, _                                             -> state
+    let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
-let isOrigin = function Events.Snapshotted -> true | _ -> false
-let toSnapshot state = Events.Snapshotted state
+    let isOrigin = function Events.Snapshotted -> true | _ -> false
+    let toSnapshot state = Events.Snapshotted state
 
 type Action =
     | AssignShipments   of containerId : ContainerId * shipmentIds : ShipmentId []
@@ -61,25 +63,26 @@ type Action =
     | RevertAssignment  of containerId : ContainerId * shipmentIds : ShipmentId []
     | Finish            of success : bool
 
-let nextAction : State -> Action = function
-    | Assigning state      -> AssignShipments   (state.container, state.shipments)
-    | Assigned containerId -> FinalizeContainer containerId
-    | Reverting state      -> RevertAssignment  (state.container, state.shipments)
-    | Completed result     -> Finish result
-    | Initial as s         -> failwith (sprintf "Cannot interpret state %A" s)
+let nextAction : Fold.State -> Action = function
+    | Fold.State.Assigning state      -> AssignShipments   (state.container, state.shipments)
+    | Fold.State.Assigned containerId -> FinalizeContainer containerId
+    | Fold.State.Reverting state      -> RevertAssignment  (state.container, state.shipments)
+    | Fold.State.Completed result     -> Finish result
+    // As all state transitions are driven by members on the FinalizationProcessManager, we can rule this out
+    | Fold.State.Initial as s         -> failwith (sprintf "Cannot interpret state %A" s)
 
-// When there are no event to apply to the state, it pushes the transaction manager to
+// If there are no events to apply to the state, it pushes the transaction manager to
 // follow up on the next action from where it was.
-let decide (update : Events.Event option) (state : State) : Action * Events.Event list =
+let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
     let events =
         match update with
-        | Some e when isValidTransition e state -> [e]
+        | Some e when Fold.isValidTransition e state -> [e]
         | _ -> []
 
-    let state' = fold state events
+    let state' = Fold.fold state events
     nextAction state', events
 
-type Service internal (resolve : TransactionId -> Equinox.Stream<Events.Event, State>) =
+type Service internal (resolve : TransactionId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     member __.Apply(transactionId, update) : Async<Action> =
         let stream = resolve transactionId
@@ -93,8 +96,8 @@ module Cosmos =
 
     open Equinox.Cosmos
 
-    let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
+    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
     let create (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Resolver(context, Events.codec, fold, initial, cacheStrategy, accessStrategy)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
         create resolver.Resolve
