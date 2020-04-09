@@ -7,7 +7,7 @@ let streamName (containerId : ContainerId) = FsCodec.StreamName.create Category 
 module Events =
 
     type Event =
-        | ContainerFinalized
+        | Finalized
         | Snapshotted of {| finalized : bool |}
         interface TypeShape.UnionContract.IUnionContract
 
@@ -18,17 +18,17 @@ module Fold =
     type State = { finalized : bool }
     let initial = { finalized = false }
 
-    let evolve (state : State) (event : Events.Event) : State =
+    let evolve (_state : State) (event : Events.Event) : State =
         match event with
         | Events.Snapshotted snapshot -> { finalized = snapshot.finalized }
-        | Events.ContainerFinalized _ -> { state with finalized = true }
+        | Events.Finalized _ -> { finalized = true }
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot (state : State) = Events.Snapshotted {| finalized = state.finalized |}
 
 let interpretFinalize (state : Fold.State): Events.Event list =
-    [ if not state.finalized then yield Events.ContainerFinalized ]
+    [ if not state.finalized then yield Events.Finalized ]
 
 type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fold.State>) =
 
