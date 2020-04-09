@@ -47,27 +47,28 @@ module Fold =
         | _, Events.FinalizationRequested event                -> State.Assigning { container = event.containerId; shipments = event.shipmentIds }
         | State.Assigning state,  Events.AssignmentCompleted   -> State.Assigned state.container
         | State.Assigning state,  Events.RevertCommenced event -> State.Reverting { state with shipments = event.shipmentIds }
-        | State.Assigned,         Events.Completed             -> State.Completed true
+        | State.Assigned _,       Events.Completed             -> State.Completed true
         | State.Reverting _state, Events.Completed             -> State.Completed false
         | _,                      Events.Snapshotted state     -> state
         // this shouldn't happen, but, if we did produce invalid events, we'll just ignore them
         | state, _                                             -> state
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
-    let isOrigin = function Events.Snapshotted -> true | _ -> false
+    let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot state = Events.Snapshotted state
 
+[<RequireQualifiedAccess>]
 type Action =
-    | AssignShipments   of containerId : ContainerId * shipmentIds : ShipmentId []
+    | AssignShipments   of containerId : ContainerId * shipmentIds : ShipmentId[]
     | FinalizeContainer of containerId : ContainerId
-    | RevertAssignment  of containerId : ContainerId * shipmentIds : ShipmentId []
+    | RevertAssignment  of containerId : ContainerId * shipmentIds : ShipmentId[]
     | Finish            of success : bool
 
 let nextAction : Fold.State -> Action = function
-    | Fold.State.Assigning state      -> AssignShipments   (state.container, state.shipments)
-    | Fold.State.Assigned containerId -> FinalizeContainer containerId
-    | Fold.State.Reverting state      -> RevertAssignment  (state.container, state.shipments)
-    | Fold.State.Completed result     -> Finish result
+    | Fold.State.Assigning state      -> Action.AssignShipments   (state.container, state.shipments)
+    | Fold.State.Assigned containerId -> Action.FinalizeContainer containerId
+    | Fold.State.Reverting state      -> Action.RevertAssignment  (state.container, state.shipments)
+    | Fold.State.Completed result     -> Action.Finish result
     // As all state transitions are driven by members on the FinalizationProcessManager, we can rule this out
     | Fold.State.Initial as s         -> failwith (sprintf "Cannot interpret state %A" s)
 
