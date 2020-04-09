@@ -9,9 +9,6 @@ module EnvVar =
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
     let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-configuration
-// - this is where any custom retrieval of settings not arriving via commandline arguments or environment variables should go
-// - values should be propagated by setting environment variables and/or returning them from `initialize`
 module Configuration =
 
     let private initEnvVar var key loadF =
@@ -23,13 +20,6 @@ module Configuration =
         // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
-// - this module is responsible solely for parsing/validating the commandline arguments (including falling back to values supplied via environment variables)
-// - It's expected that the properties on *Arguments types will summarize the active settings as a side effect of
-// TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
-//      you may want to regenerate it at a different time and/or facilitate comparing it with the `module Args` of other programs
-// TODO NEVER hack temporary overrides in here; if you're going to do that, use commandline arguments that fall back to environment variables
-//      or (as a last resort) supply them via code in `module Configuration`
 module Args =
 
     exception MissingArg of string
@@ -47,10 +37,9 @@ module Args =
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-C"; Unique>]   VerboseConsole
+        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
+        | [<AltCommandLine "-t"; Unique>]   TimeoutS of float
 
-        | [<AltCommandLine "-e">]           CategoryBlacklist of string
-        | [<AltCommandLine "-i">]           CategoryWhitelist of string
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
             member a.Usage =
@@ -58,43 +47,20 @@ module Args =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
+                | TimeoutS _ ->             "Timeout (in seconds) before Watchdog should step in to process transactions. Default: 10."
                 | Verbose ->                "request Verbose Logging. Default: off."
-                | VerboseConsole ->         "request Verbose Console Logging. Default: off."
-                | CategoryBlacklist _ ->    "category whitelist"
-                | CategoryWhitelist _ ->    "category blacklist"
+                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off."
                 | Cosmos _ ->               "specify CosmosDB input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
         member __.Verbose =                 a.Contains Parameters.Verbose
-        member __.VerboseConsole =          a.Contains VerboseConsole
+        member __.CfpVerbose =              a.Contains CfpVerbose
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
+        member __.ProcessManagerMaxDop =    4
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
-        member __.FilterFunction(?excludeLong, ?longOnly): string -> bool =
-            let isLong (streamName : string) =
-                streamName.StartsWith "Inventory-" // Too long
-                || streamName.StartsWith "InventoryCount-" // No Longer used
-                || streamName.StartsWith "InventoryLog" // 5GB, causes lopsided partitions, unused
-            let excludeLong = defaultArg excludeLong true
-            match a.GetResults CategoryBlacklist, a.GetResults CategoryWhitelist with
-            | [], [] when longOnly = Some true ->
-                Log.Information("Only including long streams")
-                isLong
-            | [], [] ->
-                let black = set [
-                    "SkuFileUpload-534e4362c641461ca27e3d23547f0852"
-                    "SkuFileUpload-778f1efeab214f5bab2860d1f802ef24"
-                    "PurchaseOrder-5791" ]
-                let isCheckpoint (streamName : string) =
-                    streamName.EndsWith "_checkpoint"
-                    || streamName.EndsWith "_checkpoints"
-                    || streamName.StartsWith "#serial"
-                    || streamName.StartsWith "marvel_bookmark"
-                Log.Information("Using well-known stream blacklist {black} excluding checkpoints and #serial streams, excluding long streams: {excludeLong}", black, excludeLong)
-                fun x -> not (black.Contains x) && (not << isCheckpoint) x && (not excludeLong || (not << isLong) x)
-            | bad, [] ->    let black = Set.ofList bad in Log.Warning("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
-            | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
-            | _, _ -> raise (MissingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
+        member __.StateInterval =           TimeSpan.FromMinutes 5.
+        member __.ProcessingTimeout =       a.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
         member val Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
             | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments cosmos
@@ -209,68 +175,87 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful Args.parse
 module Logging =
 
-    let initialize verbose verboseConsole =
+    let initialize verbose changeFeedProcessorVerbose =
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             // LibLog writes to the global logger, so we need to control the emission
-            |> fun c -> let cfpl = if verboseConsole then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
+            |> fun c -> let cfpl = if changeFeedProcessorVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
             |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
                         let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
                         let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
                         let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
                         let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                        if verboseConsole then c else c.Filter.ByExcluding(fun x -> isCfp x)
+                        if changeFeedProcessorVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
 let [<Literal>] AppName = "Watchdog"
 
+open Shipping.Domain
+
+let createProcessManager maxDop (context, cache) =
+    let transactions = FinalizationTransaction.Cosmos.create (context, cache)
+    let containers = Container.Cosmos.create (context, cache)
+    let shipments = Shipment.Cosmos.create (context, cache)
+    FinalizationProcessManager.Service(transactions, containers, shipments, maxDop = maxDop)
+
+//open
+
 let build (args : Args.Arguments) =
         let (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
         let monitoredDiscovery, monitored, monitoredConnector = source.BuildConnectionDetails()
+
+        // Connect to the Target CosmosDB, wire to Process Manager
         let cosmos = source.Cosmos
         let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
+        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+        let cache = Equinox.Cache(AppName, sizeMb = 10)
+        let context = Equinox.Cosmos.Context(connection, database, container)
+        let processManager = createProcessManager args.ProcessManagerMaxDop (context, cache)
+        // TOCONSIDER We could collect stats on the final outcomes of stuck transactions we process
+        let driveTransaction transactionId : Async<unit> = async { let! _finalizedOk = processManager.Drive transactionId in () }
 
-        // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
-        let handle = Ingester.handleStreamEvents Ingester.tryHandle
-        let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
-        let filterByStreamName = args.FilterFunction()
+        // Hook the Watchdog Handler to the Process Manager
+        let isRelevantToWatchdogHandler = function
+            | FinalizationTransaction.Watchdog.MatchCategory _ -> true
+            | _ -> false
+        let handleSpan = Shipping.Watchdog.Handler.tryHandle args.ProcessingTimeout driveTransaction
+        let handle = Shipping.Watchdog.Handler.handleStreamEvents handleSpan
+        let stats = Shipping.Watchdog.Handler.Stats(Log.Logger, statsInterval = args.StatsInterval, stateInterval = args.StateInterval)
         let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
 
+        // Wire up the CFP to feed in the items
         let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
-            // TODO: customize parsing to events if source is not an Equinox Container
             docs
             |> Seq.collect EquinoxCosmosParser.enumStreamEvents
-            |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
+            |> Seq.filter (fun e -> isRelevantToWatchdogHandler e.stream)
         let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
-        let runPipeline =
+        let runSource =
             CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
                 leaseId, startFromTail, createObserver,
                 ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-        sink, runPipeline
+        sink, runSource
 
 let run args =
-    let projector, runSourcePipeline = build args
-    runSourcePipeline |> Async.Start
-    projector.AwaitCompletion() |> Async.RunSynchronously
-    projector.RanToCompletion
+    let sink, runSource = build args
+    runSource |> Async.Start
+    sink.AwaitCompletion() |> Async.RunSynchronously
+    sink.RanToCompletion
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.initialize args.Verbose args.VerboseConsole
+        try Logging.initialize args.Verbose args.CfpVerbose
             try Configuration.initialize ()
                 if run args then 0 else 3
-            with e -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

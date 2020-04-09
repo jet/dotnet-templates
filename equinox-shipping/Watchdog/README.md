@@ -31,23 +31,6 @@ This project was generated using:
 3. To run an instance of the Projector from a CosmosDb ChangeFeed
 
         # `-g default` defines the Projector Group identity - each id has separated state in the checkpoints store (`Sync-default` in the cited `cosmos` store)
-        # `-c $env:EQUINOX_COSMOS_CONTAINER ` specifies the source (if you have specified EQUINOX_COSMOS_* environment vars, no connection/database arguments are needed, but the monitored (source) container must be specified explicitly)
-        # `cosmos` specifies the target store for the reactions (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
+        # `-c $env:EQUINOX_COSMOS_CONTAINER` specifies the source (if you have specified EQUINOX_COSMOS_* environment vars, no connection/database arguments are needed, but the monitored (source) container must be specified explicitly)
+        # `cosmos` specifies the target store (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         dotnet run -- -g default cosmos -c $env:EQUINOX_COSMOS_CONTAINER  cosmos
-
-4. To run an instance of the Projector from EventStore
-
-        # (either add environment variables as per step 0 or use -s/-d/-c to specify them after the `cosmos` argument token)
-
-        $env:EQUINOX_ES_USERNAME="admin" # or use -u
-        $env:EQUINOX_ES_PASSWORD="changeit" # or use -p
-        $env:EQUINOX_ES_HOST="localhost" # or use -g
-
-        # `-g default` defines the Projector Group identity - each id has separated state in the checkpoints store (`Sync-default` in the cited `cosmos` store)
-        # `es` specifies the source (if you have specified 3x EQUINOX_ES_* environment vars, no arguments are needed)
-        # `cosmos` specifies the checkpoint store (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
-        dotnet run -- -g default es cosmos
-
-        # NB running more than one projector will cause them to duel, and is hence not advised
-
-5. To create a Consumer, use `dotnet new proConsumer` (see README therein for details)

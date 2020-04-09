@@ -1,18 +1,22 @@
 module Shipping.Domain.FinalizationTransaction
 
+open System.Runtime.Serialization
+
 let [<Literal>] private Category = "FinalizationTransaction"
 let streamName (transactionId : TransactionId) = FsCodec.StreamName.create Category (TransactionId.toString transactionId)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
+    let [<Literal>] private CompletedEventName = "Completed"
     type Event =
         | FinalizationRequested of {| containerId : ContainerId; shipmentIds : ShipmentId[] |}
         | AssignmentCompleted
         /// Signifies we're switching focus to relinquishing any assignments we completed.
         /// The list includes any items we could possibly have touched (including via idempotent retries)
         | RevertCommenced       of {| shipmentIds : ShipmentId[] |}
-        | Completed
+        /// Signifies all processing for the transaction has completed - the Watchdog looks for this event
+        | [<DataMember(Name = CompletedEventName)>]Completed
         | Snapshotted           of State
         interface TypeShape.UnionContract.IUnionContract
 
@@ -26,6 +30,10 @@ module Events =
     and TransactionState = { container : ContainerId; shipments : ShipmentId[] }
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+
+    /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
+    let isTerminalEvent (encoded : FsCodec.ITimelineEvent<_>) =
+        encoded.EventType = CompletedEventName
 
 module Fold =
 
@@ -102,3 +110,56 @@ module Cosmos =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
         create resolver.Resolve
+
+/// Handles requirement to infer when a transaction is 'stuck'
+/// Note we don't want to couple to the state in a deep manner; thus we track:
+/// a) when the request intent is established (aka when *Requested is logged)
+/// b) when a transaction reports that it has Completed
+module Watchdog =
+
+    module Events =
+
+        type Event =
+            | NonTerminal
+            | Terminal
+        type TimestampAndEvent = System.DateTimeOffset * Event
+        let codec =
+            let tryDecode (encoded : FsCodec.ITimelineEvent<byte[]>) =
+                Some (encoded.Timestamp, if Events.isTerminalEvent encoded then Terminal else NonTerminal)
+            let encode _ = failwith "Not Implemented"
+            let mapCausation _ = failwith "Not Implemented"
+            FsCodec.Codec.Create<TimestampAndEvent, _, obj>(encode, tryDecode, mapCausation)
+
+    module Fold =
+
+        type State = Initial | Active of startTime: System.DateTimeOffset | Completed
+        let initial = Initial
+        let evolve state = function
+            | startTime, Events.NonTerminal ->
+                if state = Initial then Active startTime
+                else state
+            | _, Events.Terminal ->
+                Completed
+        let fold : State -> Events.TimestampAndEvent seq -> State = Seq.fold evolve
+
+    type Status = Complete | Active | Stuck
+    let categorize cutoffTime = function
+        | Fold.Initial -> failwith "Expected at least one valid event"
+        | Fold.Active startTime when startTime < cutoffTime -> Stuck
+        | Fold.Active _ -> Active
+        | Fold.Completed -> Complete
+
+    let fold : Events.TimestampAndEvent seq -> Fold.State =
+        Fold.fold Fold.initial
+
+    let (|FoldToWatchdogState|) events : Fold.State =
+        events
+        |> Seq.choose Events.codec.TryDecode
+        |> fold
+
+    let (|MatchCategory|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> Some transId
+        | _ -> None
+    let (|MatchState|_|) = function
+        | MatchCategory transId, FoldToWatchdogState state -> Some (transId, state)
+        | _ -> None

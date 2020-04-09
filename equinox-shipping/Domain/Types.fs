@@ -16,3 +16,5 @@ module ContainerId =
 type TransactionId = string<transactionId>
 module TransactionId =
     let toString (x : TransactionId) : string = %x
+    let parse (x : string) = %x
+    let (|Parse|) = parse
