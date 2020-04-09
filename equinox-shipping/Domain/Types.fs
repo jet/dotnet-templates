@@ -1,12 +1,18 @@
-module Types
+namespace Shipping.Domain
 
 open FSharp.UMX
 
 [<Measure>] type shipmentId
+type ShipmentId = string<shipmentId>
+module ShipmentId =
+    let toString (x : ShipmentId) : string = %x
+
 [<Measure>] type containerId
+type ContainerId = string<containerId>
+module ContainerId =
+    let toString (x : ContainerId) : string = %x
+
 [<Measure>] type transactionId
-
-type ShipmentState = { association: string<containerId> option }
-
-// Container state needs to be serializable as it will be stored as part of the Snapshotted event data.
-type ContainerState = { finalized : bool }
+type TransactionId = string<transactionId>
+module TransactionId =
+    let toString (x : TransactionId) : string = %x

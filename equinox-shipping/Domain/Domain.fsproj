@@ -7,14 +7,13 @@
     <ItemGroup>
         <Compile Include="Types.fs" />
         <Compile Include="Shipment.fs" />
-        <Compile Include="FinalizationTransaction.fs" />
         <Compile Include="Container.fs" />
+        <Compile Include="FinalizationTransaction.fs" />
         <Compile Include="FinalizationProcessManager.fs" />
     </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="Equinox.Cosmos" Version="2.0.0" />
-      <PackageReference Include="FSharp.UMX" Version="1.0.0" />
     </ItemGroup>
 
 </Project>

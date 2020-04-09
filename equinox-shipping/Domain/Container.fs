@@ -1,49 +1,51 @@
-module Container
+module Shipping.Domain.Container
 
-open Types
-open FSharp.UMX
+let [<Literal>] private Category = "Container"
+let streamName (containerId : ContainerId) = FsCodec.StreamName.create Category (ContainerId.toString containerId)
 
-let [<Literal>] Category = "Container"
-
+// NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
-
-    let streamName (containerId : string<containerId>) = FsCodec.StreamName.create Category (UMX.untag containerId)
 
     type Event =
         | ContainerFinalized
-        | Snapshotted         of ContainerState
+        | Snapshotted of {| finalized : bool |}
         interface TypeShape.UnionContract.IUnionContract
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 module Fold =
 
-    type State = ContainerState
+    type State = { finalized : bool }
+    let initial = { finalized = false }
 
-    let initial: ContainerState = { finalized = false }
-
-    let evolve (state: State) (event: Events.Event): State =
+    let evolve (state : State) (event : Events.Event) : State =
         match event with
-        | Events.Snapshotted snapshot -> snapshot
+        | Events.Snapshotted snapshot -> { finalized = snapshot.finalized }
         | Events.ContainerFinalized _ -> { state with finalized = true }
+    let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
-    let fold: State -> Events.Event seq -> State =
-        Seq.fold evolve
+    let isOrigin = function Events.Snapshotted _ -> true | _ -> false
+    let toSnapshot (state : State) = Events.Snapshotted {| finalized = state.finalized |}
 
-    let isOrigin (event: Events.Event) =
-        match event with
-        | Events.Snapshotted _ -> true
-        | _ -> false
+let interpretFinalize (state : Fold.State): Events.Event list =
+    [ if not state.finalized then yield Events.ContainerFinalized ]
 
-    let snapshot (state : State) = Events.Snapshotted state
+type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-type Command = Finalize
-
-let interpret (command: Command) (state : Fold.State): Events.Event list =
-    match command with
-    | Finalize -> [ if not state.finalized then yield Events.ContainerFinalized ]
-
-type Service internal (resolve : string<containerId> -> Equinox.Stream<Events.Event, Fold.State>) =
-    member __.Execute(containerId, command : Command) : Async<unit> =
+    member __.Finalize(containerId) : Async<unit> =
         let stream = resolve containerId
-        stream.Transact(interpret command)
+        stream.Transact(interpretFinalize)
+
+let private create resolve =
+    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts = 3)
+    Service(resolve)
+
+module Cosmos =
+
+    open Equinox.Cosmos
+
+    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create resolver.Resolve

@@ -1,100 +1,100 @@
-module FinalizationTransaction
+module Shipping.Domain.FinalizationTransaction
 
-open Types
-open FSharp.UMX
+let [<Literal>] private Category = "FinalizationTransaction"
+let streamName (transactionId : TransactionId) = FsCodec.StreamName.create Category (TransactionId.toString transactionId)
 
-let [<Literal>] Category = "FinalizationTransaction"
-
-type State =
-    | Initial
-    | Running   of RunningState
-    | Completed of success : bool
-and RunningState =
-    | Assigning of shipmentIds : string<shipmentId>[]
-    | Assigned  of shipmentIds : string<shipmentId>[]
-    | Reverting of shipmentIds : string<shipmentId>[]
-
-type FinalizationTransactionState = { container : string<containerId> option; state : State }
-
+// NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    let streamName (transactionId : string<transactionId>) = FsCodec.StreamName.create Category (UMX.untag transactionId)
-
     type Event =
-        | FinalizationRequested of {| containerId: string; shipmentIds : string[] |}
-        | AssignmentCompleted   of {| shipmentIds : string[] |}
-        | RevertRequested       of {| shipmentIds : string[] |}
+        | FinalizationRequested of {| containerId : ContainerId; shipmentIds : ShipmentId[] |}
+        | AssignmentCompleted
+        /// Signifies we're switching focus to relinquishing any assignments we completed.
+        /// The list includes any items we could possibly have touched (including via idempotent retries)
+        | RevertRequested       of {| shipmentIds : ShipmentId[] |}
         | Completed
+        | Snapshotted           of State
         interface TypeShape.UnionContract.IUnionContract
+
+    and [<Newtonsoft.Json.JsonConverter(typeof<FsCodec.NewtonsoftJson.UnionConverter>)>]
+        State =
+        | Initial
+        | Assigning of TransactionState
+        | Assigned  of containerId : ContainerId
+        | Reverting of TransactionState
+        | Completed of success : bool
+    and TransactionState = { container : ContainerId; shipments : ShipmentId[] }
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
+open Events
+
+let initial : State = Initial
+
+let isValidTransition (event : Events.Event) (state : State) =
+    match state, event with
+    | Initial,     FinalizationRequested _
+    | Assigning _, AssignmentCompleted _
+    | Assigning _, RevertRequested _
+    | Assigned _,  Events.Completed
+    | Reverting _, Events.Completed -> true
+    | _ -> false
+
+// The implementation trusts (does not spend time double checking) that events have passed an isValidTransition check
+let evolve (state : State) (event : Event) : State =
+    match state, event with
+    | _, FinalizationRequested event         -> Assigning { container = event.containerId; shipments = event.shipmentIds }
+    | Assigning state, AssignmentCompleted   -> Assigned state.container
+    | Assigning state, RevertRequested event -> Reverting { state with shipments = event.shipmentIds }
+    | Assigned, Event.Completed              -> Completed true
+    | Reverting _state, Event.Completed      -> Completed false
+    | _, Snapshotted state                   -> state
+    | state, _                               -> state
+let fold : State -> Events.Event seq -> State = Seq.fold evolve
+
+let isOrigin = function Events.Snapshotted -> true | _ -> false
+let toSnapshot state = Events.Snapshotted state
+
 type Action =
-    | AssignShipments   of containerId : string<containerId> * shipmentIds : string<shipmentId>[]
-    | FinalizeContainer of containerId : string<containerId>
-    // Reverts the assignment of the container for the shipments provided.
-    | RevertAssignment  of shipmentIds : string<shipmentId>[]
+    | AssignShipments   of containerId : ContainerId * shipmentIds : ShipmentId []
+    | FinalizeContainer of containerId : ContainerId
+    | RevertAssignment  of containerId : ContainerId * shipmentIds : ShipmentId []
     | Finish            of success : bool
 
-module Fold =
-
-    type State = FinalizationTransactionState
-
-    let initial: State = { container = None; state = Initial }
-
-    let evolve (state : State) (event : Events.Event): State =
-        let tag (ids: string[]) = ids |> Array.map UMX.tag
-
-        match state, event with
-        | _, Events.FinalizationRequested event ->
-            { container = Some (UMX.tag event.containerId); state = Running (Assigning (tag event.shipmentIds)) }
-
-        | _, Events.AssignmentCompleted event ->
-            { state with state = Running (Assigned (tag event.shipmentIds)) }
-
-        | _, Events.RevertRequested event ->
-            { state with state = Running (Reverting (tag event.shipmentIds)) }
-
-        | { state = Running (Assigned _) }, Events.Completed ->
-            { state with state = Completed true }
-
-        | _, Events.Completed ->
-            { state with state = Completed false }
-
-    let nextAction (state: State): Action =
-        match state with
-        | { container = Some cId; state = Running (Assigning shipmentIds) } -> Action.AssignShipments   (cId, shipmentIds)
-        | { container = Some cId; state = Running (Assigned  _) }           -> Action.FinalizeContainer cId
-        | { state = Running (Reverting shipmentIds) }                       -> Action.RevertAssignment  shipmentIds
-        | { state = Completed result }                                      -> Action.Finish result
-        | s -> failwith (sprintf "Cannot interpret state %A" s)
-
-    let fold: State -> Events.Event seq -> State =
-        Seq.fold evolve
-
-    let chooseValidTransition (event : Events.Event) (state : State) =
-        match state, event with
-        | { state = Initial },               Events.FinalizationRequested _
-        | { state = Running (Assigning _) }, Events.AssignmentCompleted _
-        | { state = Running (Assigning _) }, Events.RevertRequested _
-        | { state = Running (Assigned _)  }, Events.Completed
-        | { state = Running (Reverting _) }, Events.Completed -> Some event
-        | _ -> None
+let nextAction : State -> Action = function
+    | Assigning state      -> AssignShipments   (state.container, state.shipments)
+    | Assigned containerId -> FinalizeContainer containerId
+    | Reverting state      -> RevertAssignment  (state.container, state.shipments)
+    | Completed result     -> Finish result
+    | Initial as s         -> failwith (sprintf "Cannot interpret state %A" s)
 
 // When there are no event to apply to the state, it pushes the transaction manager to
 // follow up on the next action from where it was.
-let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
+let decide (update : Events.Event option) (state : State) : Action * Events.Event list =
     let events =
         match update with
-        | Some e -> Fold.chooseValidTransition e state |> Option.toList
-        | None   -> []
+        | Some e when isValidTransition e state -> [e]
+        | _ -> []
 
-    let state' =
-        Fold.fold state events
+    let state' = fold state events
+    nextAction state', events
 
-    Fold.nextAction state', events
+type Service internal (resolve : TransactionId -> Equinox.Stream<Events.Event, State>) =
 
-type Service internal (resolve : string<transactionId> -> Equinox.Stream<Events.Event, Fold.State>) =
     member __.Apply(transactionId, update) : Async<Action> =
         let stream = resolve transactionId
         stream.Transact(decide update)
+
+let private create resolve =
+    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts = 3)
+    Service(resolve)
+
+module Cosmos =
+
+    open Equinox.Cosmos
+
+    let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, fold, initial, cacheStrategy, accessStrategy)
+        create resolver.Resolve
