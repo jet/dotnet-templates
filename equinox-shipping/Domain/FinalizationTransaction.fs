@@ -11,7 +11,7 @@ module Events =
         | AssignmentCompleted
         /// Signifies we're switching focus to relinquishing any assignments we completed.
         /// The list includes any items we could possibly have touched (including via idempotent retries)
-        | RevertRequested       of {| shipmentIds : ShipmentId[] |}
+        | RevertCommenced       of {| shipmentIds : ShipmentId[] |}
         | Completed
         | Snapshotted           of State
         interface TypeShape.UnionContract.IUnionContract
@@ -35,7 +35,7 @@ let isValidTransition (event : Events.Event) (state : State) =
     match state, event with
     | Initial,     FinalizationRequested _
     | Assigning _, AssignmentCompleted _
-    | Assigning _, RevertRequested _
+    | Assigning _, RevertCommenced _
     | Assigned _,  Events.Completed
     | Reverting _, Events.Completed -> true
     | _ -> false
@@ -45,7 +45,7 @@ let evolve (state : State) (event : Event) : State =
     match state, event with
     | _, FinalizationRequested event         -> Assigning { container = event.containerId; shipments = event.shipmentIds }
     | Assigning state, AssignmentCompleted   -> Assigned state.container
-    | Assigning state, RevertRequested event -> Reverting { state with shipments = event.shipmentIds }
+    | Assigning state, RevertCommenced event -> Reverting { state with shipments = event.shipmentIds }
     | Assigned, Event.Completed              -> Completed true
     | Reverting _state, Event.Completed      -> Completed false
     | _, Snapshotted state                   -> state

@@ -22,7 +22,7 @@ type Service(transactions : FinalizationTransaction.Service, containers : Contai
                     return! loop FinalizationTransaction.Events.AssignmentCompleted
                 else
                     let inDoubt = shipmentIds |> Array.except failures
-                    return! loop (FinalizationTransaction.Events.RevertRequested {| shipmentIds = inDoubt |})
+                    return! loop (FinalizationTransaction.Events.RevertCommenced {| shipmentIds = inDoubt |})
 
               | FinalizationTransaction.Action.FinalizeContainer containerId ->
                   do! containers.Finalize(containerId)
