@@ -7,7 +7,7 @@ let streamName (shipmentId : ShipmentId) = FsCodec.StreamName.create Category (S
 module Events =
 
     type Event =
-        // TOCONSIDER: We could introduce a reserved state for a shipment if we needed to prevent a shipment being assigned twice
+        // TOCONSIDER: We could introduce a reserved state for a shipment if we needed to avoid multiple instances of the Assigned event
         | Assigned    of {| containerId : ContainerId |}
         | Revoked
         | Snapshotted of {| association : ContainerId option |}

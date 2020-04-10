@@ -7,34 +7,34 @@ let streamName (containerId : ContainerId) = FsCodec.StreamName.create Category 
 module Events =
 
     type Event =
-        | Finalized
-        | Snapshotted of {| finalized : bool |}
+        | Finalized of {| shipmentIds : ShipmentId[] |}
+        | Snapshotted of {| shipmentIds : ShipmentId[] |}
         interface TypeShape.UnionContract.IUnionContract
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 module Fold =
 
-    type State = { finalized : bool }
-    let initial = { finalized = false }
+    type State = { shipmentIds : ShipmentId[] }
+    let initial = { shipmentIds = Array.empty }
 
     let evolve (_state : State) (event : Events.Event) : State =
         match event with
-        | Events.Snapshotted snapshot -> { finalized = snapshot.finalized }
-        | Events.Finalized _ -> { finalized = true }
+        | Events.Snapshotted snapshot -> { shipmentIds = snapshot.shipmentIds }
+        | Events.Finalized event -> { shipmentIds = event.shipmentIds }
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
-    let toSnapshot (state : State) = Events.Snapshotted {| finalized = state.finalized |}
+    let toSnapshot (state : State) = Events.Snapshotted {| shipmentIds = state.shipmentIds |}
 
-let interpretFinalize (state : Fold.State): Events.Event list =
-    [ if not state.finalized then yield Events.Finalized ]
+let interpretFinalize shipmentIds (state : Fold.State): Events.Event list =
+    [ if (not << Array.isEmpty) state.shipmentIds then yield Events.Finalized {| shipmentIds = shipmentIds |} ]
 
 type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-    member __.Finalize(containerId) : Async<unit> =
+    member __.Finalize(containerId, shipmentIds) : Async<unit> =
         let stream = resolve containerId
-        stream.Transact(interpretFinalize)
+        stream.Transact(interpretFinalize shipmentIds)
 
 let private create resolve =
     let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts = 3)

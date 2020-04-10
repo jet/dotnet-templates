@@ -29,12 +29,12 @@ type Service
                     let inDoubt = shipmentIds |> Array.except failedShipmentAssignments
                     return! loop (FinalizationTransaction.Events.RevertCommenced {| shipmentIds = inDoubt |})
 
-              | FinalizationTransaction.Action.FinalizeContainer containerId ->
-                  do! containers.Finalize(containerId)
-                  return! loop FinalizationTransaction.Events.Completed
-
               | FinalizationTransaction.Action.RevertAssignment (containerId, shipmentIds) ->
                   let! _ = Async.Parallel(seq { for sId in shipmentIds -> shipments.TryRevoke(sId, containerId) }, maxDop)
+                  return! loop FinalizationTransaction.Events.Completed
+
+              | FinalizationTransaction.Action.FinalizeContainer (containerId, shipmentIds) ->
+                  do! containers.Finalize(containerId, shipmentIds)
                   return! loop FinalizationTransaction.Events.Completed
 
               | FinalizationTransaction.Action.Finish result ->
@@ -42,8 +42,8 @@ type Service
         }
         loop
 
-    // Caller can generate the TransactionId via a deterministic hash of the shipmentIds
-    member __.TryFinalize(transactionId, containerId, shipmentIds) : Async<bool> =
+    // Caller should generate the TransactionId via a deterministic hash of the shipmentIds in order to ensure idempotency (and sharing of fate) of identical requests
+    member __.TryFinalizeContainer(transactionId, containerId, shipmentIds) : Async<bool> =
         let initialRequest =
             FinalizationTransaction.Events.FinalizationRequested
                 {|  containerId = containerId

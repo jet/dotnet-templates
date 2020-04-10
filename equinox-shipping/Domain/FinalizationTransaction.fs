@@ -11,10 +11,10 @@ module Events =
     let [<Literal>] private CompletedEventName = "Completed"
     type Event =
         | FinalizationRequested of {| containerId : ContainerId; shipmentIds : ShipmentId[] |}
-        | AssignmentCompleted
         /// Signifies we're switching focus to relinquishing any assignments we completed.
         /// The list includes any items we could possibly have touched (including via idempotent retries)
         | RevertCommenced       of {| shipmentIds : ShipmentId[] |}
+        | AssignmentCompleted
         /// Signifies all processing for the transaction has completed - the Watchdog looks for this event
         | [<DataMember(Name = CompletedEventName)>]Completed
         | Snapshotted           of State
@@ -24,8 +24,8 @@ module Events =
         State =
         | Initial
         | Assigning of TransactionState
-        | Assigned  of containerId : ContainerId
         | Reverting of TransactionState
+        | Assigned  of TransactionState
         | Completed of success : bool
     and TransactionState = { container : ContainerId; shipments : ShipmentId[] }
 
@@ -43,20 +43,20 @@ module Fold =
     let isValidTransition (event : Events.Event) (state : State) =
         match state, event with
         | State.Initial,     Events.FinalizationRequested _
-        | State.Assigning _, Events.AssignmentCompleted _
         | State.Assigning _, Events.RevertCommenced _
-        | State.Assigned _,  Events.Completed
-        | State.Reverting _, Events.Completed -> true
+        | State.Reverting _, Events.Completed
+        | State.Assigning _, Events.AssignmentCompleted _
+        | State.Assigned _,  Events.Completed -> true
         | _ -> false
 
     // The implementation trusts (does not spend time double checking) that events have passed an isValidTransition check
     let evolve (state : State) (event : Events.Event) : State =
         match state, event with
         | _, Events.FinalizationRequested event                -> State.Assigning { container = event.containerId; shipments = event.shipmentIds }
-        | State.Assigning state,  Events.AssignmentCompleted   -> State.Assigned state.container
         | State.Assigning state,  Events.RevertCommenced event -> State.Reverting { state with shipments = event.shipmentIds }
-        | State.Assigned _,       Events.Completed             -> State.Completed true
         | State.Reverting _state, Events.Completed             -> State.Completed false
+        | State.Assigning state,  Events.AssignmentCompleted   -> State.Assigned state
+        | State.Assigned _,       Events.Completed             -> State.Completed true
         | _,                      Events.Snapshotted state     -> state
         // this shouldn't happen, but, if we did produce invalid events, we'll just ignore them
         | state, _                                             -> state
@@ -68,14 +68,14 @@ module Fold =
 [<RequireQualifiedAccess>]
 type Action =
     | AssignShipments   of containerId : ContainerId * shipmentIds : ShipmentId[]
-    | FinalizeContainer of containerId : ContainerId
     | RevertAssignment  of containerId : ContainerId * shipmentIds : ShipmentId[]
+    | FinalizeContainer of containerId : ContainerId * shipmentIds : ShipmentId[]
     | Finish            of success : bool
 
 let nextAction : Fold.State -> Action = function
     | Fold.State.Assigning state      -> Action.AssignShipments   (state.container, state.shipments)
-    | Fold.State.Assigned containerId -> Action.FinalizeContainer containerId
     | Fold.State.Reverting state      -> Action.RevertAssignment  (state.container, state.shipments)
+    | Fold.State.Assigned state       -> Action.FinalizeContainer (state.container, state.shipments)
     | Fold.State.Completed result     -> Action.Finish result
     // As all state transitions are driven by members on the FinalizationProcessManager, we can rule this out
     | Fold.State.Initial as s         -> failwith (sprintf "Cannot interpret state %A" s)
