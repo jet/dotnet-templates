@@ -9,15 +9,20 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.5.0"></a>
+## [4.5.0] - 2020-04-10
+
+### Added
 
 - `eqxShipping` Shipping Domain, Process Manager and Watchdog service [#56](https://github.com/jet/dotnet-templates/pull/56) :pray: [@Kimserey](https://github.com/Kimserey)
 
 ### Changed
 
 - DRY'd handling of `MissingArg` in `Configuration.initialize`
-
-### Removed
-### Fixed
 
 <a name="4.4.2"></a>
 ## [4.4.2] - 2020-04-04
@@ -389,7 +394,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.4.2...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.5.0...HEAD
+[4.5.0]: https://github.com/jet/dotnet-templates/compare/4.4.2...4.5.0
 [4.4.2]: https://github.com/jet/dotnet-templates/compare/4.4.1...4.4.2
 [4.4.1]: https://github.com/jet/dotnet-templates/compare/4.4.0...4.4.1
 [4.4.0]: https://github.com/jet/dotnet-templates/compare/4.3.0...4.4.0
