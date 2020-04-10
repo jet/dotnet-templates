@@ -44,10 +44,7 @@ type Service
 
     // Caller should generate the TransactionId via a deterministic hash of the shipmentIds in order to ensure idempotency (and sharing of fate) of identical requests
     member __.TryFinalizeContainer(transactionId, containerId, shipmentIds) : Async<bool> =
-        let initialRequest =
-            FinalizationTransaction.Events.FinalizationRequested
-                {|  containerId = containerId
-                    shipmentIds = shipmentIds |}
+        let initialRequest = FinalizationTransaction.Events.FinalizationRequested {| containerId = containerId; shipmentIds = shipmentIds |}
         execute transactionId (Some initialRequest)
 
     /// Used by watchdog service to drive processing to a conclusion where a given request was orphaned

@@ -10,6 +10,7 @@
         <Compile Include="Container.fs" />
         <Compile Include="FinalizationTransaction.fs" />
         <Compile Include="FinalizationProcessManager.fs" />
+        <Compile Include="TransactionWatchdog.fs" />
     </ItemGroup>
 
     <ItemGroup>

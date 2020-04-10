@@ -3,43 +3,43 @@ module Shipping.Watchdog.Handler
 open System
 
 [<RequireQualifiedAccess>]
-type Outcome = Completed | Deferred | Resolved
+type Outcome = Completed | Deferred | Resolved of successfully : bool
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
 
-    let mutable completed, deferred, resolved = 0, 0, 0
+    let mutable completed, deferred, failed, succeeded = 0, 0, 0, 0
 
     override __.HandleOk res = res |> function
         | Outcome.Completed -> completed <- completed + 1
         | Outcome.Deferred -> deferred <- deferred + 1
-        | Outcome.Resolved -> resolved <- resolved + 1
+        | Outcome.Resolved successfully -> if successfully then succeeded <- succeeded + 1 else failed <- failed + 1
 
     override __.DumpStats () =
-        if completed <> 0 || deferred <> 0 then
-            log.Information(" Completed {completed} Deferred {deferred} Resolved {resolved}", completed, deferred, resolved)
-            completed <- 0; deferred <- 0; resolved <- 0
+        if completed <> 0 || deferred <> 0 || failed <> 0 || succeeded <> 0 then
+            log.Information(" Completed {completed} Deferred {deferred} Failed {failed} Succeeded {succeeded}", completed, deferred, failed, succeeded)
+            completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0
 
-open Shipping.Domain.FinalizationTransaction
+open Shipping.Domain
 
 let tryHandle
         (processingTimeout : TimeSpan)
-        (driveTransaction : Shipping.Domain.TransactionId -> Async<unit>)
+        (driveTransaction : Shipping.Domain.TransactionId -> Async<bool>)
         (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
     let processingStuckCutoff = let now = DateTimeOffset.UtcNow in now.Add(-processingTimeout)
     match stream, span.events with
-    | Watchdog.MatchState (transId, state) ->
-        match Watchdog.categorize processingStuckCutoff state with
-        | Watchdog.Complete ->
+    | TransactionWatchdog.Finalization.MatchStatus (transId, status) ->
+        match TransactionWatchdog.categorize processingStuckCutoff status with
+        | TransactionWatchdog.Complete ->
             return Outcome.Completed
-        | Watchdog.Active ->
-            // Visiting every second is not too expensive; we don't want to be warming the data center for no purpose
+        | TransactionWatchdog.Active ->
+            // We don't want to be warming the data center for no purpose; visiting every second is not too expensive
             do! Async.Sleep 1000 // ms
             return Outcome.Deferred
-        | Watchdog.Stuck ->
-            do! driveTransaction transId
-            return Outcome.Resolved
+        | TransactionWatchdog.Stuck ->
+            let! success = driveTransaction transId
+            return Outcome.Resolved success
     | other -> return failwithf "Span from unexpected category %A" other }
 
 let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64*Outcome> = async {
@@ -47,4 +47,4 @@ let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_
     // if we're deferring, we need to retain the events (all of them, as the time of the first one is salient)
     | Outcome.Deferred as r -> return span.index, r
     // if it's now complete (either organically, or with our help), we can release all the events pertaining to this transaction
-    | Outcome.Completed | Outcome.Resolved as r -> return span.index + span.events.LongLength, r }
+    | Outcome.Completed | Outcome.Resolved _ as r -> return span.index + span.events.LongLength, r }

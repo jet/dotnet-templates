@@ -53,7 +53,7 @@ module Args =
                 | Cosmos _ ->               "specify CosmosDB input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.Verbose =                 a.Contains Parameters.Verbose
+        member __.Verbose =                 a.Contains Verbose
         member __.CfpVerbose =              a.Contains CfpVerbose
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
@@ -219,14 +219,12 @@ let build (args : Args.Arguments) =
         let cache = Equinox.Cache(AppName, sizeMb = 10)
         let context = Equinox.Cosmos.Context(connection, database, container)
         let processManager = createProcessManager args.ProcessManagerMaxDop (context, cache)
-        // TOCONSIDER We could collect stats on the final outcomes of stuck transactions we process
-        let driveTransaction transactionId : Async<unit> = async { let! _finalizedOk = processManager.Drive transactionId in () }
 
         // Hook the Watchdog Handler to the Process Manager
         let isRelevantToWatchdogHandler = function
-            | FinalizationTransaction.Watchdog.MatchCategory _ -> true
+            | FinalizationTransaction.Match _ -> true
             | _ -> false
-        let handleSpan = Shipping.Watchdog.Handler.tryHandle args.ProcessingTimeout driveTransaction
+        let handleSpan = Shipping.Watchdog.Handler.tryHandle args.ProcessingTimeout processManager.Drive
         let handle = Shipping.Watchdog.Handler.handleStreamEvents handleSpan
         let stats = Shipping.Watchdog.Handler.Stats(Log.Logger, statsInterval = args.StatsInterval, stateInterval = args.StateInterval)
         let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
