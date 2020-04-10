@@ -54,6 +54,12 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
+- [`eqxShipping`](equinox-shipping/) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey)
+ 
+   - processing is fully idempotent; retries, concurrent or overlapping transactions are handled correctly
+   - if any `Shipment`s cannot be `Assigned`, those that have been get `Revoked`, and the failure is reported to the caller
+   - includes a `Watchdog` console app (based on `dotnet new proReactor --source changeFeedOnly --blank`) responsible for driving any abandoned transactions being carried out by e.g. Web Clients through to their conclusion.
+
 ## Walkthrough
 
 As dictated by [the design of dotnet's templating mechanism](https://github.com/dotnet/templating/), consumption is ultimately via the .NET Core SDK's `dotnet new` CLI facility and/or associated facilities in Visual Studio, Rider etc.
@@ -129,6 +135,10 @@ To use from the command line, the outline is:
     # (-m includes an example of how to upconvert from similar event-sourced representations in an existing store)
     dotnet new proSync -m
     start README.md
+
+    # ... to add a Shipping Domain example containing a Process Manager with a Watchdog Service
+    md -p ../Shipping | Set-Location
+    dotnet new eqxShipping
 
 ## TESTING
 

@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `eqxShipping` Shipping Domain, Process Manager and Watchdog service [#56](https://github.com/jet/dotnet-templates/pull/56) :pray: [@Kimserey](https://github.com/Kimserey)
+
 ### Changed
 ### Removed
 ### Fixed

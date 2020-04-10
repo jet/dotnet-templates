@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @kimserey @bartelink",
+  "classifications": [
+    "Equinox",
+    "Propulsion",
+    "Event Sourcing",
+    "Process Manager"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Equinox.Shipping",
+  "name": "Equinox Shipping Sample",
+  "shortName": "eqxShipping",
+  "sourceName": "Shipping",
+  "preferNameDirectory": true
+}
