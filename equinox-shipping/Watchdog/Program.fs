@@ -1,4 +1,4 @@
-﻿module Watchdog.Program
+﻿module Shipping.Watchdog.Program
 
 open Propulsion.Cosmos
 open Serilog
@@ -206,40 +206,38 @@ let createProcessManager maxDop (context, cache) =
     let shipments = Shipment.Cosmos.create (context, cache)
     FinalizationProcessManager.Service(transactions, containers, shipments, maxDop = maxDop)
 
-//open
-
 let build (args : Args.Arguments) =
-        let (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
-        let monitoredDiscovery, monitored, monitoredConnector = source.BuildConnectionDetails()
+    let (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
+    let monitoredDiscovery, monitored, monitoredConnector = source.BuildConnectionDetails()
 
-        // Connect to the Target CosmosDB, wire to Process Manager
-        let cosmos = source.Cosmos
-        let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        let cache = Equinox.Cache(AppName, sizeMb = 10)
-        let context = Equinox.Cosmos.Context(connection, database, container)
-        let processManager = createProcessManager args.ProcessManagerMaxDop (context, cache)
+    // Connect to the Target CosmosDB, wire to Process Manager
+    let cosmos = source.Cosmos
+    let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
+    let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+    let cache = Equinox.Cache(AppName, sizeMb = 10)
+    let context = Equinox.Cosmos.Context(connection, database, container)
+    let processManager = createProcessManager args.ProcessManagerMaxDop (context, cache)
 
-        // Hook the Watchdog Handler to the Process Manager
-        let isRelevantToWatchdogHandler = function
-            | FinalizationTransaction.Match _ -> true
-            | _ -> false
-        let handleSpan = Shipping.Watchdog.Handler.tryHandle args.ProcessingTimeout processManager.Drive
-        let handle = Shipping.Watchdog.Handler.handleStreamEvents handleSpan
-        let stats = Shipping.Watchdog.Handler.Stats(Log.Logger, statsInterval = args.StatsInterval, stateInterval = args.StateInterval)
-        let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
+    // Hook the Watchdog Handler to the Process Manager
+    let isRelevantToWatchdogHandler = function
+        | FinalizationTransaction.Match _ -> true
+        | _ -> false
+    let handleSpan = Shipping.Watchdog.Handler.tryHandle args.ProcessingTimeout processManager.Drive
+    let handle = Shipping.Watchdog.Handler.handleStreamEvents handleSpan
+    let stats = Shipping.Watchdog.Handler.Stats(Log.Logger, statsInterval = args.StatsInterval, stateInterval = args.StateInterval)
+    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
 
-        // Wire up the CFP to feed in the items
-        let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
-            docs
-            |> Seq.collect EquinoxCosmosParser.enumStreamEvents
-            |> Seq.filter (fun e -> isRelevantToWatchdogHandler e.stream)
-        let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
-        let runSource =
-            CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
-                leaseId, startFromTail, createObserver,
-                ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-        sink, runSource
+    // Wire up the CFP to feed in the items
+    let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
+        docs
+        |> Seq.collect EquinoxCosmosParser.enumStreamEvents
+        |> Seq.filter (fun e -> isRelevantToWatchdogHandler e.stream)
+    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
+    let runSource =
+        CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
+            leaseId, startFromTail, createObserver,
+            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
+    sink, runSource
 
 let run args =
     let sink, runSource = build args
