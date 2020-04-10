@@ -109,10 +109,10 @@ module Args =
 
                 | Cosmos _ ->               "CosmosDb Sink parameters."
     and CosmosSourceArguments(a : ParseResults<CosmosSourceParameters>) =
-        member __.FromTail =                a.Contains CosmosSourceParameters.FromTail
+        member __.FromTail =                a.Contains FromTail
         member __.MaxDocuments =            a.TryGetResult MaxDocuments
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member __.LeaseContainer =          a.TryGetResult CosmosSourceParameters.LeaseContainer
+        member __.LeaseContainer =          a.TryGetResult LeaseContainer
 
         member __.Mode =                    a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Discovery =               Equinox.Cosmos.Discovery.FromConnectionString __.Connection
