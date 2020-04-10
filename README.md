@@ -54,6 +54,7 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
+<a name="eqxshipping"></a>
 - [`eqxShipping`](equinox-shipping/) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey)
  
    - processing is fully idempotent; retries, concurrent or overlapping transactions are handled correctly
