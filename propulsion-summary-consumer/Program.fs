@@ -146,7 +146,7 @@ let start (args : Args.Arguments) =
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse spanJson
-    let stats = Ingester.Stats Log.Logger
+    let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
     Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, parseStreamSummaries, Ingester.ingest service, args.MaxConcurrentStreams, stats)
 
 let run args =
@@ -160,7 +160,8 @@ let main argv =
         try Logging.initialize args.Verbose
             try Configuration.initialize ()
                 if run args then 0 else 3
-            with e -> Log.Fatal(e, "Exiting"); 2
+            with Args.MissingArg msg -> eprintfn "%s" msg; 1
+                | e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

@@ -13,7 +13,44 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
-<a name="4.2.0></a>
+<a name="4.4.2"></a>
+## [4.4.2] - 2020-04-04
+
+### Fixed
+
+- Added missing catch for `MissingArg` exceptions in all `main`s [#61](https://github.com/jet/dotnet-templates/pull/61) :pray: [@wantastic](https://github.com/wantastic84)
+
+<a name="4.4.1"></a>
+## [4.4.1] - 2020-04-01
+
+### Changed
+
+- Clarified role of `VerboseConsole` argument for templates involving ChangeFeedVerbose (by renaming to `CfpVerbose`)
+
+<a name="4.4.0"></a>
+## [4.4.0] - 2020-03-27
+
+### Added
+
+- `proReactor`: Added `--kafka --blank` mode illustrating a simple publisher [#59](https://github.com/jet/dotnet-templates/pull/59) 
+
+### Changed
+
+- `proReactor`: Flip default to omitting filtering logic (`--noFilter` is now `--filter`, defaulting to omitting the logic)
+
+### Fixed
+
+- `proReactor`: Fixed CFP logging omission
+- `proReactor`: Wired producer stats emission for `--kafka` modes
+
+<a name="4.3.0"></a>
+## [4.3.0] - 2020-03-12
+
+### Changed
+
+- `Stats` and `Outcome` management cleanup [#57](https://github.com/jet/dotnet-templates/pull/57)
+
+<a name="4.2.0"></a>
 ## [4.2.0] - 2020-03-09
 
 ### Changed
@@ -346,7 +383,11 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.2.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.4.2...HEAD
+[4.4.2]: https://github.com/jet/dotnet-templates/compare/4.4.1...4.4.2
+[4.4.1]: https://github.com/jet/dotnet-templates/compare/4.4.0...4.4.1
+[4.4.0]: https://github.com/jet/dotnet-templates/compare/4.3.0...4.4.0
+[4.3.0]: https://github.com/jet/dotnet-templates/compare/4.2.0...4.3.0
 [4.2.0]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.2.0
 [4.1.1]: https://github.com/jet/dotnet-templates/compare/4.1.0...4.1.1
 [4.1.0]: https://github.com/jet/dotnet-templates/compare/4.0.1...4.1.0

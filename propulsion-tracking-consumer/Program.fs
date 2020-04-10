@@ -144,7 +144,7 @@ let start (args : Args.Arguments) =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    let stats = Ingester.Stats(Log.Logger)
+    let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
     // No categorization required, our inputs are all one big family defying categorization
     let sequencer = Propulsion.Kafka.Core.StreamKeyEventSequencer()
     Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, sequencer.ToStreamEvent, Ingester.ingest service, args.MaxConcurrentStreams, stats)
@@ -160,7 +160,8 @@ let main argv =
         try Logging.initialize args.Verbose
             try Configuration.initialize ()
                 run args
-            with e -> Log.Fatal(e, "Exiting"); 2
+            with Args.MissingArg msg -> eprintfn "%s" msg; 1
+                | e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

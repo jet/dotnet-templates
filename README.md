@@ -2,13 +2,17 @@
 
 This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/en-us/dotnet/core/tools/dotnet-new) templates.
 
-## [Equinox](https://github.com/jet/equinox) related
+## [Equinox](https://github.com/jet/equinox) only
+
+These templates focus solely on Consistent Processing using Equinox Stores:
 
 - [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox).
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
 - [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox](https://github.com/jet/equinox), using different stores and/or store configuration parameters.
 
 ## [Propulsion](https://github.com/jet/propulsion) related
+
+The following templates focus specifically on the usage of `Propulsion` components:
 
 - [`proProjector`](propulsion-projector/README.md) - Boilerplate for an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
 
@@ -20,23 +24,35 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 ## Producer/Reactor Templates combining usage of Equinox and Propulsion
 
-- [`proReactor`](propulsion-reactor/README.md) - Boilerplate for a dual mode CosmosDB ChangeFeed Processor and/or EventStore `$all` stream projector/reactor using `Propulsion.Cosmos`/`Propulsion.EventStore`
+The bulk of the remaining templates have a consumer aspect, and hence involve usage of `Propulsion`.
+The specific behaviors carried out in reaction to incoming events often use `Equinox components
+
+<a name="proReactor"></a>
+- [`proReactor`](propulsion-reactor/README.md) - Boilerplate for an application that handles reactive actions ranging from publishing notifications via Kafka (simple, or [summarising events](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) through to driving follow-on actions implied by events (e.g., updating a denormalized view of an aggregate)
+
+   Input options are:
+   
+   0. (default) dual mode CosmosDB ChangeFeed Processor and/or EventStore `$all` stream projector/reactor using `Propulsion.Cosmos`/`Propulsion.EventStore` depending on whether the program is run with `cosmos` or `es` arguments
+   1. `--source changeFeedOnly`: removes `EventStore` wiring from commandline processing
+   2. `--source kafkaEventSpans`: changes source to be Kafka Event Spans, as emitted from `dotnet new proProjector --kafka`
+
+   The reactive behavior template has the following options:
+   
+   0. Default processing shows importing (in summary form) from an aggregate in `EventStore` or a CosmosDB ChangeFeedProcessor to a Summary form in `Cosmos` 
+   1. `--blank`: remove sample Ingester logic, yielding a minimal projector
+   2. `--kafka` (without `--blank`): adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store). Produces versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed.
+   3. `--kafka --blank`: provides wiring for producing to Kafka, without summary reading logic etc
+    
+   Miscellaneous options:
+   - `--filter` - include category filtering boilerplate
 
   **NOTE At present, checkpoint storage when projecting from EventStore uses Azure CosmosDB - help wanted ;)**
-
-   Standard processing shows importing (in summary form) from an aggregate in `EventStore` or a CosmosDB ChangeFeedProcessor to a Summary form in `Cosmos` (use `-b`(`lank`) to remove, yielding a minimal projector)
-   
-   `--kafka` adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store). Produces versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed.
-   `--source changeFeedOnly` removes `EventStore` wiring from commandline processing
-   `--source kafkaEventSpans` changes source to be Kafka Event Spans, as emitted from `dotnet new proProjector --kafka`
   
-- [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
-
-## Consumer Templates combining usage of Equinox and Propulsion
-
 - [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new proReactor --kafka`
 
 - [`trackingConsumer`](propulsion-tracking-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest accumulating changes in an `Equinox.Cosmos` store idempotently.
+
+- [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
 ## Walkthrough
 
@@ -83,7 +99,12 @@ To use from the command line, the outline is:
 
     # ... to add a Summary Projector
     md -p ../SummaryProducer | Set-Location
-    dotnet new proReactor --kafka --noFilter
+    dotnet new proReactor --kafka 
+    start README.md
+
+    # ... to add a Custom Projector
+    md -p ../SummaryProducer | Set-Location
+    dotnet new proReactor --kafka --blank
     start README.md
 
     # ... to add a Summary Consumer (ingesting output from `SummaryProducer`)
@@ -161,6 +182,12 @@ Wherever possible, the samples strongly type identifiers, particularly ones that
 
 ## Managing Projections and Reactions with Equinox, Propulsion and FsKafka
 
+<a name="aggregate-module"></a>
+## Aggregate module conventions
+
+There are established conventions documented in [Equinox's `module Aggregate` overview](https://github.com/jet/equinox/blob/master/DOCUMENTATION.md#aggregate-module)
+
+<a name="programfs"></a>
 ## Microservice Program.fs conventions
 
 All the templates herein attempt to adhere to a consistent structure for the [composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/) `module` (the one containing an Application’s `main`), consisting of the following common elements:
@@ -251,7 +278,8 @@ let main argv =
         try Logging.initialize args.Verbose
             try Configuration.initialize ()
                 if run args then 0 else 3
-            with e -> Log.Fatal(e, "Exiting"); 2
+            with Args.MissingArg msg -> eprintfn "%s" msg; 1
+                | e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

@@ -118,8 +118,8 @@ module MultiStreams =
             log.Information(" Favorited {total}/{users}", faves.Values |> Seq.sumBy (fun x -> x.Count), faves.Count)
             log.Information(" SavedForLater {total}/{users}", saves.Values |> Seq.sumBy (fun x -> x.Length), saves.Count)
 
-    type Stats(log, ?statsInterval, ?stateInterval) =
-        inherit Propulsion.Kafka.StreamsConsumerStats<Stat>(log, defaultArg statsInterval (TimeSpan.FromMinutes 1.), defaultArg stateInterval (TimeSpan.FromMinutes 5.))
+    type Stats(log, statsInterval, stateInterval) =
+        inherit Propulsion.Kafka.StreamsConsumerStats<Stat>(log, statsInterval, stateInterval)
 
         let mutable faves, saves = 0, 0
         let otherCats = Propulsion.Streams.Internal.CatStats()

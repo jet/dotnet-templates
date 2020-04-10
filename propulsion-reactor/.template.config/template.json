@@ -53,19 +53,19 @@
       "type": "computed",
       "value": "(source == \"multiSource\")"
     },
-    "noFilter": {
+    "filter": {
       "type": "parameter",
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Remove logic and commandline handling relating to filtering based on stream names."
+      "description": "Include logic and commandline handling relating to filtering based on stream names."
     },
     "blank": {
       "type": "parameter",
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "Remove Ingestion sample code. (Not applicable if --kafka selected)"
+      "description": "Remove Ingestion/Summary Production sample code."
     },
     "kafka": {
       "type": "parameter",
@@ -79,22 +79,23 @@
     {
       "modifiers": [
         {
-          "condition": "blank",
+          "condition": "blank && !kafka",
           "exclude": [
             "Infrastructure.fs",
             "Todo.fs",
-            "Contract.fs",
+            "Contract.fs"
+          ]
+        },
+        {
+          "condition": "blank && kafka",
+          "exclude": [
+            "Todo.fs"
           ]
         },
         {
           "condition": "kafka",
           "exclude": [
-            "TodoSummary.fs"
-          ]
-        },
-        {
-          "condition": "kafka",
-          "exclude": [
+            "TodoSummary.fs",
             "Ingester.fs"
           ]
         },

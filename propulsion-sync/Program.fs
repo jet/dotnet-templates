@@ -58,7 +58,7 @@ module Args =
 
         | [<AltCommandLine "-S"; Unique>]   LocalSeq
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-C"; Unique>]   VerboseConsole
+        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
 
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
@@ -75,7 +75,7 @@ module Args =
 
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | VerboseConsole ->         "request Verbose Console Logging. Default: off"
+                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
 
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
@@ -91,8 +91,7 @@ module Args =
         member __.MaxSubmit =               a.GetResult(MaxSubmit, 8)
 
         member __.Verbose =                 a.Contains Parameters.Verbose
-        member __.VerboseConsole =          a.Contains VerboseConsole
-        member __.ConsoleMinLevel =         if __.VerboseConsole then Serilog.Events.LogEventLevel.Information else Serilog.Events.LogEventLevel.Warning
+        member __.CfpVerbose =              a.Contains CfpVerbose
         member val Source : Choice<CosmosSourceArguments, EsSourceArguments> =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> Choice1Of2 (CosmosSourceArguments cosmos)
@@ -446,15 +445,15 @@ module Args =
 module Logging =
 
     open Serilog.Events
-    let initialize verbose verboseConsole maybeSeqEndpoint =
+    let initialize verbose changeFeedProcessorVerbose maybeSeqEndpoint =
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
-                        let cfpLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning
+                        let cfpLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
-            |> fun c -> let ingesterLevel = if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information
+            |> fun c -> let ingesterLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Information
                         c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamStates<_>>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
@@ -476,7 +475,7 @@ module Logging =
                                 let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
                                 let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
                                 let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                                (if verboseConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterA x || isWriterB x || isCp x || isCfp x))
+                                (if changeFeedProcessorVerbose then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterA x || isWriterB x || isCp x || isCfp x))
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
@@ -643,10 +642,11 @@ let run (args, log, storeLog) =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try let log, storeLog = Logging.initialize args.Verbose args.VerboseConsole args.MaybeSeqEndpoint
+        try let log, storeLog = Logging.initialize args.Verbose args.CfpVerbose args.MaybeSeqEndpoint
             try Configuration.initialize ()
                 if run (args, log, storeLog) then 0 else 3
-            with e -> Log.Fatal(e, "Exiting"); 2
+            with Args.MissingArg msg -> eprintfn "%s" msg; 1
+                | e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

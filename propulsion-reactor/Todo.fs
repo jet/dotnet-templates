@@ -6,10 +6,6 @@ let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (Client
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    let (|MatchesCategory|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
-        | _ -> None
-
     type ItemData =     { id : int; order : int; title : string; completed : bool }
     type DeletedData =  { id : int }
     type ClearedData =  { nextId : int }
@@ -23,7 +19,10 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
-        span.events |> Seq.choose (EventCodec.tryDecode codec stream)
+        span.events |> Array.choose (EventCodec.tryDecode codec stream)
+    let (|MatchesCategory|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
+        | _ -> None
     let (|Match|_|) = function
         | (MatchesCategory clientId, _) & (Decode events) -> Some (clientId, events)
         | _ -> None
@@ -60,25 +59,25 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
         // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
         stream.QueryEx(fun c -> c.Version, render c.State)
 
-let create resolver =
+let create resolve =
     let resolve clientId =
-        let stream = resolver (streamName clientId)
+        let stream = resolve (streamName clientId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
     Service(resolve)
 
 //#if multiSource
 module EventStore =
 
-    let private resolver (context, cache) =
+    let create (context, cache) =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy).Resolve
-    let create (context, cache) = create (resolver (context, cache))
+        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
+        create resolver.Resolve
 
 //#endif
 module Cosmos =
 
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-    let private resolver (context, cache) =
+    let create (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) = create (resolver (context, cache))
+        let resolver  = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create resolver.Resolve
