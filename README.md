@@ -9,7 +9,8 @@ These templates focus solely on Consistent Processing using Equinox Stores:
 - [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox).
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
 - [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox](https://github.com/jet/equinox), using different stores and/or store configuration parameters.
-- [`eqxfc`](equinox-fc/README.md) - Samples showcasing various modeling and testing techniques such as (FsCheck-based) unit tests and use of `MemoryStore` for integration tests.
+<a name="eqxFc"></a>
+- [`eqxFc`](equinox-fc/README.md) - Samples showcasing various modeling and testing techniques such as (FsCheck-based) unit tests and use of `MemoryStore` for integration tests.
 
 ## [Propulsion](https://github.com/jet/propulsion) related
 

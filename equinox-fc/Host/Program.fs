@@ -1,4 +1,4 @@
-﻿module Fc.Watchdog.Program
+﻿module Fc.Host.Program
 
 open Propulsion.Cosmos
 open Propulsion.EventStore
@@ -10,7 +10,7 @@ module EnvVar =
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
     let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
 
-module Settings =
+module Configuration =
 
     let private initEnvVar var key loadF =
         if None = EnvVar.tryGet var then
@@ -21,7 +21,7 @@ module Settings =
         // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
-module CmdParser =
+module Args =
 
     exception MissingArg of string
     let private getEnvVarForArgumentOrThrow varName argName =
@@ -41,7 +41,6 @@ module CmdParser =
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-C"; Unique>]   VerboseConsole
-
 
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSourceParameters>
         | [<AltCommandLine "cosmos"; CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
@@ -283,28 +282,20 @@ module CmdParser =
 
 module Logging =
 
-    let initialize verbose changeLogVerbose =
+    let initialize verbose =
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            // LibLog writes to the global logger, so we need to control the emission
-            |> fun c -> let cfpl = if changeLogVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
-                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-            |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-                        let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-                        let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                        let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-                        let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                        if changeLogVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let [<Literal>] AppName = "Watchdog"
+let [<Literal>] AppName = "Host"
 
 module EventStoreContext =
+
     let cache = Equinox.Cache(AppName, sizeMb = 10)
     let create connection = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
     let tryMapEvent isWhitelisted (x : EventStore.ClientAPI.ResolvedEvent) =
@@ -315,7 +306,7 @@ module EventStoreContext =
 let transactionStreamPrefix = sprintf "%s-" Fc.Inventory.Transaction.Category
 let isTransactionStream : string -> bool = function sn -> sn.StartsWith transactionStreamPrefix
 
-let build (args : CmdParser.Arguments) =
+let build (args : Args.Arguments) =
     match args.SourceParams() with
     | Choice1Of2 (srcE, cosmos, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
@@ -381,7 +372,7 @@ let build (args : CmdParser.Arguments) =
         sink, runPipeline
 
 let run argv =
-    try let args = CmdParser.parse argv
+    try let args = Args.parse argv
         Logging.initialize args.Verbose args.VerboseConsole
         Settings.initialize ()
         let projector, runSourcePipeline = build args
@@ -389,7 +380,7 @@ let run argv =
         projector.AwaitCompletion() |> Async.RunSynchronously
         if projector.RanToCompletion then 0 else 2
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | CmdParser.MissingArg msg -> eprintfn "%s" msg; 1
+        | Args.MissingArg msg -> eprintfn "%s" msg; 1
         | e -> Log.Fatal(e, "Exiting"); 1
 
 [<EntryPoint>]
