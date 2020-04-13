@@ -20,7 +20,7 @@
       "type": "parameter",
       "datatype": "bool",
       "isRequired": false,
-      "defaultValue": "true",
+      "defaultValue": "false",
       "description": "Generate an example Aggregate."
     },
     "todos": {
