@@ -342,7 +342,7 @@ module Args =
                 | Port _ ->                 "specify a custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
                 | Username _ ->             "specify a username. (optional if environment variable EQUINOX_ES_USERNAME specified)"
                 | Password _ ->             "specify a Password. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
-                | ProjTcp ->                "Request connecting direct to a TCP/IP endpoint for Projection EventStore. Defaults to value of es tcp flag unless environment variable EQUINOX_ES_PROJ_TCP specifies 'true'."
+                | ProjTcp ->                "Request connecting direct to a TCP/IP endpoint for Projection EventStore. Defaults to value of es tcp (-T) flag unless environment variable EQUINOX_ES_PROJ_TCP specifies 'true'."
                 | ProjHost _ ->             "specify Projection EventStore hostname to connect. Defaults to value of es host (-h) unless environment variable EQUINOX_ES__PROJ_HOST is specified."
                 | ProjPort _ ->             "specify Projection EventStore custom port. Defaults to value of es port (-x) unless environment variable EQUINOX_ES_PROJ_PORT is specified. "
                 | ProjUsername _ ->         "specify a username for Projection EventStore. Defaults to value of es user (-u) unless environment variable EQUINOX_ES_PROJ_USERNAME is specified."
