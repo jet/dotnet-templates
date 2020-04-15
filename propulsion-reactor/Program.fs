@@ -48,7 +48,7 @@ module Args =
     let private defaultWithEnvVar varName argName = function
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
-    let private defaultWithEnvVarOrFallback varName fallbackValue  = function
+    let private defaultWithEnvVarOrFallback varName fallbackValue = function
         | Some x -> x
         | None -> EnvVar.tryGet varName |> Option.defaultValue fallbackValue
     open Argu
@@ -531,7 +531,7 @@ let build (args : Args.Arguments) =
     match args.SourceParams() with
     | Choice1Of2 (srcE, cosmos, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
-        let connectProjEs = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.Master)
+        let connectProjEs = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.PreferSlave)
         let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
 
         let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
