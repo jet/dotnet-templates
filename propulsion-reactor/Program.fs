@@ -338,11 +338,11 @@ module Args =
                 | Port _ ->                 "specify a custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
                 | Username _ ->             "specify a username. (optional if environment variable EQUINOX_ES_USERNAME specified)"
                 | Password _ ->             "specify a Password. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
-                | ProjTcp ->                "Request connecting direct to a TCP/IP endpoint for Projection EventStore. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_PROJ_TCP specifies 'true')."
-                | ProjHost _ ->             "TCP mode: specify Projection EventStore hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_PROJ_HOST specified)"
-                | ProjPort _ ->             "specify Projection EventStore custom port. Uses value of environment variable EQUINOX_ES_PROJ_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
-                | ProjUsername _ ->         "specify a username for Projection EventStore. (optional if environment variable EQUINOX_ES_PROJ_USERNAME specified)"
-                | ProjPassword _ ->         "specify a Password for Projection EventStore. (optional if environment variable EQUINOX_ES_PROJ_PASSWORD specified)"
+                | ProjTcp ->                "Request connecting direct to a TCP/IP endpoint for Projection EventStore. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
+                | ProjHost _ ->             "TCP mode: specify Projection EventStore hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
+                | ProjPort _ ->             "specify Projection EventStore custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
+                | ProjUsername _ ->         "specify a username for Projection EventStore. (optional if environment variable EQUINOX_ES_USERNAME specified)"
+                | ProjPassword _ ->         "specify a Password for Projection EventStore. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
                 | Retries _ ->              "specify operation retries. Default: 3."
                 | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
@@ -377,11 +377,11 @@ module Args =
         member __.Password =                a.TryGetResult Password |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "Password"
         member __.ProjTcp =
             a.Contains ProjTcp
-            || EnvVar.tryGet "EQUINOX_ES_PROJ_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
-        member __.ProjPort =                match a.TryGetResult ProjPort with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PROJ_PORT" |> Option.map int
-        member __.ProjHost =                a.TryGetResult ProjHost |> defaultWithEnvVar "EQUINOX_ES_PROJ_HOST"         "ProjHost"
-        member __.ProjUser =                a.TryGetResult ProjUsername |> defaultWithEnvVar "EQUINOX_ES_PROJ_USERNAME" "Username"
-        member __.ProjPassword =            a.TryGetResult ProjPassword |> defaultWithEnvVar "EQUINOX_ES_PROJ_PASSWORD" "Password"
+            || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
+        member __.ProjPort =                match a.TryGetResult ProjPort with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
+        member __.ProjHost =                a.TryGetResult ProjHost |> defaultWithEnvVar     "EQUINOX_ES_HOST"     "ProjHost"
+        member __.ProjUser =                a.TryGetResult ProjUsername |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "ProjUsername"
+        member __.ProjPassword =            a.TryGetResult ProjPassword |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "ProjPassword"
         member __.Retries =                 a.GetResult(EsSourceParameters.Retries, 3)
         member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
         member __.Heartbeat =               a.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
