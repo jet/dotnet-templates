@@ -369,19 +369,19 @@ module Args =
             | None, None, None, true ->     StartPos.TailOrCheckpoint
             | None, None, None, _ ->        StartPos.StartOrCheckpoint
         member __.Tcp =
-            a.Contains EsSourceParameters.Tcp
+            a.Contains Tcp
             || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
         member __.Port =                    match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
         member __.Host =                    a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
         member __.User =                    a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
         member __.Password =                a.TryGetResult Password |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "Password"
         member __.ProjTcp =
-            a.Contains EsSourceParameters.ProjTcp
+            a.Contains ProjTcp
             || EnvVar.tryGet "EQUINOX_ES_PROJ_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
-        member __.ProjPort =                match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PROJ_PORT" |> Option.map int
-        member __.ProjHost =                a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_PROJ_HOST"     "ProjHost"
-        member __.ProjUser =                a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_PROJ_USERNAME" "Username"
-        member __.ProjPassword =            a.TryGetResult Password |> defaultWithEnvVar "EQUINOX_ES_PROJ_PASSWORD" "Password"
+        member __.ProjPort =                match a.TryGetResult ProjPort with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PROJ_PORT" |> Option.map int
+        member __.ProjHost =                a.TryGetResult ProjHost |> defaultWithEnvVar "EQUINOX_ES_PROJ_HOST"         "ProjHost"
+        member __.ProjUser =                a.TryGetResult ProjUsername |> defaultWithEnvVar "EQUINOX_ES_PROJ_USERNAME" "Username"
+        member __.ProjPassword =            a.TryGetResult ProjPassword |> defaultWithEnvVar "EQUINOX_ES_PROJ_PASSWORD" "Password"
         member __.Retries =                 a.GetResult(EsSourceParameters.Retries, 3)
         member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
         member __.Heartbeat =               a.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
@@ -389,7 +389,7 @@ module Args =
         member x.ConnectProj(log: ILogger, storeLog: ILogger, appName, nodePreference) =
             let s (x : TimeSpan) = x.TotalSeconds
             let discovery = discovery(x.ProjHost, x.ProjPort, x.ProjTcp)
-            log.ForContext("host", x.ProjHost).ForContext("port", x.ProjPort)
+            log.ForContext("projHost", x.ProjHost).ForContext("projPort", x.ProjPort)
                 .Information("Projection EventStore {discovery} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
                     discovery, s x.Heartbeat, s x.Timeout, x.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
