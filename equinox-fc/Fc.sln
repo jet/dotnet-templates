@@ -12,7 +12,7 @@ ProjectSection(SolutionItems) = preProject
 	README.md = README.md
 EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Watchdog", "Watchdog\Watchdog.fsproj", "{B57DFA65-DC4F-4673-A5DC-7B00A08EFFF0}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Web", "Web\Web.fsproj", "{B57DFA65-DC4F-4673-A5DC-7B00A08EFFF0}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

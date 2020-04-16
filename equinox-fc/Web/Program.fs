@@ -1,7 +1,8 @@
-﻿module Fc.Host.Program
+﻿module Fc.Web.Program
 
 open Microsoft.AspNetCore
 open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Mvc
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
@@ -34,6 +35,7 @@ module Args =
     let private defaultWithEnvVar varName argName = function
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
+    let isEnvVarTrue varName = EnvVar.tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
     open Argu
     open Equinox.Cosmos
     open Equinox.EventStore
@@ -86,9 +88,7 @@ module Args =
             | false, Some p -> Discovery.GossipDnsCustomPort (__.Host, p)
             | true, None ->    Discovery.Uri                 (UriBuilder("tcp", __.Host).Uri)
             | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", __.Host, p).Uri)
-        member __.Tcp =
-            a.Contains EsParameters.Tcp
-            || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
+        member __.Tcp =                     a.Contains Tcp || isEnvVarTrue "EQUINOX_ES_TCP"
         member __.Port =                    match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
         member __.Host =                    a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
         member __.User =                    a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
@@ -162,8 +162,6 @@ module Logging =
 
 let [<Literal>] AppName = "Host"
 
-open System
-
 /// Defines the Hosting configuration, including registration of the store and backend services
 type Startup() =
 
@@ -188,43 +186,49 @@ type Startup() =
 
 let build (args : Args.Arguments) =
     let cache = Equinox.Cache(AppName, sizeMb = 10)
-    match args.Source with
-    | Choice1Of2 es ->
-        let connectEs () = es.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
-        failwith "TODO"
-    | Choice2Of2 cosmos ->
-        let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        let context = Equinox.Cosmos.Context(connection, database, container)
-        let inventoryService =
-            let inventoryId = InventoryId.parse "FC000"
-            let maxTransactionsPerEpoch = 100
-            let lookBackLimit = 10
-            Fc.Inventory.Cosmos.create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache)
-        let transactionService = Fc.Inventory.Transaction.Cosmos.createService (context, cache)
-        let locations =
-            let zeroBalance : Fc.Location.Epoch.Events.CarriedForward = { initial = 0; recentTransactions = [||] }
-            let chooseTransactionIds = function
-                | Fc.Location.Epoch.Fold.Init { recentTransactions = ids } -> Seq.ofArray ids
-                | Fc.Location.Epoch.Fold.Step { id = id } -> Seq.singleton id
-            let toBalanceCarriedForward (Fc.Location.Epoch.Fold.Current cur as records) : Fc.Location.Epoch.Events.CarriedForward =
-                { initial = cur; recentTransactions = records |> Seq.collect chooseTransactionIds |> Seq.truncate 5 |> Seq.toArray }
-            let shouldClose x = false
-            let maxAttempts = 3
-            Fc.Location.Cosmos.createService (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts)
-        let processor = Fc.Inventory.Processor.Service(transactionService, locations, inventoryService)
-        failwith "TODO"
-    // TODO add APIs etc
 
-open Microsoft.Extensions.DependencyInjection
+    let inventoryId = InventoryId.parse "FC000"
+    let maxTransactionsPerEpoch = 100
+    let lookBackLimit = 10
+
+    let zeroBalance : Fc.Location.Epoch.Events.CarriedForward = { initial = 0; recentTransactions = [||] }
+    let chooseTransactionIds = function
+        | Fc.Location.Epoch.Fold.Init { recentTransactions = ids } -> Seq.ofArray ids
+        | Fc.Location.Epoch.Fold.Step { id = id } -> Seq.singleton id
+    let toBalanceCarriedForward (Fc.Location.Epoch.Fold.Current cur as records) : Fc.Location.Epoch.Events.CarriedForward =
+        { initial = cur; recentTransactions = records |> Seq.collect chooseTransactionIds |> Seq.truncate 5 |> Seq.toArray }
+    let shouldClose x = false
+    let maxAttempts = 3
+
+    let transactions, locations, inventory =
+        match args.Source with
+        | Choice1Of2 es ->
+            let connection = es.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
+            let context = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize = 500))
+
+            let transactions = Fc.Inventory.Transaction.EventStore.create (context, cache)
+            let locations = Fc.Location.EventStore.create (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts)
+            let inventory = Fc.Inventory.EventStore.create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache)
+            transactions, locations, inventory
+        | Choice2Of2 cosmos ->
+            let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
+            let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+            let context = Equinox.Cosmos.Context(connection, database, container)
+
+            let transactions = Fc.Inventory.Transaction.Cosmos.create (context, cache)
+            let locations = Fc.Location.Cosmos.create (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts)
+            let inventory = Fc.Inventory.Cosmos.create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache)
+            transactions, locations, inventory
+    let processor = Fc.Inventory.Processor.Service(transactions, locations, inventory)
+    processor
 
 let run argv args =
     let processor = build args
     WebHost
         .CreateDefaultBuilder(argv)
         .UseSerilog()
-//        .ConfigureServices(fun svc -> svc.AddSingleton(processor))
-        .AddStartup<Startup>()
+        .ConfigureServices(fun svc -> svc.AddSingleton(processor) |> ignore)
+        .UseStartup<Startup>()
         .Build()
         .Run()
 
@@ -233,7 +237,8 @@ let main argv =
     try let args = Args.parse argv
         try Logging.initialize args.Verbose
             try Configuration.initialize ()
-                if run argv args then 0 else 3
+                run argv args
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1

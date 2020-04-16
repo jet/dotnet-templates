@@ -40,21 +40,32 @@ type Service internal (resolve : InventoryId -> Equinox.Stream<Events.Event, Fol
         let stream = resolve inventoryId
         stream.Transact(interpretAdvanceIngestionEpoch epochId)
 
-let create resolver =
+let create resolve =
+    // For this stream, we uniformly use stale reads as:
+    // a) we don't require any information from competing writers
+    // b) while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
+    let opt = Equinox.ResolveOption.AllowStale
     let resolve locationId =
-        let stream = resolver (streamName locationId)
+        let stream = resolve (streamName locationId, opt)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
-    Service (resolve)
+    Service(resolve)
 
 module Cosmos =
 
-    let accessStrategy = Equinox.Cosmos.AccessStrategy.LatestKnownEvent
-    let resolver (context, cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        // For this stream, we uniformly use stale reads as:
-        // a) we don't require any information from competing writers
-        // b) while there are competing writers [which might cause us to have to retry a Transact], this should be infrequent
-        let opt = Equinox.ResolveOption.AllowStale
-        fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
+    open Equinox.Cosmos
+
+    let accessStrategy = AccessStrategy.LatestKnownEvent
     let create (context, cache) =
-        create (resolver (context, cache))
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create <| fun (id, opt) -> resolver.Resolve(id, opt)
+
+module EventStore =
+
+    open Equinox.EventStore
+
+    let accessStrategy = AccessStrategy.LatestKnownEvent
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create <| fun (id, opt) -> resolver.Resolve(id, opt)

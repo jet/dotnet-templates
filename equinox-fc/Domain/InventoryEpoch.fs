@@ -81,16 +81,28 @@ type Service internal (resolve : InventoryId * InventoryEpochId -> Equinox.Strea
         let stream = resolve (inventoryId, epochId)
         stream.Transact(decideSync capacity events)
 
-let create resolver =
+let create resolve =
     let resolve ids =
-        let stream = resolver (streamName ids)
+        let stream = resolve (streamName ids)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
     Service(resolve)
 
 module Cosmos =
 
-    let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-    let resolver (context, cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve
-    let create (context, cache) = create (resolver (context, cache))
+    open Equinox.Cosmos
+
+    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create resolver.Resolve
+
+module EventStore =
+
+    open Equinox.EventStore
+
+    // No use of RollingSnapshots as we're intentionally making an epoch short enough to simply read any time
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
+        create resolver.Resolve
