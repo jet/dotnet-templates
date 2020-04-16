@@ -48,9 +48,8 @@ module Args =
     let private defaultWithEnvVar varName argName = function
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
-    let private defaultWithEnvVarOrFallback varName fallback = function
-        | Some x -> x
-        | None -> EnvVar.tryGet varName |> Option.defaultWith fallback        
+    let private getEnvVarTrue varName =
+         EnvVar.tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
     let private seconds (x : TimeSpan) = x.TotalSeconds
     open Argu
 //#if multiSource
@@ -337,23 +336,22 @@ module Args =
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
 
                 | Verbose ->                "Include low level Store logging."
-                | Tcp ->                    "Request connecting direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
-                | Host _ ->                 "TCP mode: specify a hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
-                | Port _ ->                 "specify a custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
-                | Username _ ->             "specify a username. (optional if environment variable EQUINOX_ES_USERNAME specified)"
-                | Password _ ->             "specify a Password. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
-                | ProjTcp ->                "Request connecting direct to a TCP/IP endpoint for Projection EventStore. Defaults to value of es tcp (-T) flag unless environment variable EQUINOX_ES_PROJ_TCP specifies 'true'."
-                | ProjHost _ ->             "specify Projection EventStore hostname to connect. Defaults to value of es host (-h) unless environment variable EQUINOX_ES__PROJ_HOST is specified."
-                | ProjPort _ ->             "specify Projection EventStore custom port. Defaults to value of es port (-x) unless environment variable EQUINOX_ES_PROJ_PORT is specified. "
-                | ProjUsername _ ->         "specify a username for Projection EventStore. Defaults to value of es user (-u) unless environment variable EQUINOX_ES_PROJ_USERNAME is specified."
-                | ProjPassword _ ->         "specify a Password for Projection EventStore. Defaults to value of es password (-p) unless environment variable EQUINOX_ES_PROJ_PASSWORD is specified."
+                | Tcp ->                    "Request connecting EventStore direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
+                | Host _ ->                 "TCP mode: specify EventStore hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
+                | Port _ ->                 "specify EventStore custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
+                | Username _ ->             "specify username for EventStore. (optional if environment variable EQUINOX_ES_USERNAME specified)"
+                | Password _ ->             "specify Password for EventStore. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
+                | ProjTcp ->                "Request connecting Projection EventStore direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_PROJ_TCP specifies 'true')."
+                | ProjHost _ ->             "specify Projection EventStore hostname to connect. Defaults to value of es host (-h) unless environment variable EQUINOX_ES_PROJ_HOST is specified."
+                | ProjPort _ ->             "specify Projection EventStore custom port. Defaults to value of es port (-x) unless environment variable EQUINOX_ES_PROJ_PORT is specified."
+                | ProjUsername _ ->         "specify username for Projection EventStore. Defaults to value of es user (-u) unless environment variable EQUINOX_ES_PROJ_USERNAME is specified."
+                | ProjPassword _ ->         "specify Password for Projection EventStore. Defaults to value of es password (-p) unless environment variable EQUINOX_ES_PROJ_PASSWORD is specified."
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
                 | Retries _ ->              "specify operation retries. Default: 3."
                 | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
 
                 | Cosmos _ ->               "CosmosDB (Checkpoint) Store parameters."
     and EsSourceArguments(a : ParseResults<EsSourceParameters>) =
-        
         let discovery (host, port, tcp) =
             match tcp, port with
             | false, None ->   Discovery.GossipDns            host
@@ -372,28 +370,30 @@ module Args =
             | _, _, Some p, _ ->            Percentage p
             | None, None, None, true ->     StartPos.TailOrCheckpoint
             | None, None, None, _ ->        StartPos.StartOrCheckpoint
-        member __.Tcp =
-            a.Contains Tcp
-            || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
+        member __.Tcp =                     a.Contains Tcp || getEnvVarTrue "EQUINOX_ES_TCP"
         member __.Port =                    match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
         member __.Host =                    a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
         member __.User =                    a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
         member __.Password =                a.TryGetResult Password |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "Password"
-        member __.ProjTcp =
-            a.Contains ProjTcp
-            || match EnvVar.tryGet "EQUINOX_ES_PROJ_TCP" with Some s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase) | None -> __.Tcp
+        member __.ProjTcp =                 a.Contains ProjTcp || getEnvVarTrue "EQUINOX_ES_PROJ_TCP"
         member __.ProjPort =                match a.TryGetResult ProjPort with
                                             | Some x -> Some x
-                                            | None -> (EnvVar.tryGet "EQUINOX_ES_PROJ_PORT" |> Option.map int) |> Option.orElse __.Port
-        member __.ProjHost =                a.TryGetResult ProjHost     |> defaultWithEnvVarOrFallback  "EQUINOX_ES_PROJ_HOST"     (fun () -> __.Host)
-        member __.ProjUser =                a.TryGetResult ProjUsername |> defaultWithEnvVarOrFallback  "EQUINOX_ES_PROJ_USERNAME" (fun () -> __.User)
-        member __.ProjPassword =            a.TryGetResult ProjPassword |> defaultWithEnvVarOrFallback  "EQUINOX_ES_PROJ_PASSWORD" (fun () -> __.Password)
+                                            | None -> EnvVar.tryGet "EQUINOX_ES_PROJ_PORT" |> Option.map int |> Option.orElseWith (fun () -> __.Port) 
+        member __.ProjHost =                match a.TryGetResult ProjHost with
+                                            | Some x -> x
+                                            | None -> EnvVar.tryGet "EQUINOX_ES_PROJ_HOST"      |> Option.defaultWith (fun () -> __.Host)
+        member __.ProjUser =                match a.TryGetResult ProjUsername with
+                                            | Some x -> x
+                                            | None -> EnvVar.tryGet  "EQUINOX_ES_PROJ_USERNAME" |> Option.defaultWith (fun () -> __.User)
+        member __.ProjPassword =            match a.TryGetResult ProjPassword with
+                                            | Some x -> x
+                                            | None -> EnvVar.tryGet  "EQUINOX_ES_PROJ_PASSWORD" |> Option.defaultWith (fun () -> __.Password)
         member __.Retries =                 a.GetResult(EsSourceParameters.Retries, 3)
         member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
         member __.Heartbeat =               a.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
         
         member x.ConnectProj(log: ILogger, storeLog: ILogger, appName, nodePreference) =
-            let discovery = discovery(x.ProjHost, x.ProjPort, x.ProjTcp)
+            let discovery = discovery (x.ProjHost, x.ProjPort, x.ProjTcp)
             log.ForContext("projHost", x.ProjHost).ForContext("projPort", x.ProjPort)
                 .Information("Projection EventStore {discovery} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
                     discovery, seconds x.Heartbeat, seconds x.Timeout, x.Retries)
@@ -403,7 +403,7 @@ module Args =
                 .Connect(appName + "-Proj", discovery, nodePreference) |> Async.RunSynchronously
         
         member x.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
-            let discovery = discovery(x.Host, x.Port, x.Tcp)
+            let discovery = discovery (x.Host, x.Port, x.Tcp)
             log.ForContext("host", x.Host).ForContext("port", x.Port)
                 .Information("EventStore {discovery} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
                     discovery, seconds x.Heartbeat, seconds x.Timeout, x.Retries)

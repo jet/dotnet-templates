@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- `proReactor`: Start using projection event store connection to read when using event store [#62](https://github.com/jet/dotnet-templates/pull/62) 
+
 ### Removed
 ### Fixed
 
