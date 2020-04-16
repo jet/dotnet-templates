@@ -48,7 +48,7 @@ module Args =
     let private defaultWithEnvVar varName argName = function
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
-    let private getEnvVarTrue varName =
+    let private isEnvVarTrue varName =
          EnvVar.tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
     let private seconds (x : TimeSpan) = x.TotalSeconds
     open Argu
@@ -342,7 +342,7 @@ module Args =
                 | Username _ ->             "specify username for EventStore. (optional if environment variable EQUINOX_ES_USERNAME specified)"
                 | Password _ ->             "specify Password for EventStore. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
                 | ProjTcp ->                "Request connecting Projection EventStore direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_PROJ_TCP specifies 'true')."
-                | ProjHost _ ->             "specify Projection EventStore hostname to connect. Defaults to value of es host (-h) unless environment variable EQUINOX_ES_PROJ_HOST is specified."
+                | ProjHost _ ->             "TCP mode: specify Projection EventStore hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. Defaults to value of es host (-h) unless environment variable EQUINOX_ES_PROJ_HOST is specified."
                 | ProjPort _ ->             "specify Projection EventStore custom port. Defaults to value of es port (-x) unless environment variable EQUINOX_ES_PROJ_PORT is specified."
                 | ProjUsername _ ->         "specify username for Projection EventStore. Defaults to value of es user (-u) unless environment variable EQUINOX_ES_PROJ_USERNAME is specified."
                 | ProjPassword _ ->         "specify Password for Projection EventStore. Defaults to value of es password (-p) unless environment variable EQUINOX_ES_PROJ_PASSWORD is specified."
@@ -370,12 +370,12 @@ module Args =
             | _, _, Some p, _ ->            Percentage p
             | None, None, None, true ->     StartPos.TailOrCheckpoint
             | None, None, None, _ ->        StartPos.StartOrCheckpoint
-        member __.Tcp =                     a.Contains Tcp || getEnvVarTrue "EQUINOX_ES_TCP"
+        member __.Tcp =                     a.Contains Tcp || isEnvVarTrue "EQUINOX_ES_TCP"
         member __.Port =                    match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
         member __.Host =                    a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
         member __.User =                    a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
         member __.Password =                a.TryGetResult Password |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "Password"
-        member __.ProjTcp =                 a.Contains ProjTcp || getEnvVarTrue "EQUINOX_ES_PROJ_TCP"
+        member __.ProjTcp =                 a.Contains ProjTcp || isEnvVarTrue "EQUINOX_ES_PROJ_TCP"
         member __.ProjPort =                match a.TryGetResult ProjPort with
                                             | Some x -> Some x
                                             | None -> EnvVar.tryGet "EQUINOX_ES_PROJ_PORT" |> Option.map int |> Option.orElseWith (fun () -> __.Port) 
