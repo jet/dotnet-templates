@@ -111,7 +111,7 @@ module Fold =
             [event]
         | _ -> []
 
-    /// Determines the next action (if any) to be carried out in this workflwo
+    /// Determines the next action (if any) to be carried out in this workflow
     let nextAction : State -> Action = function
         | Initial -> failwith "Cannot interpret Initial state"
         | Running (Adjust r) -> Action.Adjust (r.location, r.quantity)
@@ -136,19 +136,30 @@ type Service internal (resolve : InventoryTransactionId -> Equinox.Stream<Events
         let stream = resolve transactionId
         stream.Transact(decide update)
 
-let create resolver =
+let create resolve =
+    // there will generally be a single actor touching it at a given time, so we don't need to do a load (which would be more expensive than normal given the `accessStrategy`) before we sync
+    let opt = Equinox.AllowStale
     let resolve inventoryTransactionId =
-        let stream = resolver (streamName inventoryTransactionId)
+        let stream = resolve (streamName inventoryTransactionId, opt)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
-    Service (resolve)
+    Service(resolve)
 
 module Cosmos =
 
+    open Equinox.Cosmos
+
     // in the happy path case, the event stream will typically be short, and the state cached, so snapshotting is less critical
-    let accessStrategy = Equinox.Cosmos.AccessStrategy.Unoptimized
-    // ... and there will generally be a single actor touching it at a given time, so we don't need to do a load (which would be more expensive than normal given the `accessStrategy`) before we sync
-    let opt = Equinox.AllowStale
-    let resolver (context, cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        fun id -> Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy).Resolve(id, opt)
-    let createService (context, cache) = create (resolver (context, cache))
+    let accessStrategy = AccessStrategy.Unoptimized
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create <| fun (id, opt) -> resolver.Resolve(id, opt)
+
+module EventStore =
+
+    open Equinox.EventStore
+
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
+        create <| fun (id, opt) -> resolver.Resolve(id, opt)

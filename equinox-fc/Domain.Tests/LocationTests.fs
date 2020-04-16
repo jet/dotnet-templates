@@ -6,7 +6,7 @@ open FSharp.UMX
 open Swensen.Unquote
 open System
 
-/// Helpers to match `module Cosmos` wrapping inside the impl
+/// Helpers to match `module Cosmos/EventStore` wrapping inside the impl
 module Location =
 
     module MemoryStore =
@@ -15,17 +15,17 @@ module Location =
 
         module Series =
 
-            let resolver store = Resolver(store, Series.Events.codec, Series.Fold.fold, Series.Fold.initial).Resolve
+            let resolve store = Resolver(store, Series.Events.codec, Series.Fold.fold, Series.Fold.initial).Resolve
 
         module Epoch =
 
-            let resolver store = Resolver(store, Epoch.Events.codec, Epoch.Fold.fold, Epoch.Fold.initial).Resolve
+            let resolve store = Resolver(store, Epoch.Events.codec, Epoch.Fold.fold, Epoch.Fold.initial).Resolve
 
-        let createService (zeroBalance, shouldClose) store =
+        let create (zeroBalance, toBalanceCarriedForward, shouldClose) store =
             let maxAttempts = Int32.MaxValue
-            let series = Series.create (Series.resolver store) maxAttempts
-            let epochs = Epoch.create (Epoch.resolver store) maxAttempts
-            create (zeroBalance, shouldClose) (series, epochs)
+            let series = Series.create (fun (id, _opt) -> Series.resolve store id) maxAttempts
+            let epochs = Epoch.create (Epoch.resolve store) maxAttempts
+            create (zeroBalance, toBalanceCarriedForward, shouldClose) (series, epochs)
 
 let run (service : Location.Service) (IdsAtLeastOne locations, deltas : _[], transactionId) = Async.RunSynchronously <| async {
     let runId = mkId () // Need to make making state in store unique when replaying or shrinking

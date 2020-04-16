@@ -83,6 +83,13 @@ module Cosmos =
         let epochs = Epoch.Cosmos.create (context, cache)
         Helpers.create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs)
 
+module EventStore =
+
+    let create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache) =
+        let series = Series.EventStore.create (context, cache)
+        let epochs = Epoch.EventStore.create (context, cache)
+        Helpers.create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs)
+
 module Processor =
 
     type Service(transactions : Transaction.Service, locations : Fc.Location.Service, inventory : Service2) =
@@ -127,5 +134,5 @@ module Processor =
             run transactionId (Fc.Inventory.Transaction.Events.TransferRequested { source = source; destination = destination; quantity = quantity })
 
         /// Used by Watchdog to force conclusion of a transaction whose progress has stalled
-        member __.Push(transactionId) = async {
+        member __.Drive(transactionId) = async {
             let! _ = execute transactionId None in () }
