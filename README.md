@@ -54,12 +54,12 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
-<a name="eqxshipping"></a>
-- [`eqxShipping`](equinox-shipping/) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey)
+<a name="eqxShipping"></a>
+- [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey)
  
-   - processing is fully idempotent; retries, concurrent or overlapping transactions are handled correctly
-   - if any `Shipment`s cannot be `Assigned`, those that have been get `Revoked`, and the failure is reported to the caller
-   - includes a `Watchdog` console app (based on `dotnet new proReactor --source changeFeedOnly --blank`) responsible for driving any abandoned transactions being carried out by e.g. Web Clients through to their conclusion.
+   - processing is fully idempotent; retries, concurrent or overlapping transactions are intended to be handled thoroughly and correctly
+   - if any `Shipment`s cannot be `Reserved`, those that have been get `Revoked`, and the failure is reported to the caller
+   - includes a `Watchdog` console app (based on `dotnet new proReactor --source changeFeedOnly --blank`) responsible for concluding abandoned transaction instances (e.g., where processing is carried out in response to a HTTP request and the Clients fails to retry after a transient failure leaves processing in a non-terminal state).
 
 ## Walkthrough
 
