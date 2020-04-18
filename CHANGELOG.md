@@ -13,6 +13,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - `eqxShipping`: Add `Reserved` event/phase to `eqxShipping` [#63](https://github.com/jet/dotnet-templates/pull/63)
 
 ### Changed
+
+- Target `Propulsion` v `2.2.0`, `FsKafka` v `1.4.1` [#64](https://github.com/jet/dotnet-templates/pull/64)
+
 ### Removed
 ### Fixed
 
