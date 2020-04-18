@@ -83,6 +83,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "equinox-shipping", "equinox-shipping", "{DAE9E2B9-EDA2-4064-B0CE-FD5294549374}"
 ProjectSection(SolutionItems) = preProject
 	equinox-shipping\.template.config\template.json = equinox-shipping\.template.config\template.json
+	equinox-shipping\README.md = equinox-shipping\README.md
 EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-shipping\Domain\Domain.fsproj", "{7B96FCF8-0BB5-4494-A143-628882A6E50A}"

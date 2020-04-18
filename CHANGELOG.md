@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `eqxShipping`: Add `Reserved` event/phase to `eqxShipping` [#63](https://github.com/jet/dotnet-templates/pull/63)
+
 ### Changed
 ### Removed
 ### Fixed
