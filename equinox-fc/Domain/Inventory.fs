@@ -1,6 +1,5 @@
 namespace Fc.Inventory
 
-open Epoch
 open Equinox.Core // we use Equinox's AsyncCacheCell helper below
 open FSharp.UMX
 
@@ -92,7 +91,7 @@ module EventStore =
 
 module Processor =
 
-    type Service(transactions : Transaction.Service, locations : Fc.Location.Service, inventory : Service2) =
+    type Service(transactions : Transaction.Service, locations : Fc.Location.Epoch.Service, inventory : Service2) =
 
         let execute transactionId =
             let f = Fc.Location.Epoch.decide transactionId
@@ -101,20 +100,17 @@ module Processor =
                 let aux event = aux (Some event)
                 match action with
                 | Transaction.Adjust (loc, bal) ->
-                    match! locations.Execute(loc, f (Fc.Location.Epoch.Reset bal)) with
+                    match! locations.Execute(loc, transactionId, Fc.Location.Epoch.Reset bal) with
                     | Fc.Location.Epoch.Accepted _ -> return! aux Transaction.Events.Adjusted
                     | Fc.Location.Epoch.Denied -> return failwith "Cannot Deny Reset"
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Remove (loc, delta) ->
-                    match! locations.Execute(loc, f (Fc.Location.Epoch.Remove delta)) with
+                    match! locations.Execute(loc, transactionId, Fc.Location.Epoch.Remove delta) with
                     | Fc.Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Removed { balance = bal })
                     | Fc.Location.Epoch.Denied -> return! aux Transaction.Events.Failed
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Add    (loc, delta) ->
-                    match! locations.Execute(loc, f (Fc.Location.Epoch.Add delta)) with
+                    match! locations.Execute(loc, transactionId, Fc.Location.Epoch.Add delta) with
                     | Fc.Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Added   { balance = bal })
                     | Fc.Location.Epoch.Denied -> return failwith "Cannot Deny Add"
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Log (Transaction.Adjusted _) ->
                     let! _count = inventory.Ingest([Fc.Inventory.Epoch.Events.Adjusted    { transactionId = transactionId }])
                     return! aux Transaction.Events.Logged

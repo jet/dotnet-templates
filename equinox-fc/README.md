@@ -3,8 +3,12 @@
 This project was generated using:
 
     dotnet new -i Equinox.Templates # just once, to install in the local templates store
+#if minimal
 
-    dotnet new eqxfc # use --help to see options regarding storage subsystem configuration etc
+    dotnet new eqxfc --minimal # use --help to see options regarding storage subsystem configuration etc
+#else
+    dotnet new eqxfc # use --minimal to simplify epoch management # use --help to see options regarding storage subsystem configuration etc
+#endif
 
 # `Location*`
 
@@ -12,8 +16,11 @@ The `Location`* `module`s illustrates a way to approach the modelling of a long-
 
 - the `LocationEpoch` category represents a span of time, which is guaranteed to have a `CarriedForward` event representing the opening balance, and/or the balance carried forward when the preceding epoch was marked `Closed`
 - the `LocationSeries` category bears the verified active epoch (competing readers/writers read this optimistically on a cached basis; in the event that they're behind, they'll compete to log the successful commencement of a new epoch, which cannot happen before the `CarriedForward` event for the successor epoch has been committed)
-
+#if minimal
+- **NOTE: in this minimal expansion of the template, the mechanism for carrying forward the balances has been removed in order to enable one to follow the high level flow more directly (the tests have also been removed)**
+#else
 - `Domain.Tests` includes (`FsCheck`) Property-based unit tests, and an integration tests that demonstrates parallel writes (that trigger Optimistic Concurrency Control-based conflict resolution, including against `MemoryStore`)
+#endif
 
 ## Notes
 
@@ -24,3 +31,4 @@ The `Location`* `module`s illustrates a way to approach the modelling of a long-
 - Representing a long-running state in this fashion is no panacea; in modeling a system, the ideal is to have streams that have a naturally constrained number of events over their lifetime.
 
 - [Original PR](https://github.com/jet/dotnet-templates/pull/40)
+- [Minimization PR](https://github.com/jet/dotnet-templates/pull/50)

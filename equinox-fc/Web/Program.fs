@@ -191,12 +191,6 @@ let build (args : Args.Arguments) =
     let maxTransactionsPerEpoch = 100
     let lookBackLimit = 10
 
-    let zeroBalance : Fc.Location.Epoch.Events.CarriedForward = { initial = 0; recentTransactions = [||] }
-    let chooseTransactionIds = function
-        | Fc.Location.Epoch.Fold.Init { recentTransactions = ids } -> Seq.ofArray ids
-        | Fc.Location.Epoch.Fold.Step { id = id } -> Seq.singleton id
-    let toBalanceCarriedForward (Fc.Location.Epoch.Fold.Current cur as records) : Fc.Location.Epoch.Events.CarriedForward =
-        { initial = cur; recentTransactions = records |> Seq.collect chooseTransactionIds |> Seq.truncate 5 |> Seq.toArray }
     let shouldClose x = false
     let maxAttempts = 3
 
@@ -207,7 +201,7 @@ let build (args : Args.Arguments) =
             let context = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize = 500))
 
             let transactions = Fc.Inventory.Transaction.EventStore.create (context, cache)
-            let locations = Fc.Location.EventStore.create (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts)
+            let locations = Fc.Location.Epoch.EventStore.create (context, cache, maxAttempts)
             let inventory = Fc.Inventory.EventStore.create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache)
             transactions, locations, inventory
         | Choice2Of2 cosmos ->
@@ -216,7 +210,7 @@ let build (args : Args.Arguments) =
             let context = Equinox.Cosmos.Context(connection, database, container)
 
             let transactions = Fc.Inventory.Transaction.Cosmos.create (context, cache)
-            let locations = Fc.Location.Cosmos.create (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts)
+            let locations = Fc.Location.Epoch.Cosmos.create (context, cache, maxAttempts)
             let inventory = Fc.Inventory.Cosmos.create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache)
             transactions, locations, inventory
     let processor = Fc.Inventory.Processor.Service(transactions, locations, inventory)
