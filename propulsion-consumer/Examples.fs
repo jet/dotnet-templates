@@ -212,7 +212,7 @@ module MultiMessages =
             let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_, _>[]) = async {
                 let processor = Processor()
                 for m in msgs do
-                    processor.Handle(StreamName.parse m.Key, m.Value)
+                    processor.Handle(StreamName.parse m.Message.Key, m.Message.Value)
                 processor.DumpStats log }
             FsKafka.BatchedConsumer.Start(log, config, handleBatch)
     
@@ -226,6 +226,6 @@ module MultiMessages =
             let dop = new SemaphoreSlim(degreeOfParallelism)
             let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_, _>[]) = async {
                 let processor = Processor()
-                let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(StreamName.parse m.Key, m.Value) } |> dop.Throttle })
+                let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(StreamName.parse m.Message.Key, m.Message.Value) } |> dop.Throttle })
                 processor.DumpStats log }
             FsKafka.BatchedConsumer.Start(log, config, handleBatch)
