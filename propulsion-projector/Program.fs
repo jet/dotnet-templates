@@ -141,7 +141,7 @@ module Args =
 //#if kafka
         member val Target =                 TargetInfo a
     and TargetInfo(a : ParseResults<Parameters>) =
-        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member x.BuildTargetParams() = x.Broker, x.Topic
 //#endif
