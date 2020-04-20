@@ -1,5 +1,10 @@
 module ReactorTemplate.Ingester
 
+module Log =
+
+    let (|LogAsWarning|_|) = function (e : exn) -> Serilog.Log.Warning(e, "Unhandled"); None
+    let exceptions f = async { try return! f with LogAsWarning -> return! invalidOp "not possible; Filter always returns None" }
+
 [<RequireQualifiedAccess>]
 type Outcome =
     /// Handler processed the span, with counts of used vs unused known event types
@@ -36,7 +41,7 @@ type Stats(log, statsInterval, stateInterval) =
             ok <- 0; skipped <- 0; na <- 0
 
 #if blank
-let tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option * Outcome> = async {
+let tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option * Outcome> = Log.exceptions <| async {
     match stream, span with
     | FsCodec.StreamName.CategoryAndId ("Todos",id), _ ->
         let ok, version' = true, None
@@ -65,9 +70,10 @@ let tryHandle
     | _ -> return None, Outcome.NotApplicable span.events.Length }
 #endif
 
-let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 * Outcome> = async {
+let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 * Outcome> = Log.exceptions <| async {
     match! tryHandle (stream, span) with
     // We need to yield the next write position, which will be after the version we've just generated the summary based on
     | Some version', outcome -> return version'+1L, outcome
     // If we're ignoring the events, we mark the next write position to be one beyond the last one offered
-    | _, outcome -> return span.index + span.events.LongLength, outcome }
+    | _, outcome -> return span.index + span.events.LongLength, outcome
+}

@@ -11,6 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - `eqxShipping`: Add `Reserved` event/phase to `eqxShipping` [#63](https://github.com/jet/dotnet-templates/pull/63)
+- Added `Log.exceptions` for all ingestion/reaction logic [#65](https://github.com/jet/dotnet-templates/pull/65)
 
 ### Changed
 

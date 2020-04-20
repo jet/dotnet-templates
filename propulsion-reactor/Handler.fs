@@ -1,6 +1,11 @@
 module ReactorTemplate.Handler
-//#if multiSource
 
+module Log =
+
+    let (|LogAsWarning|_|) = function (e : exn) -> Serilog.Log.Warning(e, "Unhandled"); None
+    let exceptions f = async { try return! f with LogAsWarning -> return! invalidOp "not possible; Filter always returns None" }
+
+//#if multiSource
 open Propulsion.EventStore
 
 /// Responsible for inspecting and then either dropping or tweaking events coming from EventStore
@@ -11,7 +16,6 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
     | PropulsionStreamEvent e -> Some e
 //#endif
 //#if kafka
-
 [<RequireQualifiedAccess>]
 type Outcome =
     /// Handler processed the span, with counts of used vs unused known event types
@@ -88,7 +92,7 @@ let tryHandle
     | _ -> return None, Outcome.NotApplicable span.events.Length }
 #endif
 
-let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 * Outcome> = async {
+let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 * Outcome> = Log.exceptions <| async {
     match! tryHandle (stream, span) with
     // We need to yield the next write position, which will be after the version we've just generated the summary based on
     | Some version', outcome -> return version' + 1L, outcome

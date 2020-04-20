@@ -2,6 +2,11 @@
 /// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
 module ConsumerTemplate.Ingester
 
+module Log =
+
+    let (|LogAsWarning|_|) = function (e : exn) -> Serilog.Log.Warning(e, "Unhandled"); None
+    let exceptions f = async { try return! f with LogAsWarning -> return! invalidOp "not possible; Filter always returns None" }
+
 /// Defines the contract we share with the proReactor --'s published feed
 module Contract =
 
@@ -64,7 +69,7 @@ let map : Contract.Message -> TodoSummary.Events.SummaryData = function
                 { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
 
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : TodoSummary.Service) (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+let ingest (service : TodoSummary.Service) (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = Log.exceptions <| async {
     match stream, span with
     | Contract.MatchNewest (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with

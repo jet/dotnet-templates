@@ -2,6 +2,11 @@ module Shipping.Watchdog.Handler
 
 open System
 
+module Log =
+
+    let (|LogAsWarning|_|) = function (e : exn) -> Serilog.Log.Warning(e, "Unhandled"); None
+    let exceptions f = async { try return! f with LogAsWarning -> return! invalidOp "not possible; Filter always returns None" }
+
 [<RequireQualifiedAccess>]
 type Outcome = Completed | Deferred | Resolved of successfully : bool
 
@@ -42,7 +47,7 @@ let tryHandle
             return Outcome.Resolved success
     | other -> return failwithf "Span from unexpected category %A" other }
 
-let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64*Outcome> = async {
+let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64*Outcome> = Log.exceptions <| async {
     match! tryHandle (stream, span) with
     // if we're deferring, we need to retain the events (all of them, as the time of the first one is salient)
     | Outcome.Deferred as r -> return span.index, r

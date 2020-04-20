@@ -34,7 +34,9 @@ type Stats(log, statsInterval, stateInterval) =
             ok <- 0; skipped <- 0
 
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : SkuSummary.Service) (FsCodec.StreamName.CategoryAndId (_,SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+let ingest
+        (service : SkuSummary.Service)
+        (FsCodec.StreamName.CategoryAndId (_,SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = Log.exceptions <| async {
     let items =
         [ for e in span.events do
             let x = Contract.parse e.Data
