@@ -4,7 +4,7 @@ open System
 
 module Log =
 
-    let (|LogAsWarning|_|) = function (e : exn) -> Serilog.Log.Warning(e, "Unhandled"); None
+    let (|LogAsWarning|_|) = function (e : exn) -> Serilog.Log.Warning(e, "Unhandled exception"); None
     let exceptions f = async { try return! f with LogAsWarning -> return! invalidOp "not possible; Filter always returns None" }
 
 [<RequireQualifiedAccess>]
