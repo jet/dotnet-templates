@@ -28,7 +28,7 @@ module Configuration =
             EnvVar.set var (loadF key)
 
     let initialize () =
-        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
@@ -206,7 +206,7 @@ module Args =
                 | Cosmos _ ->               "CosmosDb Sink parameters."
 #endif
     and KafkaSourceArguments(a : ParseResults<KafkaSourceParameters>) =
-        member __.Broker =                  a.TryGetResult KafkaSourceParameters.Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Broker =                  a.TryGetResult KafkaSourceParameters.Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult KafkaSourceParameters.Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member __.MaxInFlightBytes =        a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map System.TimeSpan.FromMinutes
@@ -476,7 +476,7 @@ module Args =
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
     and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
-        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member x.BuildTargetParams() =      x.Broker, x.Topic
 //#endif
@@ -519,11 +519,37 @@ module Logging =
 let [<Literal>] AppName = "ReactorTemplate"
 
 //#if multiSource
-module EventStoreContext =
-    let cache = Equinox.Cache(AppName, sizeMb = 10)
-    let create connection = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
+#if (!kafkaEventSpans)
+//#if (!changeFeedOnly)
+module Checkpoints =
+
+    // In this implementation, we keep the checkpoints in Cosmos when consuming from EventStore
+    module Cosmos =
+
+        let codec = FsCodec.NewtonsoftJson.Codec.Create<Checkpoint.Events.Event>()
+        let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
+        let create groupName (context, cache) =
+            let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+            let resolver = Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
+            let resolve streamName = resolver.Resolve(streamName, Equinox.AllowStale)
+            Checkpoint.CheckpointSeries(groupName, resolve)
 
 //#endif
+#endif
+module EventStoreContext =
+
+    let create connection =
+        Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize = 500))
+
+//#endif
+#if (!kafkaEventSpans)
+module CosmosContext =
+
+    let create (connector : Equinox.Cosmos.Connector) discovery (database, container) =
+        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+        Equinox.Cosmos.Context(connection, database, container)
+
+#endif
 let build (args : Args.Arguments) =
 #if (!kafkaEventSpans)
 //#if (!changeFeedOnly)
@@ -533,16 +559,10 @@ let build (args : Args.Arguments) =
         let connectProjEs () = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.PreferSlave)
         let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
 
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+        let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb = 10)
-        let context = Equinox.Cosmos.Context(connection, database, container)
 
-        let resolveCheckpointStream =
-            let codec = FsCodec.NewtonsoftJson.Codec.Create()
-            let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
-            fun target -> Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve(target, Equinox.AllowStale)
-        let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, Log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
+        let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
 #if kafka
         let (broker, topic) = srcE.Cosmos.Sink.BuildTargetParams()
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
@@ -553,7 +573,7 @@ let build (args : Args.Arguments) =
 #else
         let esConn = connectEs ()
         let srcCache = Equinox.Cache(AppName, sizeMb = 10)
-        let srcService = Todo.EventStore.create (EventStoreContext.create esConn,srcCache)
+        let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
         let handle = Handler.handleStreamEvents (Handler.tryHandle srcService produceSummary)
 #endif
         let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., logExternalStats = producer.DumpStats)
@@ -623,8 +643,7 @@ let build (args : Args.Arguments) =
 #if blank
         let handle = Handler.handleStreamEvents (Handler.tryHandle produceSummary)
 #else
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        let context = Equinox.Cosmos.Context (connection, database, container)
+        let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb = 10)
         let service = Todo.Cosmos.create (context, cache)
         let handle = Handler.handleStreamEvents (Handler.tryHandle service produceSummary)
@@ -635,8 +654,7 @@ let build (args : Args.Arguments) =
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
         let handle = Ingester.handleStreamEvents Ingester.tryHandle
 #else // blank -> no specific Ingester source/destination wire-up
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        let context = Equinox.Cosmos.Context (connection, database, container)
+        let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb = 10)
         let srcService = Todo.Cosmos.create (context, cache)
         let dstService = TodoSummary.Cosmos.create (context, cache)

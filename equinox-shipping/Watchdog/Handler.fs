@@ -29,8 +29,8 @@ let tryHandle
         (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
     let processingStuckCutoff = let now = DateTimeOffset.UtcNow in now.Add(-processingTimeout)
     match stream, span.events with
-    | TransactionWatchdog.Finalization.MatchStatus (transId, status) ->
-        match TransactionWatchdog.categorize processingStuckCutoff status with
+    | TransactionWatchdog.Finalization.MatchStatus (transId, state) ->
+        match TransactionWatchdog.toStatus processingStuckCutoff state with
         | TransactionWatchdog.Complete ->
             return Outcome.Completed
         | TransactionWatchdog.Active ->
