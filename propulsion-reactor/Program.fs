@@ -530,7 +530,7 @@ let build (args : Args.Arguments) =
     match args.SourceParams() with
     | Choice1Of2 (srcE, cosmos, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
-        let connectProjEs = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.PreferSlave)
+        let connectProjEs () = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.PreferSlave)
         let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
 
         let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
@@ -579,7 +579,6 @@ let build (args : Args.Arguments) =
         let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
         let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
 #endif // !kafka
-        let connect () = connectProjEs
 #if filter
         let filterByStreamName = args.FilterFunction()
 #else
@@ -587,7 +586,7 @@ let build (args : Args.Arguments) =
 #endif
         let runPipeline =
             EventStoreSource.Run(
-                Log.Logger, sink, checkpoints, connect, spec, Handler.tryMapEvent filterByStreamName,
+                Log.Logger, sink, checkpoints, connectProjEs, spec, Handler.tryMapEvent filterByStreamName,
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
     | Choice2Of2 (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
