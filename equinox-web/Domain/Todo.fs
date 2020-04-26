@@ -61,7 +61,7 @@ type Command =
 
 /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream
 let interpret c (state : Fold.State) =
-    let mkItem id (value: Props): Events.ItemData = { id = id; order = value.order; title = value.title; completed = value.completed }
+    let mkItem id (value : Props) : Events.ItemData = { id = id; order = value.order; title = value.title; completed = value.completed }
     match c with
     | Add value -> [Events.Added (mkItem state.nextId value)]
     | Update (itemId, value) ->

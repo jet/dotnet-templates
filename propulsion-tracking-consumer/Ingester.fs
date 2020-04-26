@@ -28,7 +28,7 @@ type Stats(log, statsInterval, stateInterval) =
     override __.HandleOk res = res |> function
         | Completed (used, unused) -> ok <- ok + used; skipped <- skipped + unused
     override __.HandleExn exn =
-        log.Information(exn, "Umhandled")
+        log.Information(exn, "Unhandled")
 
     override __.DumpStats() =
         if ok <> 0 || skipped <> 0 then

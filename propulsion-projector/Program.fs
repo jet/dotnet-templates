@@ -182,24 +182,28 @@ let [<Literal>] AppName = "ProjectorTemplate"
 #if kakfa
 type ProductionStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+
     // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
     override __.HandleOk(()) = log.Warning("Produced")
     // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
-    override __.HandleExn e = log.Information(e, "Unhandled")
+    override __.HandleExn exn = log.Information(exn, "Unhandled")
 #else
 #if !parallelOnly
 type ProjectorStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Projector.Stats<int>(log, statsInterval, stateInterval)
+
     let mutable totalCount = 0
+
+    // TODO consider best balance between logging or gathering summary information per handler invocation
+    override __.HandleOk count =
+        log.Warning("Handled {count}", count)
+    // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
+    override __.HandleExn exn =
+        log.Information(exn, "Unhandled")
+
     override __.DumpStats() =
         log.Information(" Total events processed {total}", totalCount)
         totalCount <- 0
-    // TODO consider best balance between logging or gathering summary information per handler invocation
-    override __.HandleOk(count) =
-        log.Warning("Handled {count}", count)
-    // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
-    override __.HandleExn e =
-        log.Information(e, "Unhandled")
 #endif
 #endif
 

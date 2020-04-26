@@ -41,8 +41,8 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
         | Outcome.NotApplicable count -> na <- na + count
     override __.HandleExn exn =
         log.Information(exn, "Unhandled")
-
-    override __.DumpStats () =
+        
+    override __.DumpStats() =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0

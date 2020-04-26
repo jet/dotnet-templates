@@ -570,14 +570,14 @@ let build (args : Args.Arguments) =
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
             producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 #if blank
-        let handle = Handler.handleStreamEvents (Handler.hhandle produceSummary)
+        let handle = Handler.handleStreamEvents (Handler.handle produceSummary)
 #else
         let esConn = connectEs ()
         let srcCache = Equinox.Cache(AppName, sizeMb=10)
         let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
         let handle = Handler.handleStreamEvents (Handler.handle srcService produceSummary)
 #endif
-        let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats = producer.DumpStats)
+        let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
         let sink =
 #if (kafka && !blank)
              Propulsion.Streams.Sync.StreamsSync.Start(
@@ -673,7 +673,7 @@ let build (args : Args.Arguments) =
 #if filter
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
-        Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, consumerConfig, parseStreamEvents, handle, args.MaxConcurrentStreams, stats = stats,  pipelineStatsInterval = args.StatsInterval)
+        Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, consumerConfig, parseStreamEvents, handle, args.MaxConcurrentStreams, stats=stats,  pipelineStatsInterval=args.StatsInterval)
 #else // !kafkaEventSpans => Default consumption, from CosmosDb
 #if (kafka && !blank)
         let sink =

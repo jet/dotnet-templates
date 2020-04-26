@@ -1,7 +1,5 @@
 module ProjectorTemplate.Handler
 
-open Propulsion.Streams
-
 //let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
 //    if x.Data.Length < 900_000 then x
 //    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp)
@@ -41,5 +39,5 @@ let handle (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
     let r = System.Random()
     let ms = r.Next(1, span.events.Length)
     do! Async.Sleep ms
-    return SpanResult.AllProcessed, span.events.Length }
+    return Propulsion.Streams.SpanResult.AllProcessed, span.events.Length }
 #endif

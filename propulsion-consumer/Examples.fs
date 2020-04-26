@@ -1,7 +1,6 @@
 ﻿namespace ConsumerTemplate
 
 open FsCodec
-open Propulsion.Streams
 open Serilog
 open System
 open System.Collections.Concurrent
@@ -93,13 +92,13 @@ module MultiStreams =
         member __.Handle(streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
             match streamName, span with
             | OtherCategory (cat, count) ->
-                return SpanResult.AllProcessed, OtherCategory (cat, count)
+                return Propulsion.Streams.SpanResult.AllProcessed, OtherCategory (cat, count)
             | FavoritesEvents (id, s, xs) ->
                 let folder (s : HashSet<_>) = function
                     | Favorites.Favorited e -> s.Add(e.skuId) |> ignore; s
                     | Favorites.Unfavorited e -> s.Remove(e.skuId) |> ignore; s
                 faves.[id] <- Array.fold folder s xs
-                return SpanResult.AllProcessed, Faves xs.Length
+                return Propulsion.Streams.SpanResult.AllProcessed, Faves xs.Length
             | SavedForLaterEvents (id, s, xs) ->
                 let remove (skus : SkuId seq) (s : _ list) =
                     let removing = (HashSet skus).Contains
@@ -112,7 +111,7 @@ module MultiStreams =
                     | SavedForLater.Removed e -> remove e.skus s
                     | SavedForLater.Merged e -> s |> remove [| for x in e.items -> x.skuId |] |> add [| for x in e.items -> x.skuId |]
                 saves.[id] <- (s, xs) ||> Array.fold folder
-                return SpanResult.AllProcessed, Saves xs.Length
+                return Propulsion.Streams.SpanResult.AllProcessed, Saves xs.Length
         }
 
         // Dump stats relating to how much information is being held - note it's likely for requests to be in flighht during the call
