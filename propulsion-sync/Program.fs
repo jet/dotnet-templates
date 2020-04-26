@@ -437,7 +437,7 @@ module Args =
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
@@ -531,12 +531,12 @@ module EventV0Parser =
 
 let transformV0 catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
-    let (FsCodec.StreamName.CategoryAndId (cat,_)) = parsed.stream
+    let (FsCodec.StreamName.CategoryAndId (cat, _)) = parsed.stream
     if catFilter cat then
         yield parsed }
 //#else
 let transformOrFilter catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for { stream = FsCodec.StreamName.CategoryAndId (cat,_) } as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
+    for { stream = FsCodec.StreamName.CategoryAndId (cat, _) } as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter cat then
             yield e }
@@ -580,10 +580,9 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
                             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
                         return FsCodec.StreamName.toString stream, value }
-                    let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic, degreeOfParallelism = producers)
+                    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic, degreeOfParallelism=producers)
                     StreamsProducerSink.Start(
-                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer,
-                        statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 1., maxBytes=maxBytes, maxEvents=maxEvents),
+                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, statsInterval=args.StatsInterval, stateInterval=args.StateInterval, maxBytes=maxBytes, maxEvents=maxEvents),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
@@ -617,7 +616,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         | Some (mainConn, containers) ->
 
         let context = Equinox.Cosmos.Context(mainConn, containers)
-        let cache = Equinox.Cache(AppName, sizeMb = 1)
+        let cache = Equinox.Cache(AppName, sizeMb=1)
         let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
 
         let withNullData (e : FsCodec.ITimelineEvent<_>) : FsCodec.ITimelineEvent<_> =
@@ -642,7 +641,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         sink, runPipeline
 
 let run (args, log, storeLog) =
-    let sink,runSourcePipeline = build (args, log, storeLog)
+    let sink, runSourcePipeline = build (args, log, storeLog)
     runSourcePipeline |> Async.Start
     sink.AwaitCompletion() |> Async.RunSynchronously
     sink.RanToCompletion

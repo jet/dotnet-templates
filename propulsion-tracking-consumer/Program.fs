@@ -113,10 +113,13 @@ module Args =
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
         member __.Verbose =                 a.Contains Verbose
 
+        member __.StatsInterval =           TimeSpan.FromMinutes 1.
+        member __.StateInterval =           TimeSpan.FromMinutes 5.
+
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
         let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
@@ -138,13 +141,13 @@ let [<Literal>] AppName = "ConsumerTemplate"
 
 let start (args : Args.Arguments) =
     let context = args.Cosmos.Connect(AppName) |> Async.RunSynchronously
-    let cache = Equinox.Cache (AppName, sizeMb = 10) // here rather than in SkuSummary aggregate as it can be shared with other Aggregates
+    let cache = Equinox.Cache (AppName, sizeMb=10) // here rather than in SkuSummary aggregate as it can be shared with other Aggregates
     let service = SkuSummary.Cosmos.create (context, cache)
     let config =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
+    let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     // No categorization required, our inputs are all one big family defying categorization
     let sequencer = Propulsion.Kafka.Core.StreamKeyEventSequencer()
     Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, sequencer.ToStreamEvent, Ingester.ingest service, args.MaxConcurrentStreams, stats)

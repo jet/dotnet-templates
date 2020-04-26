@@ -1,6 +1,6 @@
 module ReactorTemplate.Handler
-//#if multiSource
 
+//#if multiSource
 open Propulsion.EventStore
 
 /// Responsible for inspecting and then either dropping or tweaking events coming from EventStore
@@ -9,9 +9,9 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
     match x.Event with
     | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
     | PropulsionStreamEvent e -> Some e
+
 //#endif
 //#if kafka
-
 [<RequireQualifiedAccess>]
 type Outcome =
     /// Handler processed the span, with counts of used vs unused known event types
@@ -46,7 +46,8 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
         | _, Outcome.Skipped count -> skipped <- skipped + count
         | _, Outcome.NotApplicable count -> na <- na + count
 #endif
-    override __.DumpStats () =
+        
+    override __.DumpStats() =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0

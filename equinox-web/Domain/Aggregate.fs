@@ -50,5 +50,5 @@ type Service internal (resolve : string -> Equinox.Stream<Events.Event, Fold.Sta
 let create resolve =
     let resolve id =
         let stream = resolve (streamName id)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
     Service(resolve)

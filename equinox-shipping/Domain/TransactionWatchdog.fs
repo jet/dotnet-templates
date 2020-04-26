@@ -38,7 +38,7 @@ let toStatus cutoffTime = function
 let fold : Events.Categorization seq -> Fold.State =
     Fold.fold Fold.initial
 
-let (|TransactionStatus|) (codec : #FsCodec.IEventCodec<_,_,_>) events : Fold.State =
+let (|TransactionStatus|) (codec : #FsCodec.IEventCodec<_, _, _>) events : Fold.State =
     events
     |> Seq.choose codec.TryDecode
     |> fold

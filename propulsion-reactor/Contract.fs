@@ -28,7 +28,7 @@ module Input =
     let codec =
         let up (evt : FsCodec.ITimelineEvent<_>, e : Event) =
             evt.Index, e
-        let down (_,e) = e, None, None
+        let down (_, e) = e, None, None
         FsCodec.NewtonsoftJson.Codec.Create(up, down)
 
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =

@@ -125,6 +125,8 @@ module Args =
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 64)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 1024)
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member __.StatsInterval =           TimeSpan.FromMinutes 1.
+        member __.StateInterval =           TimeSpan.FromMinutes 2.
         member __.AuxContainerName =        __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
@@ -143,13 +145,13 @@ module Args =
     and TargetInfo(a : ParseResults<Parameters>) =
         member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
-        member x.BuildTargetParams() = x.Broker, x.Topic
+        member x.BuildTargetParams() =      x.Broker, x.Topic
 //#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
@@ -184,7 +186,7 @@ let build (args : Args.Arguments) =
     let (broker, topic) = args.Target.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
 #if parallelOnly
-    let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, statsInterval=TimeSpan.FromMinutes 1.)
+    let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, statsInterval=args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, fun x -> upcast x)
 #else
     let sink =
@@ -194,10 +196,7 @@ let build (args : Args.Arguments) =
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
 #else
-    let sink =
-        Propulsion.Streams.StreamsProjector.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle,
-            statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
     let runSourcePipeline =

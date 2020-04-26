@@ -17,6 +17,7 @@ type Stats(log, statsInterval, stateInterval) =
 #else
     inherit Propulsion.Kafka.StreamsConsumerStats<int64 * Outcome>(log, statsInterval, stateInterval)
 #endif
+
     let mutable ok, skipped, na = 0, 0, 0
 
 #if (!kafkaEventSpans)
@@ -30,6 +31,7 @@ type Stats(log, statsInterval, stateInterval) =
         | _, Outcome.Skipped count -> skipped <- skipped + count
         | _, Outcome.NotApplicable count -> na <- na + count
 #endif
+
     override __.DumpStats () =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
@@ -38,7 +40,7 @@ type Stats(log, statsInterval, stateInterval) =
 #if blank
 let tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option * Outcome> = async {
     match stream, span with
-    | FsCodec.StreamName.CategoryAndId ("Todos",id), _ ->
+    | FsCodec.StreamName.CategoryAndId ("Todos", id), _ ->
         let ok, version' = true, None
         // "TODO: add handler code"
         match ok with

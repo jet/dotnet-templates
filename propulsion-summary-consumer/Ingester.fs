@@ -28,7 +28,7 @@ module Contract =
         | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
         | _ -> None
     let (|MatchNewest|_|) = function
-        | (MatchesCategory clientId,_) & DecodeNewest (version, update) -> Some (clientId, version, update)
+        | (MatchesCategory clientId, _) & DecodeNewest (version, update) -> Some (clientId, version, update)
         | _ -> None
 
 [<RequireQualifiedAccess>]
@@ -51,7 +51,7 @@ type Stats(log, statsInterval, stateInterval) =
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
 
-    override __.DumpStats () =
+    override __.DumpStats() =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" Used {ok} Skipped {skipped} N/A {na}", ok, skipped, na)
             ok <- 0; skipped <- 0l; na <- 0

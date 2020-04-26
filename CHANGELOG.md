@@ -10,13 +10,15 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
+- `proReactor`: Add arguments to facilitate projecting from a different database than that used to transact [#62](https://github.com/jet/dotnet-templates/pull/62)
+[@svairagade](https://github.com/svairagade)
 - `eqxShipping`: Add `Reserved` event/phase to `eqxShipping` [#63](https://github.com/jet/dotnet-templates/pull/63)
 
 ### Changed
 
-- `proReactor`: Start using projection event store connection to read when using event store [#62](https://github.com/jet/dotnet-templates/pull/62) 
 - Target `Propulsion` v `2.2.0`, `FsKafka` v `1.4.1` [#64](https://github.com/jet/dotnet-templates/pull/64)
 - `proReactor`, `proSync`: Clean up `CosmosContext` and `Checkpoints` management [#58](https://github.com/jet/dotnet-templates/pull/58)
+- `proReactor`: Start using projection event store connection to read when using event store [#62](https://github.com/jet/dotnet-templates/pull/62) 
 
 ### Removed
 ### Fixed

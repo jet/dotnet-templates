@@ -130,7 +130,7 @@ module MultiStreams =
             | OtherCategory (cat, count) -> otherCats.Ingest(cat, int64 count)
 
         // Dump stats relating to the nature of the message processing throughput
-        override __.DumpStats () =
+        override __.DumpStats() =
             if faves <> 0 || saves <> 0 then
                 log.Information(" Processed Faves {faves} Saves {s}", faves, saves)
                 faves <- 0; saves <- 0
@@ -202,7 +202,7 @@ module MultiMessages =
             let handleMessage (KeyValue (streamName, eventsSpan)) = async { processor.Handle(StreamName.parse streamName, eventsSpan) }
             Propulsion.Kafka.ParallelConsumer.Start(
                 log, config, degreeOfParallelism, handleMessage,
-                statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
+                statsInterval=TimeSpan.FromSeconds 30., logExternalStats=processor.DumpStats)
 
     type BatchesSync =
         /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`

@@ -16,7 +16,7 @@ type Stats(log, statsInterval, stateInterval) =
         | Outcome.Deferred -> deferred <- deferred + 1
         | Outcome.Resolved successfully -> if successfully then succeeded <- succeeded + 1 else failed <- failed + 1
 
-    override __.DumpStats () =
+    override __.DumpStats() =
         if completed <> 0 || deferred <> 0 || failed <> 0 || succeeded <> 0 then
             log.Information(" Completed {completed} Deferred {deferred} Failed {failed} Succeeded {succeeded}", completed, deferred, failed, succeeded)
             completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0

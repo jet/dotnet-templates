@@ -28,13 +28,15 @@ type Stats(log, statsInterval, stateInterval) =
     override __.HandleOk res = res |> function
         | Completed (used, unused) -> ok <- ok + used; skipped <- skipped + unused
 
-    override __.DumpStats () =
+    override __.DumpStats() =
         if ok <> 0 || skipped <> 0 then
             log.Information(" Used {ok} Skipped {skipped}", ok, skipped)
             ok <- 0; skipped <- 0
 
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : SkuSummary.Service) (FsCodec.StreamName.CategoryAndId (_,SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+let ingest
+        (service : SkuSummary.Service)
+        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
     let items =
         [ for e in span.events do
             let x = Contract.parse e.Data
