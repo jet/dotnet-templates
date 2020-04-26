@@ -149,8 +149,10 @@ let start (args : Args.Arguments) =
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     // No categorization required, our inputs are all one big family defying categorization
-    let sequencer = Propulsion.Kafka.Core.StreamKeyEventSequencer()
-    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, sequencer.ToStreamEvent, Ingester.ingest service, args.MaxConcurrentStreams, stats)
+    let sequencer = Propulsion.Kafka.StreamNameSequenceGenerator()
+    let parseResult = sequencer.ConsumeResultToStreamEvent(fun (res : Confluent.Kafka.ConsumeResult<_, string>) ->
+        System.Text.Encoding.UTF8.GetBytes res.Message.Value, null)
+    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config,  parseResult, Ingester.ingest service, args.MaxConcurrentStreams, stats, pipelineStatsInterval=args.StatsInterval)
 
 let run args =
     use consumer = start args

@@ -570,32 +570,32 @@ let build (args : Args.Arguments) =
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
             producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 #if blank
-        let handle = Handler.handleStreamEvents (Handler.tryHandle produceSummary)
+        let handle = Handler.handleStreamEvents (Handler.hhandle produceSummary)
 #else
         let esConn = connectEs ()
         let srcCache = Equinox.Cache(AppName, sizeMb=10)
         let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
-        let handle = Handler.handleStreamEvents (Handler.tryHandle srcService produceSummary)
+        let handle = Handler.handleStreamEvents (Handler.handle srcService produceSummary)
 #endif
-        let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
+        let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats = producer.DumpStats)
         let sink =
 #if (kafka && !blank)
              Propulsion.Streams.Sync.StreamsSync.Start(
                  Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
                  stats, projectorStatsInterval=args.StatsInterval)
 #else
-             Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
+             Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
 #endif
 #else // !kafka -> ingestion
 #if blank
         // TODO: establish any relevant inputs, or re-run without `--blank` for example wiring code
-        let handle = Ingester.handleStreamEvents Ingester.tryHandle
+        let handle = Ingester.handle
 #else // blank
         let esConn = connectEs ()
         let srcCache = Equinox.Cache(AppName, sizeMb=10)
         let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
         let dstService = TodoSummary.Cosmos.create (context, cache)
-        let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
+        let handle = Ingester.handle srcService dstService
 #endif // blank
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
@@ -642,24 +642,24 @@ let build (args : Args.Arguments) =
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
             producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 #if blank
-        let handle = Handler.handleStreamEvents (Handler.tryHandle produceSummary)
+        let handle = Handler.handle produceSummary
 #else
         let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb=10)
         let service = Todo.Cosmos.create (context, cache)
-        let handle = Handler.handleStreamEvents (Handler.tryHandle service produceSummary)
+        let handle = Handler.handle service produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
 #else // !kafka -> Ingester only
 #if blank
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
-        let handle = Ingester.handleStreamEvents Ingester.tryHandle
+        let handle = Ingester.handle
 #else // blank -> no specific Ingester source/destination wire-up
         let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb=10)
         let srcService = Todo.Cosmos.create (context, cache)
         let dstService = TodoSummary.Cosmos.create (context, cache)
-        let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
+        let handle = Ingester.handle srcService dstService
 #endif // blank
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
 #endif // kafka
@@ -673,7 +673,7 @@ let build (args : Args.Arguments) =
 #if filter
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
-        Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, consumerConfig, parseStreamEvents, handle, args.MaxConcurrentStreams, stats=stats,  pipelineStatsInterval=args.StatsInterval)
+        Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, consumerConfig, parseStreamEvents, handle, args.MaxConcurrentStreams, stats = stats,  pipelineStatsInterval = args.StatsInterval)
 #else // !kafkaEventSpans => Default consumption, from CosmosDb
 #if (kafka && !blank)
         let sink =

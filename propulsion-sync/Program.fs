@@ -557,6 +557,12 @@ module Checkpoints =
             let resolve streamName = resolver.Resolve(streamName, Equinox.AllowStale)
             Checkpoint.CheckpointSeries(groupName, resolve)
 
+type Stats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+
+    override __.HandleOk(()) = ()
+    override __.HandleExn exn = log.Information(exn, "Unhandled")
+
 let build (args : Args.Arguments, log, storeLog : ILogger) =
     let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
@@ -581,8 +587,9 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
                             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
                         return FsCodec.StreamName.toString stream, value }
                     let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic, degreeOfParallelism=producers)
+                    let stats = Stats(Log.Logger, args.StatsInterval, args.StateInterval)
                     StreamsProducerSink.Start(
-                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, statsInterval=args.StatsInterval, stateInterval=args.StateInterval, maxBytes=maxBytes, maxEvents=maxEvents),
+                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, stats, args.StatsInterval, maxBytes=maxBytes, maxEvents=maxEvents),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif

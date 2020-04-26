@@ -222,10 +222,9 @@ let build (args : Args.Arguments) =
     let isRelevantToWatchdogHandler = function
         | FinalizationTransaction.Match _ -> true
         | _ -> false
-    let handleSpan = Shipping.Watchdog.Handler.tryHandle args.ProcessingTimeout processManager.Drive
-    let handle = Shipping.Watchdog.Handler.handleStreamEvents handleSpan
+    let handle = Shipping.Watchdog.Handler.handle args.ProcessingTimeout processManager.Drive
     let stats = Shipping.Watchdog.Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
-    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
+    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
 
     // Wire up the CFP to feed in the items
     let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
