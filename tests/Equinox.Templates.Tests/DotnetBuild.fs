@@ -17,7 +17,7 @@ type EqxWebs() as this =
         do this.Add(t, ["--todos"; "--cosmos"])
 #if !DEBUG
         do this.Add(t, ["--todos"])
-        fo this.Add(t, ["--todos"; "--eventStore"])
+        do this.Add(t, ["--todos"; "--eventStore"])
 #endif
 
 type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
