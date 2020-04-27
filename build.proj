@@ -14,6 +14,10 @@
     <Exec Command="dotnet pack src/Equinox.Templates/Equinox.Templates.fsproj $(Cfg) $(PackOptions)" />
   </Target>
 
-  <Target Name="Build" DependsOnTargets="Pack" />
+  <Target Name="VsTest">
+    <Exec Command="dotnet test tests/Equinox.Templates.Tests/" LogStandardErrorAsError="true" />
+  </Target>
+
+  <Target Name="Build" DependsOnTargets="Pack;VsTest" />
 
 </Project>
