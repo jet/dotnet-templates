@@ -179,7 +179,7 @@ module Logging =
 
 let [<Literal>] AppName = "ProjectorTemplate"
 
-#if kakfa
+#if kafka
 type ProductionStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
