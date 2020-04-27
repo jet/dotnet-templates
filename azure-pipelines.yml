@@ -10,7 +10,12 @@ jobs:
       BUILD_PR: $(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)
       BUILD_ID: $(BUILD.BUILDNUMBER) 
   - script: dotnet test build.proj
-    displayName: dotnet test -v n build.proj
+    displayName: dotnet build build.proj -v d
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: 'VSTest'
+      testResultsFiles: 'tests/**/*.trx'
+    condition: succeededOrFailed()
   - task: PublishBuildArtifacts@1
     inputs:
       pathtoPublish: 'bin/nupkg'
