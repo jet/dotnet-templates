@@ -15,11 +15,11 @@
   </PropertyGroup>
 
   <Target Name="Pack">
-    <Exec Command="dotnet pack src/Equinox.Templates/Equinox.Templates.fsproj $(Cfg) $(PackOptions)" />
+    <Exec Command="dotnet pack src/Equinox.Templates $(Cfg) $(PackOptions)" />
   </Target>
 
   <Target Name="VSTest">
-    <Exec Command="dotnet test tests/Equinox.Templates.Tests/ $(Cfg) $(TestOptions)" />
+    <Exec Command="dotnet test tests/Equinox.Templates.Tests $(Cfg) $(TestOptions)" />
   </Target>
 
   <Target Name="Build" DependsOnTargets="Pack;VSTest" />
