@@ -2,7 +2,7 @@ name: $(Rev:r)
 jobs:
 - job: Windows
   pool:
-    vmImage: 'vs2017-win2016'
+    vmImage: 'windows-latest'
   steps:
   - script: dotnet pack build.proj
     displayName: dotnet pack build.proj
@@ -10,7 +10,7 @@ jobs:
       BUILD_PR: $(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)
       BUILD_ID: $(BUILD.BUILDNUMBER) 
   - script: dotnet test build.proj
-    displayName: dotnet build build.proj -v d
+    displayName: dotnet build build.proj -v n
   - task: PublishTestResults@2
     inputs:
       testResultsFormat: 'VSTest'
