@@ -179,6 +179,34 @@ module Logging =
 
 let [<Literal>] AppName = "ProjectorTemplate"
 
+#if kakfa
+type ProductionStats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+
+    // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
+    override __.HandleOk(()) = log.Warning("Produced")
+    // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
+    override __.HandleExn exn = log.Information(exn, "Unhandled")
+#else
+#if !parallelOnly
+type ProjectorStats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Streams.Projector.Stats<int>(log, statsInterval, stateInterval)
+
+    let mutable totalCount = 0
+
+    // TODO consider best balance between logging or gathering summary information per handler invocation
+    override __.HandleOk count =
+        log.Warning("Handled {count}", count)
+    // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
+    override __.HandleExn exn =
+        log.Information(exn, "Unhandled")
+
+    override __.DumpStats() =
+        log.Information(" Total events processed {total}", totalCount)
+        totalCount <- 0
+#endif
+#endif
+
 let build (args : Args.Arguments) =
     let discovery, source, connector = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
@@ -189,14 +217,13 @@ let build (args : Args.Arguments) =
     let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, statsInterval=args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, fun x -> upcast x)
 #else
-    let sink =
-        Propulsion.Kafka.StreamsProducerSink.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer,
-            statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
+    let stats = ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
 #else
-    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
+    let stats = ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
     let runSourcePipeline =

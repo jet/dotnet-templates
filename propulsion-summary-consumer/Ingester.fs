@@ -50,6 +50,8 @@ type Stats(log, statsInterval, stateInterval) =
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
+    override __.HandleExn exn =
+        log.Information(exn, "Unhandled")
 
     override __.DumpStats() =
         if ok <> 0 || skipped <> 0 || na <> 0 then
@@ -64,10 +66,10 @@ let map : Contract.Message -> TodoSummary.Events.SummaryData = function
                 { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
 
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : TodoSummary.Service) (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+let ingest (service : TodoSummary.Service) (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
     | Contract.MatchNewest (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with
-        | true -> return Outcome.Ok (1, span.events.Length - 1)
-        | false -> return Outcome.Skipped span.events.Length
-    | _ -> return Outcome.NotApplicable span.events.Length }
+        | true -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (1, span.events.Length - 1)
+        | false -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped span.events.Length
+    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.events.Length }

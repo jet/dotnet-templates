@@ -27,6 +27,8 @@ type Stats(log, statsInterval, stateInterval) =
 
     override __.HandleOk res = res |> function
         | Completed (used, unused) -> ok <- ok + used; skipped <- skipped + unused
+    override __.HandleExn exn =
+        log.Information(exn, "Unhandled")
 
     override __.DumpStats() =
         if ok <> 0 || skipped <> 0 then
@@ -36,7 +38,7 @@ type Stats(log, statsInterval, stateInterval) =
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
 let ingest
         (service : SkuSummary.Service)
-        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) : Async<Outcome> = async {
+        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) = async {
     let items =
         [ for e in span.events do
             let x = Contract.parse e.Data
@@ -49,4 +51,4 @@ let ingest
                         reservedQuantity = o.reservedUnitQuantity }
                 yield x ]
     let! used = service.Ingest(skuId, items)
-    return Outcome.Completed(used, items.Length - used) }
+    return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Completed(used, items.Length - used) }

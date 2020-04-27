@@ -146,10 +146,12 @@ let start (args : Args.Arguments) =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse spanJson
+    let parseStreamSummaries(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
+        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse res.Message.Value
     let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, parseStreamSummaries, Ingester.ingest service, args.MaxConcurrentStreams, stats)
+    Propulsion.Kafka.StreamsConsumer.Start
+        (   Log.Logger, config, parseStreamSummaries, Ingester.ingest service, args.MaxConcurrentStreams,
+            stats, args.StateInterval)
 
 let run args =
     use consumer = start args
