@@ -143,7 +143,13 @@ To use from the command line, the outline is:
 
 ## TESTING
 
-There's [integration tests in the repo](https://github.com/jet/dotnet-templates/blob/int-tests/tests/Equinox.Templates.Tests/DotnetBuild.fs) that check everything compiles before we merge/release, but you can also do it manually:
+There's [integration tests in the repo](https://github.com/jet/dotnet-templates/blob/int-tests/tests/Equinox.Templates.Tests/DotnetBuild.fs) that check everything compiles before we merge/release
+
+    dotnet build build.proj # build Equinox.Templates package, run tests \/
+    dotnet pack build.proj # build Equinox.Templates package only
+    dotnet test build.proj # Test aphabetically newest file in bin/nupkgs only
+
+One can also do it manually:
 
 1. Generate the package (per set of changes you make locally)
 
@@ -152,7 +158,7 @@ There's [integration tests in the repo](https://github.com/jet/dotnet-templates/
     b. packaging into a local nupkg
 
         $ cd ~/dotnet-templates
-        $ dotnet build build.proj
+        $ dotnet pack build.proj
         Successfully created package '/Users/me/dotnet-templates/bin/nupkg/Equinox.Templates.3.10.1-alpha.0.1.nupkg'.
 
 2. Test, per variant
