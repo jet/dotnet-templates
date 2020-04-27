@@ -1,6 +1,9 @@
-# OS
+# Test results
 
-/scratch-area
+*.trx
+scratch-area
+
+# OS
 
 ## Mac
 .DS_Store
