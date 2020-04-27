@@ -152,7 +152,9 @@ let start (args : Args.Arguments) =
     let sequencer = Propulsion.Kafka.StreamNameSequenceGenerator()
     let parseResult = sequencer.ConsumeResultToStreamEvent(fun (res : Confluent.Kafka.ConsumeResult<_, string>) ->
         System.Text.Encoding.UTF8.GetBytes res.Message.Value, null)
-    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config,  parseResult, Ingester.ingest service, args.MaxConcurrentStreams, stats, pipelineStatsInterval=args.StatsInterval)
+    Propulsion.Kafka.StreamsConsumer.Start
+        (   Log.Logger, config,  parseResult, Ingester.ingest service, args.MaxConcurrentStreams, stats,
+            args.StateInterval)
 
 let run args =
     use consumer = start args

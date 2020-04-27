@@ -17,7 +17,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- Target `Propulsion` v `2.4.1`, `FsKafka` v `1.4.1` [#64](https://github.com/jet/dotnet-templates/pull/64) [#66](https://github.com/jet/dotnet-templates/pull/66)
+- Target `Propulsion` v `2.4.2`, `FsKafka` v `1.4.1` [#64](https://github.com/jet/dotnet-templates/pull/64) [#66](https://github.com/jet/dotnet-templates/pull/66)
 - `proReactor`, `proSync`: Clean up `CosmosContext` and `Checkpoints` management [#58](https://github.com/jet/dotnet-templates/pull/58)
 - `proReactor`: Start using projection event store connection to read when using event store [#62](https://github.com/jet/dotnet-templates/pull/62) 
 

@@ -149,7 +149,9 @@ let start (args : Args.Arguments) =
     let parseStreamSummaries(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse res.Message.Value
     let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, parseStreamSummaries, Ingester.ingest service, args.MaxConcurrentStreams, stats,  pipelineStatsInterval=args.StatsInterval)
+    Propulsion.Kafka.StreamsConsumer.Start
+        (   Log.Logger, config, parseStreamSummaries, Ingester.ingest service, args.MaxConcurrentStreams,
+            stats, args.StateInterval)
 
 let run args =
     use consumer = start args

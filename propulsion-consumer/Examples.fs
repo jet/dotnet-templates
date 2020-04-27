@@ -149,7 +149,8 @@ module MultiStreams =
         let stats = Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
         Propulsion.Kafka.StreamsConsumer.Start(
             log, config, parseStreamEvents, handler.Handle, degreeOfParallelism,
-            stats, logExternalState=handler.DumpState)
+            stats, TimeSpan.FromMinutes 10.,
+            logExternalState=handler.DumpState)
 
 /// When using parallel or batch processing, items are not grouped by stream but there are no constraints on the concurrency
 module MultiMessages =
