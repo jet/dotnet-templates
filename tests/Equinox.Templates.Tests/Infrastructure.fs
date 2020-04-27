@@ -47,7 +47,7 @@ module Dir =
     let projectBaseDir = CodeFolder.OfMe() ++ "../.."
     let projectBinNuGetDir = projectBaseDir ++ "bin/nupkg"
 
-    let scratchFolder = projectBaseDir ++ "../dotnet-templates-scratch-area"
+    let scratchFolder = projectBaseDir ++ "scratch-area"
     let cleared subFolder =
         let res = Path.GetFullPath(scratchFolder ++ subFolder)
         if Directory.Exists res then
@@ -56,11 +56,12 @@ module Dir =
 
 type EquinoxTemplatesFixture() =
 
-    let packagePath = Directory.EnumerateFiles(Dir.projectBinNuGetDir, "Equinox.Templates.*.nupkg") |> Seq.sort |> Seq.last
+    let [<Literal>] PackageName = "Equinox.Templates"
+    let packagePath = Directory.EnumerateFiles(Dir.projectBinNuGetDir, PackageName + ".*.nupkg") |> Seq.sort |> Seq.last
     do Dotnet.install packagePath
 
     member val PackagePath = packagePath
 
     interface IDisposable with
         member __.Dispose() =
-            Dotnet.uninstall "Equinox.Templates"
+            Dotnet.uninstall PackageName

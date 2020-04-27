@@ -143,7 +143,7 @@ To use from the command line, the outline is:
 
 ## TESTING
 
-There's [no integration test for the templates yet](https://github.com/jet/dotnet-templates/issues/2), so validating a template is safe to release is unfortunately a manual process based on:
+There's [integration tests in the repo](https://github.com/jet/dotnet-templates/blob/int-tests/tests/Equinox.Templates.Tests/DotnetBuild.fs) that check everything compiles before we merge/release, but you can also do it manually:
 
 1. Generate the package (per set of changes you make locally)
 
@@ -177,8 +177,6 @@ There's [no integration test for the templates yet](https://github.com/jet/dotne
 3. uninstalling the locally built templates from step 2a:
 
       $ dotnet new -u Equinox.Templates
-
-Pssst ... the above is also what implementing [#2](https://github.com/jet/dotnet-templates/issues/2) involves!
 
 # PATTERNS / GUIDANCE
 

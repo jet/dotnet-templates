@@ -5,15 +5,32 @@ open Xunit.Abstractions
 
 type TemplatesToTest() as this =
     inherit TheoryData<string, string list>()
-    do for t in ["eqxweb"; "eqxwebcs"] do
-        this.Add(t, ["--todos"])
-        this.Add(t, ["--todos"; "--memoryStore"])
-        this.Add(t, ["--todos"; "--eventStore"])
-        this.Add(t, ["--todos"; "--cosmos"])
-    do this.Add("eqxTestbed", [])
+
     do this.Add("proProjector", [])
+    do this.Add("proConsumer", [])
+    do this.Add("trackingConsumer", [])
+    do this.Add("summaryConsumer", [])
+    do this.Add("proSync", [])
+
+    do this.Add("proSync", ["--kafka"])
     do this.Add("proProjector", ["--kafka"])
-    do this.Add("proProjector", ["--kafka --parallelOnly"])
+    do this.Add("proProjector", ["--kafka"; "--parallelOnly"])
+    do this.Add("proReactor", [])
+    do this.Add("proReactor", ["--filter"])
+
+    do for source in ["multiSource"; (* <-default *) "kafkaEventSpans"; "changeFeedOnly"] do
+        for opts in [ []; ["--blank"]; ["--kafka"]; ["--kafka"; "--blank"] ] do
+            do this.Add("proReactor", ["--source " + source; ] @ opts)
+
+    do for t in ["eqxweb"; "eqxwebcs"] do
+        this.Add(t, ["--todos"; "--cosmos"])
+#if !DEBUG
+        this.Add(t, ["--todos"])
+        this.Add(t, ["--todos"; "--eventStore"])
+    do this.Add("proSync", ["--marveleqx"])
+#endif
+    do this.Add("eqxTestbed", [])
+    do this.Add("eqxShipping", [])
 
 type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
 

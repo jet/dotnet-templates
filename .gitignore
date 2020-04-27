@@ -1,8 +1,9 @@
 # OS
 
+/scratch-area
+
 ## Mac
 .DS_Store
-
 
 # Build results
 msbuild.*
