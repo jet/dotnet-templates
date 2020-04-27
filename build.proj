@@ -1,4 +1,4 @@
-<Project ToolsVersion="15.0">
+<Project>
 
   <Import Project="Directory.Build.props" />
 
@@ -19,7 +19,7 @@
   </Target>
 
   <Target Name="VSTest">
-    <Exec Command="dotnet test tests/Equinox.Templates.Tests $(Cfg) $(TestOptions)" />
+    <Exec Command="dotnet test tests/Equinox.Templates.Tests $(Cfg) $(TestOptions)" IgnoreStandardErrorWarningFormat="true" />
   </Target>
 
   <Target Name="Build" DependsOnTargets="Pack;VSTest" />
