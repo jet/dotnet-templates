@@ -54,7 +54,7 @@ let generate stream version summary =
 
 #if blank
 let handle
-        (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<_>)
+        (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
     | Contract.Input.Match (clientId, events) ->
@@ -70,7 +70,7 @@ let handle
 #else
 let handle
         (service : Todo.Service)
-        (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<_>)
+        (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
     | Todo.Events.Match (clientId, events) ->
