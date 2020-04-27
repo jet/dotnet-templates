@@ -10,6 +10,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
+- `tests/Equinox.Templates.Tests`: allow repo to validate integrity of templates within [#67](https://github.com/jet/dotnet-templates/pull/67) [#2](https://github.com/jet/dotnet-templates/issues/2)
 - `proReactor`: Add arguments to facilitate projecting from a different database than that used to transact [#62](https://github.com/jet/dotnet-templates/pull/62)
 [@svairagade](https://github.com/svairagade)
 - `eqxShipping`: Add `Reserved` event/phase to `eqxShipping` [#63](https://github.com/jet/dotnet-templates/pull/63)

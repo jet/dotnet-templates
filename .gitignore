@@ -1,8 +1,12 @@
+# Test results
+
+*.trx
+scratch-area
+
 # OS
 
 ## Mac
 .DS_Store
-
 
 # Build results
 msbuild.*
