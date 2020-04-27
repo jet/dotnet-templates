@@ -10,7 +10,7 @@ jobs:
       BUILD_PR: $(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)
       BUILD_ID: $(BUILD.BUILDNUMBER) 
   - script: dotnet test build.proj
-    displayName: dotnet test build.proj
+    displayName: dotnet test -v n build.proj
   - task: PublishBuildArtifacts@1
     inputs:
       pathtoPublish: 'bin/nupkg'
