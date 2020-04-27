@@ -21,7 +21,7 @@ module Process =
         direct p.OutputDataReceived (out.AppendLine >> ignore); direct p.ErrorDataReceived (err.AppendLine >> ignore)
         let _wasFresh = p.Start()
         p.BeginErrorReadLine(); p.BeginOutputReadLine()
-        if not (p.WaitForExit 10000) then
+        if not (p.WaitForExit 10_000) then
             failwithf "Running %s %s timed out" fileName args
         if p.ExitCode <> 0 then
             failwithf "Process <%s %s> Failed:\nstdout: <%O>\n stderr: <%O>" fileName args out err

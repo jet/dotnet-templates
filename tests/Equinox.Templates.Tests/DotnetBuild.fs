@@ -29,7 +29,7 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
         Dotnet.build [folder]
 
     #if DEBUG // Use this one to trigger an individual test
-    let [<Fact>] active ()                      = run "proReactor" ["--source changeFeedOnly"]
+    let [<Fact>] ``*pending*`` ()               = run "proReactor" ["--source changeFeedOnly"; "--kafka"]
     #endif
 
     let [<Fact>] eqxTestbed ()                  = run "eqxTestbed" []
