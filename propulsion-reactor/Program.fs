@@ -357,7 +357,7 @@ module Args =
             match tcp, port with
             | false, None ->   Discovery.GossipDns            host
             | false, Some p -> Discovery.GossipDnsCustomPort (host, p)
-            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", host).Uri)
+            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", host, 1113).Uri)
             | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", host, p).Uri)
         member __.Gorge =                   a.TryGetResult Gorge
         member __.TailInterval =            a.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
