@@ -356,7 +356,7 @@ module Args =
             match __.Tcp, __.Port with
             | false, None ->   Discovery.GossipDns            __.Host
             | false, Some p -> Discovery.GossipDnsCustomPort (__.Host, p)
-            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", __.Host).Uri)
+            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", __.Host, 1113).Uri)
             | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", __.Host, p).Uri)
         member __.Tcp =
             a.Contains EsSourceParameters.Tcp
