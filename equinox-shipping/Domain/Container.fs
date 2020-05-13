@@ -37,7 +37,7 @@ type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fol
         stream.Transact(interpretFinalize shipmentIds)
 
 let private create resolve =
-    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts = 3)
+    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts=3)
     Service(resolve)
 
 module Cosmos =

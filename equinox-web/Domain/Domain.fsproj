@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <WarningLevel>5</WarningLevel>
     <IsTestProject>false</IsTestProject>
     <DisableImplicitSystemValueTupleReference>true</DisableImplicitSystemValueTupleReference>
@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <PackageReference Include="Equinox" Version="2.0.0" />
-    <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.0.0" />
+    <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.0.1" />
   </ItemGroup>
 
 </Project>

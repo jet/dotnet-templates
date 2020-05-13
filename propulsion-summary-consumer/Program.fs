@@ -19,7 +19,7 @@ module Configuration =
             EnvVar.set var (loadF key)
 
     let initialize () =
-        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
@@ -104,7 +104,7 @@ module Args =
 
     type Arguments(a : ParseResults<Parameters>) =
         member val Cosmos =                 CosmosArguments(a.GetResult Cosmos)
-        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member __.Group =                   a.TryGetResult Group  |> defaultWithEnvVar "PROPULSION_KAFKA_GROUP"  "Group"
         member __.MaxInFlightBytes =        a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
@@ -112,11 +112,13 @@ module Args =
 
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
         member __.Verbose =                 a.Contains Verbose
+        member __.StatsInterval =           TimeSpan.FromMinutes 1.
+        member __.StateInterval =           TimeSpan.FromMinutes 5.
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
         let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
@@ -138,16 +140,18 @@ let [<Literal>] AppName = "ConsumerTemplate"
 
 let start (args : Args.Arguments) =
     let context = args.Cosmos.Connect(AppName) |> Async.RunSynchronously
-    let cache = Equinox.Cache (AppName, sizeMb = 10) // here rather than in Todo aggregate as it can be shared with other Aggregates
+    let cache = Equinox.Cache (AppName, sizeMb=10) // here rather than in Todo aggregate as it can be shared with other Aggregates
     let service = TodoSummary.Cosmos.create (context, cache)
     let config =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    let parseStreamSummaries(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse spanJson
-    let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
-    Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, config, parseStreamSummaries, Ingester.ingest service, args.MaxConcurrentStreams, stats)
+    let parseStreamSummaries(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
+        Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse res.Message.Value
+    let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
+    Propulsion.Kafka.StreamsConsumer.Start
+        (   Log.Logger, config, parseStreamSummaries, Ingester.ingest service, args.MaxConcurrentStreams,
+            stats, args.StateInterval)
 
 let run args =
     use consumer = start args

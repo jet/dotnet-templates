@@ -28,7 +28,7 @@ module Configuration =
             EnvVar.set var (loadF key)
 
     let initialize () =
-        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
@@ -48,6 +48,9 @@ module Args =
     let private defaultWithEnvVar varName argName = function
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
+    let private isEnvVarTrue varName =
+         EnvVar.tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
+    let private seconds (x : TimeSpan) = x.TotalSeconds
     open Argu
 //#if multiSource
     open Equinox.EventStore
@@ -105,6 +108,7 @@ module Args =
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
+        member __.StateInterval =           TimeSpan.FromMinutes 5.
 //#if filter
         member __.FilterFunction(?excludeLong, ?longOnly): string -> bool =
             let isLong (streamName : string) =
@@ -203,7 +207,7 @@ module Args =
                 | Cosmos _ ->               "CosmosDb Sink parameters."
 #endif
     and KafkaSourceArguments(a : ParseResults<KafkaSourceParameters>) =
-        member __.Broker =                  a.TryGetResult KafkaSourceParameters.Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Broker =                  a.TryGetResult KafkaSourceParameters.Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult KafkaSourceParameters.Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member __.MaxInFlightBytes =        a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map System.TimeSpan.FromMinutes
@@ -313,6 +317,11 @@ module Args =
         | [<AltCommandLine "-x">]           Port of int
         | [<AltCommandLine "-u">]           Username of string
         | [<AltCommandLine "-p">]           Password of string
+        | [<AltCommandLine "-Tp">]          ProjTcp
+        | [<AltCommandLine "-hp">]          ProjHost of string
+        | [<AltCommandLine "-xp">]          ProjPort of int
+        | [<AltCommandLine "-up">]          ProjUsername of string
+        | [<AltCommandLine "-pp">]          ProjPassword of string
 
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
@@ -328,17 +337,28 @@ module Args =
                 | Percent _ ->              "EventStore $all Stream Position to commence from (as a percentage of current tail position)"
 
                 | Verbose ->                "Include low level Store logging."
-                | Tcp ->                    "Request connecting direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
-                | Host _ ->                 "TCP mode: specify a hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
-                | Port _ ->                 "specify a custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
-                | Username _ ->             "specify a username. (optional if environment variable EQUINOX_ES_USERNAME specified)"
-                | Password _ ->             "specify a Password. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
+                | Tcp ->                    "Request connecting EventStore direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
+                | Host _ ->                 "TCP mode: specify EventStore hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
+                | Port _ ->                 "specify EventStore custom port. Uses value of environment variable EQUINOX_ES_PORT if specified. Defaults for Cluster and Direct TCP/IP mode are 30778 and 1113 respectively."
+                | Username _ ->             "specify username for EventStore. (optional if environment variable EQUINOX_ES_USERNAME specified)"
+                | Password _ ->             "specify Password for EventStore. (optional if environment variable EQUINOX_ES_PASSWORD specified)"
+                | ProjTcp ->                "Request connecting Projection EventStore direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_PROJ_TCP specifies 'true')."
+                | ProjHost _ ->             "TCP mode: specify Projection EventStore hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. Defaults to value of es host (-h) unless environment variable EQUINOX_ES_PROJ_HOST is specified."
+                | ProjPort _ ->             "specify Projection EventStore custom port. Defaults to value of es port (-x) unless environment variable EQUINOX_ES_PROJ_PORT is specified."
+                | ProjUsername _ ->         "specify username for Projection EventStore. Defaults to value of es user (-u) unless environment variable EQUINOX_ES_PROJ_USERNAME is specified."
+                | ProjPassword _ ->         "specify Password for Projection EventStore. Defaults to value of es password (-p) unless environment variable EQUINOX_ES_PROJ_PASSWORD is specified."
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
                 | Retries _ ->              "specify operation retries. Default: 3."
                 | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
 
                 | Cosmos _ ->               "CosmosDB (Checkpoint) Store parameters."
     and EsSourceArguments(a : ParseResults<EsSourceParameters>) =
+        let discovery (host, port, tcp) =
+            match tcp, port with
+            | false, None ->   Discovery.GossipDns            host
+            | false, Some p -> Discovery.GossipDnsCustomPort (host, p)
+            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", host, 1113).Uri)
+            | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", host, p).Uri)
         member __.Gorge =                   a.TryGetResult Gorge
         member __.TailInterval =            a.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
         member __.ForceRestart =            a.Contains ForceRestart
@@ -351,29 +371,43 @@ module Args =
             | _, _, Some p, _ ->            Percentage p
             | None, None, None, true ->     StartPos.TailOrCheckpoint
             | None, None, None, _ ->        StartPos.StartOrCheckpoint
-
-        member __.Discovery =
-            match __.Tcp, __.Port with
-            | false, None ->   Discovery.GossipDns            __.Host
-            | false, Some p -> Discovery.GossipDnsCustomPort (__.Host, p)
-            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", __.Host, 1113).Uri)
-            | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", __.Host, p).Uri)
-        member __.Tcp =
-            a.Contains EsSourceParameters.Tcp
-            || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
+        member __.Tcp =                     a.Contains Tcp || isEnvVarTrue "EQUINOX_ES_TCP"
         member __.Port =                    match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
         member __.Host =                    a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
         member __.User =                    a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
         member __.Password =                a.TryGetResult Password |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "Password"
+        member __.ProjTcp =                 a.Contains ProjTcp || isEnvVarTrue "EQUINOX_ES_PROJ_TCP"
+        member __.ProjPort =                match a.TryGetResult ProjPort with
+                                            | Some x -> Some x
+                                            | None -> EnvVar.tryGet "EQUINOX_ES_PROJ_PORT" |> Option.map int |> Option.orElseWith (fun () -> __.Port) 
+        member __.ProjHost =                match a.TryGetResult ProjHost with
+                                            | Some x -> x
+                                            | None -> EnvVar.tryGet "EQUINOX_ES_PROJ_HOST"      |> Option.defaultWith (fun () -> __.Host)
+        member __.ProjUser =                match a.TryGetResult ProjUsername with
+                                            | Some x -> x
+                                            | None -> EnvVar.tryGet  "EQUINOX_ES_PROJ_USERNAME" |> Option.defaultWith (fun () -> __.User)
+        member __.ProjPassword =            match a.TryGetResult ProjPassword with
+                                            | Some x -> x
+                                            | None -> EnvVar.tryGet  "EQUINOX_ES_PROJ_PASSWORD" |> Option.defaultWith (fun () -> __.Password)
         member __.Retries =                 a.GetResult(EsSourceParameters.Retries, 3)
         member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
         member __.Heartbeat =               a.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
+        
+        member x.ConnectProj(log: ILogger, storeLog: ILogger, appName, nodePreference) =
+            let discovery = discovery (x.ProjHost, x.ProjPort, x.ProjTcp)
+            log.ForContext("projHost", x.ProjHost).ForContext("projPort", x.ProjPort)
+                .Information("Projection EventStore {discovery} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
+                    discovery, seconds x.Heartbeat, seconds x.Timeout, x.Retries)
+            let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
+            let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
+            Connector(x.ProjUser, x.ProjPassword, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
+                .Connect(appName + "-Proj", discovery, nodePreference) |> Async.RunSynchronously
+        
         member x.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
-            let s (x : TimeSpan) = x.TotalSeconds
-            let discovery = x.Discovery
+            let discovery = discovery (x.Host, x.Port, x.Tcp)
             log.ForContext("host", x.Host).ForContext("port", x.Port)
                 .Information("EventStore {discovery} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
-                    discovery, s x.Heartbeat, s x.Timeout, x.Retries)
+                    discovery, seconds x.Heartbeat, seconds x.Timeout, x.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
@@ -443,7 +477,7 @@ module Args =
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
     and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
-        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member x.BuildTargetParams() =      x.Broker, x.Topic
 //#endif
@@ -451,7 +485,7 @@ module Args =
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
@@ -486,66 +520,86 @@ module Logging =
 let [<Literal>] AppName = "ReactorTemplate"
 
 //#if multiSource
-module EventStoreContext =
-    let cache = Equinox.Cache(AppName, sizeMb = 10)
-    let create connection = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
+#if (!kafkaEventSpans)
+//#if (!changeFeedOnly)
+module Checkpoints =
+
+    // In this implementation, we keep the checkpoints in Cosmos when consuming from EventStore
+    module Cosmos =
+
+        let codec = FsCodec.NewtonsoftJson.Codec.Create<Checkpoint.Events.Event>()
+        let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
+        let create groupName (context, cache) =
+            let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+            let resolver = Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
+            let resolve streamName = resolver.Resolve(streamName, Equinox.AllowStale)
+            Checkpoint.CheckpointSeries(groupName, resolve)
 
 //#endif
+#endif
+module EventStoreContext =
+
+    let create connection =
+        Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
+
+//#endif
+#if !(kafkaEventSpans && blank)
+module CosmosContext =
+
+    let create (connector : Equinox.Cosmos.Connector) discovery (database, container) =
+        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+        Equinox.Cosmos.Context(connection, database, container)
+
+#endif
 let build (args : Args.Arguments) =
 #if (!kafkaEventSpans)
 //#if (!changeFeedOnly)
     match args.SourceParams() with
     | Choice1Of2 (srcE, cosmos, spec) ->
-        let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.PreferSlave)
+        let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
+        let connectProjEs () = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.PreferSlave)
         let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
 
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        let cache = Equinox.Cache(AppName, sizeMb = 10)
-        let context = Equinox.Cosmos.Context(connection, database, container)
+        let context = CosmosContext.create connector discovery (database, container)
+        let cache = Equinox.Cache(AppName, sizeMb=10)
 
-        let resolveCheckpointStream =
-            let codec = FsCodec.NewtonsoftJson.Codec.Create()
-            let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
-            fun target -> Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve(target, Equinox.AllowStale)
-        let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, Log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
+        let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
 #if kafka
         let (broker, topic) = srcE.Cosmos.Sink.BuildTargetParams()
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
-            producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
+            producer.Produce(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 #if blank
-        let handle = Handler.handleStreamEvents (Handler.tryHandle produceSummary)
+        let handle = Handler.handle produceSummary
 #else
         let esConn = connectEs ()
-        let srcCache = Equinox.Cache(AppName, sizeMb = 10)
-        let srcService = Todo.EventStore.create (EventStoreContext.create esConn,srcCache)
-        let handle = Handler.handleStreamEvents (Handler.tryHandle srcService produceSummary)
+        let srcCache = Equinox.Cache(AppName, sizeMb=10)
+        let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
+        let handle = Handler.handle srcService produceSummary
 #endif
-        let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., logExternalStats = producer.DumpStats)
+        let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
         let sink =
 #if (kafka && !blank)
              Propulsion.Streams.Sync.StreamsSync.Start(
-                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats,
-                 projectorStatsInterval = TimeSpan.FromMinutes 1.)
+                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
+                 stats, statsInterval=args.StatsInterval)
 #else
-             Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
+             Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
 #endif
 #else // !kafka -> ingestion
 #if blank
         // TODO: establish any relevant inputs, or re-run without `--blank` for example wiring code
-        let handle = Ingester.handleStreamEvents Ingester.tryHandle
+        let handle = Ingester.handle
 #else // blank
         let esConn = connectEs ()
-        let srcCache = Equinox.Cache(AppName, sizeMb = 10)
+        let srcCache = Equinox.Cache(AppName, sizeMb=10)
         let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
         let dstService = TodoSummary.Cosmos.create (context, cache)
-        let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
+        let handle = Ingester.handle srcService dstService
 #endif // blank
-        let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
-        let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
+        let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
+        let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
 #endif // !kafka
-        let connect () = let c = connectEs () in c.ReadConnection
 #if filter
         let filterByStreamName = args.FilterFunction()
 #else
@@ -553,7 +607,7 @@ let build (args : Args.Arguments) =
 #endif
         let runPipeline =
             EventStoreSource.Run(
-                Log.Logger, sink, checkpoints, connect, spec, Handler.tryMapEvent filterByStreamName,
+                Log.Logger, sink, checkpoints, connectProjEs, spec, Handler.tryMapEvent filterByStreamName,
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
     | Choice2Of2 (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
@@ -586,50 +640,50 @@ let build (args : Args.Arguments) =
 #endif
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
-            producer.ProduceAsync(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
+            producer.Produce(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 #if blank
-        let handle = Handler.handleStreamEvents (Handler.tryHandle produceSummary)
+        let handle = Handler.handle produceSummary
 #else
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        let context = Equinox.Cosmos.Context (connection, database, container)
-        let cache = Equinox.Cache(AppName, sizeMb = 10)
+        let context = CosmosContext.create connector discovery (database, container)
+        let cache = Equinox.Cache(AppName, sizeMb=10)
         let service = Todo.Cosmos.create (context, cache)
-        let handle = Handler.handleStreamEvents (Handler.tryHandle service produceSummary)
+        let handle = Handler.handle service produceSummary
 #endif
-        let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 5., logExternalStats = producer.DumpStats)
+        let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
 #else // !kafka -> Ingester only
 #if blank
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
-        let handle = Ingester.handleStreamEvents Ingester.tryHandle
+        let handle = Ingester.handle
 #else // blank -> no specific Ingester source/destination wire-up
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        let context = Equinox.Cosmos.Context (connection, database, container)
-        let cache = Equinox.Cache(AppName, sizeMb = 10)
+        let context = CosmosContext.create connector discovery (database, container)
+        let cache = Equinox.Cache(AppName, sizeMb=10)
         let srcService = Todo.Cosmos.create (context, cache)
         let dstService = TodoSummary.Cosmos.create (context, cache)
-        let handle = Ingester.handleStreamEvents (Ingester.tryHandle srcService dstService)
+        let handle = Ingester.handle srcService dstService
 #endif // blank
-        let stats = Ingester.Stats(Log.Logger, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 5.)
+        let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
 #endif // kafka
 #if filter
         let filterByStreamName = args.FilterFunction()
 #endif
 #if kafkaEventSpans
 
-        let parseStreamEvents(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-            Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
+        let parseStreamEvents (res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
+            Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse res.Message.Value
 #if filter
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
-        Propulsion.Kafka.StreamsConsumer.Start(Log.Logger, consumerConfig, parseStreamEvents, handle, args.MaxConcurrentStreams, stats = stats)
+        Propulsion.Kafka.StreamsConsumer.Start
+            (   Log.Logger, consumerConfig, parseStreamEvents, handle, args.MaxConcurrentStreams,
+                stats=stats, statsInterval=args.StateInterval)
 #else // !kafkaEventSpans => Default consumption, from CosmosDb
 #if (kafka && !blank)
         let sink =
             Propulsion.Streams.Sync.StreamsSync.Start(
-                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats,
-                 projectorStatsInterval = TimeSpan.FromMinutes 1.)
+                 Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle,
+                 stats, statsInterval=args.StateInterval)
 #else
-        let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
+        let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
 #endif
 
         let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =

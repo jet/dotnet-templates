@@ -1,7 +1,5 @@
 module Shipping.Domain.FinalizationTransaction
 
-open System.Runtime.Serialization
-
 let [<Literal>] private Category = "FinalizationTransaction"
 let streamName (transactionId : TransactionId) = FsCodec.StreamName.create Category (TransactionId.toString transactionId)
 let (|Match|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> Some transId | _ -> None
@@ -9,32 +7,32 @@ let (|Match|_|) = function FsCodec.StreamName.CategoryAndId (Category, Transacti
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    let [<Literal>] private CompletedEventName = "Completed"
     type Event =
-        | FinalizationRequested of {| containerId : ContainerId; shipmentIds : ShipmentId[] |}
+        | FinalizationRequested of {| container : ContainerId; shipments : ShipmentId[] |}
+        | ReservationCompleted
         /// Signifies we're switching focus to relinquishing any assignments we completed.
         /// The list includes any items we could possibly have touched (including via idempotent retries)
-        | RevertCommenced       of {| shipmentIds : ShipmentId[] |}
+        | RevertCommenced       of {| shipments : ShipmentId[] |}
         | AssignmentCompleted
         /// Signifies all processing for the transaction has completed - the Watchdog looks for this event
-        | [<DataMember(Name = CompletedEventName)>]Completed
+        | Completed
         | Snapshotted           of State
         interface TypeShape.UnionContract.IUnionContract
 
     and [<Newtonsoft.Json.JsonConverter(typeof<FsCodec.NewtonsoftJson.UnionConverter>)>]
         State =
         | Initial
-        | Assigning of TransactionState
-        | Reverting of TransactionState
-        | Assigned  of TransactionState
-        | Completed of success : bool
-    and TransactionState = { container : ContainerId; shipments : ShipmentId[] }
+        | Reserving of {| container : ContainerId; shipments : ShipmentId[] |}
+        | Reverting of {| shipments : ShipmentId[] |}
+        | Assigning of {| container : ContainerId; shipments : ShipmentId[] |}
+        | Assigned  of {| container : ContainerId; shipments : ShipmentId[] |}
+        | Completed of {| success : bool |}
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded : FsCodec.ITimelineEvent<_>) =
-        encoded.EventType = CompletedEventName
+        encoded.EventType = "Completed" // TODO nameof("Completed")
 
 module Fold =
 
@@ -44,7 +42,8 @@ module Fold =
     let isValidTransition (event : Events.Event) (state : State) =
         match state, event with
         | State.Initial,     Events.FinalizationRequested _
-        | State.Assigning _, Events.RevertCommenced _
+        | State.Reserving _, Events.RevertCommenced _
+        | State.Reserving _, Events.ReservationCompleted _
         | State.Reverting _, Events.Completed
         | State.Assigning _, Events.AssignmentCompleted _
         | State.Assigned _,  Events.Completed -> true
@@ -53,11 +52,11 @@ module Fold =
     // The implementation trusts (does not spend time double checking) that events have passed an isValidTransition check
     let evolve (state : State) (event : Events.Event) : State =
         match state, event with
-        | _, Events.FinalizationRequested event                -> State.Assigning { container = event.containerId; shipments = event.shipmentIds }
-        | State.Assigning state,  Events.RevertCommenced event -> State.Reverting { state with shipments = event.shipmentIds }
-        | State.Reverting _state, Events.Completed             -> State.Completed false
-        | State.Assigning state,  Events.AssignmentCompleted   -> State.Assigned state
-        | State.Assigned _,       Events.Completed             -> State.Completed true
+        | _, Events.FinalizationRequested event                -> State.Assigning {| container = event.container; shipments = event.shipments |}
+        | State.Assigning state,  Events.RevertCommenced event -> State.Reverting {| shipments = event.shipments |}
+        | State.Reverting _state, Events.Completed             -> State.Completed {| success = false |}
+        | State.Assigning state,  Events.AssignmentCompleted   -> State.Assigned  {| container = state.container; shipments = state.shipments |}
+        | State.Assigned _,       Events.Completed             -> State.Completed {| success = true |}
         | _,                      Events.Snapshotted state     -> state
         // this shouldn't happen, but, if we did produce invalid events, we'll just ignore them
         | state, _                                             -> state
@@ -68,16 +67,18 @@ module Fold =
 
 [<RequireQualifiedAccess>]
 type Action =
-    | AssignShipments   of containerId : ContainerId * shipmentIds : ShipmentId[]
-    | RevertAssignment  of containerId : ContainerId * shipmentIds : ShipmentId[]
-    | FinalizeContainer of containerId : ContainerId * shipmentIds : ShipmentId[]
-    | Finish            of success : bool
+    | ReserveShipments   of shipmentIds : ShipmentId[]
+    | RevertReservations of shipmentIds : ShipmentId[]
+    | AssignShipments    of shipmentIds : ShipmentId[] * containerId : ContainerId
+    | FinalizeContainer  of containerId : ContainerId * shipmentIds : ShipmentId[]
+    | Finish             of success : bool
 
 let nextAction : Fold.State -> Action = function
-    | Fold.State.Assigning state      -> Action.AssignShipments   (state.container, state.shipments)
-    | Fold.State.Reverting state      -> Action.RevertAssignment  (state.container, state.shipments)
+    | Fold.State.Reserving state      -> Action.ReserveShipments   state.shipments
+    | Fold.State.Reverting state      -> Action.RevertReservations state.shipments
+    | Fold.State.Assigning state      -> Action.AssignShipments   (state.shipments, state.container)
     | Fold.State.Assigned state       -> Action.FinalizeContainer (state.container, state.shipments)
-    | Fold.State.Completed result     -> Action.Finish result
+    | Fold.State.Completed result     -> Action.Finish             result.success
     // As all state transitions are driven by members on the FinalizationProcessManager, we can rule this out
     | Fold.State.Initial as s         -> failwith (sprintf "Cannot interpret state %A" s)
 
@@ -94,12 +95,12 @@ let decide (update : Events.Event option) (state : Fold.State) : Action * Events
 
 type Service internal (resolve : TransactionId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-    member __.Apply(transactionId, update) : Async<Action> =
+    member __.Record(transactionId, update) : Async<Action> =
         let stream = resolve transactionId
         stream.Transact(decide update)
 
 let private create resolve =
-    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts = 3)
+    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts=3)
     Service(resolve)
 
 module Cosmos =

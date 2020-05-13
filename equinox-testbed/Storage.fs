@@ -77,10 +77,10 @@ module Cosmos =
 
     let private createGateway connection maxItems = Gateway(connection, BatchingPolicy(defaultMaxItems=maxItems))
     let private context (log: ILogger, storeLog: ILogger) (a : Arguments) =
-        let (Discovery.UriAndKey (endpointUri, _)) as discovery = a.Connection|> Discovery.FromConnectionString
+        let (Discovery.UriAndKey (endpointUri, _)) as discovery = a.Connection |> Discovery.FromConnectionString
         log.Information("CosmosDb {mode} {connection} Database {database} Container {container}",
             a.Mode, endpointUri, a.Database, a.Container)
-        Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+        log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
             (let t = a.Timeout in t.TotalSeconds), a.Retries, (let t = a.MaxRetryWaitTime in t.TotalSeconds))
         let connector = Connector(a.Timeout, a.Retries, a.MaxRetryWaitTime, storeLog, mode=a.Mode)
         discovery, a.Database, a.Container, connector
@@ -89,7 +89,7 @@ module Cosmos =
         let conn = connector.Connect("TestbedTemplate", discovery) |> Async.RunSynchronously
         let cacheStrategy =
             if cache then
-                let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
+                let c = Equinox.Cache("TestbedTemplate", sizeMb=50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else CachingStrategy.NoCaching
         StorageConfig.Cosmos (createGateway conn batchSize, cacheStrategy, unfolds, dbName, containerName)
@@ -135,11 +135,11 @@ module EventStore =
 
     let private connect (log: Serilog.ILogger) (dnsQuery, heartbeatTimeout, col) (username, password) (operationTimeout, operationRetries) =
         Connector(username, password, reqTimeout=operationTimeout, reqRetries=operationRetries,
-                heartbeatTimeout=heartbeatTimeout, concurrentOperationsLimit = col,
-                log=(if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
-                tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
+                heartbeatTimeout=heartbeatTimeout, concurrentOperationsLimit=col,
+                log = (if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
+                tags = ["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
             .Establish("TestbedTemplate", Discovery.GossipDns dnsQuery, ConnectionStrategy.ClusterTwinPreferSlaveReads)
-    let private createContext connection batchSize = Context(connection, BatchingPolicy(maxBatchSize = batchSize))
+    let private createContext connection batchSize = Context(connection, BatchingPolicy(maxBatchSize=batchSize))
     let config (log: Serilog.ILogger, storeLog) (cache, unfolds, batchSize) (args : ParseResults<Parameters>) =
         let a = Arguments(args)
         let (timeout, retries) as operationThrottling = a.Timeout, a.Retries
@@ -150,7 +150,7 @@ module EventStore =
         let conn = connect storeLog (a.Host, heartbeatTimeout, concurrentOperationsLimit) a.Credentials operationThrottling |> Async.RunSynchronously
         let cacheStrategy =
             if cache then
-                let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
+                let c = Equinox.Cache("TestbedTemplate", sizeMb=50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
             else None
         StorageConfig.Es ((createContext conn batchSize), cacheStrategy, unfolds)

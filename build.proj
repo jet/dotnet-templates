@@ -1,19 +1,27 @@
-<Project ToolsVersion="15.0">
+<Project>
 
   <Import Project="Directory.Build.props" />
 
   <PropertyGroup>
+    <Cfg>--configuration Release</Cfg>
+
     <ThisDirAbsolute>$([System.IO.Path]::GetFullPath("$(MSBuildThisFileDirectory)"))</ThisDirAbsolute>
 
     <PrOption Condition =" '$(BUILD_PR)' != '%24(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)' ">/p:BUILD_PR=$(BUILD_PR) </PrOption>
 
     <PackOptions>/p:BUILD_ID=$(BUILD_ID) $(PrOption) -o $(ThisDirAbsolute)bin/nupkg</PackOptions>
+
+    <TestOptions>--logger:trx -- RunConfiguration.TestSessionTimeout=3300000 xunit.diagnosticMessages=true</TestOptions>
   </PropertyGroup>
 
   <Target Name="Pack">
-    <Exec Command="dotnet pack src/Equinox.Templates/Equinox.Templates.fsproj $(Cfg) $(PackOptions)" />
+    <Exec Command="dotnet pack src/Equinox.Templates $(Cfg) $(PackOptions)" />
   </Target>
 
-  <Target Name="Build" DependsOnTargets="Pack" />
+  <Target Name="VSTest">
+    <Exec Command="dotnet test tests/Equinox.Templates.Tests $(Cfg) $(TestOptions)" />
+  </Target>
+
+  <Target Name="Build" DependsOnTargets="Pack;VSTest" />
 
 </Project>

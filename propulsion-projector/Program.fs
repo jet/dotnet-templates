@@ -21,7 +21,7 @@ module Configuration =
             EnvVar.set var (loadF key)
 
     let initialize () =
-        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
@@ -125,6 +125,8 @@ module Args =
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 64)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 1024)
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member __.StatsInterval =           TimeSpan.FromMinutes 1.
+        member __.StateInterval =           TimeSpan.FromMinutes 2.
         member __.AuxContainerName =        __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
@@ -141,15 +143,15 @@ module Args =
 //#if kafka
         member val Target =                 TargetInfo a
     and TargetInfo(a : ParseResults<Parameters>) =
-        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
-        member x.BuildTargetParams() = x.Broker, x.Topic
+        member x.BuildTargetParams() =      x.Broker, x.Topic
 //#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
@@ -177,6 +179,34 @@ module Logging =
 
 let [<Literal>] AppName = "ProjectorTemplate"
 
+#if kafka
+type ProductionStats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+
+    // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
+    override __.HandleOk(()) = log.Warning("Produced")
+    // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
+    override __.HandleExn exn = log.Information(exn, "Unhandled")
+#else
+#if !parallelOnly
+type ProjectorStats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Streams.Projector.Stats<int>(log, statsInterval, stateInterval)
+
+    let mutable totalCount = 0
+
+    // TODO consider best balance between logging or gathering summary information per handler invocation
+    override __.HandleOk count =
+        log.Warning("Handled {count}", count)
+    // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
+    override __.HandleExn exn =
+        log.Information(exn, "Unhandled")
+
+    override __.DumpStats() =
+        log.Information(" Total events processed {total}", totalCount)
+        totalCount <- 0
+#endif
+#endif
+
 let build (args : Args.Arguments) =
     let discovery, source, connector = args.Cosmos.BuildConnectionDetails()
     let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
@@ -184,20 +214,16 @@ let build (args : Args.Arguments) =
     let (broker, topic) = args.Target.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
 #if parallelOnly
-    let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, statsInterval=TimeSpan.FromMinutes 1.)
+    let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, statsInterval=args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, fun x -> upcast x)
 #else
-    let sink =
-        Propulsion.Kafka.StreamsProducerSink.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer,
-            statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 2.)
+    let stats = ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
 #else
-    let sink =
-        Propulsion.Streams.StreamsProjector.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle,
-            statsInterval=TimeSpan.FromMinutes 1., stateInterval=TimeSpan.FromMinutes 5.)
+    let stats = ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
     let runSourcePipeline =

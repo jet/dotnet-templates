@@ -25,7 +25,7 @@ module Args =
                 | LocalSeq ->           "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | LogFile _ ->          "specify a log file to write the result breakdown into. Default: TestbedTemplate.log."
                 | Run _ ->              "Run a load test"
-    and [<NoComparison>]
+    and [<NoEquality; NoComparison>]
         TestParameters =
         | [<AltCommandLine "-t"; Unique>] Name of Tests.Test
         | [<AltCommandLine "-s">]       Size of int
@@ -67,8 +67,8 @@ module Args =
 //#endif
     and TestArguments(a : ParseResults<TestParameters>) =
         member __.Options =             a.GetResults Cached @ a.GetResults Unfolds
-        member __.Cache =               __.Options |> List.contains Cached
-        member __.Unfolds =             __.Options |> List.contains Unfolds
+        member __.Cache =               a.Contains Cached
+        member __.Unfolds =             a.Contains Unfolds
         member __.BatchSize =           a.GetResult(BatchSize, 500)
         member __.Test =                a.GetResult(Name, Tests.Favorite)
         member __.ErrorCutoff =         a.GetResult(ErrorCutoff, 10000L)
@@ -117,7 +117,7 @@ let createStoreLog verbose verboseConsole maybeSeqEndpoint =
 //#if cosmos
     let c = c.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink())
 //#endif
-    let c = c.WriteTo.Console((if verbose && verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning), theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
+    let c = c.WriteTo.Console((if verbose && verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning), theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
     let c = match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
     c.CreateLogger() :> ILogger
 
@@ -186,14 +186,14 @@ let createDomainLog verbose verboseConsole maybeSeqEndpoint =
 //#if cosmos
     let c = c.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink())
 //#endif
-    let c = c.WriteTo.Console((if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information), theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
+    let c = c.WriteTo.Console((if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information), theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
     let c = match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
     c.CreateLogger()
 
 [<EntryPoint>]
 let main argv =
     let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-    let parser = ArgumentParser.Create<Parameters>(programName = programName)
+    let parser = ArgumentParser.Create<Parameters>(programName=programName)
     try
         let args = parser.ParseCommandLine argv
         match args.GetSubCommand() with

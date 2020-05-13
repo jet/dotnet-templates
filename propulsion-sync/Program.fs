@@ -26,7 +26,7 @@ module Configuration =
             EnvVar.set var (loadF key)
 
     let initialize () =
-        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
@@ -428,7 +428,7 @@ module Args =
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)."
                 | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1."
     and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
-        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker" |> Uri
+        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
         member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
         member __.Producers =               a.GetResult(Producers, 1)
         member x.BuildTargetParams() =      x.Broker, x.Topic, x.Producers
@@ -437,7 +437,7 @@ module Args =
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
 // TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
@@ -531,18 +531,37 @@ module EventV0Parser =
 
 let transformV0 catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
-    let (FsCodec.StreamName.CategoryAndId (cat,_)) = parsed.stream
+    let (FsCodec.StreamName.CategoryAndId (cat, _)) = parsed.stream
     if catFilter cat then
         yield parsed }
 //#else
 let transformOrFilter catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for { stream = FsCodec.StreamName.CategoryAndId (cat,_) } as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
+    for { stream = FsCodec.StreamName.CategoryAndId (cat, _) } as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter cat then
             yield e }
 //#endif
 
 let [<Literal>] AppName = "SyncTemplate"
+
+module Checkpoints =
+
+    // In this implementation, we keep the checkpoints in Cosmos when consuming from EventStore
+    module Cosmos =
+
+        let codec = FsCodec.NewtonsoftJson.Codec.Create<Checkpoint.Events.Event>()
+        let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
+        let create groupName (context, cache) =
+            let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+            let resolver = Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
+            let resolve streamName = resolver.Resolve(streamName, Equinox.AllowStale)
+            Checkpoint.CheckpointSeries(groupName, resolve)
+
+type Stats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+
+    override __.HandleOk(()) = ()
+    override __.HandleExn exn = log.Information(exn, "Unhandled")
 
 let build (args : Args.Arguments, log, storeLog : ILogger) =
     let maybeDstCosmos, sink, streamFilter =
@@ -567,10 +586,10 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
                             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
                         return FsCodec.StreamName.toString stream, value }
-                    let producer = Propulsion.Kafka.Producer(Log.Logger, appName, broker, topic, degreeOfParallelism = producers)
+                    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic, degreeOfParallelism=producers)
+                    let stats = Stats(Log.Logger, args.StatsInterval, args.StateInterval)
                     StreamsProducerSink.Start(
-                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer,
-                        statsInterval=TimeSpan.FromMinutes 5., stateInterval=TimeSpan.FromMinutes 1., maxBytes=maxBytes, maxEvents=maxEvents),
+                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, stats, args.StatsInterval, maxBytes=maxBytes, maxEvents=maxEvents),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
@@ -603,15 +622,10 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         | None -> failwith "ES->ES checkpointing E_NOTIMPL"
         | Some (mainConn, containers) ->
 
-        let resolveCheckpointStream =
-            let context = Equinox.Cosmos.Context(mainConn, containers)
-            let codec = FsCodec.NewtonsoftJson.Codec.Create()
-            let caching =
-                let c = Equinox.Cache(AppName, sizeMb = 1)
-                Equinox.Cosmos.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
-            let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
-            Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access).Resolve
-        let checkpoints = Checkpoint.CheckpointSeries(spec.groupName, log.ForContext<Checkpoint.CheckpointSeries>(), resolveCheckpointStream)
+        let context = Equinox.Cosmos.Context(mainConn, containers)
+        let cache = Equinox.Cache(AppName, sizeMb=1)
+        let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
+
         let withNullData (e : FsCodec.ITimelineEvent<_>) : FsCodec.ITimelineEvent<_> =
             FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, null, e.Meta, timestamp=e.Timestamp) :> _
         let tryMapEvent streamFilter (x : EventStore.ClientAPI.ResolvedEvent) =
@@ -634,7 +648,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         sink, runPipeline
 
 let run (args, log, storeLog) =
-    let sink,runSourcePipeline = build (args, log, storeLog)
+    let sink, runSourcePipeline = build (args, log, storeLog)
     runSourcePipeline |> Async.Start
     sink.AwaitCompletion() |> Async.RunSynchronously
     sink.RanToCompletion

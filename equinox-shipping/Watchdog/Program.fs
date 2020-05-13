@@ -17,7 +17,7 @@ module Configuration =
             EnvVar.set var (loadF key)
 
     let initialize () =
-        // e.g. initEnvVar     "EQUINOX_COSMOS_COLLECTION"    "CONSUL KEY" readFromConsul
+        // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
 module Args =
@@ -111,7 +111,7 @@ module Args =
     and CosmosSourceArguments(a : ParseResults<CosmosSourceParameters>) =
         member __.FromTail =                a.Contains FromTail
         member __.MaxDocuments =            a.TryGetResult MaxDocuments
-        member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member __.LagFrequency =            a.TryPostProcessResult(LagFreqM, TimeSpan.FromMinutes)
         member __.LeaseContainer =          a.TryGetResult LeaseContainer
 
         member __.Mode =                    a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
@@ -172,7 +172,7 @@ module Args =
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName = programName)
+        let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
 module Logging =
@@ -204,7 +204,7 @@ let createProcessManager maxDop (context, cache) =
     let transactions = FinalizationTransaction.Cosmos.create (context, cache)
     let containers = Container.Cosmos.create (context, cache)
     let shipments = Shipment.Cosmos.create (context, cache)
-    FinalizationProcessManager.Service(transactions, containers, shipments, maxDop = maxDop)
+    FinalizationProcessManager.Service(transactions, containers, shipments, maxDop=maxDop)
 
 let build (args : Args.Arguments) =
     let (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
@@ -214,7 +214,7 @@ let build (args : Args.Arguments) =
     let cosmos = source.Cosmos
     let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
     let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-    let cache = Equinox.Cache(AppName, sizeMb = 10)
+    let cache = Equinox.Cache(AppName, sizeMb=10)
     let context = Equinox.Cosmos.Context(connection, database, container)
     let processManager = createProcessManager args.ProcessManagerMaxDop (context, cache)
 
@@ -222,10 +222,9 @@ let build (args : Args.Arguments) =
     let isRelevantToWatchdogHandler = function
         | FinalizationTransaction.Match _ -> true
         | _ -> false
-    let handleSpan = Shipping.Watchdog.Handler.tryHandle args.ProcessingTimeout processManager.Drive
-    let handle = Shipping.Watchdog.Handler.handleStreamEvents handleSpan
-    let stats = Shipping.Watchdog.Handler.Stats(Log.Logger, statsInterval = args.StatsInterval, stateInterval = args.StateInterval)
-    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats = stats)
+    let handle = Shipping.Watchdog.Handler.handle args.ProcessingTimeout processManager.Drive
+    let stats = Shipping.Watchdog.Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
+    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
 
     // Wire up the CFP to feed in the items
     let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
@@ -236,7 +235,7 @@ let build (args : Args.Arguments) =
     let runSource =
         CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
             leaseId, startFromTail, createObserver,
-            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
+            ?maxDocuments = maxDocuments, ?lagReportFreq = lagFrequency)
     sink, runSource
 
 let run args =

@@ -63,7 +63,7 @@ module Domain =
                 if doesntHave skuId then [] else
                 [ Events.Unfavorited { skuId = skuId } ]
 
-        type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event,Fold.State>) =
+        type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
             member __.Execute(clientId, command) =
                 let stream = resolve clientId
@@ -82,7 +82,7 @@ module Domain =
         let create log resolve =
             let resolve clientId =
                 let stream = resolve (streamName clientId)
-                Equinox.Stream(log, stream, maxAttempts = 3)
+                Equinox.Stream(log, stream, maxAttempts=3)
             Service(resolve)
 
 open Microsoft.Extensions.DependencyInjection

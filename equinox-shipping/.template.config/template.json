@@ -5,7 +5,8 @@
     "Equinox",
     "Propulsion",
     "Event Sourcing",
-    "Process Manager"
+    "Process Manager",
+    "Watchdog"
   ],
   "tags": {
     "language": "F#"

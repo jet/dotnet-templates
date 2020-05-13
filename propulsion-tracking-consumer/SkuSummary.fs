@@ -69,7 +69,7 @@ type Service internal (resolve : SkuId -> Equinox.Stream<Events.Event, Fold.Stat
 let create resolve =
     let resolve skuId =
         let stream = resolve (streamName skuId)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
     Service(resolve)
 
 module Cosmos =

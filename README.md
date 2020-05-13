@@ -54,12 +54,12 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
-<a name="eqxshipping"></a>
-- [`eqxShipping`](equinox-shipping/) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey)
+<a name="eqxShipping"></a>
+- [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey)
  
-   - processing is fully idempotent; retries, concurrent or overlapping transactions are handled correctly
-   - if any `Shipment`s cannot be `Assigned`, those that have been get `Revoked`, and the failure is reported to the caller
-   - includes a `Watchdog` console app (based on `dotnet new proReactor --source changeFeedOnly --blank`) responsible for driving any abandoned transactions being carried out by e.g. Web Clients through to their conclusion.
+   - processing is fully idempotent; retries, concurrent or overlapping transactions are intended to be handled thoroughly and correctly
+   - if any `Shipment`s cannot be `Reserved`, those that have been get `Revoked`, and the failure is reported to the caller
+   - includes a `Watchdog` console app (based on `dotnet new proReactor --source changeFeedOnly --blank`) responsible for concluding abandoned transaction instances (e.g., where processing is carried out in response to a HTTP request and the Clients fails to retry after a transient failure leaves processing in a non-terminal state).
 
 ## Walkthrough
 
@@ -143,7 +143,13 @@ To use from the command line, the outline is:
 
 ## TESTING
 
-There's [no integration test for the templates yet](https://github.com/jet/dotnet-templates/issues/2), so validating a template is safe to release is unfortunately a manual process based on:
+There's [integration tests in the repo](https://github.com/jet/dotnet-templates/blob/int-tests/tests/Equinox.Templates.Tests/DotnetBuild.fs) that check everything compiles before we merge/release
+
+    dotnet build build.proj # build Equinox.Templates package, run tests \/
+    dotnet pack build.proj # build Equinox.Templates package only
+    dotnet test build.proj # Test aphabetically newest file in bin/nupkgs only
+
+One can also do it manually:
 
 1. Generate the package (per set of changes you make locally)
 
@@ -152,7 +158,7 @@ There's [no integration test for the templates yet](https://github.com/jet/dotne
     b. packaging into a local nupkg
 
         $ cd ~/dotnet-templates
-        $ dotnet build build.proj
+        $ dotnet pack build.proj
         Successfully created package '/Users/me/dotnet-templates/bin/nupkg/Equinox.Templates.3.10.1-alpha.0.1.nupkg'.
 
 2. Test, per variant
@@ -177,8 +183,6 @@ There's [no integration test for the templates yet](https://github.com/jet/dotne
 3. uninstalling the locally built templates from step 2a:
 
       $ dotnet new -u Equinox.Templates
-
-Pssst ... the above is also what implementing [#2](https://github.com/jet/dotnet-templates/issues/2) involves!
 
 # PATTERNS / GUIDANCE
 
