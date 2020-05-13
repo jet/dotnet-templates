@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- `proReactor`: Fixed Default ES TCP port to 1113 [#69](https://github.com/jet/dotnet-templates/pull/69) 
+
 ### Removed
 ### Fixed
 
@@ -23,7 +26,6 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - DRY'd handling of `MissingArg` in `Configuration.initialize`
-- `proReactor`: Fixed Default ES TCP port to 1113 [#69](https://github.com/jet/dotnet-templates/pull/69) 
 
 <a name="4.4.2"></a>
 ## [4.4.2] - 2020-04-04
