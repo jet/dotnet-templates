@@ -15,36 +15,33 @@ type Stats(log, statsInterval, stateInterval) =
 #if (!kafkaEventSpans)
     inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
-    inherit Propulsion.Kafka.StreamsConsumerStats<int64 * Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, statsInterval, stateInterval)
 #endif
+
     let mutable ok, skipped, na = 0, 0, 0
 
-#if (!kafkaEventSpans)
     override __.HandleOk res = res |> function
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
-#else
-    override __.HandleOk res = res |> function
-        | _, Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
-        | _, Outcome.Skipped count -> skipped <- skipped + count
-        | _, Outcome.NotApplicable count -> na <- na + count
-#endif
-    override __.DumpStats () =
+    override __.HandleExn exn =
+        log.Information(exn, "Unhandled")
+
+    override __.DumpStats() =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0
 
 #if blank
-let tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option * Outcome> = async {
+let handle (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
-    | FsCodec.StreamName.CategoryAndId ("Todos",id), _ ->
-        let ok, version' = true, None
+    | FsCodec.StreamName.CategoryAndId ("Todos", id), _ ->
+        let ok = true
         // "TODO: add handler code"
         match ok with
-        | true -> return version', Outcome.Ok (1, span.events.Length - 1)
-        | false -> return version', Outcome.Skipped span.events.Length
-    | _ -> return None, Outcome.NotApplicable span.events.Length }
+        | true -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (1, span.events.Length - 1)
+        | false -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped span.events.Length
+    | _ -> return Propulsion.Streams.AllProcessed, Outcome.NotApplicable span.events.Length }
 #else
 // map from external contract to internal contract defined by the aggregate
 let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryData =
@@ -52,22 +49,15 @@ let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryD
         [| for x in x.items ->
             { id = x.id; order = x.order; title = x.title; completed = x.completed } |] }
 
-let tryHandle
+let handle
         (sourceService : Todo.Service)
         (summaryService : TodoSummary.Service)
-        (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 option * Outcome> = async {
+        (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
     | Todo.Events.Match (clientId, events) when events |> Seq.exists Todo.Fold.impliesStateChange ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
-        | true -> return Some version', Outcome.Ok (1, span.events.Length - 1)
-        | false -> return Some version', Outcome.Skipped span.events.Length
-    | _ -> return None, Outcome.NotApplicable span.events.Length }
+        | true -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Ok (1, span.events.Length - 1)
+        | false -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Skipped span.events.Length
+    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.events.Length }
 #endif
-
-let handleStreamEvents tryHandle (stream, span : Propulsion.Streams.StreamSpan<_>) : Async<int64 * Outcome> = async {
-    match! tryHandle (stream, span) with
-    // We need to yield the next write position, which will be after the version we've just generated the summary based on
-    | Some version', outcome -> return version'+1L, outcome
-    // If we're ignoring the events, we mark the next write position to be one beyond the last one offered
-    | _, outcome -> return span.index + span.events.LongLength, outcome }

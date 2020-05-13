@@ -51,7 +51,7 @@ module Storage =
         open Equinox.EventStore
         let connect host username password =
             let log = Logger.SerilogNormal (Log.ForContext<Instance>())
-            let c = Connector(username, password, reqTimeout=TimeSpan.FromSeconds 5., reqRetries = 1, log = log)
+            let c = Connector(username, password, reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
             let conn = c.Establish ("Twin", Discovery.GossipDns host, ConnectionStrategy.ClusterTwinPreferSlaveReads) |> Async.RunSynchronously
             Context(conn, BatchingPolicy(maxBatchSize=500))
 

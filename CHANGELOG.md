@@ -13,6 +13,22 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
+<a name="4.6.0"></a>
+## [4.6.0] - 2020-04-27
+
+### Added
+
+- `tests/Equinox.Templates.Tests`: allow repo to validate integrity of templates within [#67](https://github.com/jet/dotnet-templates/pull/67) [#2](https://github.com/jet/dotnet-templates/issues/2)
+- `proReactor`: Add arguments to facilitate projecting from a different database than that used to transact [#62](https://github.com/jet/dotnet-templates/pull/62)
+[@svairagade](https://github.com/svairagade)
+- `eqxShipping`: Add `Reserved` event/phase to `eqxShipping` [#63](https://github.com/jet/dotnet-templates/pull/63)
+- Added exception logging (as forced by abstract methods in `Stats` types) [#66](https://github.com/jet/dotnet-templates/pull/66)
+
+### Changed
+
+- Target `Propulsion` v `2.4.2`, `FsKafka` v `1.4.1` [#64](https://github.com/jet/dotnet-templates/pull/64) [#66](https://github.com/jet/dotnet-templates/pull/66)
+- `proReactor`, `proSync`: Clean up `CosmosContext` and `Checkpoints` management [#58](https://github.com/jet/dotnet-templates/pull/58)
+
 <a name="4.5.0"></a>
 ## [4.5.0] - 2020-04-10
 
@@ -395,7 +411,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.5.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.6.0...HEAD
+[4.6.0]: https://github.com/jet/dotnet-templates/compare/4.5.0...4.6.0
 [4.5.0]: https://github.com/jet/dotnet-templates/compare/4.4.2...4.5.0
 [4.4.2]: https://github.com/jet/dotnet-templates/compare/4.4.1...4.4.2
 [4.4.1]: https://github.com/jet/dotnet-templates/compare/4.4.0...4.4.1

@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Equinox" Version="2.0.0" />
-    <PackageReference Include="FsCodec" Version="2.0.0" />
+    <PackageReference Include="FsCodec" Version="2.0.1" />
     <PackageReference Include="FSharp.Core" Version="4.5.4" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
   </ItemGroup>

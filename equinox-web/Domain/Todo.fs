@@ -33,10 +33,10 @@ module Fold =
     let initial = { items = []; nextId = 0 }
     /// Compute State change implied by a given Event
     let evolve state = function
-        | Events.Added item -> { state with items = item :: state.items; nextId = state.nextId + 1 }
+        | Events.Added item    -> { state with items = item :: state.items; nextId = state.nextId + 1 }
         | Events.Updated value -> { state with items = state.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
-        | Events.Deleted e -> { state with items = state.items  |> List.filter (fun x -> x.id <> e.id) }
-        | Events.Cleared e -> { nextId = e.nextId; items = [] }
+        | Events.Deleted e     -> { state with items = state.items  |> List.filter (fun x -> x.id <> e.id) }
+        | Events.Cleared e     -> { nextId = e.nextId; items = [] }
         | Events.Snapshotted s -> { nextId = s.nextId; items = List.ofArray s.items }
     /// Folds a set of events from the store into a given `state`
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
@@ -61,7 +61,7 @@ type Command =
 
 /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream
 let interpret c (state : Fold.State) =
-    let mkItem id (value: Props): Events.ItemData = { id = id; order=value.order; title=value.title; completed=value.completed }
+    let mkItem id (value : Props) : Events.ItemData = { id = id; order = value.order; title = value.title; completed = value.completed }
     match c with
     | Add value -> [Events.Added (mkItem state.nextId value)]
     | Update (itemId, value) ->
@@ -89,7 +89,7 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
         stream.Transact(fun state ->
             let events = interpret command state
             let state' = Fold.fold state events
-            state'.items,events)
+            state'.items, events)
 
     let render (item: Events.ItemData) : View =
         {   id = item.id
@@ -116,7 +116,7 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
     (* WRITE-READ *)
 
     /// Create a new ToDo List item; response contains the generated `id`
-    member __.Create(clientId , template: Props) : Async<View> = async {
+    member __.Create(clientId, template: Props) : Async<View> = async {
         let! state' = handle clientId (Add template)
         return List.head state' |> render }
 
@@ -128,5 +128,5 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
 let create resolve =
     let resolve clientId =
         let stream = resolve (streamName clientId)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 3)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
     Service(resolve)

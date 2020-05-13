@@ -29,7 +29,7 @@ module Fold =
     let fold : State -> Events.Categorization seq -> State = Seq.fold evolve
 
 type Status = Complete | Active | Stuck
-let categorize cutoffTime = function
+let toStatus cutoffTime = function
     | Fold.Initial -> failwith "Expected at least one valid event"
     | Fold.Active startTime when startTime < cutoffTime -> Stuck
     | Fold.Active _ -> Active
@@ -38,7 +38,7 @@ let categorize cutoffTime = function
 let fold : Events.Categorization seq -> Fold.State =
     Fold.fold Fold.initial
 
-let (|TransactionStatus|) (codec : #FsCodec.IEventCodec<_,_,_>) events : Fold.State =
+let (|TransactionStatus|) (codec : #FsCodec.IEventCodec<_, _, _>) events : Fold.State =
     events
     |> Seq.choose codec.TryDecode
     |> fold

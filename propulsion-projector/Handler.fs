@@ -38,5 +38,6 @@ let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>
 let handle (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
     let r = System.Random()
     let ms = r.Next(1, span.events.Length)
-    do! Async.Sleep ms }
+    do! Async.Sleep ms
+    return Propulsion.Streams.SpanResult.AllProcessed, span.events.Length }
 #endif

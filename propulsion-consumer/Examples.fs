@@ -91,13 +91,14 @@ module MultiStreams =
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
         member __.Handle(streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
             match streamName, span with
-            | OtherCategory (cat, count) -> return OtherCategory (cat, count)
+            | OtherCategory (cat, count) ->
+                return Propulsion.Streams.SpanResult.AllProcessed, OtherCategory (cat, count)
             | FavoritesEvents (id, s, xs) ->
                 let folder (s : HashSet<_>) = function
                     | Favorites.Favorited e -> s.Add(e.skuId) |> ignore; s
                     | Favorites.Unfavorited e -> s.Remove(e.skuId) |> ignore; s
                 faves.[id] <- Array.fold folder s xs
-                return Faves xs.Length
+                return Propulsion.Streams.SpanResult.AllProcessed, Faves xs.Length
             | SavedForLaterEvents (id, s, xs) ->
                 let remove (skus : SkuId seq) (s : _ list) =
                     let removing = (HashSet skus).Contains
@@ -110,7 +111,7 @@ module MultiStreams =
                     | SavedForLater.Removed e -> remove e.skus s
                     | SavedForLater.Merged e -> s |> remove [| for x in e.items -> x.skuId |] |> add [| for x in e.items -> x.skuId |]
                 saves.[id] <- (s, xs) ||> Array.fold folder
-                return Saves xs.Length
+                return Propulsion.Streams.SpanResult.AllProcessed, Saves xs.Length
         }
 
         // Dump stats relating to how much information is being held - note it's likely for requests to be in flighht during the call
@@ -128,9 +129,11 @@ module MultiStreams =
             | Faves count -> faves <- faves + count
             | Saves count -> saves <- saves + count
             | OtherCategory (cat, count) -> otherCats.Ingest(cat, int64 count)
+        override __.HandleExn exn =
+            log.Information(exn, "Unhandled")
 
         // Dump stats relating to the nature of the message processing throughput
-        override __.DumpStats () =
+        override __.DumpStats() =
             if faves <> 0 || saves <> 0 then
                 log.Information(" Processed Faves {faves} Saves {s}", faves, saves)
                 faves <- 0; saves <- 0
@@ -138,15 +141,16 @@ module MultiStreams =
                 log.Information(" Ignored Categories {ignoredCats}", Seq.truncate 5 otherCats.StatsDescending)
                 otherCats.Clear()
 
-    let private parseStreamEvents(KeyValue (_streamName : string, spanJson)) : seq<Propulsion.Streams.StreamEvent<_>> =
-        Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse spanJson
+    let private parseStreamEvents(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
+        Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse res.Message.Value
 
     let start (config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
         let log, handler = Log.ForContext<InMemoryHandler>(), InMemoryHandler()
         let stats = Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
         Propulsion.Kafka.StreamsConsumer.Start(
             log, config, parseStreamEvents, handler.Handle, degreeOfParallelism,
-            stats, logExternalState=handler.DumpState)
+            stats, TimeSpan.FromMinutes 10.,
+            logExternalState=handler.DumpState)
 
 /// When using parallel or batch processing, items are not grouped by stream but there are no constraints on the concurrency
 module MultiMessages =
@@ -202,7 +206,7 @@ module MultiMessages =
             let handleMessage (KeyValue (streamName, eventsSpan)) = async { processor.Handle(StreamName.parse streamName, eventsSpan) }
             Propulsion.Kafka.ParallelConsumer.Start(
                 log, config, degreeOfParallelism, handleMessage,
-                statsInterval = TimeSpan.FromSeconds 30., logExternalStats = processor.DumpStats)
+                statsInterval=TimeSpan.FromSeconds 30., logExternalStats=processor.DumpStats)
 
     type BatchesSync =
         /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
@@ -212,7 +216,7 @@ module MultiMessages =
             let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_, _>[]) = async {
                 let processor = Processor()
                 for m in msgs do
-                    processor.Handle(StreamName.parse m.Key, m.Value)
+                    processor.Handle(StreamName.parse m.Message.Key, m.Message.Value)
                 processor.DumpStats log }
             FsKafka.BatchedConsumer.Start(log, config, handleBatch)
     
@@ -226,6 +230,6 @@ module MultiMessages =
             let dop = new SemaphoreSlim(degreeOfParallelism)
             let handleBatch (msgs : Confluent.Kafka.ConsumeResult<_, _>[]) = async {
                 let processor = Processor()
-                let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(StreamName.parse m.Key, m.Value) } |> dop.Throttle })
+                let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(StreamName.parse m.Message.Key, m.Message.Value) } |> dop.Throttle })
                 processor.DumpStats log }
             FsKafka.BatchedConsumer.Start(log, config, handleBatch)
