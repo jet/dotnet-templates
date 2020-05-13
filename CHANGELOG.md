@@ -11,7 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 ### Changed
 
-- `proReactor`: Fixed Default ES TCP port to 1113 [#69](https://github.com/jet/dotnet-templates/pull/69) 
+- `proReactor`, `proSync`: Fixed Default ES TCP port to 1113 [#69](https://github.com/jet/dotnet-templates/pull/69) 
 
 ### Removed
 ### Fixed
