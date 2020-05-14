@@ -11,7 +11,11 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 ### Changed
 
-- `proReactor`, `proSync`: Fixed Default ES TCP port to 1113 [#69](https://github.com/jet/dotnet-templates/pull/69) 
+- Target `Propulsion` v `2.5.1`, `FsKafka` v `1.4.2`
+
+### Fixed
+
+- `proReactor`, `proSync`: Fixed Default ES TCP port to 1113 [#69](https://github.com/jet/dotnet-templates/pull/69) :pray: [@svairagade](https://github.com/svairagade)
 
 ### Removed
 ### Fixed

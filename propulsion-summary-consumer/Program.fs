@@ -144,7 +144,7 @@ let start (args : Args.Arguments) =
     let service = TodoSummary.Cosmos.create (context, cache)
     let config =
         FsKafka.KafkaConsumerConfig.Create(
-            AppName, args.Broker, [args.Topic], args.Group,
+            AppName, args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     let parseStreamSummaries(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse res.Message.Value

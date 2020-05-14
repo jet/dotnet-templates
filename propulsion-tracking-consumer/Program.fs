@@ -145,7 +145,7 @@ let start (args : Args.Arguments) =
     let service = SkuSummary.Cosmos.create (context, cache)
     let config =
         FsKafka.KafkaConsumerConfig.Create(
-            AppName, args.Broker, [args.Topic], args.Group,
+            AppName, args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     // No categorization required, our inputs are all one big family defying categorization
