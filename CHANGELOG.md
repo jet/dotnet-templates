@@ -13,12 +13,12 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
-<a name="4.7.0"></a>
-## [4.7.0] - 2020-05-27
+<a name="4.7.1"></a>
+## [4.7.1] - 2020-05-16
 
 ### Changed
 
-- Target `Propulsion` v `2.5.1`, `FsKafka` v `1.4.2`
+- Target `Propulsion` v `2.5.2`, `FsKafka` v `1.5.0-beta.2`
 
 ### Fixed
 
@@ -421,8 +421,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.7.0...HEAD
-[4.7.0]: https://github.com/jet/dotnet-templates/compare/4.6.0...4.7.0
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.7.1...HEAD
+[4.7.1]: https://github.com/jet/dotnet-templates/compare/4.6.0...4.7.1
 [4.6.0]: https://github.com/jet/dotnet-templates/compare/4.5.0...4.6.0
 [4.5.0]: https://github.com/jet/dotnet-templates/compare/4.4.2...4.5.0
 [4.4.2]: https://github.com/jet/dotnet-templates/compare/4.4.1...4.4.2

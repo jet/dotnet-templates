@@ -91,10 +91,12 @@ module Logging =
                         c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
             |> fun c -> c.CreateLogger()
 
+let [<Literal>] AppName = "ConsumerTemplate"
+
 let start (args : Args.Arguments) =
     let c =
         FsKafka.KafkaConsumerConfig.Create(
-            "ConsumerTemplate",
+            AppName,
             args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     //MultiMessages.BatchesSync.Start(c)

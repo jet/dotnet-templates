@@ -628,7 +628,7 @@ let build (args : Args.Arguments) =
 //#endif
         let consumerConfig =
             FsKafka.KafkaConsumerConfig.Create(
-                AppName, source.Broker, [source.Topic], args.ConsumerGroupName,
+                AppName, source.Broker, [source.Topic], args.ConsumerGroupName, Confluent.Kafka.AutoOffsetReset.Earliest,
                 maxInFlightBytes = source.MaxInFlightBytes, ?statisticsInterval = source.LagFrequency)
 #endif // kafkaEventSpans
 
