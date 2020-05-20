@@ -148,13 +148,15 @@ let start (args : Args.Arguments) =
             AppName, args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
     let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-    // No categorization required, our inputs are all one big family defying categorization
+    // Here we illustrate how we can work with Kafka feeds where messages do not contain an intrinsic version number per message
+    //   (as opposed to when we are processing a notification feed from an event store)
+    //   that we can use to sequence duplicate deliveries / replays
+    // The StreamNameSequenceGenerator maintains an Index per stream with which the messages are tagged in order to be able to
+    //   represent them as a sequence of indexed messages per stream
     let sequencer = Propulsion.Kafka.StreamNameSequenceGenerator()
-    let parseResult = sequencer.ConsumeResultToStreamEvent(fun (res : Confluent.Kafka.ConsumeResult<_, string>) ->
-        System.Text.Encoding.UTF8.GetBytes res.Message.Value, null)
     Propulsion.Kafka.StreamsConsumer.Start
-        (   Log.Logger, config,  parseResult, Ingester.ingest service, args.MaxConcurrentStreams, stats,
-            args.StateInterval)
+        (   Log.Logger, config, sequencer.ConsumeResultToStreamEvent(), Ingester.ingest service, args.MaxConcurrentStreams,
+            stats, args.StateInterval)
 
 let run args =
     use consumer = start args

@@ -98,7 +98,7 @@ let start (args : Args.Arguments) =
         FsKafka.KafkaConsumerConfig.Create(
             AppName,
             args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,
-            maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
+            maxInFlightBytes=args.MaxInFlightBytes, ?statisticsInterval=args.LagFrequency)
     //MultiMessages.BatchesSync.Start(c)
     //MultiMessages.BatchesAsync.Start(c, args.MaxDop)
     //NultiMessages.Parallel.Start(c, args.MaxDop)

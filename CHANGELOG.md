@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Target `Propulsion` v `2.6.0`, `FsKafka` v `1.4.3`
+
 ### Removed
 ### Fixed
 
