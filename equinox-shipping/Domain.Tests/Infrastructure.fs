@@ -22,8 +22,6 @@ type EventAccumulator<'S, 'E>() =
         messages.Clear()
 
 (* Generic FsCheck helpers *)
-open System
-let (|Id|) (x : Guid) = x.ToString "N" |> FSharp.UMX.UMX.tag
-let (|Ids|) (xs : Guid[]) = xs |> Array.map (|Id|)
+let (|Id|) (x : System.Guid) = x.ToString "N" |> FSharp.UMX.UMX.tag
+let (|Ids|) (xs : System.Guid[]) = xs |> Array.map (|Id|)
 let (|IdsMoreThanOne|) (Ids xs, Id x) = [| yield x; yield! xs |]
-
