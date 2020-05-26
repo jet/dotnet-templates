@@ -28,7 +28,7 @@ module Fold =
     let toSnapshot (state : State) = Events.Snapshotted {| shipmentIds = state.shipmentIds |}
 
 let interpretFinalize shipmentIds (state : Fold.State): Events.Event list =
-    [ if (not << Array.isEmpty) state.shipmentIds then yield Events.Finalized {| shipmentIds = shipmentIds |} ]
+    [ if Array.isEmpty state.shipmentIds then yield Events.Finalized {| shipmentIds = shipmentIds |} ]
 
 type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fold.State>) =
 
