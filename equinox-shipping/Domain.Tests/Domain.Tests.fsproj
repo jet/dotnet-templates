@@ -9,6 +9,7 @@
 
     <ItemGroup>
         <Compile Include="Infrastructure.fs" />
+        <Compile Include="Fixtures.fs" />
         <Compile Include="ContainerTests.fs" />
         <Compile Include="ShipmentTests.fs" />
         <Compile Include="FinalizationTransactionTests.fs" />
