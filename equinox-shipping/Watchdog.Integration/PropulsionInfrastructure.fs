@@ -1,8 +1,16 @@
 [<AutoOpen>]
-module Shipping.Watchdog.Integration.PropulsionHelpers
+module Shipping.Watchdog.Integration.PropulsionInfrastructure
 
 open System
 open System.Threading
+
+type Async with
+
+    /// Returns an async computation which runs the argument computation but raises an exception if it doesn't complete
+    /// by the specified timeout.
+    static member timeoutAfter (timeout : System.TimeSpan) (c : Async<'a>) = async {
+        let! r = Async.StartChild(c, int timeout.TotalMilliseconds)
+        return! r }
 
 type MemoryStoreSource<'F, 'B>(sink : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<Propulsion.Streams.StreamEvent<'F> seq, 'B>>) =
     let ingester = sink.StartIngester(Serilog.Log.Logger, 0)
@@ -36,3 +44,13 @@ type MemoryStoreSource<'F, 'B>(sink : Propulsion.ProjectorPipeline<Propulsion.In
         sink.Stop()
         return! sink.AwaitCompletion()
     }
+
+type TestOutputAdapter(testOutput : Xunit.Abstractions.ITestOutputHelper) =
+    let formatter = Serilog.Formatting.Display.MessageTemplateTextFormatter("{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level}] {Message}{NewLine}{Exception}", null);
+    let writeSerilogEvent logEvent =
+        use writer = new System.IO.StringWriter()
+        formatter.Format(logEvent, writer);
+        writer |> string |> testOutput.WriteLine
+        writer |> string |> System.Diagnostics.Debug.Write
+    interface Serilog.Core.ILogEventSink with member __.Emit logEvent = writeSerilogEvent logEvent
+

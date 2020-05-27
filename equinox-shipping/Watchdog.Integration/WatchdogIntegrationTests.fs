@@ -1,8 +1,9 @@
 namespace Shipping.Watchdog.Integration
 
-open FsCheck.Xunit
 open Shipping.Domain.Tests
 open Shipping.Watchdog
+
+open FsCheck.Xunit
 open Serilog
 open System
 
@@ -30,8 +31,7 @@ type WatchdogIntegrationTests(output) =
 
             let counts = System.Collections.Generic.Stack()
             let mutable timeouts = 0
-            for (Id tid, Id cid, Id oneSid, Ids otherSids) in batches do
-                let shipmentIds = [| oneSid; yield! otherSids |]
+            for (Id tid, Id cid, IdsMoreThanOne shipmentIds) in batches do
                 counts.Push shipmentIds.Length
                 try let! _ = processManager.TryFinalizeContainer(tid, cid, shipmentIds)
                              |> Async.timeoutAfter runTimeout

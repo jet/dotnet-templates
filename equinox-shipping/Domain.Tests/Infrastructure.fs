@@ -20,26 +20,3 @@ type EventAccumulator<'E>() =
 
     member __.Clear() =
         messages.Clear()
-
-type Async with
-
-    /// Returns an async computation which runs the argument computation but raises an exception if it doesn't complete
-    /// by the specified timeout.
-    static member timeoutAfter (timeout : System.TimeSpan) (c : Async<'a>) = async {
-        let! r = Async.StartChild(c, int timeout.TotalMilliseconds)
-        return! r }
-
-(* Generic FsCheck helpers *)
-let (|Id|) (x : System.Guid) = x.ToString "N" |> FSharp.UMX.UMX.tag
-let (|Ids|) (xs : System.Guid[]) = xs |> Array.map (|Id|)
-let (|IdsMoreThanOne|) (Ids xs, Id x) = [| yield x; yield! xs |]
-let (|AtLeastOne|) (x, xs) = x::xs
-
-type TestOutputAdapter(testOutput : Xunit.Abstractions.ITestOutputHelper) =
-    let formatter = Serilog.Formatting.Display.MessageTemplateTextFormatter("{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level}] {Message}{NewLine}{Exception}", null);
-    let writeSerilogEvent logEvent =
-        use writer = new System.IO.StringWriter()
-        formatter.Format(logEvent, writer);
-        writer |> string |> testOutput.WriteLine
-        writer |> string |> System.Diagnostics.Debug.Write
-    interface Serilog.Core.ILogEventSink with member __.Emit logEvent = writeSerilogEvent logEvent

@@ -30,3 +30,10 @@ let createProcessManager maxDop store =
     let containers = Container.MemoryStore.create store
     let shipments = Shipment.MemoryStore.create store
     FinalizationProcessManager.Service(transactions, containers, shipments, maxDop=maxDop)
+
+(* Generic FsCheck helpers *)
+
+let (|Id|) (x : System.Guid) = x.ToString "N" |> FSharp.UMX.UMX.tag
+let (|Ids|) (xs : System.Guid[]) = xs |> Array.map (|Id|)
+let (|IdsMoreThanOne|) (Ids xs, Id x) = [| yield x; yield! xs |]
+let (|AtLeastOne|) (x, xs) = x::xs

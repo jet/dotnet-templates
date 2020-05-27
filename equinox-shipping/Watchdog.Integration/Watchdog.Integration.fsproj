@@ -10,7 +10,7 @@
     <ItemGroup>
         <Compile Include="../Domain.Tests/Infrastructure.fs" Link="Infrastructure.fs" />
         <Compile Include="../Domain.Tests/Fixtures.fs" Link="Fixtures.fs" />
-        <Compile Include="PropulsionHelpers.fs" />
+        <Compile Include="PropulsionInfrastructure.fs" />
         <Compile Include="WatchdogIntegrationTests.fs" />
     </ItemGroup>
 
