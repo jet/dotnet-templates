@@ -3,10 +3,10 @@ module Shipping.Domain.Tests.Infrastructure
 
 open System.Collections.Concurrent
 
-type EventAccumulator<'S, 'E>() =
-    let messages = ConcurrentDictionary<'S,ConcurrentQueue<'E>>()
+type EventAccumulator<'E>() =
+    let messages = ConcurrentDictionary<FsCodec.StreamName, ConcurrentQueue<'E>>()
 
-    member __.Record(stream : 'S, events : 'E seq) =
+    member __.Record(stream, events : 'E seq) =
         let initStreamQueue _ = ConcurrentQueue events
         let appendToQueue _ (queue : ConcurrentQueue<'E>) = events |> Seq.iter queue.Enqueue; queue
         messages.AddOrUpdate(stream, initStreamQueue, appendToQueue) |> ignore

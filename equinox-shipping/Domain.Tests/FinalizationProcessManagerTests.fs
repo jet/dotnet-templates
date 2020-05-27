@@ -39,11 +39,11 @@ let ``FinalizationProcessManager properties`` (Id transId1, Id transId2, Id cont
     let buffer = EventAccumulator()
     use __ = store.Committed.Subscribe buffer.Record
     let eventTypes = seq { for e in buffer.All() -> e.EventType }
-    let pm = createProcessManager 16 store
+    let processManager = createProcessManager 16 store
     Async.RunSynchronously <| async {
         (* First, run the happy path - should pass through all stages of the lifecycle *)
         let requestedShipmentIds = Array.append shipmentIds1 shipmentIds2
-        let! res1 = pm.TryFinalizeContainer(transId1, containerId1, requestedShipmentIds)
+        let! res1 = processManager.TryFinalizeContainer(transId1, containerId1, requestedShipmentIds)
         let expectedEvents =
             [   "FinalizationRequested"; "ReservationCompleted"; "AssignmentCompleted"; "Completed" // Transaction
                 "Reserved"; "Assigned" // Shipment
@@ -60,7 +60,7 @@ let ``FinalizationProcessManager properties`` (Id transId1, Id transId2, Id cont
            a) yield a fail result
            b) result in triggering of Revert flow with associated Shipment revoke events *)
         buffer.Clear()
-        let! res2 = pm.TryFinalizeContainer(transId2, containerId2, Array.append shipmentIds2 [|shipment3|])
+        let! res2 = processManager.TryFinalizeContainer(transId2, containerId2, Array.append shipmentIds2 [|shipment3|])
         test <@ not res2
                 && set eventTypes = set ["FinalizationRequested"; "RevertCommenced"; "Completed"; "Reserved"; "Revoked"] @>
     }

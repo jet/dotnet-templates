@@ -43,7 +43,7 @@ let handle
         | TransactionWatchdog.Active ->
             // We don't want to be warming the data center for no purpose; visiting every second is not too expensive
             do! Async.Sleep 1000 // ms
-            return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Deferred
+            return Propulsion.Streams.SpanResult.PartiallyProcessed 0, Outcome.Deferred
         | TransactionWatchdog.Stuck ->
             let! success = driveTransaction transId
             return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Resolved success
