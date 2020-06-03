@@ -66,17 +66,17 @@ module Args =
             | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments cosmos
             | _ -> raise (MissingArg "Must specify cosmos for Src")
         member x.SourceParams() =
-                let srcC = x.Source
-                let auxColl =
-                    match srcC.LeaseContainer with
-                    | None ->     { database = srcC.Database; container = srcC.Container + "-aux" }
-                    | Some sc ->  { database = srcC.Database; container = sc }
-                Log.Information("Max read backlog: {maxReadAhead}", x.MaxReadAhead)
-                Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                    x.ConsumerGroupName, auxColl.database, auxColl.container, srcC.MaxDocuments)
-                if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-                srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
-                (srcC, (auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
+            let srcC = x.Source
+            let auxColl =
+                match srcC.LeaseContainer with
+                | None ->     { database = srcC.Database; container = srcC.Container + "-aux" }
+                | Some sc ->  { database = srcC.Database; container = sc }
+            Log.Information("Max read backlog: {maxReadAhead}", x.MaxReadAhead)
+            Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
+                x.ConsumerGroupName, auxColl.database, auxColl.container, srcC.MaxDocuments)
+            if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
+            srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
+            (srcC, (auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
@@ -198,6 +198,11 @@ module Logging =
 
 let [<Literal>] AppName = "Watchdog"
 
+let createSink log (processingTimeout, stats : Handler.Stats) (maxReadAhead, maxConcurrentStreams) driveTransaction
+    : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<_, _>> =
+    let handle = Handler.handle processingTimeout driveTransaction
+    Propulsion.Streams.StreamsProjector.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval)
+
 open Shipping.Domain
 
 let createProcessManager maxDop (context, cache) =
@@ -208,34 +213,30 @@ let createProcessManager maxDop (context, cache) =
 
 let build (args : Args.Arguments) =
     let (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
-    let monitoredDiscovery, monitored, monitoredConnector = source.BuildConnectionDetails()
 
     // Connect to the Target CosmosDB, wire to Process Manager
-    let cosmos = source.Cosmos
-    let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
-    let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-    let cache = Equinox.Cache(AppName, sizeMb=10)
-    let context = Equinox.Cosmos.Context(connection, database, container)
-    let processManager = createProcessManager args.ProcessManagerMaxDop (context, cache)
+    let processManager =
+        let (discovery, database, container, connector) = source.Cosmos.BuildConnectionDetails()
+        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+        let cache = Equinox.Cache(AppName, sizeMb=10)
+        let context = Equinox.Cosmos.Context(connection, database, container)
+        createProcessManager args.ProcessManagerMaxDop (context, cache)
 
-    // Hook the Watchdog Handler to the Process Manager
-    let isRelevantToWatchdogHandler = function
-        | FinalizationTransaction.Match _ -> true
-        | _ -> false
-    let handle = Shipping.Watchdog.Handler.handle args.ProcessingTimeout processManager.Drive
-    let stats = Shipping.Watchdog.Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
-    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
+    let sink =
+        let stats = Handler.Stats(Serilog.Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
+        createSink Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Drive
 
     // Wire up the CFP to feed in the items
     let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
         docs
         |> Seq.collect EquinoxCosmosParser.enumStreamEvents
-        |> Seq.filter (fun e -> isRelevantToWatchdogHandler e.stream)
+        |> Seq.filter (fun e -> Handler.isRelevant e.stream)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
     let runSource =
+        let monitoredDiscovery, monitored, monitoredConnector = source.BuildConnectionDetails()
         CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
             leaseId, startFromTail, createObserver,
-            ?maxDocuments = maxDocuments, ?lagReportFreq = lagFrequency)
+            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     sink, runSource
 
 let run args =

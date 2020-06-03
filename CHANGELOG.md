@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Cleanup `eqxShipping` [#71](https://github.com/jet/dotnet-templates/pull/71) 
+
 ### Removed
 ### Fixed
 
