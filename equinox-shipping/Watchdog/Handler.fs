@@ -10,6 +10,7 @@ type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable completed, deferred, failed, succeeded = 0, 0, 0, 0
+    member val StatsInterval = statsInterval
 
     override __.HandleOk res = res |> function
         | Outcome.Completed -> completed <- completed + 1
@@ -24,6 +25,10 @@ type Stats(log, statsInterval, stateInterval) =
             completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0
 
 open Shipping.Domain
+
+let isRelevant = function
+    | FinalizationTransaction.Match _ -> true
+    | _ -> false
 
 let handle
         (processingTimeout : TimeSpan)

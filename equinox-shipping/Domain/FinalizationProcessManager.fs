@@ -50,6 +50,7 @@ type Service
 
     // Caller should generate the TransactionId via a deterministic hash of the shipmentIds in order to ensure idempotency (and sharing of fate) of identical requests
     member __.TryFinalizeContainer(transactionId, containerId, shipmentIds) : Async<bool> =
+        if Array.isEmpty shipmentIds then invalidArg "shipmentIds" "must not be empty"
         let initialRequest = Events.FinalizationRequested {| container = containerId; shipments = shipmentIds |}
         execute transactionId (Some initialRequest)
 

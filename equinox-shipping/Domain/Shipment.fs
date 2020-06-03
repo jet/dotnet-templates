@@ -23,8 +23,8 @@ module Fold =
     let evolve (state: State) = function
         | Events.Reserved event     -> { reservation = Some event.transaction; association = None }
         | Events.Revoked            ->   initial
-        | Events.Assigned event     -> { state with                              association = Some event.container  }
-        | Events.Snapshotted event  -> { reservation = event.reservation;        association = event.association }
+        | Events.Assigned event     -> { state with                            association = Some event.container  }
+        | Events.Snapshotted event  -> { reservation = event.reservation;      association = event.association }
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false

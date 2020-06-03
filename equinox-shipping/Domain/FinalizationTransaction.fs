@@ -16,7 +16,7 @@ module Events =
         | AssignmentCompleted
         /// Signifies all processing for the transaction has completed - the Watchdog looks for this event
         | Completed
-        | Snapshotted           of State
+        | Snapshotted           of {| state : State |}
         interface TypeShape.UnionContract.IUnionContract
 
     and [<Newtonsoft.Json.JsonConverter(typeof<FsCodec.NewtonsoftJson.UnionConverter>)>]
@@ -32,7 +32,7 @@ module Events =
 
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded : FsCodec.ITimelineEvent<_>) =
-        encoded.EventType = "Completed" // TODO nameof("Completed")
+        encoded.EventType = "Completed" // TODO nameof(Completed)
 
 module Fold =
 
@@ -57,13 +57,13 @@ module Fold =
         | State.Reverting _state, Events.Completed             -> State.Completed {| success = false |}
         | State.Assigning state,  Events.AssignmentCompleted   -> State.Assigned  {| container = state.container; shipments = state.shipments |}
         | State.Assigned _,       Events.Completed             -> State.Completed {| success = true |}
-        | _,                      Events.Snapshotted state     -> state
+        | _,                      Events.Snapshotted state     -> state.state
         // this shouldn't happen, but, if we did produce invalid events, we'll just ignore them
         | state, _                                             -> state
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
-    let toSnapshot state = Events.Snapshotted state
+    let toSnapshot state = Events.Snapshotted {| state = state |}
 
 [<RequireQualifiedAccess>]
 type Action =
