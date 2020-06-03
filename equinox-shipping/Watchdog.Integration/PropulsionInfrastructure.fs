@@ -46,11 +46,19 @@ type MemoryStoreSource<'F, 'B>(sink : Propulsion.ProjectorPipeline<Propulsion.In
     }
 
 type TestOutputAdapter(testOutput : Xunit.Abstractions.ITestOutputHelper) =
-    let formatter = Serilog.Formatting.Display.MessageTemplateTextFormatter("{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level}] {Message}{NewLine}{Exception}", null);
+    let formatter = Serilog.Formatting.Display.MessageTemplateTextFormatter("{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level}] {Message}{NewLine}{Exception}", null)
     let writeSerilogEvent logEvent =
         use writer = new System.IO.StringWriter()
-        formatter.Format(logEvent, writer);
+        formatter.Format(logEvent, writer)
         writer |> string |> testOutput.WriteLine
         writer |> string |> System.Diagnostics.Debug.Write
     interface Serilog.Core.ILogEventSink with member __.Emit logEvent = writeSerilogEvent logEvent
+
+module TestOutputLogger =
+
+    open Serilog
+
+    let create output =
+        let logger = TestOutputAdapter output
+        LoggerConfiguration().Destructure.FSharpTypes().WriteTo.Sink(logger).CreateLogger()
 

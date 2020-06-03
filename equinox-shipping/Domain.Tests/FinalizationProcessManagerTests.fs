@@ -33,8 +33,11 @@ let ``FinalizationProcessManager properties`` (Id transId1, Id transId2, Id cont
            b) result in triggering of Revert flow with associated Shipment revoke events *)
         buffer.Clear()
         let! res2 = processManager.TryFinalizeContainer(transId2, containerId2, Array.append shipmentIds2 [|shipment3|])
+        let expectedEvents =
+            [   "FinalizationRequested"; "RevertCommenced"; "Completed" // Transaction
+                "Reserved"; "Revoked" ] // Shipment
         test <@ not res2
-                && set eventTypes = set ["FinalizationRequested"; "RevertCommenced"; "Completed"; "Reserved"; "Revoked"] @>
+                && set eventTypes = set expectedEvents @>
     }
 
 module Dummy = let [<EntryPoint>] main _argv = 0

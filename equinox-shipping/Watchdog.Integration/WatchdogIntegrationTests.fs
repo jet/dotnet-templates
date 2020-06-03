@@ -4,13 +4,11 @@ open Shipping.Domain.Tests
 open Shipping.Watchdog
 
 open FsCheck.Xunit
-open Serilog
 open System
 
 type WatchdogIntegrationTests(output) =
 
-    let logger = TestOutputAdapter output
-    let log = LoggerConfiguration().Destructure.FSharpTypes().WriteTo.Sink(logger).CreateLogger()
+    let log = TestOutputLogger.create output
 
     [<Property(StartSize=1000, MaxTest=5, MaxFail=1)>]
     let ``Watchdog.Handler properties`` (AtLeastOne batches) =
