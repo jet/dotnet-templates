@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `eqxShipping`: Unit and integration tests [#70](https://github.com/jet/dotnet-templates/pull/70) 
+
 ### Changed
 ### Removed
 ### Fixed
