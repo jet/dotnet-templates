@@ -16,8 +16,8 @@ The following templates focus specifically on the usage of `Propulsion` componen
 
 - [`proProjector`](propulsion-projector/README.md) - Boilerplate for a Publisher application with support for consuming events from one of:
   
-  * `-s cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
-  * `-s eventStore`: EventStoreDB's `$all` feed
+  * `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
+  * `--source eventStore`: EventStoreDB's `$all` feed
 
   `-k` adds publishing to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
   
