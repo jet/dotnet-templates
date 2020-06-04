@@ -7,19 +7,23 @@ module ProjectorTemplate.Handler
 //let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
 //    { stream = e.stream; event = replaceLongDataWithNull e.event }
 
+#if cosmos
 let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
     docs
     |> Seq.collect  Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
     // |> Seq.map hackDropBigBodies
+#endif
 
 #if kafka
 #if     parallelOnly
 type ExampleOutput = { Id : string }
 
+#if         cosmos
 let render (doc : Microsoft.Azure.Documents.Document) : string * string =
     let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
     equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
+#endif
 #else
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
 // The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls

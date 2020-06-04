@@ -1,7 +1,9 @@
-﻿module ProjectorTemplate.Program
+module ProjectorTemplate.Program
 
 #if cosmos
 open Propulsion.Cosmos
+#else
+open Propulsion.EventStore
 #endif
 open Serilog
 open System
