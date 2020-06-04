@@ -21,6 +21,8 @@ let render (doc : Microsoft.Azure.Documents.Document) : string * string =
     let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
     equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
 #else
+// Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
+// The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls
 type ProductionStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
@@ -30,9 +32,9 @@ type ProductionStats(log, statsInterval, stateInterval) =
     override __.HandleExn exn = log.Information(exn, "Unhandled")
 
 /// Responsible for wrapping a span of events for a specific stream into an envelope
-/// The well-defined Propulsion.Codec form represents the accumulated span of events for a given stream as an array within
-///   each message in order to maximize throughput within constraints Kafka's model implies (we are aiming to preserve
-///   ordering at stream (key) level for messages produced to the topic)
+/// The well-defined Propulsion.Codec `RenderedSpan` represents the accumulated span of events for a given stream as an
+///   array within each message in order to maximize throughput within constraints Kafka's model implies (we are aiming
+///   to preserve ordering at stream (key) level for messages produced to the topic)
 // TODO NOTE: The bulk of any manipulation should take place before events enter the scheduler, i.e. in program.fs
 // TODO NOTE: While filtering out entire categories is appropriate, you should not filter within a given stream (i.e., by event type)
 let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
@@ -43,14 +45,17 @@ let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>
     return FsCodec.StreamName.toString stream, value }
 #endif
 #else
+// Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
+// The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls
 type ProjectorStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Projector.Stats<int>(log, statsInterval, stateInterval)
 
     let mutable totalCount = 0
 
     // TODO consider best balance between logging or gathering summary information per handler invocation
+    // here we don't log per invocation (such high level stats are already gathered and emitted) but accumulate for periodic emission
     override __.HandleOk count =
-        log.Warning("Handled {count}", count)
+        totalCount <- totalCount + count
     // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
     override __.HandleExn exn =
         log.Information(exn, "Unhandled")
