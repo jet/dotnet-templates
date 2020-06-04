@@ -226,7 +226,7 @@ module Args =
         | [<AltCommandLine "-g"; Unique>]   Gorge of int
         | [<AltCommandLine "-i"; Unique>]   StreamReaders of int
         | [<AltCommandLine "-t"; Unique>]   Tail of intervalS: float
-        | [<AltCommandLine "-force"; Unique>] ForceRestart
+        | [<AltCommandLine "--force"; Unique>] ForceRestart
         | [<AltCommandLine "-m"; Unique>]   BatchSize of int
         | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-pos"; Unique>] Position of int64

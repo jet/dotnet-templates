@@ -14,16 +14,18 @@ These templates focus solely on Consistent Processing using Equinox Stores:
 
 The following templates focus specifically on the usage of `Propulsion` components:
 
-- [`proProjector`](propulsion-projector/README.md) - Boilerplate for a Publisher application with support for consuming events from one of:
-  
-  * `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
-  * `--source eventStore`: EventStoreDB's `$all` feed
+- [`proProjector`](propulsion-projector/README.md) - Boilerplate for a Publisher application that
 
-  `-k` adds publishing to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
+  * consumes events from one of:
   
-  * `-p` schedule processing to operate in parallel at message (rather than stream) level
+    * `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
+    * `--source eventStore`: EventStoreDB's `$all` feed
 
-- [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion). (typically consuming from an app produced with `dotnet new proProjector -k`)
+  * `-k` adds publishing to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
+  
+  * `-k -p` schedule kafka processing to operate in parallel at document (rather than accumulated span of events for a stream) level
+
+- [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (typically consuming from an app produced with `dotnet new proProjector -k`).
 
 ## Producer/Reactor Templates combining usage of Equinox and Propulsion
 

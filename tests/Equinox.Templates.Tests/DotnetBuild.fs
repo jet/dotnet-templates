@@ -6,12 +6,15 @@ open Xunit.Abstractions
 type ProProjector() as this =
     inherit TheoryData<string list>()
 
-#if DEBUG
-    let variants = [ ["--kafka"] ]
-#else
-    let variants = [ []; ["--kafka"]; ["--kafka"; "--parallelOnly"] ]
-#endif
     do for source in ["cosmos"; (* <-default *) "eventStore"] do
+        let variants =
+            if source = "eventStore" then [ []; ["--kafka"] ]
+            else
+#if DEBUG
+                    [ ["--kafka"] ]
+#else
+                    [ []; ["--kafka"]; ["--kafka"; "--parallelOnly"] ]
+#endif
         for opts in variants do
             this.Add (["--source " + source] @ opts)
 
