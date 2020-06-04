@@ -1,6 +1,8 @@
 ﻿module ProjectorTemplate.Program
 
+#if cosmos
 open Propulsion.Cosmos
+#endif
 open Serilog
 open System
 
@@ -41,6 +43,7 @@ module Args =
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
     open Argu
+#if cosmos
     type [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-C"; Unique>]   CfpVerbose
         | [<AltCommandLine "-as"; Unique>]  LeaseContainerSuffix of string
@@ -96,6 +99,7 @@ module Args =
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; container = x.Container }, connector
+#endif
 
     [<NoEquality; NoComparison>]
     type Parameters =
