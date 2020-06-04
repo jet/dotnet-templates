@@ -14,13 +14,21 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
     // |> Seq.map hackDropBigBodies
 
 #if kafka
-#if parallelOnly
+#if     parallelOnly
 type ExampleOutput = { Id : string }
 
 let render (doc : Microsoft.Azure.Documents.Document) : string * string =
     let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
     equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
 #else
+type ProductionStats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+
+    // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
+    override __.HandleOk(()) = log.Warning("Produced")
+    // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
+    override __.HandleExn exn = log.Information(exn, "Unhandled")
+
 /// Responsible for wrapping a span of events for a specific stream into an envelope
 /// The well-defined Propulsion.Codec form represents the accumulated span of events for a given stream as an array within
 ///   each message in order to maximize throughput within constraints Kafka's model implies (we are aiming to preserve
@@ -35,6 +43,22 @@ let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>
     return FsCodec.StreamName.toString stream, value }
 #endif
 #else
+type ProjectorStats(log, statsInterval, stateInterval) =
+    inherit Propulsion.Streams.Projector.Stats<int>(log, statsInterval, stateInterval)
+
+    let mutable totalCount = 0
+
+    // TODO consider best balance between logging or gathering summary information per handler invocation
+    override __.HandleOk count =
+        log.Warning("Handled {count}", count)
+    // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
+    override __.HandleExn exn =
+        log.Information(exn, "Unhandled")
+
+    override __.DumpStats() =
+        log.Information(" Total events processed {total}", totalCount)
+        totalCount <- 0
+
 let handle (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
     let r = System.Random()
     let ms = r.Next(1, span.events.Length)

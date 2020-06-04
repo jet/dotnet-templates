@@ -1,6 +1,5 @@
 ﻿module ProjectorTemplate.Program
 
-open Equinox.Cosmos
 open Propulsion.Cosmos
 open Serilog
 open System
@@ -60,11 +59,12 @@ module Args =
                 | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->          "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
+    open Equinox.Cosmos
     type CosmosArguments(a : ParseResults<CosmosParameters>) =
         member __.Mode =                a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Connection =          a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
-        member __.Database =            a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
-        member __.Container =           a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
+        member __.Connection =          a.TryGetResult CosmosParameters.Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
+        member __.Database =            a.TryGetResult Database |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
+        member __.Container =           a.TryGetResult Container |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
 
         member __.Timeout =             a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =             a.GetResult(Retries, 1)
@@ -130,15 +130,14 @@ module Args =
         member __.AuxContainerName =        __.Cosmos.Container + __.Suffix
         member x.BuildChangeFeedParams() =
             match x.MaxDocuments with
-            | None ->
-                Log.Information("Processing {leaseId} in {auxContainerName} without document count limit (<= {maxPending} pending) using {dop} processors",
-                    x.ConsumerGroupName, x.AuxContainerName, x.MaxReadAhead, x.MaxConcurrentStreams)
+            | None -> Log.Information("Processing {leaseId} in {auxContainerName} without document count limit", x.ConsumerGroupName, x.AuxContainerName)
             | Some lim ->
-                Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents (<= {maxPending} pending) using {dop} processors",
-                    x.ConsumerGroupName, x.AuxContainerName, lim, x.MaxReadAhead, x.MaxConcurrentStreams)
+                Log.Information("Processing {leaseId} in {auxContainerName} with max {changeFeedMaxDocuments} documents", x.ConsumerGroupName, x.AuxContainerName, lim)
             if a.Contains FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             x.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
-            { database = x.Cosmos.Database; container = x.AuxContainerName }, x.ConsumerGroupName, a.Contains FromTail, x.MaxDocuments, x.LagFrequency,
+            { database = x.Cosmos.Database; container = x.AuxContainerName }, x.ConsumerGroupName, a.Contains FromTail, x.MaxDocuments, x.LagFrequency
+        member x.BuildProcessorParams() =
+            Log.Information("Reading {maxPending} ahead; using {dop} processors", x.MaxReadAhead, x.MaxConcurrentStreams)
             (x.MaxReadAhead, x.MaxConcurrentStreams)
 //#if kafka
         member val Target =                 TargetInfo a
@@ -179,54 +178,27 @@ module Logging =
 
 let [<Literal>] AppName = "ProjectorTemplate"
 
-#if kafka
-type ProductionStats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
-
-    // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
-    override __.HandleOk(()) = log.Warning("Produced")
-    // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
-    override __.HandleExn exn = log.Information(exn, "Unhandled")
-#else
-#if !parallelOnly
-type ProjectorStats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Projector.Stats<int>(log, statsInterval, stateInterval)
-
-    let mutable totalCount = 0
-
-    // TODO consider best balance between logging or gathering summary information per handler invocation
-    override __.HandleOk count =
-        log.Warning("Handled {count}", count)
-    // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
-    override __.HandleExn exn =
-        log.Information(exn, "Unhandled")
-
-    override __.DumpStats() =
-        log.Information(" Total events processed {total}", totalCount)
-        totalCount <- 0
-#endif
-#endif
-
 let build (args : Args.Arguments) =
-    let discovery, source, connector = args.Cosmos.BuildConnectionDetails()
-    let aux, leaseId, startFromTail, maxDocuments, lagFrequency, (maxReadAhead, maxConcurrentStreams) = args.BuildChangeFeedParams()
+    let maxReadAhead, maxConcurrentStreams = args.BuildProcessorParams()
 #if kafka
     let (broker, topic) = args.Target.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
-#if parallelOnly
-    let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, statsInterval=args.StatsInterval)
+#if     parallelOnly
+    let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, fun x -> upcast x)
 #else
-    let stats = ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let stats = Handler.ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
 #else
-    let stats = ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
     let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
 #endif
     let runSourcePipeline =
+        let discovery, source, connector = args.Cosmos.BuildConnectionDetails()
+        let aux, leaseId, startFromTail, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
         CosmosSource.Run(
             Log.Logger, connector.CreateClient(AppName, discovery), source,
             aux, leaseId, startFromTail, createObserver,
