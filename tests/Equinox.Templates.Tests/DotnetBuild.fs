@@ -4,7 +4,7 @@ open Xunit
 open Xunit.Abstractions
 
 type ProProjector() as this =
-    inherit TheoryData<string seq>()
+    inherit TheoryData<string list>()
 
     do for source in ["cosmos"; (* <-default *) "eventStore"] do
         let variants =
@@ -16,17 +16,17 @@ type ProProjector() as this =
                     [ []; ["--kafka"]; ["--kafka"; "--parallelOnly"] ]
 #endif
         for opts in variants do
-            this.Add (["--source " + source] @ opts)
+            this.Add(["--source " + source] @ opts)
 
 type ProReactor() as this =
-    inherit TheoryData<string seq>()
+    inherit TheoryData<string list>()
 
     do for source in ["multiSource"; (* <-default *) "kafkaEventSpans"; "changeFeedOnly"] do
         for opts in [ []; ["--blank"]; ["--kafka"]; ["--kafka"; "--blank"] ] do
-            this.Add (["--source " + source] @ opts)
+            this.Add(["--source " + source] @ opts)
 
 type EqxWebs() as this =
-    inherit TheoryData<string, string seq>()
+    inherit TheoryData<string, string list>()
 
     do for t in ["eqxweb"; "eqxwebcs"] do
         do this.Add(t, ["--todos"; "--cosmos"])
