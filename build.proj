@@ -23,6 +23,4 @@
     <Exec Command="dotnet test tests/Equinox.Templates.Tests $(Cfg) $(TestOptions)" />
   </Target>
 
-  <Target Name="Build" DependsOnTargets="Pack;VSTest" />
-
 </Project>

@@ -21,8 +21,4 @@
         </PackageReference>
     </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\..\src\Equinox.Templates\Equinox.Templates.fsproj" />
-    </ItemGroup>
-
 </Project>
