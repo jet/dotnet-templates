@@ -18,7 +18,7 @@
     <!--#if cosmos-->
     <PackageReference Include="Propulsion.Cosmos" Version="2.6.0" />
     <!--#endif-->
-    <!--#if eventStore-->
+    <!--#if esdb-->
     <PackageReference Include="Propulsion.EventStore" Version="2.6.0" />
     <!--#endif-->
     <!--#if (kafka)-->

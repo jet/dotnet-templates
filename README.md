@@ -18,11 +18,11 @@ The following templates focus specifically on the usage of `Propulsion` componen
 
   * consumes events from one of:
   
-    * `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
+    1. _(default)_ `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
  
       * `-k --parallelOnly` schedule kafka processing to operate in parallel at document (rather than accumulated span of events for a stream) level
 
-    * `--source eventStore`: EventStoreDB's `$all` feed
+    2. `--source eventStore`: EventStoreDB's `$all` feed
 
   * `-k` adds publishing to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
       
