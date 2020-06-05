@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proProjector`: Add EventStore source [#73](https://github.com/jet/dotnet-templates/pull/73) 
+
 ### Changed
 
 - Cleanup `eqxShipping` [#71](https://github.com/jet/dotnet-templates/pull/71) 

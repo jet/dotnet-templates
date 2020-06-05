@@ -3,12 +3,27 @@ namespace Equinox.Templates.Tests
 open Xunit
 open Xunit.Abstractions
 
+type ProProjector() as this =
+    inherit TheoryData<string list>()
+
+    do for source in ["cosmos"; (* <-default *) "eventStore"] do
+        let variants =
+            if source = "eventStore" then [ []; ["--kafka"] ]
+            else
+#if DEBUG
+                    [ ["--kafka"] ]
+#else
+                    [ []; ["--kafka"]; ["--kafka"; "--parallelOnly"] ]
+#endif
+        for opts in variants do
+            this.Add(["--source " + source] @ opts)
+
 type ProReactor() as this =
     inherit TheoryData<string list>()
 
     do for source in ["multiSource"; (* <-default *) "kafkaEventSpans"; "changeFeedOnly"] do
         for opts in [ []; ["--blank"]; ["--kafka"]; ["--kafka"; "--blank"] ] do
-            do this.Add (["--source " + source; ] @ opts)
+            this.Add(["--source " + source] @ opts)
 
 type EqxWebs() as this =
     inherit TheoryData<string, string list>()
@@ -34,11 +49,8 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
 
     let [<Fact>] eqxTestbed ()                  = run "eqxTestbed" []
     let [<Fact>] eqxShipping ()                 = run "eqxShipping" []
-    let [<Fact>] proProjector ()                = run "proProjector" []
-#if !DEBUG
-    let [<Fact>] proProjectorK ()               = run "proProjector" ["--kafka"]
-    let [<Fact>] proProjectorKP ()              = run "proProjector" ["--kafka"; "--parallelOnly"]
-#endif
+    [<ClassData(typeof<ProProjector>)>]
+    let [<Theory>] proProjector args            = run "proProjector" args
     let [<Fact>] proConsumer ()                 = run "proConsumer" []
     let [<Fact>] trackingConsumer ()            = run "trackingConsumer" []
     let [<Fact>] summaryConsumer ()             = run "summaryConsumer" []

@@ -1,5 +1,10 @@
 module ProjectorTemplate.Handler
 
+#if cosmos
+#if     parallelOnly
+// Here we pass the items directly through to the handler without parsing them
+let mapToStreamItems (x : System.Collections.Generic.IReadOnlyList<'a>) : seq<'a> = upcast x
+#else // cosmos && !parallelOnly
 //let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
 //    if x.Data.Length < 900_000 then x
 //    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp)
@@ -12,15 +17,27 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
     |> Seq.collect  Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
     // |> Seq.map hackDropBigBodies
+#endif // !parallelOnly
+#endif // cosmos
+//#if esdb
+open Propulsion.EventStore
+
+/// Responsible for inspecting and then either dropping or tweaking events coming from EventStore
+// NB the `Index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
+let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
+    match x.Event with
+    | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
+    | PropulsionStreamEvent e -> Some e
+//#endif // esdb
 
 #if kafka
-#if     parallelOnly
+#if     (cosmos && parallelOnly) // kafka && cosmos && parallelOnly
 type ExampleOutput = { Id : string }
 
 let render (doc : Microsoft.Azure.Documents.Document) : string * string =
     let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
     equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
-#else
+#else // kafka && !(cosmos && parallelOnly)
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
 // The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls
 type ProductionStats(log, statsInterval, stateInterval) =
@@ -43,8 +60,8 @@ let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
         |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
     return FsCodec.StreamName.toString stream, value }
-#endif
-#else
+#endif // kafka && !(cosmos && parallelOnly)
+#else // !kafka
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
 // The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls
 type ProjectorStats(log, statsInterval, stateInterval) =
@@ -69,4 +86,4 @@ let handle (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
     let ms = r.Next(1, span.events.Length)
     do! Async.Sleep ms
     return Propulsion.Streams.SpanResult.AllProcessed, span.events.Length }
-#endif
+#endif // !kafka

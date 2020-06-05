@@ -8,6 +8,7 @@
     "CosmosDb",
     "ChangeFeed",
     "ChangeFeedProcessor",
+    "EventStore",
     "Kafka"
   ],
   "tags": {
@@ -20,6 +21,30 @@
   "preferNameDirectory": true,
 
   "symbols": {
+    "source": {
+      "type": "parameter",
+      "defaultValue": "cosmos",
+      "description": "Define source the app is to be wired up for",
+      "datatype": "choice",
+      "choices": [
+        {
+          "choice": "cosmos",
+          "description": "Wire for CosmosDB ChangeFeedProcessor source"
+        },
+        {
+          "choice": "eventStore",
+          "description": "Wire for EventStoreDB $all source"
+        }
+      ]
+    },
+    "esdb": {
+      "type": "computed",
+      "value": "(source == \"eventStore\")"
+    },
+    "cosmos": {
+      "type": "computed",
+      "value": "(source == \"cosmos\")"
+    },
     "kafka": {
       "type": "parameter",
       "datatype": "bool",
