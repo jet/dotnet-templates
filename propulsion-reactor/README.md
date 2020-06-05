@@ -84,11 +84,11 @@ This project was generated using:
 
 4. To run an instance of the Projector from EventStore
 
-        # (either add environment variables as per step 0 or use -s/-d/-c to specify them after the `cosmos` argument token)
+        # (either add environment variables like this, or use -h/-u/-p to specify them after the `es` argument token)
 
+        $env:EQUINOX_ES_HOST="localhost" # or use -h
         $env:EQUINOX_ES_USERNAME="admin" # or use -u
         $env:EQUINOX_ES_PASSWORD="changeit" # or use -p
-        $env:EQUINOX_ES_HOST="localhost" # or use -g
 
 //#if kafka
         $env:PROPULSION_KAFKA_BROKER="instance.kafka.example.com:9092" # or use -b
