@@ -2,7 +2,8 @@ module ProjectorTemplate.Handler
 #if cosmos
 
 #if     parallelOnly
-let mapToStreamItems : seq<'a> -> IReadOnlyList<'a> = upcast
+// Here we pass the items directly through to the handler without parsing them
+let mapToStreamItems (x : System.Collections.Generic.IReadOnlyList<'a>) : seq<'a> = upcast
 #else // cosmos && !parallelOnly
 //let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
 //    if x.Data.Length < 900_000 then x
