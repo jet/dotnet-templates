@@ -4,7 +4,7 @@ open Xunit
 open Xunit.Abstractions
 
 type ProProjector() as this =
-    inherit TheoryData<string list>()
+    inherit TheoryData<string seq>()
 
     do for source in ["cosmos"; (* <-default *) "eventStore"] do
         let variants =
@@ -19,14 +19,14 @@ type ProProjector() as this =
             this.Add (["--source " + source] @ opts)
 
 type ProReactor() as this =
-    inherit TheoryData<string list>()
+    inherit TheoryData<string seq>()
 
     do for source in ["multiSource"; (* <-default *) "kafkaEventSpans"; "changeFeedOnly"] do
         for opts in [ []; ["--blank"]; ["--kafka"]; ["--kafka"; "--blank"] ] do
             this.Add (["--source " + source] @ opts)
 
 type EqxWebs() as this =
-    inherit TheoryData<string, string list>()
+    inherit TheoryData<string, string seq>()
 
     do for t in ["eqxweb"; "eqxwebcs"] do
         do this.Add(t, ["--todos"; "--cosmos"])
@@ -37,10 +37,10 @@ type EqxWebs() as this =
 
 type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
 
-    let run template args =
+    let run template (args : string seq) =
         output.WriteLine(sprintf "using %s" folder.PackagePath)
         let folder = Dir.cleared template
-        Dotnet.instantiate folder template args
+        Dotnet.instantiate folder template (List.ofSeq args)
         Dotnet.build [folder]
 
     #if DEBUG // Use this one to trigger an individual test

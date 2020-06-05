@@ -22,7 +22,7 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
 open Propulsion.EventStore
 
 /// Responsible for inspecting and then either dropping or tweaking events coming from EventStore
-// NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
+// NB the `Index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
 let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
     match x.Event with
     | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
