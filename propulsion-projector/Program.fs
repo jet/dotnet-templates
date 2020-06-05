@@ -2,8 +2,6 @@
 
 #if cosmos
 open Propulsion.Cosmos
-#else
-open Propulsion.EventStore
 #endif
 open Serilog
 open System
@@ -108,6 +106,7 @@ module Args =
             discovery, { database = x.Database; container = x.Container }, connector
 #else
     open Equinox.EventStore
+    open Propulsion.EventStore
     type [<NoEquality; NoComparison>] EsSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-g"; Unique>]   Gorge of int
@@ -341,9 +340,11 @@ module Logging =
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
-#if !cosmos
+#if (!cosmos)
 
 module Checkpoints =
+
+    open Propulsion.EventStore
 
     // In this implementation, we keep the checkpoints in Cosmos when consuming from EventStore
     module Cosmos =
@@ -411,7 +412,7 @@ let build (args : Args.Arguments) =
 #endif // !cosmos && !kafka
     let runSourcePipeline =
         let filterByStreamName _ = true // see `dotnet new proReactor --filter` for an example of how to rig filtering arguments
-        EventStoreSource.Run(
+        Propulsion.EventStore.EventStoreSource.Run(
             Log.Logger, sink, checkpoints, connectEs, spec, Handler.tryMapEvent filterByStreamName,
             args.MaxReadAhead, args.StatsInterval)
 #endif // !cosmos

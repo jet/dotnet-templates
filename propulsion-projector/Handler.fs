@@ -2,7 +2,7 @@ module ProjectorTemplate.Handler
 #if cosmos
 
 #if     parallelOnly
-let mapToStreamItems = id
+let mapToStreamItems : seq<'a> -> IReadOnlyList<'a> = upcast
 #else // cosmos && !parallelOnly
 //let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
 //    if x.Data.Length < 900_000 then x
