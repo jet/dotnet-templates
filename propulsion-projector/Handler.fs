@@ -1,6 +1,6 @@
 module ProjectorTemplate.Handler
-#if cosmos
 
+#if cosmos
 #if     parallelOnly
 // Here we pass the items directly through to the handler without parsing them
 let mapToStreamItems (x : System.Collections.Generic.IReadOnlyList<'a>) : seq<'a> = upcast
@@ -27,7 +27,6 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
     match x.Event with
     | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
     | PropulsionStreamEvent e -> Some e
-
 #endif // !cosmos
 
 #if kafka
