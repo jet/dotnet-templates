@@ -18,7 +18,8 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
     // |> Seq.map hackDropBigBodies
 #endif // !parallelOnly
-#else // !cosmos
+#endif // cosmos
+//#if esdb
 open Propulsion.EventStore
 
 /// Responsible for inspecting and then either dropping or tweaking events coming from EventStore
@@ -27,7 +28,7 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
     match x.Event with
     | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
     | PropulsionStreamEvent e -> Some e
-#endif // !cosmos
+//#endif // esdb
 
 #if kafka
 #if     (cosmos && parallelOnly) // kafka && cosmos && parallelOnly

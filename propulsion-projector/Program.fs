@@ -42,11 +42,11 @@ module Args =
     let private defaultWithEnvVar varName argName = function
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
-#if !cosmos
+//#if esdb
     let private isEnvVarTrue varName =
          EnvVar.tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
+//#endif
     let private seconds (x : TimeSpan) = x.TotalSeconds
-#endif
     open Argu
 #if cosmos
     type [<NoEquality; NoComparison>] CosmosParameters =
@@ -101,10 +101,11 @@ module Args =
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
+                seconds x.Timeout, x.Retries, seconds x.MaxRetryWaitTime)
             let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; container = x.Container }, connector
-#else
+#endif
+//#if esdb
     open Equinox.EventStore
     open Propulsion.EventStore
     type [<NoEquality; NoComparison>] EsSourceParameters =
@@ -226,10 +227,10 @@ module Args =
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
+                seconds x.Timeout, x.Retries, seconds x.MaxRetryWaitTime)
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, x.Database, x.Container, connector
-#endif
+//#endif
 
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -244,9 +245,10 @@ module Args =
 //#endif
 #if cosmos
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosParameters>
-#else
-        | [<CliPrefix(CliPrefix.None); Last>] Es of ParseResults<EsSourceParameters>
 #endif
+//#if esdb
+        | [<CliPrefix(CliPrefix.None); Last>] Es of ParseResults<EsSourceParameters>
+//#endif
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
@@ -260,9 +262,10 @@ module Args =
 //#endif
 #if cosmos
                 | Cosmos _ ->               "specify CosmosDb input parameters"
-#else
-                | Es _ ->                   "specify EventStore input parameters."
 #endif
+//#if esdb
+                | Es _ ->                   "specify EventStore input parameters."
+//#endif
     and Arguments(a : ParseResults<Parameters>) =
         member __.Verbose =                 a.Contains Verbose
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
@@ -284,7 +287,8 @@ module Args =
             if c.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             c.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
             { database = c.Database; container = c.AuxContainerName }, __.ConsumerGroupName, c.FromTail, c.MaxDocuments, c.LagFrequency
-#else // esdb
+#endif
+//#if esdb
         member val Es =                     EsSourceArguments(a.GetResult Es)
         member __.BuildEventStoreParams() =
             let srcE = __.Es
@@ -297,7 +301,7 @@ module Args =
                 {   groupName = __.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                     forceRestart = srcE.ForceRestart
                     batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = 0 }
-#endif
+//#endif
 //#if kafka
         member val Target =                 TargetInfo a
     and TargetInfo(a : ParseResults<Parameters>) =
@@ -340,7 +344,7 @@ module Logging =
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
-#if (!cosmos)
+//#if esdb
 
 module Checkpoints =
 
@@ -362,7 +366,7 @@ module CosmosContext =
     let create appName (connector : Equinox.Cosmos.Connector) discovery (database, container) =
         let connection = connector.Connect(appName, discovery) |> Async.RunSynchronously
         Equinox.Cosmos.Context(connection, database, container)
-#endif
+//#endif // esdb
 
 let [<Literal>] AppName = "ProjectorTemplate"
 
@@ -390,7 +394,8 @@ let build (args : Args.Arguments) =
             Log.Logger, connector.CreateClient(AppName, discovery), source,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-#else // !cosmos => i.e., esdb
+#endif // cosmos
+//#if esdb
     let (srcE, cosmos, spec) = args.BuildEventStoreParams()
 
     let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.Master)
@@ -401,21 +406,21 @@ let build (args : Args.Arguments) =
 
     let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
 
-#if     kafka // !cosmos && kafka
+#if     kafka // esdb && kafka
     let (broker, topic) = args.Target.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
     let stats = Handler.ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
-#else // !cosmos && !kafka
+#else // esdb && !kafka
     let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
-#endif // !cosmos && !kafka
+#endif // esdb && !kafka
     let runSourcePipeline =
         let filterByStreamName _ = true // see `dotnet new proReactor --filter` for an example of how to rig filtering arguments
         Propulsion.EventStore.EventStoreSource.Run(
             Log.Logger, sink, checkpoints, connectEs, spec, Handler.tryMapEvent filterByStreamName,
             args.MaxReadAhead, args.StatsInterval)
-#endif // !cosmos
+//#endif // esdb
     sink, runSourcePipeline
 
 let run args =
