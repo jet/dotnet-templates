@@ -37,10 +37,10 @@ type EqxWebs() as this =
 
 type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
 
-    let run template (args : string seq) =
+    let run template args =
         output.WriteLine(sprintf "using %s" folder.PackagePath)
         let folder = Dir.cleared template
-        Dotnet.instantiate folder template (List.ofSeq args)
+        Dotnet.instantiate folder template args
         Dotnet.build [folder]
 
     #if DEBUG // Use this one to trigger an individual test
