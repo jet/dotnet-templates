@@ -20,7 +20,7 @@ The following templates focus specifically on the usage of `Propulsion` componen
   
     1. _(default)_ `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
  
-       * `-k --parallelOnly` schedule kafka processing to operate in parallel at document (rather than accumulated span of events for a stream) level
+       * `-k --parallelOnly` schedule kafka emission to operate in parallel at document (rather than accumulated span of events for a stream) level
 
     2. `--source eventStore`: EventStoreDB's `$all` feed
 

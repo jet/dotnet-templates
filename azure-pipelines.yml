@@ -4,13 +4,11 @@ jobs:
   pool:
     vmImage: 'windows-latest'
   steps:
-  - script: dotnet pack build.proj
-    displayName: dotnet pack build.proj
+  - script: dotnet build build.proj -v n
+    displayName: dotnet pack + test
     env:
       BUILD_PR: $(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)
-      BUILD_ID: $(BUILD.BUILDNUMBER) 
-  - script: dotnet test build.proj
-    displayName: dotnet test build.proj -v n
+      BUILD_ID: $(BUILD.BUILDNUMBER)
   - task: PublishTestResults@2
     inputs:
       testResultsFormat: 'VSTest'
