@@ -9,15 +9,20 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.8.0"></a>
+## [4.8.0] - 2020-06-05
+
+### Added
 
 - `proProjector`: Add EventStore source [#73](https://github.com/jet/dotnet-templates/pull/73) 
 
 ### Changed
 
 - Cleanup `eqxShipping` [#71](https://github.com/jet/dotnet-templates/pull/71) 
-
-### Removed
-### Fixed
 
 <a name="4.7.2"></a>
 ## [4.7.2] - 2020-05-20
@@ -434,7 +439,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.7.2...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.8.0...HEAD
+[4.8.0]: https://github.com/jet/dotnet-templates/compare/4.7.2...4.8.0
 [4.7.2]: https://github.com/jet/dotnet-templates/compare/4.7.1...4.7.2
 [4.7.1]: https://github.com/jet/dotnet-templates/compare/4.6.0...4.7.1
 [4.6.0]: https://github.com/jet/dotnet-templates/compare/4.5.0...4.6.0
