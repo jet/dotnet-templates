@@ -22,7 +22,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TrackingConsumer", "propuls
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Web", "equinox-web-csharp\Web\Web.csproj", "{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxwebcs", "eqxwebcs", "{B72FFAAE-7801-41B2-86F5-FD90E97A30F7}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxWebCs", "eqxWebCs", "{B72FFAAE-7801-41B2-86F5-FD90E97A30F7}"
 ProjectSection(SolutionItems) = preProject
 	equinox-web-csharp\.template.config\template.json = equinox-web-csharp\.template.config\template.json
 EndProjectSection
@@ -38,7 +38,7 @@ ProjectSection(SolutionItems) = preProject
 	Directory.Build.targets = Directory.Build.targets
 EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxweb", "eqxweb", "{9FF8FE1F-CB92-4840-BF98-7DF9FCFC6913}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxWeb", "eqxWeb", "{9FF8FE1F-CB92-4840-BF98-7DF9FCFC6913}"
 ProjectSection(SolutionItems) = preProject
 	equinox-web\.template.config\template.json = equinox-web\.template.config\template.json
 EndProjectSection
