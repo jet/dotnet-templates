@@ -97,7 +97,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "equinox-shi
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Watchdog.Integration", "equinox-shipping\Watchdog.Integration\Watchdog.Integration.fsproj", "{83BA87C3-6288-40F4-BC4F-EC3A54586CDF}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "equinox-fc", "equinox-fc", "{4946576F-1558-49ED-A272-6F4D92FB0031}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxFc", "eqxFc", "{4946576F-1558-49ED-A272-6F4D92FB0031}"
 ProjectSection(SolutionItems) = preProject
 	equinox-fc\.template.config\template.json = equinox-fc\.template.config\template.json
 	equinox-fc\README.md = equinox-fc\README.md
