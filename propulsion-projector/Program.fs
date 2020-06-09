@@ -242,12 +242,12 @@ module Args =
         | [<Unique>]                        Checkpoints of string
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Tail _ ->          "Polling interval in Seconds. Default: 1"
-                | BatchSize _ ->     "Maximum events to request from feed. Default: 512"
-                | Connection _ ->    "Connection string for SqlStreamStore db. Optional if SQLSTREAMSTORE_CONNECTION specified"
-                | Schema _ ->        "Database schema name"
-                | Credentials _ ->   "Credentials string for SqlStreamStore db (Part of connection string, but NOT logged). Optional if SQLSTREAMSTORE_CREDENTIALS specified"
-                | Checkpoints _ ->   "Connection string for Checkpoints sql db. Optional if SQLSTREAMSTORE_CHECKPOINTS_CONNECTION specified. Default: same as `Connection`"
+                | Tail _ ->                 "Polling interval in Seconds. Default: 1"
+                | BatchSize _ ->            "Maximum events to request from feed. Default: 512"
+                | Connection _ ->           "Connection string for SqlStreamStore db. Optional if SQLSTREAMSTORE_CONNECTION specified"
+                | Schema _ ->               "Database schema name"
+                | Credentials _ ->          "Credentials string for SqlStreamStore db (Part of connection string, but NOT logged). Optional if SQLSTREAMSTORE_CREDENTIALS specified"
+                | Checkpoints _ ->          "Connection string for Checkpoints sql db. Optional if SQLSTREAMSTORE_CHECKPOINTS_CONNECTION specified. Default: same as `Connection`"
     and SqlStreamStoreSourceArguments(a : ParseResults<SqlStreamStoreSourceParameters>) =
         member __.TailInterval =            a.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
         member __.MaxBatchSize =            a.GetResult(BatchSize, 512)
@@ -347,9 +347,9 @@ module Args =
         member __.BuildSqlStreamStoreParams() =
             let src = __.SqlStreamStore
             let spec : Propulsion.SqlStreamStore.ReaderSpec =
-                {    consumerGroup     = __.ConsumerGroupName
-                     maxBatchSize      = src.MaxBatchSize;
-                     tailSleepInterval = src.TailInterval }
+                {    consumerGroup         = __.ConsumerGroupName
+                     maxBatchSize          = src.MaxBatchSize
+                     tailSleepInterval     = src.TailInterval }
             src, spec
 //#endif
 //#if kafka
