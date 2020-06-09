@@ -23,6 +23,8 @@ The following templates focus specifically on the usage of `Propulsion` componen
        * `-k --parallelOnly` schedule kafka emission to operate in parallel at document (rather than accumulated span of events for a stream) level
 
     2. `--source eventStore`: EventStoreDB's `$all` feed
+    
+    3. `--source sqlStreamStore`: [`SqlStreamStore`](https://github.com/SQLStreamStore/SQLStreamStore)'s `$all` feed
 
   * `-k` adds publishing to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
       
