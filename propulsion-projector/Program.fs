@@ -232,35 +232,43 @@ module Args =
             discovery, x.Database, x.Container, connector
 #endif
 //#if sss
-    /// TODO: add DB connectors other than MsSql
+    // TOCONSIDER: add DB connectors other than MsSql
     type [<NoEquality; NoComparison>] SqlStreamStoreSourceParameters =
         | [<AltCommandLine "-t"; Unique>]   Tail of intervalS: float
         | [<AltCommandLine "-m"; Unique>]   BatchSize of int
         | [<AltCommandLine "-c"; Unique>]   Connection of string
-        | [<AltCommandLine "-s">]           Schema of string
         | [<AltCommandLine "-p"; Unique>]   Credentials of string
-        | [<Unique>]                        Checkpoints of string
+        | [<AltCommandLine "-s">]           Schema of string
+        | [<AltCommandLine "-cc"; Unique>]  CheckpointsConnection of string
+        | [<AltCommandLine "-cp"; Unique>] CheckpointsCredentials of string
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Tail _ ->                 "Polling interval in Seconds. Default: 1"
                 | BatchSize _ ->            "Maximum events to request from feed. Default: 512"
                 | Connection _ ->           "Connection string for SqlStreamStore db. Optional if SQLSTREAMSTORE_CONNECTION specified"
+                | Credentials _ ->          "Credentials string for SqlStreamStore db (used as part of connection string, but NOT logged). Default: use SQLSTREAMSTORE_CREDENTIALS environment variable (or assume no credentials)"
                 | Schema _ ->               "Database schema name"
-                | Credentials _ ->          "Credentials string for SqlStreamStore db (Part of connection string, but NOT logged). Optional if SQLSTREAMSTORE_CREDENTIALS specified"
-                | Checkpoints _ ->          "Connection string for Checkpoints sql db. Optional if SQLSTREAMSTORE_CHECKPOINTS_CONNECTION specified. Default: same as `Connection`"
+                | CheckpointsConnection _ ->"Connection string for Checkpoints sql db. Optional if SQLSTREAMSTORE_CONNECTION_CHECKPOINTS specified. Default: same as `Connection`"
+                | CheckpointsCredentials _ ->"Credentials string for Checkpoints sql db. (used as part of checkpoints connection string, but NOT logged). Default (when no `CheckpointsConnection`: use `Credentials. Default (when `CheckpointsConnection` specified): use SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS environment variable (or assume no credentials)"
     and SqlStreamStoreSourceArguments(a : ParseResults<SqlStreamStoreSourceParameters>) =
         member __.TailInterval =            a.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
         member __.MaxBatchSize =            a.GetResult(BatchSize, 512)
-        member __.StoreConnectionString =   a.TryGetResult Connection |> defaultWithEnvVar "SQLSTREAMSTORE_CONNECTION" "Connection"
-        member __.StoreCredentialsString =  a.TryGetResult Connection |> Option.orElseWith (fun () -> EnvVar.tryGet "SQLSTREAMSTORE_CREDENTIALS")
+        member private __.Connection =      a.TryGetResult Connection |> defaultWithEnvVar "SQLSTREAMSTORE_CONNECTION" "Connection"
+        member private __.Credentials =     a.TryGetResult Credentials |> Option.orElseWith (fun () -> EnvVar.tryGet "SQLSTREAMSTORE_CREDENTIALS") |> Option.toObj
         member __.Schema =                  a.GetResult(Schema, null)
-        member __.CheckpointsConnectionString =
-            a.TryGetResult Checkpoints
-            |> Option.orElseWith (fun () -> EnvVar.tryGet "SQLSTREAMSTORE_CHECKPOINTS_CONNECTION")
-            |> Option.defaultValue __.StoreConnectionString
 
+        member x.BuildCheckpointsConnectionString() =
+            let c, cs =
+                match a.TryGetResult CheckpointsConnection, a.TryGetResult CheckpointsCredentials with
+                | Some c, Some p -> c, String.Join(";", c, p)
+                | None, Some p ->   let c = x.Connection in c, String.Join(";", c, p)
+                | None, None ->     let c = x.Connection in c, String.Join(";", c, x.Credentials)
+                | Some c, None ->   let p = EnvVar.tryGet "SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS" |> Option.toObj
+                                    c, String.Join(";", c, p)
+            Log.Information("Checkpoints MsSql Connection {connectionString}", c)
+            cs
         member x.Connect() =
-            let conn, creds, schema, autoCreate = x.StoreConnectionString, x.StoreCredentialsString, x.Schema, false
+            let conn, creds, schema, autoCreate = x.Connection, x.Credentials, x.Schema, false
             let sssConnectionString = String.Join(";", conn, creds)
             Log.Information("SqlStreamStore MsSql Connection {connectionString} Schema {schema} AutoCreate {autoCreate}", conn, schema, autoCreate)
             Equinox.SqlStreamStore.MsSql.Connector(sssConnectionString, schema, autoCreate=autoCreate).Connect() |> Async.RunSynchronously
@@ -474,9 +482,10 @@ let build (args : Args.Arguments) =
 //#if sss
     let (srcSql, spec) = args.BuildSqlStreamStoreParams()
 
-    let store = srcSql.Connect()
+    let monitored = srcSql.Connect()
 
-    let checkpointer = Propulsion.SqlStreamStore.SqlCheckpointer(srcSql.CheckpointsConnectionString)
+    let connectionString = srcSql.BuildCheckpointsConnectionString()
+    let checkpointer = Propulsion.SqlStreamStore.SqlCheckpointer(connectionString)
 
 #if     kafka // sss && kafka
     let (broker, topic) = args.Target.BuildTargetParams()
@@ -487,7 +496,7 @@ let build (args : Args.Arguments) =
     let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // sss && !kafka
-    let runSourcePipeline = Propulsion.SqlStreamStore.SqlStreamStoreSource.Run(Log.Logger, store, checkpointer, spec, sink, args.StatsInterval)
+    let runSourcePipeline = Propulsion.SqlStreamStore.SqlStreamStoreSource.Run(Log.Logger, monitored, checkpointer, spec, sink, args.StatsInterval)
 //#endif // sss
     sink, runSourcePipeline
 

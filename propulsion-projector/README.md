@@ -59,7 +59,9 @@ This project was generated using:
 0. establish connection strings etc. per https://github.com/jet/equinox README
 
         $env:SQLSTREAMSTORE_CONNECTION="..." # or use -c
-        $env:SQLSTREAMSTORE_CONNECTION_CHECKPOINTS="equinox-test" # or use --checkpoints
+        $env:SQLSTREAMSTORE_CREDENTIALS="Password=secret;..." # or use -p # portion of connection string containing sensitive credentials (not logged)
+        $env:SQLSTREAMSTORE_CONNECTION_CHECKPOINTS="..." # or use -cc
+        $env:SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS="Password=secret;..." # or use -cp  # portion of connection string containing sensitive credentials (not logged)
 //#else
 0. establish connection strings etc. per https://github.com/jet/equinox README
 
