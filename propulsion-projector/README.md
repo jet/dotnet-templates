@@ -102,14 +102,24 @@ This project was generated using:
         eqx init -ru 400 cosmos
 //#endif // esdb
 //#if sss
-1. Use the `propulsion` tool to initialize the Checkpoints Table
+1a. Use the `eqx` tool to initialize and then run some transactions in a SqlStreamStore database
+
+        dotnet tool install -g Equinox.Tool # only needed once
+
+        # set up the DB/schema
+        eqx config ms -c "connectionstring" -p "u=un;p=password" -s "schema"
+
+        # (generate some events)
+        start https://github.com/jet/equinox#sqlstreamstore
+
+1b. Use the `propulsion` tool to initialize the Checkpoints Table
 
         dotnet tool install -g Propulsion.Tool # only needed once
 
         # (either add environment variables as per step 0 or use -c to specify them)
 
         # generate a SQL Table to store checkpoints in
-        propulsion init sqlms
+        propulsion init ms
 //#endif // sss         
          
 2. To run an instance of the Projector:
@@ -144,8 +154,8 @@ This project was generated using:
 //#if   sss
         # `-g default` defines the Projector Group identity - each id has a separate checkpoint in the Checkpoints Table
         # `-t topic0` identifies the Kafka topic to which the Projector should write
-        # sqlms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
-        dotnet run -- -g default -t topic0 sqlms
+        # ms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
+        dotnet run -- -g default -t topic0 ms
 //#endif // kafka && sss
 
 3. To create a Consumer, use `dotnet new proConsumer` or `dotnet new proReactor --source kafkaEventSpans`
@@ -172,7 +182,7 @@ This project was generated using:
         # (either add environment variables as per step 0 or use -c/-p to specify them)
         
         # `-g default` defines the Projector Group identity - each id has a separate checkpoint in the Checkpoints Table
-        # sqlms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
-        dotnet run -- -g default sqlms
+        # ms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
+        dotnet run -- -g default ms
 //#endif // !kafka && sss
 //#endif // !kafka

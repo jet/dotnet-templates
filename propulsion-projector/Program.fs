@@ -284,7 +284,7 @@ module Args =
         | [<CliPrefix(CliPrefix.None); Last>] Es of ParseResults<EsSourceParameters>
 #endif
 //#if sss
-        | [<CliPrefix(CliPrefix.None); Last>] SqlMs of ParseResults<SqlStreamStoreSourceParameters>
+        | [<CliPrefix(CliPrefix.None); AltCommandLine "ms"; Last>] SqlMs of ParseResults<SqlStreamStoreSourceParameters>
 //#endif
         interface IArgParserTemplate with
             member a.Usage =
