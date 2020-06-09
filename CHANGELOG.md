@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proProjector`: Add SqlStreamStore source [#74](https://github.com/jet/dotnet-templates/pull/74) :pray: [@scrwtp](https://github.com/scrwtp) 
+
 ### Changed
 ### Removed
 ### Fixed

@@ -34,14 +34,39 @@ This project was generated using:
     dotnet new proProjector -s eventStore # use --help to see options
 //#endif // esdb && !kafka
 //#endif // esdb
+//#if sss
+//#if   kafka // sss && kafka
+# Propulsion SqlStreamStore -> Kafka Projector
+
+This project was generated using:
+
+    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new proProjector -s sqlStreamStore -k # -k => include Kafka projection logic
+//#else // sss && !kafka
+# Propulsion SqlStreamStore Projector (without Kafka emission)
+
+This project was generated using:
+
+    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    # add -k to add Kafka Projection logic
+    dotnet new proProjector -s sqlStreamStore # use --help to see options
+//#endif // sss && !kafka
+//#endif // sss
 
 ## Usage instructions
 
+//#if sss
+0. establish connection strings etc. per https://github.com/jet/equinox README
+
+        $env:SQLSTREAMSTORE_CONNECTION="..." # or use -c
+        $env:SQLSTREAMSTORE_CONNECTION_CHECKPOINTS="equinox-test" # or use --checkpoints
+//#else
 0. establish connection strings etc. per https://github.com/jet/equinox README
 
         $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
         $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
         $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use -c
+//#endif
 
 //#if cosmos
 1a. Use the `eqx` tool to initialize and then run some transactions in a CosmosDB container
@@ -76,6 +101,16 @@ This project was generated using:
         # generate a cosmos container to store checkpoints in
         eqx init -ru 400 cosmos
 //#endif // esdb
+//#if sss
+1. Use the `propulsion` tool to initialize the Checkpoints Table
+
+        dotnet tool install -g Propulsion.Tool # only needed once
+
+        # (either add environment variables as per step 0 or use -c to specify them)
+
+        # generate a SQL Table to store checkpoints in
+        propulsion init sqlms
+//#endif // sss         
          
 2. To run an instance of the Projector:
 
@@ -106,6 +141,12 @@ This project was generated using:
         # cosmos specifies the checkpoint store details (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         dotnet run -- -g default -t topic0 es cosmos
 //#endif // kafka && esdb
+//#if   sss
+        # `-g default` defines the Projector Group identity - each id has a separate checkpoint in the Checkpoints Table
+        # `-t topic0` identifies the Kafka topic to which the Projector should write
+        # sqlms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
+        dotnet run -- -g default -t topic0 sqlms
+//#endif // kafka && sss
 
 3. To create a Consumer, use `dotnet new proConsumer` or `dotnet new proReactor --source kafkaEventSpans`
 //#else // !kafka
@@ -127,4 +168,11 @@ This project was generated using:
         # cosmos specifies the checkpoint store details (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
        dotnet run -- -g default es cosmos
 //#endif // !kafka && esdb       
+//#if   sss
+        # (either add environment variables as per step 0 or use -c/-p to specify them)
+        
+        # `-g default` defines the Projector Group identity - each id has a separate checkpoint in the Checkpoints Table
+        # sqlms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
+        dotnet run -- -g default sqlms
+//#endif // !kafka && sss
 //#endif // !kafka
