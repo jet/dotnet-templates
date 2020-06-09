@@ -259,7 +259,7 @@ module Args =
             |> Option.orElseWith (fun () -> EnvVar.tryGet "SQLSTREAMSTORE_CHECKPOINTS_CONNECTION")
             |> Option.defaultValue __.StoreConnectionString
 
-        member x.Connect(appName) =
+        member x.Connect() =
             let conn, creds, schema, autoCreate = x.StoreConnectionString, x.StoreCredentialsString, x.Schema, false
             let sssConnectionString = String.Join(";", conn, creds)
             Log.Information("SqlStreamStore MsSql Connection {connectionString} Schema {schema} AutoCreate {autoCreate}", conn, schema, autoCreate)
