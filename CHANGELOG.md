@@ -9,15 +9,20 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.9.0"></a>
+## [4.9.0] - 2020-06-10
+
+### Added
 
 - `proProjector`: Add SqlStreamStore source [#74](https://github.com/jet/dotnet-templates/pull/74) :pray: [@scrwtp](https://github.com/scrwtp) 
 
 ### Changed
 
 - Update to Equinox.* v `2.1.0`, Propulsion.* v `2.7.0`
-
-### Removed
-### Fixed
 
 <a name="4.8.0"></a>
 ## [4.8.0] - 2020-06-05
@@ -445,7 +450,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.8.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.9.0...HEAD
+[4.9.0]: https://github.com/jet/dotnet-templates/compare/4.8.0...4.9.0
 [4.8.0]: https://github.com/jet/dotnet-templates/compare/4.7.2...4.8.0
 [4.7.2]: https://github.com/jet/dotnet-templates/compare/4.7.1...4.7.2
 [4.7.1]: https://github.com/jet/dotnet-templates/compare/4.6.0...4.7.1
