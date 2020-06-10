@@ -13,6 +13,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - `proProjector`: Add SqlStreamStore source [#74](https://github.com/jet/dotnet-templates/pull/74) :pray: [@scrwtp](https://github.com/scrwtp) 
 
 ### Changed
+
+- Update to Equinox.* v `2.1.0`, Propulsion.* v `2.7.0`
+
 ### Removed
 ### Fixed
 
