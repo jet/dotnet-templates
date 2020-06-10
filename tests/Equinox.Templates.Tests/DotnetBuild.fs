@@ -6,9 +6,9 @@ open Xunit.Abstractions
 type ProProjector() as this =
     inherit TheoryData<string list>()
 
-    do for source in ["cosmos"; (* <-default *) "eventStore"] do
+    do for source in ["cosmos"; (* <-default *) "eventStore"; "sqlStreamStore"] do
         let variants =
-            if source = "eventStore" then [ []; ["--kafka"] ]
+            if source <> "cosmos" then [ []; ["--kafka"] ]
             else
 #if DEBUG
                     [ ["--kafka"] ]

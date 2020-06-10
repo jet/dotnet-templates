@@ -42,10 +42,10 @@ module Args =
     let private defaultWithEnvVar varName argName = function
         | None -> getEnvVarForArgumentOrThrow varName argName
         | Some x -> x
-//#if esdb
+#if esdb
     let private isEnvVarTrue varName =
          EnvVar.tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
-//#endif
+#endif
     let private seconds (x : TimeSpan) = x.TotalSeconds
     open Argu
 #if cosmos
@@ -105,7 +105,7 @@ module Args =
             let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; container = x.Container }, connector
 #endif
-//#if esdb
+#if esdb
     open Equinox.EventStore
     open Propulsion.EventStore
     type [<NoEquality; NoComparison>] EsSourceParameters =
@@ -230,6 +230,48 @@ module Args =
                 seconds x.Timeout, x.Retries, seconds x.MaxRetryWaitTime)
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, x.Database, x.Container, connector
+#endif
+//#if sss
+    // TOCONSIDER: add DB connectors other than MsSql
+    type [<NoEquality; NoComparison>] SqlStreamStoreSourceParameters =
+        | [<AltCommandLine "-t"; Unique>]   Tail of intervalS: float
+        | [<AltCommandLine "-m"; Unique>]   BatchSize of int
+        | [<AltCommandLine "-c"; Unique>]   Connection of string
+        | [<AltCommandLine "-p"; Unique>]   Credentials of string
+        | [<AltCommandLine "-s">]           Schema of string
+        | [<AltCommandLine "-cc"; Unique>]  CheckpointsConnection of string
+        | [<AltCommandLine "-cp"; Unique>] CheckpointsCredentials of string
+        interface IArgParserTemplate with
+            member a.Usage = a |> function
+                | Tail _ ->                 "Polling interval in Seconds. Default: 1"
+                | BatchSize _ ->            "Maximum events to request from feed. Default: 512"
+                | Connection _ ->           "Connection string for SqlStreamStore db. Optional if SQLSTREAMSTORE_CONNECTION specified"
+                | Credentials _ ->          "Credentials string for SqlStreamStore db (used as part of connection string, but NOT logged). Default: use SQLSTREAMSTORE_CREDENTIALS environment variable (or assume no credentials)"
+                | Schema _ ->               "Database schema name"
+                | CheckpointsConnection _ ->"Connection string for Checkpoints sql db. Optional if SQLSTREAMSTORE_CONNECTION_CHECKPOINTS specified. Default: same as `Connection`"
+                | CheckpointsCredentials _ ->"Credentials string for Checkpoints sql db. (used as part of checkpoints connection string, but NOT logged). Default (when no `CheckpointsConnection`: use `Credentials. Default (when `CheckpointsConnection` specified): use SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS environment variable (or assume no credentials)"
+    and SqlStreamStoreSourceArguments(a : ParseResults<SqlStreamStoreSourceParameters>) =
+        member __.TailInterval =            a.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
+        member __.MaxBatchSize =            a.GetResult(BatchSize, 512)
+        member private __.Connection =      a.TryGetResult Connection |> defaultWithEnvVar "SQLSTREAMSTORE_CONNECTION" "Connection"
+        member private __.Credentials =     a.TryGetResult Credentials |> Option.orElseWith (fun () -> EnvVar.tryGet "SQLSTREAMSTORE_CREDENTIALS") |> Option.toObj
+        member __.Schema =                  a.GetResult(Schema, null)
+
+        member x.BuildCheckpointsConnectionString() =
+            let c, cs =
+                match a.TryGetResult CheckpointsConnection, a.TryGetResult CheckpointsCredentials with
+                | Some c, Some p -> c, String.Join(";", c, p)
+                | None, Some p ->   let c = x.Connection in c, String.Join(";", c, p)
+                | None, None ->     let c = x.Connection in c, String.Join(";", c, x.Credentials)
+                | Some c, None ->   let p = EnvVar.tryGet "SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS" |> Option.toObj
+                                    c, String.Join(";", c, p)
+            Log.Information("Checkpoints MsSql Connection {connectionString}", c)
+            cs
+        member x.Connect() =
+            let conn, creds, schema, autoCreate = x.Connection, x.Credentials, x.Schema, false
+            let sssConnectionString = String.Join(";", conn, creds)
+            Log.Information("SqlStreamStore MsSql Connection {connectionString} Schema {schema} AutoCreate {autoCreate}", conn, schema, autoCreate)
+            Equinox.SqlStreamStore.MsSql.Connector(sssConnectionString, schema, autoCreate=autoCreate).Connect() |> Async.RunSynchronously
 //#endif
 
     [<NoEquality; NoComparison>]
@@ -246,8 +288,11 @@ module Args =
 #if cosmos
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosParameters>
 #endif
-//#if esdb
+#if esdb
         | [<CliPrefix(CliPrefix.None); Last>] Es of ParseResults<EsSourceParameters>
+#endif
+//#if sss
+        | [<CliPrefix(CliPrefix.None); AltCommandLine "ms"; Last>] SqlMs of ParseResults<SqlStreamStoreSourceParameters>
 //#endif
         interface IArgParserTemplate with
             member a.Usage =
@@ -263,8 +308,11 @@ module Args =
 #if cosmos
                 | Cosmos _ ->               "specify CosmosDb input parameters"
 #endif
-//#if esdb
+#if esdb
                 | Es _ ->                   "specify EventStore input parameters."
+#endif
+//#if sss
+                | SqlMs _ ->                "specify SqlStreamStore input parameters."
 //#endif
     and Arguments(a : ParseResults<Parameters>) =
         member __.Verbose =                 a.Contains Verbose
@@ -288,7 +336,7 @@ module Args =
             c.LagFrequency |> Option.iter (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
             { database = c.Database; container = c.AuxContainerName }, __.ConsumerGroupName, c.FromTail, c.MaxDocuments, c.LagFrequency
 #endif
-//#if esdb
+#if esdb
         member val Es =                     EsSourceArguments(a.GetResult Es)
         member __.BuildEventStoreParams() =
             let srcE = __.Es
@@ -301,6 +349,16 @@ module Args =
                 {   groupName = __.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                     forceRestart = srcE.ForceRestart
                     batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = 0 }
+#endif
+//#if sss
+        member val SqlStreamStore =         SqlStreamStoreSourceArguments(a.GetResult SqlMs)
+        member __.BuildSqlStreamStoreParams() =
+            let src = __.SqlStreamStore
+            let spec : Propulsion.SqlStreamStore.ReaderSpec =
+                {    consumerGroup         = __.ConsumerGroupName
+                     maxBatchSize          = src.MaxBatchSize
+                     tailSleepInterval     = src.TailInterval }
+            src, spec
 //#endif
 //#if kafka
         member val Target =                 TargetInfo a
@@ -395,7 +453,7 @@ let build (args : Args.Arguments) =
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
 #endif // cosmos
-//#if esdb
+#if esdb
     let (srcE, cosmos, spec) = args.BuildEventStoreParams()
 
     let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.Master)
@@ -420,7 +478,26 @@ let build (args : Args.Arguments) =
         Propulsion.EventStore.EventStoreSource.Run(
             Log.Logger, sink, checkpoints, connectEs, spec, Handler.tryMapEvent filterByStreamName,
             args.MaxReadAhead, args.StatsInterval)
-//#endif // esdb
+#endif // esdb
+//#if sss
+    let (srcSql, spec) = args.BuildSqlStreamStoreParams()
+
+    let monitored = srcSql.Connect()
+
+    let connectionString = srcSql.BuildCheckpointsConnectionString()
+    let checkpointer = Propulsion.SqlStreamStore.SqlCheckpointer(connectionString)
+
+#if     kafka // sss && kafka
+    let (broker, topic) = args.Target.BuildTargetParams()
+    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
+    let stats = Handler.ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
+#else // sss && !kafka
+    let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
+#endif // sss && !kafka
+    let runSourcePipeline = Propulsion.SqlStreamStore.SqlStreamStoreSource.Run(Log.Logger, monitored, checkpointer, spec, sink, args.StatsInterval)
+//#endif // sss
     sink, runSourcePipeline
 
 let run args =

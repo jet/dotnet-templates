@@ -24,6 +24,10 @@
     <!--#if (esdb)-->
     <PackageReference Include="Propulsion.EventStore" Version="2.6.0" />
     <!--#endif-->
+    <!--#if (sss)-->
+    <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="2.1.0" />
+    <PackageReference Include="Propulsion.SqlStreamStore" Version="2.7.0" />
+    <!--#endif-->
     <!--#if kafka-->
     <PackageReference Include="Propulsion.Kafka" Version="2.6.0" />
     <!--#endif-->

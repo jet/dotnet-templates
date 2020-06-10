@@ -34,12 +34,20 @@
         {
           "choice": "eventStore",
           "description": "Wire for EventStoreDB $all source"
+        },
+        {
+          "choice": "sqlStreamStore",
+          "description": "Wire for SqlStreamStore $all source"
         }
       ]
     },
     "esdb": {
       "type": "computed",
       "value": "(source == \"eventStore\")"
+    },
+    "sss": {
+      "type": "computed",
+      "value": "(source == \"sqlStreamStore\")"
     },
     "cosmos": {
       "type": "computed",
