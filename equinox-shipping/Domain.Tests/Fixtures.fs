@@ -35,5 +35,5 @@ let createProcessManager maxDop store =
 
 let (|Id|) (x : System.Guid) = x.ToString "N" |> FSharp.UMX.UMX.tag
 let (|Ids|) (xs : System.Guid[]) = xs |> Array.map (|Id|)
-let (|IdsMoreThanOne|) (Ids xs, Id x) = [| yield x; yield! xs |]
+let (|IdsAtLeastOne|) (Ids xs, Id x) = [| yield x; yield! xs |]
 let (|AtLeastOne|) (x, xs) = x::xs

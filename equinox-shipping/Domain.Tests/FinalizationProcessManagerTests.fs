@@ -6,7 +6,7 @@ open FsCheck.Xunit
 open Swensen.Unquote
 
 [<Property>]
-let ``FinalizationProcessManager properties`` (Id transId1, Id transId2, Id containerId1, Id containerId2, IdsMoreThanOne shipmentIds1, IdsMoreThanOne shipmentIds2, Id shipment3) =
+let ``FinalizationProcessManager properties`` (Id transId1, Id transId2, Id containerId1, Id containerId2, IdsAtLeastOne shipmentIds1, IdsAtLeastOne shipmentIds2, Id shipment3) =
     let store = Equinox.MemoryStore.VolatileStore()
     let buffer = EventAccumulator()
     use __ = store.Committed.Subscribe buffer.Record

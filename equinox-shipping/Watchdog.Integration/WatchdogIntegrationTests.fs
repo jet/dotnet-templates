@@ -29,7 +29,7 @@ type WatchdogIntegrationTests(output) =
 
             let counts = System.Collections.Generic.Stack()
             let mutable timeouts = 0
-            for (Id tid, Id cid, IdsMoreThanOne shipmentIds) in batches do
+            for (Id tid, Id cid, IdsAtLeastOne shipmentIds) in batches do
                 counts.Push shipmentIds.Length
                 try let! _ = processManager.TryFinalizeContainer(tid, cid, shipmentIds)
                              |> Async.timeoutAfter runTimeout
