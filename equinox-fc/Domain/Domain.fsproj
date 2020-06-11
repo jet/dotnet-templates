@@ -16,8 +16,8 @@
         <Compile Include="Inventory.fs" />
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="Equinox.EventStore" Version="2.0.0" />
-        <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.0.0" />
+        <PackageReference Include="Equinox.EventStore" Version="2.1.0" />
+        <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.1.0" />
     </ItemGroup>
 
 </Project>
