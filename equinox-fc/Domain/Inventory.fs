@@ -1,6 +1,6 @@
-namespace Fc.Inventory
+namespace Fc.Domain.Inventory
 
-open Epoch
+open Fc.Domain
 open Equinox.Core // we use Equinox's AsyncCacheCell helper below
 open FSharp.UMX
 
@@ -10,56 +10,41 @@ type internal IdsCache<'Id>() =
     member __.Add ids = for x in ids do all.[x] <- ()
     member __.Contains id = all.ContainsKey id
 
-/// Maintains active Epoch Id in a thread-safe manner while ingesting items into the `series` of `epochs`
-/// Prior to first add, reads `lookBack` epochs to seed the cache, in order to minimize the number of duplicated Ids we ingest
-type Service2 internal (inventoryId, series : Series.Service, epochs : Epoch.Service, lookBack, capacity) =
+/// Ingests items into a log of items, making a best effort at deduplicating as it writes
+/// Prior to first add, reads recent ids, in order to minimize the number of duplicated Ids we ingest
+type Service2 internal (inventoryId, epochs : Epoch.Service) =
 
     let log = Serilog.Log.ForContext<Service2>()
 
-    // Maintains what we believe to be the currently open EpochId
-    // Guaranteed to be set only after `previousIds.AwaitValue()`
-    let mutable activeEpochId = Unchecked.defaultof<_>
-
     // We want max one request in flight to establish the pre-existing Events from which the TransactionIds cache will be seeded
-    let previousEpochs = AsyncCacheCell<AsyncCacheCell<Set<InventoryTransactionId>> list> <| async {
-        let! startingId = series.ReadIngestionEpoch(inventoryId)
-        activeEpochId <- %startingId
-        let read epochId = async { let! r = epochs.TryIngest(inventoryId, epochId, (fun _ -> 1), Seq.empty) in return r.transactionIds }
-        return [ for epoch in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> AsyncCacheCell(read %epoch) ] }
+    let previousIds : AsyncCacheCell<Set<InventoryTransactionId>> =
+        let read = async { let! r = epochs.TryIngest(inventoryId, Seq.empty) in return r.transactionIds }
+        AsyncCacheCell read
 
     // TransactionIds cache - used to maintain a list of transactions that have already been ingested in order to avoid db round-trips
     let previousIds : AsyncCacheCell<IdsCache<_>> = AsyncCacheCell <| async {
-        let! previousEpochs = previousEpochs.AwaitValue()
-        let! ids = seq { for x in previousEpochs -> x.AwaitValue() } |> Async.Parallel
-        return IdsCache.Create(Seq.concat ids) }
+        let! previousIds = previousIds.AwaitValue()
+        return IdsCache.Create(previousIds) }
 
     let tryIngest events = async {
         let! previousIds = previousIds.AwaitValue()
-        let initialEpochId = %activeEpochId
 
-        let rec aux epochId totalIngested items = async {
+        let rec aux totalIngested items = async {
             let SeqPartition f = Seq.toArray >> Array.partition f
             let dup, fresh = items |> SeqPartition (Epoch.Events.chooseInventoryTransactionId >> Option.exists previousIds.Contains)
             let fullCount = List.length items
             let dropping = fullCount - Array.length fresh
-            if dropping <> 0 then log.Information("Ignoring {count}/{fullCount} duplicate ids: {ids} for {epochId}", dropping, fullCount, dup, epochId)
+            if dropping <> 0 then log.Information("Ignoring {count}/{fullCount} duplicate ids: {ids}", dropping, fullCount, dup)
             if Array.isEmpty fresh then
                 return totalIngested
             else
-                let! res = epochs.TryIngest(inventoryId, epochId, capacity, fresh)
-                log.Information("Added {count} items to {inventoryId:l}/{epochId}", res.added, inventoryId, epochId)
+                let! res = epochs.TryIngest(inventoryId, fresh)
+                log.Information("Added {count} items to {inventoryId:l}", res.added, inventoryId)
                 // The adding is potentially redundant; we don't care
                 previousIds.Add res.transactionIds
-                // Any writer noticing we've moved to a new epoch shares the burden of marking it active
-                if not res.isClosed && activeEpochId < %epochId then
-                    log.Information("Marking {inventoryId:l}/{epochId} active", inventoryId, epochId)
-                    do! series.AdvanceIngestionEpoch(inventoryId, epochId)
-                    System.Threading.Interlocked.CompareExchange(&activeEpochId, %epochId, activeEpochId) |> ignore
                 let totalIngestedTransactions = totalIngested + res.added
-                match res.rejected with
-                | [] -> return totalIngestedTransactions
-                | rej -> return! aux (InventoryEpochId.next epochId) totalIngestedTransactions rej }
-        return! aux initialEpochId 0 events
+                return totalIngestedTransactions }
+        return! aux 0 events
     }
 
     /// Upon startup, we initialize the TransactionIds cache with recent epochs; we want to kick that process off before our first ingest
@@ -70,56 +55,45 @@ type Service2 internal (inventoryId, series : Series.Service, epochs : Epoch.Ser
 
 module internal Helpers =
 
-    let create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs) =
-        let remainingEpochCapacity (state: Epoch.Fold.State) =
-            let currentLen = state.ids.Count
-            max 0 (maxTransactionsPerEpoch - currentLen)
-        Service2(inventoryId, series, epochs, lookBack = lookBackLimit, capacity = remainingEpochCapacity)
-
-module Cosmos =
-
-    let create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache) =
-        let series = Series.Cosmos.create (context, cache)
-        let epochs = Epoch.Cosmos.create (context, cache)
-        Helpers.create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs)
+    let create inventoryId epochs =
+        Service2(inventoryId, epochs)
 
 module EventStore =
 
-    let create inventoryId maxTransactionsPerEpoch lookBackLimit (context, cache) =
-        let series = Series.EventStore.create (context, cache)
+    let create inventoryId (context, cache) =
         let epochs = Epoch.EventStore.create (context, cache)
-        Helpers.create inventoryId maxTransactionsPerEpoch lookBackLimit (series, epochs)
+        Helpers.create inventoryId epochs
 
 module Processor =
 
-    type Service(transactions : Transaction.Service, locations : Fc.Location.Service, inventory : Service2) =
+    type Service(transactions : Transaction.Service, locations : Location.Service, inventory : Service2) =
 
         let execute transactionId =
-            let f = Fc.Location.Epoch.decide transactionId
+            let f = Location.Epoch.decide transactionId
             let rec aux update = async {
                 let! action = transactions.Apply(transactionId, update)
                 let aux event = aux (Some event)
                 match action with
                 | Transaction.Adjust (loc, bal) ->
-                    match! locations.Execute(loc, f (Fc.Location.Epoch.Reset bal)) with
-                    | Fc.Location.Epoch.Accepted _ -> return! aux Transaction.Events.Adjusted
-                    | Fc.Location.Epoch.Denied -> return failwith "Cannot Deny Reset"
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
+                    match! locations.Execute(loc, f (Location.Epoch.Reset bal)) with
+                    | Location.Epoch.Accepted _ -> return! aux Transaction.Events.Adjusted
+                    | Location.Epoch.Denied -> return failwith "Cannot Deny Reset"
+                    | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Remove (loc, delta) ->
-                    match! locations.Execute(loc, f (Fc.Location.Epoch.Remove delta)) with
-                    | Fc.Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Removed { balance = bal })
-                    | Fc.Location.Epoch.Denied -> return! aux Transaction.Events.Failed
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
+                    match! locations.Execute(loc, f (Location.Epoch.Remove delta)) with
+                    | Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Removed { balance = bal })
+                    | Location.Epoch.Denied -> return! aux Transaction.Events.Failed
+                    | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Add    (loc, delta) ->
-                    match! locations.Execute(loc, f (Fc.Location.Epoch.Add delta)) with
-                    | Fc.Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Added   { balance = bal })
-                    | Fc.Location.Epoch.Denied -> return failwith "Cannot Deny Add"
-                    | Fc.Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
+                    match! locations.Execute(loc, f (Location.Epoch.Add delta)) with
+                    | Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Added   { balance = bal })
+                    | Location.Epoch.Denied -> return failwith "Cannot Deny Add"
+                    | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
                 | Transaction.Log (Transaction.Adjusted _) ->
-                    let! _count = inventory.Ingest([Fc.Inventory.Epoch.Events.Adjusted    { transactionId = transactionId }])
+                    let! _count = inventory.Ingest([Inventory.Epoch.Events.Adjusted    { transactionId = transactionId }])
                     return! aux Transaction.Events.Logged
                 | Transaction.Log (Transaction.Transferred _) ->
-                    let! _count = inventory.Ingest([Fc.Inventory.Epoch.Events.Transferred { transactionId = transactionId }])
+                    let! _count = inventory.Ingest([Inventory.Epoch.Events.Transferred { transactionId = transactionId }])
                     return! aux Transaction.Events.Logged
                 | Transaction.Finish success ->
                     return success
@@ -128,10 +102,10 @@ module Processor =
         let run transactionId req = execute transactionId (Some req)
 
         member __.Adjust(transactionId, location, quantity) =
-            run transactionId (Fc.Inventory.Transaction.Events.AdjustmentRequested { location = location; quantity = quantity })
+            run transactionId (Inventory.Transaction.Events.AdjustmentRequested { location = location; quantity = quantity })
 
         member __.TryTransfer(transactionId, source, destination, quantity) =
-            run transactionId (Fc.Inventory.Transaction.Events.TransferRequested { source = source; destination = destination; quantity = quantity })
+            run transactionId (Inventory.Transaction.Events.TransferRequested { source = source; destination = destination; quantity = quantity })
 
         /// Used by Watchdog to force conclusion of a transaction whose progress has stalled
         member __.Drive(transactionId) = async {

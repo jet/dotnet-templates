@@ -1,9 +1,10 @@
-module Fc.LocationSeriesTests
+module Fc.Domain.Tests.LocationSeriesTests
 
 open FsCheck.Xunit
 open FSharp.UMX
 open Swensen.Unquote
-open Location.Series
+
+open Fc.Domain.Location.Series
 
 let [<Property>] properties c1 c2 =
     let events = interpretAdvanceIngestionEpoch c1 Fold.initial

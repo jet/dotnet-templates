@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Infrastructure.fs" />
+        <Compile Include="Fixtures.fs" />
         <Compile Include="LocationSeriesTests.fs" />
         <Compile Include="LocationEpochTests.fs" />
         <Compile Include="LocationTests.fs" />

@@ -1,7 +1,7 @@
 /// Manages Stock adjustments and deltas for a given Location
 /// Provides for controlled opening and closing of an epoch, carrying forward incoming balances when a given Epoch reaches a 'full' state
 /// See Location.Service for the logic that allows competing readers/writers to co-operate in bringing this about
-module Fc.Location.Epoch
+module Fc.Domain.Location.Epoch
 
 let [<Literal>] Category = "LocationEpoch"
 let streamName (locationId, epochId) = FsCodec.StreamName.compose Category [LocationId.toString locationId; LocationEpochId.toString epochId]
@@ -35,6 +35,8 @@ module Fold =
     let (|Current|) = function
         | (Init { initial = bal } | Step { balance = bal }) :: _ -> bal
         | [] -> failwith "Cannot transact when no CarriedForward"
+    let (|History|) = function Initial -> [] | (Open history | Closed history) -> history
+    let (|Balance|) (History h) = (|Current|) h
     let evolve state event =
         match event, state with
         | Events.CarriedForward e, Initial                   -> Open [Init e]
@@ -46,6 +48,20 @@ module Fold =
         | (Events.Added _ | Events.Removed _ | Events.Reset _ | Events.Closed) as e, (Initial | Closed _ as s) ->
                                                                 failwithf "Unexpected %A when %A" e s
     let fold = Seq.fold evolve
+
+let zeroBalance : Events.CarriedForward =
+    {   initial = 0
+        recentTransactions = [||] }
+let shouldClose maxEvents deltas =
+    List.length deltas > maxEvents
+let toBalanceCarriedForward idsRetentionWindow (history : Fold.Record list) : Events.CarriedForward =
+    let steps =
+        history
+        |> Seq.choose (function Fold.Record.Step s -> Some s | Fold.Record.Init _ -> None)
+        |> Seq.rev
+        |> Seq.cache
+    {   initial = let final = Seq.head steps in final.balance
+        recentTransactions = seq { for x in steps -> x.id } |> Seq.truncate idsRetentionWindow |> Array.ofSeq }
 
 /// Holds events accumulated from a series of decisions while also evolving the presented `state` to reflect the pended events
 type private Accumulator() =
@@ -76,7 +92,7 @@ let sync (carriedForward : Events.CarriedForward option)
         acc.Ingest state <|
             match state with
             | Fold.Initial ->                failwith "We've just guaranteed not Initial"
-            | Fold.Open history ->           let r, es = decide state in Some r, es
+            | Fold.Open _ ->                 let r, es = decide state in Some r, es
             | Fold.Closed _ ->               None, []
     // 3. Finally (iff we're `Open`, have run a `decide` and `shouldClose`), we generate a Closed event
     let (history, isOpen), _ =
@@ -138,16 +154,6 @@ let create resolve maxAttempts =
         let stream = resolve (streamName locationId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = maxAttempts)
     Service (resolve)
-
-module Cosmos =
-
-    open Equinox.Cosmos
-
-    let accessStrategy = AccessStrategy.Unoptimized
-    let create (context, cache, maxAttempts) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        create resolver.Resolve maxAttempts
 
 module EventStore =
 

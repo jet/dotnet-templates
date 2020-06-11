@@ -21,13 +21,6 @@ module InventoryId =
     let parse (value : string) : InventoryId = %value
     let toString (value : InventoryId) : string = %value
 
-type InventoryEpochId = int<inventoryEpochId>
-and [<Measure>] inventoryEpochId
-module InventoryEpochId =
-    let parse (value : int) : InventoryEpochId = %value
-    let next (value : InventoryEpochId) : InventoryEpochId = % (%value + 1)
-    let toString (value : InventoryEpochId) : string = string %value
-
 type InventoryTransactionId = string<inventoryTransactionId>
 and [<Measure>] inventoryTransactionId
 module InventoryTransactionId =

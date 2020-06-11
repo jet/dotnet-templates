@@ -1,10 +1,11 @@
-module Fc.LocationTests
+module Fc.Domain.Tests.LocationTests
 
-open Fc.Location
 open FsCheck.Xunit
 open FSharp.UMX
 open Swensen.Unquote
 open System
+
+open Fc.Domain.Location
 
 /// Helpers to match `module Cosmos/EventStore` wrapping inside the impl
 module Location =
@@ -27,7 +28,7 @@ module Location =
             let epochs = Epoch.create (Epoch.resolve store) maxAttempts
             create (zeroBalance, toBalanceCarriedForward, shouldClose) (series, epochs)
 
-let run (service : Location.Service) (IdsAtLeastOne locations, deltas : _[], transactionId) = Async.RunSynchronously <| async {
+let run (service : Fc.Domain.Location.Service) (IdsAtLeastOne locations, deltas : _[], transactionId) = Async.RunSynchronously <| async {
     let runId = mkId () // Need to make making state in store unique when replaying or shrinking
     let locations = locations |> Array.map (fun x -> % (sprintf "%O/%O" x runId))
 
@@ -35,37 +36,35 @@ let run (service : Location.Service) (IdsAtLeastOne locations, deltas : _[], tra
 
     (* Apply random deltas *)
 
-    let adjust delta (bal : Epoch.Fold.Balance) =
+    let adjust delta (state : Epoch.Fold.State) =
+        let (Epoch.Fold.Balance bal) = state
         let value = max -bal delta
         if value = 0 then 0, []
         elif value < 0 then value, [Epoch.Events.Removed {| delta = -value; id = transactionId |}]
         else value, [Epoch.Events.Added {| delta = value; id = transactionId |}]
-    let! appliedDeltas = seq { for loc, x in updates -> async { let! _, eff = service.Execute(loc, adjust x) in return loc,eff } } |> Async.Parallel
+    let! appliedDeltas = seq { for loc, x in updates -> async { let! eff = service.Execute(loc, adjust x) in return loc,eff } } |> Async.Parallel
     let expectedBalances = Seq.append (seq { for l in locations -> l, 0}) appliedDeltas |> Seq.groupBy fst |> Seq.map (fun (l, xs) -> l, xs |> Seq.sumBy snd) |> Set.ofSeq
 
     (* Verify loading yields identical state *)
 
-    let! balances = seq { for loc in locations -> async { let! bal, () = service.Execute(loc,(fun _ -> (), [])) in return loc,bal } } |> Async.Parallel
+    let! balances = seq { for loc in locations -> async { let! bal = service.Execute(loc,(fun (Epoch.Fold.Balance bal) -> bal, [])) in return loc,bal } } |> Async.Parallel
     test <@ expectedBalances = Set.ofSeq balances @> }
 
 let [<Property>] ``MemoryStore properties`` maxEvents args =
     let store = Equinox.MemoryStore.VolatileStore()
-    let zeroBalance = 0
+
     let maxEvents = max 1 maxEvents
-    let shouldClose (state : Epoch.Fold.OpenState) = state.count > maxEvents
-    let service = Location.MemoryStore.createService (zeroBalance, shouldClose) store
+    let service = Location.MemoryStore.create (Epoch.zeroBalance, Epoch.toBalanceCarriedForward 5, Epoch.shouldClose maxEvents) store
     run service args
 
-type Cosmos(testOutput) =
+type EventStore(testOutput) =
 
-    let context, cache = Cosmos.connect ()
-
-    let log = testOutput |> TestOutputAdapter |> createLogger
+    let log = TestOutputLogger.create testOutput
     do Serilog.Log.Logger <- log
 
-    let [<Property(MaxTest=10)>] properties maxEvents args =
-        let zeroBalance = 0
+    let context, cache = EventStore.connect ()
+
+    let [<Property(MaxTest=5, MaxFail=1)>] properties maxEvents args =
         let maxEvents = max 1 maxEvents
-        let shouldClose (state : Epoch.Fold.OpenState) = state.count > maxEvents
-        let service = Location.Cosmos.createService (zeroBalance, shouldClose) (context, cache, 50)
+        let service = Fc.Domain.Location.EventStore.create (Epoch.zeroBalance, Epoch.toBalanceCarriedForward 5, Epoch.shouldClose maxEvents) (context, cache, 50)
         run service args
