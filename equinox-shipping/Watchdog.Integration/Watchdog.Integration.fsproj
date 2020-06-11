@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netcoreapp3.1</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+        <IsPackable>false</IsPackable>
+        <GenerateProgramFile>false</GenerateProgramFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="../Domain.Tests/Infrastructure.fs" Link="Infrastructure.fs" />
+        <Compile Include="../Domain.Tests/Fixtures.fs" Link="Fixtures.fs" />
+        <Compile Include="PropulsionInfrastructure.fs" />
+        <Compile Include="WatchdogIntegrationTests.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.2.0" />
+
+        <PackageReference Include="Equinox.MemoryStore" Version="2.1.0" />
+        <PackageReference Include="Unquote" Version="5.0.0" />
+        <PackageReference Include="FsCheck.Xunit" Version="2.14.2" />
+        <PackageReference Include="xunit" Version="2.4.0" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Watchdog\Watchdog.fsproj" />
+    </ItemGroup>
+
+</Project>

@@ -7,7 +7,7 @@ let streamName (containerId : ContainerId) = FsCodec.StreamName.create Category 
 module Events =
 
     type Event =
-        | Finalized of {| shipmentIds : ShipmentId[] |}
+        | Finalized   of {| shipmentIds : ShipmentId[] |}
         | Snapshotted of {| shipmentIds : ShipmentId[] |}
         interface TypeShape.UnionContract.IUnionContract
 
@@ -28,7 +28,7 @@ module Fold =
     let toSnapshot (state : State) = Events.Snapshotted {| shipmentIds = state.shipmentIds |}
 
 let interpretFinalize shipmentIds (state : Fold.State): Events.Event list =
-    [ if (not << Array.isEmpty) state.shipmentIds then yield Events.Finalized {| shipmentIds = shipmentIds |} ]
+    [ if Array.isEmpty state.shipmentIds then yield Events.Finalized {| shipmentIds = shipmentIds |} ]
 
 type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fold.State>) =
 
@@ -36,7 +36,7 @@ type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fol
         let stream = resolve containerId
         stream.Transact(interpretFinalize shipmentIds)
 
-let private create resolve =
+let create resolve =
     let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts=3)
     Service(resolve)
 

@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netcoreapp3.1</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+        <IsPackable>false</IsPackable>
+        <GenerateProgramFile>false</GenerateProgramFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="Infrastructure.fs" />
+        <Compile Include="Fixtures.fs" />
+        <Compile Include="ContainerTests.fs" />
+        <Compile Include="ShipmentTests.fs" />
+        <Compile Include="FinalizationTransactionTests.fs" />
+        <Compile Include="FinalizationProcessManagerTests.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.2.0" />
+
+        <PackageReference Include="Equinox.MemoryStore" Version="2.1.0" />
+        <PackageReference Include="Unquote" Version="5.0.0" />
+        <PackageReference Include="FsCheck.Xunit" Version="2.14.2" />
+        <PackageReference Include="xunit" Version="2.4.0" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Domain\Domain.fsproj" />
+    </ItemGroup>
+
+</Project>

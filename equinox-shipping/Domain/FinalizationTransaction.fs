@@ -52,8 +52,9 @@ module Fold =
     // The implementation trusts (does not spend time double checking) that events have passed an isValidTransition check
     let evolve (state : State) (event : Events.Event) : State =
         match state, event with
-        | _, Events.FinalizationRequested event                -> State.Assigning {| container = event.container; shipments = event.shipments |}
-        | State.Assigning state,  Events.RevertCommenced event -> State.Reverting {| shipments = event.shipments |}
+        | _, Events.FinalizationRequested event                -> State.Reserving {| container = event.container; shipments = event.shipments |}
+        | State.Reserving state,  Events.ReservationCompleted  -> State.Assigning {| container = state.container; shipments = state.shipments |}
+        | State.Reserving _state, Events.RevertCommenced event -> State.Reverting {| shipments = event.shipments |}
         | State.Reverting _state, Events.Completed             -> State.Completed {| success = false |}
         | State.Assigning state,  Events.AssignmentCompleted   -> State.Assigned  {| container = state.container; shipments = state.shipments |}
         | State.Assigned _,       Events.Completed             -> State.Completed {| success = true |}
@@ -99,7 +100,7 @@ type Service internal (resolve : TransactionId -> Equinox.Stream<Events.Event, F
         let stream = resolve transactionId
         stream.Transact(decide update)
 
-let private create resolve =
+let create resolve =
     let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts=3)
     Service(resolve)
 

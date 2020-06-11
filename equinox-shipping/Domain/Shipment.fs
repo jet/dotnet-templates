@@ -31,14 +31,12 @@ module Fold =
     let toSnapshot (state : State) = Events.Snapshotted {| reservation = state.reservation; association = state.association |}
 
 let decideReserve transactionId : Fold.State -> bool * Events.Event list = function
-    | { reservation = r; association = a } ->
-        // validity is dependent on whether its a) open or b) an idempotent retry by the same transaction
-        let isValid = Option.forall (fun x -> x = transactionId) r
-        // if it's already Reserved (and/or assigned), there's no work to do
-        isValid, if isValid && Option.isNone a then [ Events.Reserved {| transaction = transactionId |} ] else []
+    | { reservation = Some r } when r = transactionId -> true, []
+    | { reservation = None } -> true, [ Events.Reserved {| transaction = transactionId |} ]
+    | _ -> false, []
 
 let interpretRevoke transactionId : Fold.State -> Events.Event list = function
-    | { reservation = Some current; association = None } when current = transactionId ->
+    | { reservation = Some r; association = None } when r = transactionId ->
         [ Events.Revoked ]
     | _ -> [] // Ignore if a) already revoked/never reserved b) not reserved for this transactionId
 
@@ -61,7 +59,7 @@ type Service internal (resolve : ShipmentId -> Equinox.Stream<Events.Event, Fold
         let stream = resolve shipmentId
         stream.Transact(interpretAssign transactionId containerId)
 
-let private create resolve =
+let create resolve =
     let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts=3)
     Service(resolve)
 

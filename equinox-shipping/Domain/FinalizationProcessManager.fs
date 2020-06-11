@@ -37,7 +37,7 @@ type Service
 
             | Action.AssignShipments (shipmentIds, containerId) ->
                 let! _ = Async.Parallel(seq { for sId in shipmentIds -> shipments.Assign(sId, containerId, transactionId) }, maxDop)
-                return! loop Events.Completed
+                return! loop Events.AssignmentCompleted
 
             | Action.FinalizeContainer (containerId, shipmentIds) ->
                 do! containers.Finalize(containerId, shipmentIds)
