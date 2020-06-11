@@ -2,7 +2,6 @@ namespace Fc.Domain.Inventory
 
 open Fc.Domain
 open Equinox.Core // we use Equinox's AsyncCacheCell helper below
-open FSharp.UMX
 
 type internal IdsCache<'Id>() =
     let all = System.Collections.Concurrent.ConcurrentDictionary<'Id, unit>() // Bounded only by relatively low number of physical pick tickets IRL
@@ -12,9 +11,9 @@ type internal IdsCache<'Id>() =
 
 /// Ingests items into a log of items, making a best effort at deduplicating as it writes
 /// Prior to first add, reads recent ids, in order to minimize the number of duplicated Ids we ingest
-type Service2 internal (inventoryId, epochs : Epoch.Service) =
+type Service internal (inventoryId, epochs : Epoch.Service) =
 
-    let log = Serilog.Log.ForContext<Service2>()
+    static let log = Serilog.Log.ForContext<Service>()
 
     // We want max one request in flight to establish the pre-existing Events from which the TransactionIds cache will be seeded
     let previousIds : AsyncCacheCell<Set<InventoryTransactionId>> =
@@ -56,7 +55,7 @@ type Service2 internal (inventoryId, epochs : Epoch.Service) =
 module internal Helpers =
 
     let create inventoryId epochs =
-        Service2(inventoryId, epochs)
+        Service(inventoryId, epochs)
 
 module EventStore =
 
@@ -64,49 +63,47 @@ module EventStore =
         let epochs = Epoch.EventStore.create (context, cache)
         Helpers.create inventoryId epochs
 
-module Processor =
+type ProcessManager(transactions : Transaction.Service, locations : Location.Service, inventory : Service) =
 
-    type Service(transactions : Transaction.Service, locations : Location.Service, inventory : Service2) =
+    let execute transactionId =
+        let f = Location.Epoch.decide transactionId
+        let rec aux update = async {
+            let! action = transactions.Apply(transactionId, update)
+            let aux event = aux (Some event)
+            match action with
+            | Transaction.Adjust (loc, bal) ->
+                match! locations.Execute(loc, f (Location.Epoch.Reset bal)) with
+                | Location.Epoch.Accepted _ -> return! aux Transaction.Events.Adjusted
+                | Location.Epoch.Denied -> return failwith "Cannot Deny Reset"
+                | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
+            | Transaction.Remove (loc, delta) ->
+                match! locations.Execute(loc, f (Location.Epoch.Remove delta)) with
+                | Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Removed { balance = bal })
+                | Location.Epoch.Denied -> return! aux Transaction.Events.Failed
+                | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
+            | Transaction.Add    (loc, delta) ->
+                match! locations.Execute(loc, f (Location.Epoch.Add delta)) with
+                | Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Added   { balance = bal })
+                | Location.Epoch.Denied -> return failwith "Cannot Deny Add"
+                | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
+            | Transaction.Log (Transaction.Adjusted _) ->
+                let! _count = inventory.Ingest([Inventory.Epoch.Events.Adjusted    { transactionId = transactionId }])
+                return! aux Transaction.Events.Logged
+            | Transaction.Log (Transaction.Transferred _) ->
+                let! _count = inventory.Ingest([Inventory.Epoch.Events.Transferred { transactionId = transactionId }])
+                return! aux Transaction.Events.Logged
+            | Transaction.Finish success ->
+                return success
+        }
+        aux
+    let run transactionId req = execute transactionId (Some req)
 
-        let execute transactionId =
-            let f = Location.Epoch.decide transactionId
-            let rec aux update = async {
-                let! action = transactions.Apply(transactionId, update)
-                let aux event = aux (Some event)
-                match action with
-                | Transaction.Adjust (loc, bal) ->
-                    match! locations.Execute(loc, f (Location.Epoch.Reset bal)) with
-                    | Location.Epoch.Accepted _ -> return! aux Transaction.Events.Adjusted
-                    | Location.Epoch.Denied -> return failwith "Cannot Deny Reset"
-                    | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
-                | Transaction.Remove (loc, delta) ->
-                    match! locations.Execute(loc, f (Location.Epoch.Remove delta)) with
-                    | Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Removed { balance = bal })
-                    | Location.Epoch.Denied -> return! aux Transaction.Events.Failed
-                    | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
-                | Transaction.Add    (loc, delta) ->
-                    match! locations.Execute(loc, f (Location.Epoch.Add delta)) with
-                    | Location.Epoch.Accepted bal -> return! aux (Transaction.Events.Added   { balance = bal })
-                    | Location.Epoch.Denied -> return failwith "Cannot Deny Add"
-                    | Location.Epoch.DupFromPreviousEpoch -> return failwith "TODO walk back to previous epoch"
-                | Transaction.Log (Transaction.Adjusted _) ->
-                    let! _count = inventory.Ingest([Inventory.Epoch.Events.Adjusted    { transactionId = transactionId }])
-                    return! aux Transaction.Events.Logged
-                | Transaction.Log (Transaction.Transferred _) ->
-                    let! _count = inventory.Ingest([Inventory.Epoch.Events.Transferred { transactionId = transactionId }])
-                    return! aux Transaction.Events.Logged
-                | Transaction.Finish success ->
-                    return success
-            }
-            aux
-        let run transactionId req = execute transactionId (Some req)
+    member __.Adjust(transactionId, location, quantity) =
+        run transactionId (Inventory.Transaction.Events.AdjustmentRequested { location = location; quantity = quantity })
 
-        member __.Adjust(transactionId, location, quantity) =
-            run transactionId (Inventory.Transaction.Events.AdjustmentRequested { location = location; quantity = quantity })
+    member __.TryTransfer(transactionId, source, destination, quantity) =
+        run transactionId (Inventory.Transaction.Events.TransferRequested { source = source; destination = destination; quantity = quantity })
 
-        member __.TryTransfer(transactionId, source, destination, quantity) =
-            run transactionId (Inventory.Transaction.Events.TransferRequested { source = source; destination = destination; quantity = quantity })
-
-        /// Used by Watchdog to force conclusion of a transaction whose progress has stalled
-        member __.Drive(transactionId) = async {
-            let! _ = execute transactionId None in () }
+    /// Used by Watchdog to force conclusion of a transaction whose progress has stalled
+    member __.Drive(transactionId) = async {
+        let! _ = execute transactionId None in () }

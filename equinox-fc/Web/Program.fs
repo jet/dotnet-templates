@@ -173,15 +173,14 @@ let build (args : Args.Arguments) =
         let locations = Location.EventStore.create (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts)
         let inventory = Inventory.EventStore.create inventoryId (context, cache)
         transactions, locations, inventory
-    let processor = Inventory.Processor.Service(transactions, locations, inventory)
-    processor
+    Inventory.ProcessManager(transactions, locations, inventory)
 
 let run argv args =
-    let processor = build args
+    let processManager = build args
     WebHost
         .CreateDefaultBuilder(argv)
         .UseSerilog()
-        .ConfigureServices(fun svc -> svc.AddSingleton(processor) |> ignore)
+        .ConfigureServices(fun svc -> svc.AddSingleton(processManager) |> ignore)
         .UseStartup<Startup>()
         .Build()
         .Run()
