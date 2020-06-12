@@ -60,6 +60,20 @@ let [<Property>] ``MemoryStore properties`` epochLen args =
     let service = Location.MemoryStore.create (zero, cf, sc) store
     run service args
 
+type Cosmos(testOutput) =
+
+    let log = TestOutputLogger.create testOutput
+    do Serilog.Log.Logger <- log
+
+    let context, cache = Cosmos.connect ()
+
+    let [<Property(MaxTest=5, MaxFail=1)>] properties epochLen args =
+        let epochLen, idsWindow = max 1 epochLen, 5
+        let zero, cf, sc = Epoch.zeroBalance, Epoch.toBalanceCarriedForward idsWindow, Epoch.shouldClose epochLen
+
+        let service = Location.Cosmos.create (zero, cf, sc) (context, cache, 50)
+        run service args
+
 type EventStore(testOutput) =
 
     let log = TestOutputLogger.create testOutput

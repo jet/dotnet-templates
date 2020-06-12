@@ -37,24 +37,28 @@ module Args =
         | Some x -> x
     let isEnvVarTrue varName = EnvVar.tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
     open Argu
+    open Equinox.Cosmos
     open Equinox.EventStore
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
 
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsParameters>
+        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
             member a.Usage =
                 match a with
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | Es _ ->                   "specify EventStore input parameters."
+                | Cosmos _ ->               "specify CosmosDB input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.Verbose =                 a.Contains Parameters.Verbose
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
 
-        member val Source : EsArguments =
+        member val Source : Choice<EsArguments, CosmosArguments> =
             match a.TryGetSubCommand() with
-            | Some (Es es) -> (EsArguments es)
+            | Some (Es es) -> Choice1Of2 (EsArguments es)
+            | Some (Cosmos cosmos) -> Choice2Of2 (CosmosArguments cosmos)
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
     and [<NoEquality; NoComparison>] EsParameters =
         | [<AltCommandLine "-V">]           Verbose
@@ -102,6 +106,40 @@ module Args =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
                 .Establish(appName, discovery, connectionStrategy) |> Async.RunSynchronously
+    and [<NoEquality; NoComparison>] CosmosParameters =
+        | [<AltCommandLine "-s">]           Connection of string
+        | [<AltCommandLine "-m">]           ConnectionMode of ConnectionMode
+        | [<AltCommandLine "-d">]           Database of string
+        | [<AltCommandLine "-c">]           Container of string
+        | [<AltCommandLine "-o">]           Timeout of float
+        | [<AltCommandLine "-r">]           Retries of int
+        | [<AltCommandLine "-rt">]          RetriesWaitTime of float
+        interface IArgParserTemplate with
+            member a.Usage =
+                match a with
+                | ConnectionMode _ ->       "override the connection mode. Default: Direct."
+                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
+                | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
+                | Container _ ->            "specify a container name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
+                | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
+                | Retries _ ->              "specify operation retries. Default: 1."
+                | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
+    and CosmosArguments(a : ParseResults<CosmosParameters>) =
+        member __.Mode =                    a.GetResult(CosmosParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member __.Connection =              a.TryGetResult CosmosParameters.Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
+        member __.Database =                a.TryGetResult CosmosParameters.Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
+        member __.Container =               a.TryGetResult CosmosParameters.Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
+        member __.Timeout =                 a.GetResult(CosmosParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        member __.Retries =                 a.GetResult(CosmosParameters.Retries, 1)
+        member __.MaxRetryWaitTime =        a.GetResult(CosmosParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        member x.BuildConnectionDetails() =
+            let (Discovery.UriAndKey (endpointUri, _) as discovery) = Discovery.FromConnectionString x.Connection
+            Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
+                x.Mode, endpointUri, x.Database, x.Container)
+            Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
+            let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
+            discovery, x.Database, x.Container, connector
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
@@ -149,12 +187,18 @@ type Startup() =
 let build (args : Args.Arguments) =
     let cache = Equinox.Cache(AppName, sizeMb=10)
     let create =
-        let es = args.Source
-        let connection = es.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
-        let context = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
-        Fc.Domain.StockProcessManager.EventStore.create (context, cache)
+        match args.Source with
+        | Choice1Of2 es ->
+            let connection = es.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
+            let context = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
+            Fc.Domain.StockProcessManager.EventStore.create (context, cache)
+        | Choice2Of2 cosmos ->
+            let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
+            let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
+            let context = Equinox.Cosmos.Context(connection, database, container)
+            Fc.Domain.StockProcessManager.Cosmos.create (context, cache)
     let inventoryId = InventoryId.parse "FC000"
-    create inventoryId (1000, 5, 3)
+    create inventoryId (1000, 10) (1000, 5, 3)
 
 let run argv args =
     let processManager = build args
