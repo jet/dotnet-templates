@@ -40,6 +40,13 @@ module Helpers =
     let create (zeroBalance, toBalanceCarriedForward, shouldClose) (series, epochs) =
         Service(zeroBalance, toBalanceCarriedForward, shouldClose, series, epochs)
 
+module Cosmos =
+
+    let create (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts) =
+        let series = Series.Cosmos.create (context, cache, maxAttempts)
+        let epochs = Epoch.Cosmos.create (context, cache, maxAttempts)
+        create (zeroBalance, toBalanceCarriedForward, shouldClose) (series, epochs)
+
 module EventStore =
 
     let create (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts) =

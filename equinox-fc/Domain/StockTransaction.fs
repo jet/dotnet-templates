@@ -144,6 +144,17 @@ let create resolve =
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=2)
     Service(resolve)
 
+module Cosmos =
+
+    open Equinox.Cosmos
+
+    // in the happy path case, the event stream will typically be short, and the state cached, so snapshotting is less critical
+    let accessStrategy = AccessStrategy.Unoptimized
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create <| fun (id, opt) -> resolver.Resolve(id, opt)
+
 module EventStore =
 
     open Equinox.EventStore

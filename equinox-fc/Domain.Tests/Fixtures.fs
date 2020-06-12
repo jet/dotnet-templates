@@ -8,6 +8,23 @@ module EnvVar =
 
     let tryGet k = Environment.GetEnvironmentVariable k |> Option.ofObj
 
+module Cosmos =
+
+    open Equinox.Cosmos
+    let connect () =
+        match EnvVar.tryGet "EQUINOX_COSMOS_CONNECTION", EnvVar.tryGet "EQUINOX_COSMOS_DATABASE", EnvVar.tryGet "EQUINOX_COSMOS_CONTAINER" with
+        | Some s, Some d, Some c ->
+            let appName = "Domain.Tests"
+            let discovery = Discovery.FromConnectionString s
+            let connector = Connector(TimeSpan.FromSeconds 5., 5, TimeSpan.FromSeconds 5., Serilog.Log.Logger)
+            let connection = connector.Connect(appName, discovery) |> Async.RunSynchronously
+            let context = Context(connection, d, c)
+            let cache = Equinox.Cache (appName, 10)
+            context, cache
+        | s, d, c ->
+            failwithf "Connection, Database and Container EQUINOX_COSMOS_* Environment variables are required (%b,%b,%b)"
+                (Option.isSome s) (Option.isSome d) (Option.isSome c)
+
 module EventStore =
 
     open Equinox.EventStore

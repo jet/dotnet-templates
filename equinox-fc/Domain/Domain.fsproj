@@ -11,14 +11,15 @@
         <Compile Include="LocationSeries.fs" />
         <Compile Include="LocationEpoch.fs" />
         <Compile Include="Location.fs" />
+        <Compile Include="InventorySeries.fs" />
         <Compile Include="InventoryEpoch.fs" />
         <Compile Include="Inventory.fs" />
         <Compile Include="StockTransaction.fs" />
         <Compile Include="StockProcessManager.fs" />
     </ItemGroup>
     <ItemGroup>
+        <PackageReference Include="Equinox.Cosmos" Version="2.1.0" />
         <PackageReference Include="Equinox.EventStore" Version="2.1.0" />
-        <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.1.0" />
     </ItemGroup>
 
 </Project>

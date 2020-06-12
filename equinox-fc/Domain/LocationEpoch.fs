@@ -155,6 +155,16 @@ let create resolve maxAttempts =
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=maxAttempts)
     Service (resolve)
 
+module Cosmos =
+
+    open Equinox.Cosmos
+
+    let accessStrategy = AccessStrategy.Unoptimized
+    let create (context, cache, maxAttempts) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create resolver.Resolve maxAttempts
+
 module EventStore =
 
     open Equinox.EventStore
