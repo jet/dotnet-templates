@@ -146,16 +146,15 @@ type Startup() =
             .UseEndpoints(fun endpoints -> endpoints.MapControllers() |> ignore)
             |> ignore
 
-
 let build (args : Args.Arguments) =
     let cache = Equinox.Cache(AppName, sizeMb=10)
-
+    let create =
+        let es = args.Source
+        let connection = es.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
+        let context = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
+        Fc.Domain.StockProcessManager.EventStore.create (context, cache)
     let inventoryId = InventoryId.parse "FC000"
-
-    let es = args.Source
-    let connection = es.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
-    let context = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
-    Fc.Domain.StockProcessManager.EventStore.create inventoryId (1000, 5, 3) (context, cache)
+    create inventoryId (1000, 5, 3)
 
 let run argv args =
     let processManager = build args

@@ -5,6 +5,7 @@ open FSharp.UMX
 open Swensen.Unquote
 open System
 
+open Fc.Domain
 open Fc.Domain.Location
 
 /// Helpers to match `module Cosmos/EventStore` wrapping inside the impl
@@ -28,7 +29,7 @@ module Location =
             let epochs = Epoch.create (Epoch.resolve store) maxAttempts
             create (zeroBalance, toBalanceCarriedForward, shouldClose) (series, epochs)
 
-let run (service : Fc.Domain.Location.Service) (IdsAtLeastOne locations, deltas : _[], transactionId) = Async.RunSynchronously <| async {
+let run (service : Service) (IdsAtLeastOne locations, deltas : _[], transactionId) = Async.RunSynchronously <| async {
     let runId = mkId () // Need to make making state in store unique when replaying or shrinking
     let locations = locations |> Array.map (fun x -> % (sprintf "%O/%O" x runId))
 
@@ -70,5 +71,5 @@ type EventStore(testOutput) =
         let epochLen, idsWindow = max 1 epochLen, 5
         let zero, cf, sc = Epoch.zeroBalance, Epoch.toBalanceCarriedForward idsWindow, Epoch.shouldClose epochLen
 
-        let service = Fc.Domain.Location.EventStore.create (zero, cf, sc) (context, cache, 50)
+        let service = Location.EventStore.create (zero, cf, sc) (context, cache, 50)
         run service args

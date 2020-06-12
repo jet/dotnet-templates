@@ -47,7 +47,7 @@ type Service(transactions : StockTransaction.Service, locations : Location.Servi
 
 module EventStore =
 
-    let create inventoryId (epochLen, idsWindow, maxAttempts) (context, cache) =
+    let create (context, cache) inventoryId (epochLen, idsWindow, maxAttempts) =
         let transactions, locations, inventory =
             let transactions = StockTransaction.EventStore.create (context, cache)
             let zero, cf, sc = Location.Epoch.zeroBalance, Location.Epoch.toBalanceCarriedForward idsWindow, Location.Epoch.shouldClose epochLen
