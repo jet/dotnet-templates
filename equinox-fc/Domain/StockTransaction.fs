@@ -7,7 +7,7 @@
 ///    In the normal case, such an actor will bring the flow to a terminal state (Completed or Failed)
 /// 2) A watchdog-projector, which reacts to observed events in this Category by stepping in to complete in-flight requests that have stalled
 ///    This represents the case where a 'happy path' actor died, or experienced another impediment on the path.
-module Fc.Domain.Inventory.Transaction
+module Fc.Domain.StockTransaction
 
 let [<Literal>] Category = "InventoryTransaction"
 let streamName transactionId = FsCodec.StreamName.create Category (InventoryTransactionId.toString transactionId)
@@ -141,7 +141,7 @@ let create resolve =
     let opt = Equinox.AllowStale
     let resolve inventoryTransactionId =
         let stream = resolve (streamName inventoryTransactionId, opt)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=2)
     Service(resolve)
 
 module EventStore =

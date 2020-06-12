@@ -101,6 +101,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxFc", "eqxFc", "{4946576F
 ProjectSection(SolutionItems) = preProject
 	equinox-fc\.template.config\template.json = equinox-fc\.template.config\template.json
 	equinox-fc\README.md = equinox-fc\README.md
+	equinox-fc\Fc.sln = equinox-fc\Fc.sln
 EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-fc\Domain\Domain.fsproj", "{B3CFC965-6AB9-47E8-AA47-548A8D8A2E2C}"

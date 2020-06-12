@@ -152,7 +152,7 @@ type Service internal (resolve : LocationId * LocationEpochId -> Equinox.Stream<
 let create resolve maxAttempts =
     let resolve locationId =
         let stream = resolve (streamName locationId)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = maxAttempts)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=maxAttempts)
     Service (resolve)
 
 module EventStore =

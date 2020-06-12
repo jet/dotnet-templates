@@ -12,8 +12,9 @@
         <Compile Include="LocationEpoch.fs" />
         <Compile Include="Location.fs" />
         <Compile Include="InventoryEpoch.fs" />
-        <Compile Include="InventoryTransaction.fs" />
         <Compile Include="Inventory.fs" />
+        <Compile Include="StockTransaction.fs" />
+        <Compile Include="StockProcessManager.fs" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Equinox.EventStore" Version="2.1.0" />

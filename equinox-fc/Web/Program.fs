@@ -122,7 +122,7 @@ module Logging =
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
             |> fun c -> c.CreateLogger()
 
-let [<Literal>] AppName = "Host"
+let [<Literal>] AppName = "Fc.Web"
 
 /// Defines the Hosting configuration, including registration of the store and backend services
 type Startup() =
@@ -146,34 +146,16 @@ type Startup() =
             .UseEndpoints(fun endpoints -> endpoints.MapControllers() |> ignore)
             |> ignore
 
-open Fc.Domain
 
 let build (args : Args.Arguments) =
-    let cache = Equinox.Cache(AppName, sizeMb = 10)
+    let cache = Equinox.Cache(AppName, sizeMb=10)
 
     let inventoryId = InventoryId.parse "FC000"
-    let maxTransactionsPerEpoch = 100
-    let lookBackLimit = 10
 
-    let zeroBalance : Location.Epoch.Events.CarriedForward = { initial = 0; recentTransactions = [||] }
-    let chooseTransactionIds = function
-        | Location.Epoch.Fold.Init { recentTransactions = ids } -> Seq.ofArray ids
-        | Location.Epoch.Fold.Step { id = id } -> Seq.singleton id
-    let toBalanceCarriedForward (Location.Epoch.Fold.Current cur as records) : Location.Epoch.Events.CarriedForward =
-        { initial = cur; recentTransactions = records |> Seq.collect chooseTransactionIds |> Seq.truncate 5 |> Seq.toArray }
-    let shouldClose x = false
-    let maxAttempts = 3
-
-    let transactions, locations, inventory =
-        let es = args.Source
-        let connection = es.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
-        let context = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize = 500))
-
-        let transactions = Inventory.Transaction.EventStore.create (context, cache)
-        let locations = Location.EventStore.create (zeroBalance, toBalanceCarriedForward, shouldClose) (context, cache, maxAttempts)
-        let inventory = Inventory.EventStore.create inventoryId (context, cache)
-        transactions, locations, inventory
-    Inventory.ProcessManager(transactions, locations, inventory)
+    let es = args.Source
+    let connection = es.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
+    let context = Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
+    Fc.Domain.StockProcessManager.EventStore.create inventoryId (1000, 5, 3) (context, cache)
 
 let run argv args =
     let processManager = build args

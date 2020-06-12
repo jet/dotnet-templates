@@ -60,7 +60,7 @@ type Service internal (resolve : InventoryId -> Equinox.Stream<Events.Event, Fol
 let create resolve =
     let resolve ids =
         let stream = resolve (streamName ids)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = 2)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=2)
     Service(resolve)
 
 module EventStore =

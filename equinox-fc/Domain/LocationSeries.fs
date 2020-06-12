@@ -41,7 +41,7 @@ let create resolve maxAttempts =
     let opt = Equinox.ResolveOption.AllowStale
     let resolve locationId =
         let stream = resolve (streamName locationId, opt)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts = maxAttempts)
+        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=maxAttempts)
     Service(resolve)
 
 module EventStore =
