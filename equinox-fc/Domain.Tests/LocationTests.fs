@@ -50,11 +50,13 @@ let run (service : Fc.Domain.Location.Service) (IdsAtLeastOne locations, deltas 
     let! balances = seq { for loc in locations -> async { let! bal = service.Execute(loc,(fun (Epoch.Fold.Balance bal) -> bal, [])) in return loc,bal } } |> Async.Parallel
     test <@ expectedBalances = Set.ofSeq balances @> }
 
-let [<Property>] ``MemoryStore properties`` maxEvents args =
+let [<Property>] ``MemoryStore properties`` epochLen args =
     let store = Equinox.MemoryStore.VolatileStore()
 
-    let maxEvents = max 1 maxEvents
-    let service = Location.MemoryStore.create (Epoch.zeroBalance, Epoch.toBalanceCarriedForward 5, Epoch.shouldClose maxEvents) store
+    let epochLen, idsWindow = max 1 epochLen, 5
+    let zero, cf, sc = Epoch.zeroBalance, Epoch.toBalanceCarriedForward idsWindow, Epoch.shouldClose epochLen
+
+    let service = Location.MemoryStore.create (zero, cf, sc) store
     run service args
 
 type EventStore(testOutput) =
@@ -64,7 +66,9 @@ type EventStore(testOutput) =
 
     let context, cache = EventStore.connect ()
 
-    let [<Property(MaxTest=5, MaxFail=1)>] properties maxEvents args =
-        let maxEvents = max 1 maxEvents
-        let service = Fc.Domain.Location.EventStore.create (Epoch.zeroBalance, Epoch.toBalanceCarriedForward 5, Epoch.shouldClose maxEvents) (context, cache, 50)
+    let [<Property(MaxTest=5, MaxFail=1)>] properties epochLen args =
+        let epochLen, idsWindow = max 1 epochLen, 5
+        let zero, cf, sc = Epoch.zeroBalance, Epoch.toBalanceCarriedForward idsWindow, Epoch.shouldClose epochLen
+
+        let service = Fc.Domain.Location.EventStore.create (zero, cf, sc) (context, cache, 50)
         run service args

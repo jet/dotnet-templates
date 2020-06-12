@@ -50,7 +50,7 @@ module EventStore =
     let create inventoryId (epochLen, idsWindow, maxAttempts) (context, cache) =
         let transactions, locations, inventory =
             let transactions = StockTransaction.EventStore.create (context, cache)
-            let zero, cf, sc = (Location.Epoch.zeroBalance, Location.Epoch.toBalanceCarriedForward idsWindow, Location.Epoch.shouldClose epochLen)
+            let zero, cf, sc = Location.Epoch.zeroBalance, Location.Epoch.toBalanceCarriedForward idsWindow, Location.Epoch.shouldClose epochLen
             let locations = Location.EventStore.create (zero, cf, sc) (context, cache, maxAttempts)
             let inventory = Inventory.EventStore.create inventoryId (context, cache)
             transactions, locations, inventory
