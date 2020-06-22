@@ -25,3 +25,18 @@ module ClientId =
     let toString (value : ClientId) : string = Guid.toStringN %value
     let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
+
+open Serilog
+
+// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
+type Logging() =
+
+    static member Initialize(?minimumLevel) =
+        Log.Logger <-
+            LoggerConfiguration()
+                .Destructure.FSharpTypes()
+                .Enrich.FromLogContext()
+            |> fun c -> match minimumLevel with Some m -> c.MinimumLevel.Is m | None -> c
+            |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
+                        c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
+            |> fun c -> c.CreateLogger()

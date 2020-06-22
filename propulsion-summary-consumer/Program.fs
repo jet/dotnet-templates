@@ -111,7 +111,8 @@ module Args =
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
 
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
-        member __.Verbose =                 a.Contains Verbose
+
+        member __.MinimumLevel =            if a.Contains Verbose then Some Events.LogEventLevel.Debug else None
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 5.
 
@@ -120,21 +121,6 @@ module Args =
         let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
-
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
-module Logging =
-
-    let initialize verbose =
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
-                        if not verbose then c.WriteTo.Console(theme=theme)
-                        else c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
-            |> fun c -> c.CreateLogger()
 
 let [<Literal>] AppName = "ConsumerTemplate"
 
@@ -161,7 +147,7 @@ let run args =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.initialize args.Verbose
+        try Logging.Initialize(?minimumLevel=args.MinimumLevel)
             try Configuration.initialize ()
                 if run args then 0 else 3
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

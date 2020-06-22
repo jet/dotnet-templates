@@ -1,35 +1,10 @@
-﻿namespace ReactorTemplate
+[<AutoOpen>]
+module ProjectorTemplate.Infrastructure
 
-open System.Runtime.CompilerServices
-open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
 open Serilog
-open System
+open System.Runtime.CompilerServices
 
-module EventCodec =
-
-    /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x : FsCodec.ITimelineEvent<byte[]>) =
-        match codec.TryDecode x with
-        | None ->
-            if Serilog.Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                Serilog.Log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
-                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
-            None
-        | x -> x
-
-module Guid =
-
-    let inline toStringN (x : Guid) = x.ToString "N"
-
-/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
-type ClientId = Guid<clientId>
-and [<Measure>] clientId
-module ClientId =
-    let toString (value : ClientId) : string = Guid.toStringN %value
-    let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
-    let (|Parse|) = parse
-
-#if (!kafkaEventSpans)
+#if cosmos
 [<Extension>]
 type LoggerConfigurationExtensions() =
 
@@ -50,10 +25,10 @@ type LoggerConfigurationExtensions() =
         |> fun c -> if verbose then c.ExcludeChangeFeedProcessorV2InternalDiagnostics() else c
 
 #endif
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful Args.parse
+// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
 type Logging() =
 
-#if (!kafkaEventSpans)
+#if cosmos
     static member Initialize(?minimumLevel, ?changeFeedProcessorVerbose) =
 #else
     static member Initialize(?minimumLevel) =
@@ -63,7 +38,7 @@ type Logging() =
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
             |> fun c -> match minimumLevel with Some m -> c.MinimumLevel.Is m | None -> c
-#if (!kafkaEventSpans)
+#if cosmos
             |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
 #endif
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"

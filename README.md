@@ -249,7 +249,7 @@ _Responsible for: mapping Environment Variables and the Command Line `argv` to a
 
 NOTE: there's a [medium term plan to submit a PR to Argu](https://github.com/fsprojects/Argu/issues/143) extending it to be able to fall back to environment variables where a value is not supplied, by means of declarative attributes on the Argument specification in the DU, _including having the `--help` message automatically include a reference to the name of the environment variable that one can supply the value through_
 
-### `module Logging`
+### `type Logging`
 
 _Responsible for applying logging config and setting up loggers for the application_
 
@@ -258,10 +258,10 @@ _Responsible for applying logging config and setting up loggers for the applicat
 #### example
 
 ```
-module Logging =
+type Logging() =
 
-    let initialize verbose =
-	Log.Logger <- LoggerConfiguration(….)
+    static member Initialize(?minimumLevel) =
+        Log.Logger <- LoggerConfiguration(….)
 ```
 
 ### `start` function
