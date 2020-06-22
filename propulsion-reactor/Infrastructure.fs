@@ -1,10 +1,13 @@
 ﻿namespace ReactorTemplate
 
-open System.Runtime.CompilerServices
+#if (kafka || !blank)
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
+#endif
 open Serilog
 open System
+open System.Runtime.CompilerServices
 
+#if (kafka || !blank)
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
@@ -29,6 +32,7 @@ module ClientId =
     let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
 
+#endif
 #if (!kafkaEventSpans)
 [<Extension>]
 type LoggerConfigurationExtensions() =

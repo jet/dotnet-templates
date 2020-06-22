@@ -1,6 +1,7 @@
 ﻿namespace ConsumerTemplate
 
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
+open Serilog
 open System
 
 module EventCodec =
@@ -25,8 +26,6 @@ module ClientId =
     let toString (value : ClientId) : string = Guid.toStringN %value
     let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
-
-open Serilog
 
 // Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
 type Logging() =
