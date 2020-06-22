@@ -112,7 +112,7 @@ module Args =
 
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
 
-        member __.MinimumLevel =            if a.Contains Verbose then Some Events.LogEventLevel.Debug else None
+        member __.Verbose =                 a.Contains Verbose
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 5.
 
@@ -151,7 +151,7 @@ let run args =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(?minimumLevel=args.MinimumLevel)
+        try Logging.Initialize(verbose=args.Verbose)
             try Configuration.initialize ()
                 run args
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

@@ -53,7 +53,7 @@ module Args =
                 | Cosmos _ ->               "specify CosmosDB input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.MinimumLevel =            if a.Contains Verbose then Some Events.LogEventLevel.Debug else None
+        member __.Verbose =                 a.Contains Verbose
         member __.CfpVerbose =              a.Contains CfpVerbose
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
@@ -221,7 +221,7 @@ let run args =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(?minimumLevel=args.MinimumLevel, changeFeedProcessorVerbose=args.CfpVerbose)
+        try Logging.Initialize(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose)
             try Configuration.initialize ()
                 if run args then 0 else 3
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

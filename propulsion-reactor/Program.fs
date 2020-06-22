@@ -106,7 +106,7 @@ module Args =
 //#endif
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
-        member __.MinimumLevel =            if a.Contains Parameters.Verbose then Some Events.LogEventLevel.Debug else None
+        member __.Verbose =                 a.Contains Parameters.Verbose
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 5.
 //#if filter
@@ -686,9 +686,9 @@ let run args =
 let main argv =
     try let args = Args.parse argv
 #if (!kafkaEventSpans)
-        try Logging.Initialize(?minimumLevel=args.MinimumLevel, changeFeedProcessorVerbose=args.CfpVerbose)
+        try Logging.Initialize(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose)
 #else
-        try Logging.Initialize(?minimumLevel=args.MinimumLevel)
+        try Logging.Initialize(verbose=args.Verbose)
 #endif
             try Configuration.initialize ()
                 if run args then 0 else 3

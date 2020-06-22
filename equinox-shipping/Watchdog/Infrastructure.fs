@@ -26,12 +26,12 @@ type LoggerConfigurationExtensions() =
 // Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
 type Logging() =
 
-    static member Initialize(?minimumLevel, ?changeFeedProcessorVerbose) =
+    static member Initialize(?verbose, ?changeFeedProcessorVerbose) =
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
-            |> fun c -> match minimumLevel with Some m -> c.MinimumLevel.Is m | None -> c
+            |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
             |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
             |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                         c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)

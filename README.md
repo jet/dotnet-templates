@@ -260,7 +260,7 @@ _Responsible for applying logging config and setting up loggers for the applicat
 ```
 type Logging() =
 
-    static member Initialize(?minimumLevel) =
+    static member Initialize(?verbose) =
         Log.Logger <- LoggerConfiguration(….)
 ```
 
@@ -298,7 +298,7 @@ let run args =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.initialize args.Verbose
+        try Logging.Initialize(verbose=args.Verbose)
             try Configuration.initialize ()
                 if run args then 0 else 3
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

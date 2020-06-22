@@ -69,7 +69,7 @@ module Args =
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
 
         member __.MaxDop =                  a.GetResult(MaxDop, 8)
-        member __.MinimumLevel =            if a.Contains Verbose then Some Events.LogEventLevel.Debug else None
+        member __.Verbose =                 a.Contains Verbose
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv =
@@ -98,7 +98,7 @@ let run args =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(?minimumLevel=args.MinimumLevel)
+        try Logging.Initialize(verbose=args.Verbose)
             try Configuration.initialize ()
                 if run args then 0 else 3
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

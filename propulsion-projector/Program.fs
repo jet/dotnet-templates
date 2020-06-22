@@ -315,7 +315,7 @@ module Args =
                 | SqlMs _ ->                "specify SqlStreamStore input parameters."
 //#endif
     and Arguments(a : ParseResults<Parameters>) =
-        member __.MinimumLevel =            if a.Contains Verbose then Some Events.LogEventLevel.Debug else None
+        member __.Verbose =                 a.Contains Verbose
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 64)
         member __.MaxConcurrentProcessors = a.GetResult(MaxWriters, 1024)
@@ -482,9 +482,9 @@ let run args =
 let main argv =
     try let args = Args.parse argv
 #if cosmos
-        try Logging.Initialize(?minimumLevel=args.MinimumLevel, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
+        try Logging.Initialize(verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
 #else
-        try Logging.Initialize(?minimumLevel=args.MinimumLevel)
+        try Logging.Initialize(verbose=args.Verbose)
 #endif
             try Configuration.initialize ()
                 if run args then 0 else 3

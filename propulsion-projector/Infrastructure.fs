@@ -31,13 +31,13 @@ type Logging() =
 #if cosmos
     static member Initialize(?minimumLevel, ?changeFeedProcessorVerbose) =
 #else
-    static member Initialize(?minimumLevel) =
+    static member Initialize(?verbose) =
 #endif
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
-            |> fun c -> match minimumLevel with Some m -> c.MinimumLevel.Is m | None -> c
+            |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 #if cosmos
             |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
 #endif
