@@ -198,7 +198,7 @@ module Logging =
 
 let [<Literal>] AppName = "Watchdog"
 
-let createSink log (processingTimeout, stats : Handler.Stats) (maxReadAhead, maxConcurrentStreams) driveTransaction
+let startWatchdog log (processingTimeout, stats : Handler.Stats) (maxReadAhead, maxConcurrentStreams) driveTransaction
     : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<_, _>> =
     let handle = Handler.handle processingTimeout driveTransaction
     Propulsion.Streams.StreamsProjector.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval)
@@ -224,7 +224,7 @@ let build (args : Args.Arguments) =
 
     let sink =
         let stats = Handler.Stats(Serilog.Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
-        createSink Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Drive
+        startWatchdog Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Drive
 
     // Wire up the CFP to feed in the items
     let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
