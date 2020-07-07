@@ -45,13 +45,12 @@ type MemoryStoreProjector<'F, 'B> private (inner : Propulsion.ProjectorPipeline<
 
     /// Waits until all <c>Submit</c>ted batches have been fed into the <c>inner</c> Projector
     member __.AwaitCompletion
-        (   /// sleep time while awaiting completion
+        (   /// Log for completion status info
+            log : Serilog.ILogger,
+            /// sleep time while awaiting completion
             ?delay,
             /// interval at which to log progress of Projector loop
-            ?logInterval,
-            /// Destination log. Default: <c>Serilog.Log.Logger</c>
-            ?log) = async {
-        let log = defaultArg log Serilog.Log.Logger
+            ?logInterval) = async {
         if -1L = Volatile.Read(&epoch) then
             log.Warning("No events submitted; completing immediately")
         else
