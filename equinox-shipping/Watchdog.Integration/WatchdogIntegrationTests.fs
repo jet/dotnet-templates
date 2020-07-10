@@ -35,7 +35,7 @@ type WatchdogIntegrationTests(output) =
                 with :? TimeoutException -> timeouts <- timeouts + 1
 
             log.Information("Awaiting batches: {counts} ({timeouts}/{total} timeouts)", counts, timeouts, counts.Count)
-            do! projector.AwaitCompletion(log=log)
+            do! projector.AwaitCompletion(log)
             stats.DumpStats()
         }
 
