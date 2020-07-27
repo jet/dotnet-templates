@@ -2,7 +2,6 @@
 module Shipping.Watchdog.Integration.PropulsionInfrastructure
 
 open System
-open System.Collections.Concurrent
 open System.Threading
 
 type Async with
@@ -20,7 +19,7 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
     let mutable completed = None
     let mutable checkpointed = None
 
-    let queue = new BlockingCollection<_>(1024)
+    let queue = new System.Collections.Concurrent.BlockingCollection<_>(1024)
     member __.Pump = async {
         for epoch, checkpoint, events, markCompleted in queue.GetConsumingEnumerable() do
             let! _ = ingester.Submit(epoch, checkpoint, events, markCompleted) in ()
