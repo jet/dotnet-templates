@@ -9,15 +9,20 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.10.0"></a>
+## [4.10.0] - 2020-07-27
+
+### Added
 
 - `eqxShipping`: Unit and integration tests [#70](https://github.com/jet/dotnet-templates/pull/70) 
 
 ### Changed
 
-- Target `Propulsion` v `2.8.0`, `FsKafka` v `1.5.0`[#78](https://github.com/jet/dotnet-templates/pull/78) 
-
-### Removed
-### Fixed
+- Target `Propulsion` v `2.8.0`, `FsKafka` v `1.5.0` [#78](https://github.com/jet/dotnet-templates/pull/78) 
 
 <a name="4.9.0"></a>
 ## [4.9.0] - 2020-06-10
@@ -456,7 +461,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.9.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.10.0...HEAD
+[4.10.0]: https://github.com/jet/dotnet-templates/compare/4.9.0...4.10.0
 [4.9.0]: https://github.com/jet/dotnet-templates/compare/4.8.0...4.9.0
 [4.8.0]: https://github.com/jet/dotnet-templates/compare/4.7.2...4.8.0
 [4.7.2]: https://github.com/jet/dotnet-templates/compare/4.7.1...4.7.2
