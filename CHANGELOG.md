@@ -14,7 +14,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- Target `Propulsion` v `2.8.0`, `FsKafka` v `1.5.0`
+- Target `Propulsion` v `2.8.0`, `FsKafka` v `1.5.0`[#78](https://github.com/jet/dotnet-templates/pull/78) 
 
 ### Removed
 ### Fixed
