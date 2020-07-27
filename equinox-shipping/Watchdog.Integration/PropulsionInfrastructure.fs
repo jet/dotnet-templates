@@ -14,8 +14,9 @@ type Async with
         return! r }
 
 /// Manages propagation of a stream of events into an inner Projector
-type MemoryStoreProjector<'F, 'B> private (inner : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<Propulsion.Streams.StreamEvent<'F> seq, 'B>>) =
-    let ingester = inner.StartIngester(Serilog.Log.Logger, 0)
+type MemoryStoreProjector<'F, 'B> private (inner : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<Propulsion.Streams.StreamEvent<'F> seq, 'B>>, ?log) =
+    let log = defaultArg log Serilog.Log.Logger
+    let ingester = inner.StartIngester(log, 0)
     let mutable epoch = -1L
     let mutable completed = None
     let mutable checkpointed = None
@@ -35,7 +36,10 @@ type MemoryStoreProjector<'F, 'B> private (inner : Propulsion.ProjectorPipeline<
     /// Accepts an individual batch of events from a stream for submission into the <c>inner</c> projector
     member __.Submit(stream, events : 'E seq) =
         let epoch = Interlocked.Increment &epoch
-        let markCompleted () = completed <- Some epoch
+        log.Debug("Submitted! {stream} {epoch}", stream, epoch)
+        let markCompleted () =
+            log.Debug("Completed! {stream} {epoch}", stream, epoch)
+            Volatile.Write(&completed, Some epoch)
         let checkpoint = async { checkpointed <- Some epoch }
         queue.Add((epoch, checkpoint, seq { for x in events -> { stream = stream; event = x } }, markCompleted))
 
@@ -76,7 +80,8 @@ type MemoryStoreProjector<'F, 'B> private (inner : Propulsion.ProjectorPipeline<
     }
 
 type TestOutputAdapter(testOutput : Xunit.Abstractions.ITestOutputHelper) =
-    let formatter = Serilog.Formatting.Display.MessageTemplateTextFormatter("{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level}] {Message}{NewLine}{Exception}", null)
+    let template = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level}] {Message} {Properties}{NewLine}{Exception}"
+    let formatter = Serilog.Formatting.Display.MessageTemplateTextFormatter(template, null)
     let writeSerilogEvent logEvent =
         use writer = new System.IO.StringWriter()
         formatter.Format(logEvent, writer)
@@ -90,4 +95,8 @@ module TestOutputLogger =
 
     let create output =
         let logger = TestOutputAdapter output
-        LoggerConfiguration().Destructure.FSharpTypes().WriteTo.Sink(logger).CreateLogger()
+        LoggerConfiguration()
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+            .WriteTo.Sink(logger)
+            .CreateLogger()
