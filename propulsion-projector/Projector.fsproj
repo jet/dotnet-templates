@@ -19,17 +19,17 @@
     <PackageReference Include="Equinox.Cosmos" Version="2.1.0" />
     <!--#endif-->
     <!--#if cosmos-->
-    <PackageReference Include="Propulsion.Cosmos" Version="2.7.0" />
+    <PackageReference Include="Propulsion.Cosmos" Version="2.8.0" />
     <!--#endif-->
     <!--#if (esdb)-->
-    <PackageReference Include="Propulsion.EventStore" Version="2.7.0" />
+    <PackageReference Include="Propulsion.EventStore" Version="2.8.0" />
     <!--#endif-->
     <!--#if (sss)-->
     <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="2.1.0" />
-    <PackageReference Include="Propulsion.SqlStreamStore" Version="2.7.0" />
+    <PackageReference Include="Propulsion.SqlStreamStore" Version="2.8.0" />
     <!--#endif-->
     <!--#if kafka-->
-    <PackageReference Include="Propulsion.Kafka" Version="2.7.0" />
+    <PackageReference Include="Propulsion.Kafka" Version="2.8.0" />
     <!--#endif-->
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
   </ItemGroup>
