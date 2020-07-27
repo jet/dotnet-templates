@@ -21,8 +21,7 @@ type WatchdogIntegrationTests(output) =
         let stats = Handler.Stats(log, TimeSpan.FromSeconds 10., TimeSpan.FromMinutes 1.)
         let watchdog = Program.startWatchdog log (processingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Drive
         Async.RunSynchronously <| async {
-            //
-            let projector = MemoryStoreProjector.Start(watchdog)
+            let projector = MemoryStoreProjector.Start(log, watchdog)
             use __ = projector.Subscribe(store.Committed |> Observable.filter (fun (s,_e) -> Handler.isRelevant s))
 
             let counts = System.Collections.Generic.Stack()
@@ -35,7 +34,7 @@ type WatchdogIntegrationTests(output) =
                 with :? TimeoutException -> timeouts <- timeouts + 1
 
             log.Information("Awaiting batches: {counts} ({timeouts}/{total} timeouts)", counts, timeouts, counts.Count)
-            do! projector.AwaitCompletion(log)
+            do! projector.AwaitCompletion()
             stats.DumpStats()
         }
 

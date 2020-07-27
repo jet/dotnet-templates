@@ -14,8 +14,7 @@ type Async with
         return! r }
 
 /// Manages propagation of a stream of events into an inner Projector
-type MemoryStoreProjector<'F, 'B> private (inner : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<Propulsion.Streams.StreamEvent<'F> seq, 'B>>, ?log) =
-    let log = defaultArg log Serilog.Log.Logger
+type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<Propulsion.Streams.StreamEvent<'F> seq, 'B>>) =
     let ingester = inner.StartIngester(log, 0)
     let mutable epoch = -1L
     let mutable completed = None
@@ -28,8 +27,8 @@ type MemoryStoreProjector<'F, 'B> private (inner : Propulsion.ProjectorPipeline<
     }
 
     /// Starts a projector loop, feeding into the supplied target
-    static member Start(target : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<Propulsion.Streams.StreamEvent<'F> seq, 'B>>) =
-        let instance = MemoryStoreProjector(target)
+    static member Start(log, target : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<Propulsion.Streams.StreamEvent<'F> seq, 'B>>) =
+        let instance = MemoryStoreProjector(log, target)
         do Async.Start(instance.Pump)
         instance
 
@@ -49,9 +48,7 @@ type MemoryStoreProjector<'F, 'B> private (inner : Propulsion.ProjectorPipeline<
 
     /// Waits until all <c>Submit</c>ted batches have been fed into the <c>inner</c> Projector
     member __.AwaitCompletion
-        (   /// Log for completion status info
-            log : Serilog.ILogger,
-            /// sleep time while awaiting completion
+        (   /// sleep time while awaiting completion
             ?delay,
             /// interval at which to log progress of Projector loop
             ?logInterval) = async {
