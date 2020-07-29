@@ -1,4 +1,4 @@
-﻿module ArchiverTemplate.Program
+module ArchiverTemplate.Program
 
 open Equinox.Cosmos
 open Propulsion.Cosmos
@@ -48,9 +48,7 @@ module Args =
         | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
-        | [<AltCommandLine "-s"; Unique>]   MaxSubmit of int
 
-        | [<AltCommandLine "-S"; Unique>]   LocalSeq
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-C"; Unique>]   CfpVerbose
 
@@ -60,9 +58,7 @@ module Args =
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 2."
                 | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 8."
-                | MaxSubmit _ ->            "maximum number of batches to submit concurrently. Default: 8."
 
-                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
 
@@ -71,25 +67,18 @@ module Args =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 2)
         member __.MaxWriters =              a.GetResult(MaxWriters, 8)
-        member __.MaybeSeqEndpoint =        if a.Contains LocalSeq then Some "http://localhost:5341" else None
-        member __.MaxSubmit =               a.GetResult(MaxSubmit, 8)
-
         member __.Verbose =                 a.Contains Parameters.Verbose
         member __.CfpVerbose =              a.Contains CfpVerbose
+        member __.StatsInterval =           TimeSpan.FromMinutes 1.
+        member __.StateInterval =           TimeSpan.FromMinutes 5.
         member val Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> (CosmosSourceArguments cosmos)
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
-
-        member __.StatsInterval =           TimeSpan.FromMinutes 1.
-        member __.StateInterval =           TimeSpan.FromMinutes 5.
-
-        member __.Sink : CosmosSinkArguments =
-            __.Source.Sink
         member x.SourceParams() =
             let srcC = x.Source
             let disco, db =
-                let dstC = srcC.Sink
+                let dstC : CosmosSinkArguments = srcC.Sink
                 match srcC.LeaseContainer, dstC.LeaseContainer with
                 | None, None ->     srcC.Discovery, { database = srcC.Database; container = srcC.Container + "-aux" }
                 | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
@@ -128,8 +117,8 @@ module Args =
                 | Database _ ->             "specify a database name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
                 | Container _ ->            "specify a container name within `Database`"
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
-                | Retries _ ->              "specify operation retries. Default: 1."
-                | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
+                | Retries _ ->              "specify operation retries. Default: 5."
+                | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
 
                 | DstCosmos _ ->            "CosmosDb Sink parameters."
     and CosmosSourceArguments(a : ParseResults<CosmosSourceParameters>) =
@@ -144,8 +133,8 @@ module Args =
         member __.Database =                a.TryGetResult CosmosSourceParameters.Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
         member __.Container =               a.GetResult CosmosSourceParameters.Container
         member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
-        member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 5)
+        member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         member x.BuildConnectionDetails() =
             let (Discovery.UriAndKey (endpointUri, _)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
@@ -158,7 +147,7 @@ module Args =
         member val Sink =
             match a.TryGetSubCommand() with
             | Some (DstCosmos cosmos) -> CosmosSinkArguments cosmos
-            | _ -> raise (MissingArg "Must specify one of cosmos for Sink")
+            | _ -> raise (MissingArg "Must specify cosmos for Sink")
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -209,7 +198,7 @@ module Args =
 module Logging =
 
     open Serilog.Events
-    let initialize verbose changeFeedProcessorVerbose maybeSeqEndpoint =
+    let initialize verbose changeFeedProcessorVerbose =
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
@@ -238,7 +227,6 @@ module Logging =
                                     .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                                     |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
-            |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
             |> fun c -> c.CreateLogger()
         Log.ForContext<Propulsion.Streams.Scheduling.StreamStates<_>>(), Log.ForContext<Core.Context>()
 
@@ -257,17 +245,14 @@ type Stats(log, statsInterval, stateInterval) =
     override __.HandleExn exn = log.Information(exn, "Unhandled")
 
 let build (args : Args.Arguments, log, storeLog : ILogger) =
+    let (src, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
     let sink =
-        let cosmos = args.Sink
-        let containers = Containers(cosmos.Database, cosmos.Container)
-        let connect = async {
-            let! c = cosmos.Connect AppName
-            return c, Equinox.Cosmos.Core.Context(c, containers, storeLog) }
-        let conn, context = connect |> Async.RunSynchronously
-        let mainConn = Equinox.Cosmos.Gateway(conn, Equinox.Cosmos.BatchingPolicy())
-        CosmosSink.Start(log, args.MaxReadAhead, [|context|], args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
-    let (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
-    let discovery, source, connector = srcC.BuildConnectionDetails()
+        let dst = src.Sink
+        let containers = Containers(dst.Database, dst.Container)
+        let conn = dst.Connect AppName |> Async.RunSynchronously
+        let context = Equinox.Cosmos.Core.Context(conn, containers, storeLog)
+        CosmosSink.Start(log, args.MaxReadAhead, [|context|], args.MaxWriters, args.StatsInterval, args.StateInterval)
+    let discovery, source, connector = src.BuildConnectionDetails()
     let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter))
     let runPipeline =
         CosmosSource.Run(log, connector.CreateClient(AppName, discovery), source, aux,
@@ -284,7 +269,7 @@ let run (args, log, storeLog) =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try let log, storeLog = Logging.initialize args.Verbose args.CfpVerbose args.MaybeSeqEndpoint
+        try let log, storeLog = Logging.initialize args.Verbose args.CfpVerbose
             try Configuration.initialize ()
                 if run (args, log, storeLog) then 0 else 3
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
