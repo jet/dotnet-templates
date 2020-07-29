@@ -56,8 +56,8 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 2."
-                | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 8."
+                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 32."
+                | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 4."
 
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
@@ -65,8 +65,8 @@ module Args =
                 | SrcCosmos _ ->            "Cosmos input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 2)
-        member __.MaxWriters =              a.GetResult(MaxWriters, 8)
+        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 32)
+        member __.MaxWriters =              a.GetResult(MaxWriters, 4)
         member __.Verbose =                 a.Contains Parameters.Verbose
         member __.CfpVerbose =              a.Contains CfpVerbose
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
