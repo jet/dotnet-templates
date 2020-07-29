@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Propulsion",
+    "Equinox",
+    "CosmosDb",
+    "ChangeFeed",
+    "ChangeFeedProcessor"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Propulsion.Template.Archive",
+  "name": "Propulsion Archiver tool",
+  "shortName": "proArchiver",
+  "sourceName": "ArchiverTemplate",
+  "preferNameDirectory": true,
+
+  "symbols": {
+  }
+}
