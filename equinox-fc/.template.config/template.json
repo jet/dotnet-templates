@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Equinox",
+    "Event Sourcing",
+    "Fc",
+    "Propulsion"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Equinox.Fc",
+  "name": "Equinox Fc Example",
+  "shortName": "eqxFc",
+  "sourceName": "Fc",
+  "preferNameDirectory": true
+}

@@ -19,6 +19,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - `eqxShipping`: Unit and integration tests [#70](https://github.com/jet/dotnet-templates/pull/70) 
+- `eqxFc`: Fulfilment-Center inspired example utilizing Process Manager patterns with basic `Equinox.MemoryStore` and `Equinox.EventStore` tests [#40](https://github.com/jet/dotnet-templates/pulls/40)
 
 ### Changed
 
