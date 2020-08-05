@@ -56,7 +56,7 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 32."
+                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64."
                 | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 4."
 
                 | Verbose ->                "request Verbose Logging. Default: off"
@@ -65,7 +65,7 @@ module Args =
                 | SrcCosmos _ ->            "Cosmos input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 32)
+        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 64)
         member __.MaxWriters =              a.GetResult(MaxWriters, 4)
         member __.Verbose =                 a.Contains Parameters.Verbose
         member __.CfpVerbose =              a.Contains CfpVerbose
@@ -84,7 +84,7 @@ module Args =
                 | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
                 | None, Some dc ->  dstC.Discovery, { database = dstC.Database; container = dc }
                 | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
-            Log.Information("Max read backlog: {maxReadAhead}", x.MaxReadAhead)
+            Log.Information("Max batches to read ahead: {maxReadAhead} writers: {writers}", x.MaxReadAhead, x.MaxWriters)
             Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                 x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
@@ -253,7 +253,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         let context = Equinox.Cosmos.Core.Context(conn, containers, storeLog)
         CosmosSink.Start(log, args.MaxReadAhead, [|context|], args.MaxWriters, args.StatsInterval, args.StateInterval)
     let discovery, source, connector = src.BuildConnectionDetails()
-    let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter))
+    let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect transformOrFilter)
     let runPipeline =
         CosmosSource.Run(log, connector.CreateClient(AppName, discovery), source, aux,
             leaseId, startFromTail, createObserver,
