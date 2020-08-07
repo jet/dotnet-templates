@@ -56,7 +56,7 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | ConsumerGroupName _ ->    "Projector consumer group name."
-                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64."
+                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 32."
                 | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 4."
 
                 | Verbose ->                "request Verbose Logging. Default: off"
@@ -65,13 +65,13 @@ module Args =
                 | SrcCosmos _ ->            "Cosmos input parameters."
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 64)
+        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 32)
         member __.MaxWriters =              a.GetResult(MaxWriters, 4)
         member __.Verbose =                 a.Contains Parameters.Verbose
         member __.CfpVerbose =              a.Contains CfpVerbose
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 5.
-        member val Source : CosmosSourceArguments =
+        member val private Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> (CosmosSourceArguments cosmos)
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
@@ -84,9 +84,9 @@ module Args =
                 | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
                 | None, Some dc ->  dstC.Discovery, { database = dstC.Database; container = dc }
                 | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
-            Log.Information("Max batches to read ahead: {maxReadAhead} writers: {writers}", x.MaxReadAhead, x.MaxWriters)
+            Log.Information("Syncing... Max batches to read ahead: {maxReadAhead} writers: {writers}", x.MaxReadAhead, x.MaxWriters)
             Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
+                x.ConsumerGroupName, db.database, db.container, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
             (srcC, (disco, db, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
@@ -126,7 +126,6 @@ module Args =
         member __.MaxDocuments =            a.TryGetResult MaxDocuments
         member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member __.LeaseContainer =          a.TryGetResult CosmosSourceParameters.LeaseContainer
-
         member __.Mode =                    a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member __.Discovery =               Discovery.FromConnectionString __.Connection
         member __.Connection =              a.TryGetResult CosmosSourceParameters.Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
@@ -135,7 +134,11 @@ module Args =
         member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 5)
         member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
-        member x.BuildConnectionDetails() =
+        member val Sink =
+            match a.TryGetSubCommand() with
+            | Some (DstCosmos cosmos) -> CosmosSinkArguments cosmos
+            | _ -> raise (MissingArg "Must specify cosmos for Sink")
+        member x.MonitoringParams() =
             let (Discovery.UriAndKey (endpointUri, _)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
@@ -143,11 +146,6 @@ module Args =
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; container = x.Container }, c
-
-        member val Sink =
-            match a.TryGetSubCommand() with
-            | Some (DstCosmos cosmos) -> CosmosSinkArguments cosmos
-            | _ -> raise (MissingArg "Must specify cosmos for Sink")
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -185,7 +183,7 @@ module Args =
             Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            c.Connect(sprintf "App=%s" appName, discovery)
+            c.Connect(appName, discovery)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse argv : Arguments =
@@ -247,22 +245,23 @@ type Stats(log, statsInterval, stateInterval) =
 let build (args : Args.Arguments, log, storeLog : ILogger) =
     let (src, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
     let sink =
-        let dst = src.Sink
-        let containers = Containers(dst.Database, dst.Container)
-        let conn = dst.Connect AppName |> Async.RunSynchronously
+        let target = src.Sink
+        let containers = Containers(target.Database, target.Container)
+        let conn = target.Connect AppName |> Async.RunSynchronously
         let context = Equinox.Cosmos.Core.Context(conn, containers, storeLog)
         CosmosSink.Start(log, args.MaxReadAhead, [|context|], args.MaxWriters, args.StatsInterval, args.StateInterval)
-    let discovery, source, connector = src.BuildConnectionDetails()
-    let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect transformOrFilter)
-    let runPipeline =
-        CosmosSource.Run(log, connector.CreateClient(AppName, discovery), source, aux,
+    let pipeline =
+        let discovery, source, connector = src.MonitoringParams()
+        let client, auxClient = connector.CreateClient(AppName, discovery), connector.CreateClient(AppName, auxDiscovery)
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect transformOrFilter)
+        CosmosSource.Run(log, client, source, aux,
             leaseId, startFromTail, createObserver,
-            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=connector.CreateClient(AppName, auxDiscovery))
-    sink, runPipeline
+            ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
+    sink, pipeline
 
 let run (args, log, storeLog) =
-    let sink, runSourcePipeline = build (args, log, storeLog)
-    runSourcePipeline |> Async.Start
+    let sink, pipeline = build (args, log, storeLog)
+    pipeline |> Async.Start
     sink.AwaitCompletion() |> Async.RunSynchronously
     sink.RanToCompletion
 
