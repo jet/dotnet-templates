@@ -1,4 +1,4 @@
-module ArchiverTemplate.Program
+﻿module ArchiverTemplate.Program
 
 open Equinox.Cosmos
 open Propulsion.Cosmos
@@ -228,33 +228,21 @@ module Logging =
             |> fun c -> c.CreateLogger()
         Log.ForContext<Propulsion.Streams.Scheduling.StreamStates<_>>(), Log.ForContext<Core.Context>()
 
-let transformOrFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for { stream = FsCodec.StreamName.CategoryAndId (cat, _) } as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
-        // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-        if true then
-            yield e }
-
 let [<Literal>] AppName = "ArchiverTemplate"
 
-type Stats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
-
-    override __.HandleOk(()) = ()
-    override __.HandleExn exn = log.Information(exn, "Unhandled")
-
 let build (args : Args.Arguments, log, storeLog : ILogger) =
-    let (src, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
+    let (source, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
     let sink =
-        let target = src.Sink
+        let target = source.Sink
         let containers = Containers(target.Database, target.Container)
         let conn = target.Connect AppName |> Async.RunSynchronously
         let context = Equinox.Cosmos.Core.Context(conn, containers, storeLog)
         CosmosSink.Start(log, args.MaxReadAhead, [|context|], args.MaxWriters, args.StatsInterval, args.StateInterval)
     let pipeline =
-        let discovery, source, connector = src.MonitoringParams()
-        let client, auxClient = connector.CreateClient(AppName, discovery), connector.CreateClient(AppName, auxDiscovery)
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect transformOrFilter)
-        CosmosSource.Run(log, client, source, aux,
+        let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
+        let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect Handler.transformOrFilter)
+        CosmosSource.Run(log, client, monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
     sink, pipeline
