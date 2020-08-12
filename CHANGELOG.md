@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Polished `SemaphoreSlim` extensions [#79](https://github.com/jet/dotnet-templates/pull/79) 
+
 ### Removed
 ### Fixed
 
