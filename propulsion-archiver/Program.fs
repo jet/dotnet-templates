@@ -74,7 +74,7 @@ module Args =
         member val private Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> (CosmosSourceArguments cosmos)
-            | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
+            | _ -> raise (MissingArg "Must specify cosmos for Src")
         member x.SourceParams() =
             let srcC = x.Source
             let disco, db =
