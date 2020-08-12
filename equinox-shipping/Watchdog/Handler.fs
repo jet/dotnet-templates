@@ -30,6 +30,12 @@ let isRelevant = function
     | FinalizationTransaction.Match _ -> true
     | _ -> false
 
+let transformOrFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
+    for batch in Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
+        if isRelevant batch.stream then
+            yield batch
+}
+
 let handle
         (processingTimeout : TimeSpan)
         (driveTransaction : Shipping.Domain.TransactionId -> Async<bool>)

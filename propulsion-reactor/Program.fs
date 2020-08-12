@@ -277,7 +277,7 @@ module Args =
         member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
         member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        member x.BuildConnectionDetails() =
+        member x.MonitoringParams() =
             let (Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
@@ -615,7 +615,7 @@ let build (args : Args.Arguments) =
 #if changeFeedOnly
         let (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
 #endif
-        let monitoredDiscovery, monitored, monitoredConnector = source.BuildConnectionDetails()
+        let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
 //#if (!(kafka && blank))
         let cosmos = source.Cosmos
         let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
@@ -693,23 +693,23 @@ let build (args : Args.Arguments) =
 #if filter
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
-        let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
-        let runPipeline =
+        let pipeline =
+            let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
             CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
                 leaseId, startFromTail, createObserver,
                 ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-        sink, runPipeline
+        sink, pipeline
 #endif // !kafkaEventSpans
 
 let run args =
 #if (!kafkaEventSpans)
-    let projector, runSourcePipeline = build args
-    runSourcePipeline |> Async.Start
+    let sink, pipeline = build args
+    pipeline |> Async.Start
 #else
-    let projector = build args
+    let sink = build args
 #endif
-    projector.AwaitCompletion() |> Async.RunSynchronously
-    projector.RanToCompletion
+    sink.AwaitCompletion() |> Async.RunSynchronously
+    sink.RanToCompletion
 
 [<EntryPoint>]
 let main argv =

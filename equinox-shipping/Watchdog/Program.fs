@@ -122,7 +122,7 @@ module Args =
         member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
         member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        member x.BuildConnectionDetails() =
+        member x.MonitoringParams() =
             let (Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
@@ -225,23 +225,17 @@ let build (args : Args.Arguments) =
     let sink =
         let stats = Handler.Stats(Serilog.Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
         startWatchdog Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Drive
-
-    // Wire up the CFP to feed in the items
-    let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
-        docs
-        |> Seq.collect EquinoxCosmosParser.enumStreamEvents
-        |> Seq.filter (fun e -> Handler.isRelevant e.stream)
-    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
-    let runSource =
-        let monitoredDiscovery, monitored, monitoredConnector = source.BuildConnectionDetails()
+    let pipeline =
+        let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect Handler.transformOrFilter)
+        let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
-    sink, runSource
+    sink, pipeline
 
 let run args =
-    let sink, runSource = build args
-    runSource |> Async.Start
+    let sink, pipeline = build args
+    pipeline |> Async.Start
     sink.AwaitCompletion() |> Async.RunSynchronously
     sink.RanToCompletion
 

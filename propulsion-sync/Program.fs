@@ -207,7 +207,7 @@ module Args =
         member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
         member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        member x.BuildConnectionDetails() =
+        member x.MonitoringParams() =
             let (Discovery.UriAndKey (endpointUri, _)) as discovery = x.Discovery
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
@@ -606,7 +606,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-        let discovery, source, connector = srcC.BuildConnectionDetails()
+        let discovery, source, connector = srcC.MonitoringParams()
 #if marveleqx
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 streamFilter))
 #else
@@ -648,8 +648,8 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         sink, runPipeline
 
 let run (args, log, storeLog) =
-    let sink, runSourcePipeline = build (args, log, storeLog)
-    runSourcePipeline |> Async.Start
+    let sink, pipeline = build (args, log, storeLog)
+    pipeline |> Async.Start
     sink.AwaitCompletion() |> Async.RunSynchronously
     sink.RanToCompletion
 

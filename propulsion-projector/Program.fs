@@ -96,7 +96,7 @@ module Args =
         member __.Retries =             a.GetResult(Retries, 1)
         member __.MaxRetryWaitTime =    a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
-        member x.BuildConnectionDetails() =
+        member x.MonitoringParams() =
             let (Discovery.UriAndKey (endpointUri, _) as discovery) = Discovery.FromConnectionString x.Connection
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
@@ -444,12 +444,12 @@ let build (args : Args.Arguments) =
     let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // cosmos && !kafka
-    let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
-    let runSourcePipeline =
-        let discovery, source, connector = args.Cosmos.BuildConnectionDetails()
+    let pipeline =
+        let monitoredDiscovery, monitored, monitoredConnector = args.Cosmos.MonitoringParams()
         let aux, leaseId, startFromTail, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
+        let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
         CosmosSource.Run(
-            Log.Logger, connector.CreateClient(AppName, discovery), source,
+            Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored,
             aux, leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
 #endif // cosmos
@@ -473,7 +473,7 @@ let build (args : Args.Arguments) =
     let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // esdb && !kafka
-    let runSourcePipeline =
+    let pipeline =
         let filterByStreamName _ = true // see `dotnet new proReactor --filter` for an example of how to rig filtering arguments
         Propulsion.EventStore.EventStoreSource.Run(
             Log.Logger, sink, checkpoints, connectEs, spec, Handler.tryMapEvent filterByStreamName,
@@ -496,13 +496,13 @@ let build (args : Args.Arguments) =
     let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // sss && !kafka
-    let runSourcePipeline = Propulsion.SqlStreamStore.SqlStreamStoreSource.Run(Log.Logger, monitored, checkpointer, spec, sink, args.StatsInterval)
+    let pipeline = Propulsion.SqlStreamStore.SqlStreamStoreSource.Run(Log.Logger, monitored, checkpointer, spec, sink, args.StatsInterval)
 //#endif // sss
-    sink, runSourcePipeline
+    sink, pipeline
 
 let run args =
-    let sink, runSourcePipeline = build args
-    runSourcePipeline |> Async.Start
+    let sink, pipeline = build args
+    pipeline |> Async.Start
     sink.AwaitCompletion() |> Async.RunSynchronously
     sink.RanToCompletion
 
