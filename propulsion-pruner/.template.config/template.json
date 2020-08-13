@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Propulsion",
+    "Equinox",
+    "CosmosDb",
+    "ChangeFeed",
+    "ChangeFeedProcessor"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Propulsion.Template.Prune",
+  "name": "Propulsion Pruner tool",
+  "shortName": "proPruner",
+  "sourceName": "PrunerTemplate",
+  "preferNameDirectory": true,
+
+  "symbols": {
+  }
+}

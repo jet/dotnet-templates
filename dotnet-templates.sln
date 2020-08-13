@@ -100,6 +100,16 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Archiver", "propulsion-archiver\Archiver.fsproj", "{B9976751-C3A6-4F8B-BEF4-278382D8EAA6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proArchiver", "proArchiver", "{BBD6F425-C2F4-4857-BD68-2B13D0B4EDDE}"
+ProjectSection(SolutionItems) = preProject
+	propulsion-archiver\.template.config\template.json = propulsion-archiver\.template.config\template.json
+EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proPruner", "proPruner", "{7F80222A-2687-4E91-8F5B-4717DD13DEF5}"
+ProjectSection(SolutionItems) = preProject
+	propulsion-pruner\.template.config\template.json = propulsion-pruner\.template.config\template.json
+EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Pruner", "propulsion-pruner\Pruner.fsproj", "{A0FB44F5-15E5-47C8-81E5-1991269849CB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -177,6 +187,10 @@ Global
 		{B9976751-C3A6-4F8B-BEF4-278382D8EAA6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B9976751-C3A6-4F8B-BEF4-278382D8EAA6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B9976751-C3A6-4F8B-BEF4-278382D8EAA6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
@@ -195,5 +209,6 @@ Global
 		{5A45EF21-576B-4B40-86BD-F5960ECD66BF} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
 		{83BA87C3-6288-40F4-BC4F-EC3A54586CDF} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
 		{B9976751-C3A6-4F8B-BEF4-278382D8EAA6} = {BBD6F425-C2F4-4857-BD68-2B13D0B4EDDE}
+		{A0FB44F5-15E5-47C8-81E5-1991269849CB} = {7F80222A-2687-4E91-8F5B-4717DD13DEF5}
 	EndGlobalSection
 EndGlobal
