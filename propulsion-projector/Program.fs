@@ -129,8 +129,8 @@ module Args =
         | [<AltCommandLine "-u">]           Username of string
         | [<AltCommandLine "-p">]           Password of string
 
-        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | FromTail ->               "Start the processing from the Tail"
@@ -153,8 +153,8 @@ module Args =
                 | Retries _ ->              "specify operation retries. Default: 3."
                 | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
 
-                | Es ->                     "Request storage of checkpoints in EventStore (not recommended due to feedback effects)."
                 | Cosmos _ ->               "CosmosDB (Checkpoint) Store parameters."
+                | Es ->                     "Request storage of checkpoints in EventStore (not recommended due to feedback effects)."
     and EsSourceArguments(a : ParseResults<EsSourceParameters>) =
         let discovery (host, port, tcp) =
             match tcp, port with
@@ -194,10 +194,10 @@ module Args =
                 .Connect(appName, discovery, nodePreference) |> Async.RunSynchronously
 
         member __.CheckpointInterval =  TimeSpan.FromHours 1.
-        member val Checkpoints : Choice<unit, CosmosArguments> =
+        member val Checkpoints : Choice<CosmosArguments, unit> =
             match a.TryGetSubCommand() with
-            | Some (EsSourceParameters.Es) -> Choice1Of2 ()
-            | Some (EsSourceParameters.Cosmos cosmos) -> Choice2Of2 (CosmosArguments cosmos)
+            | Some (EsSourceParameters.Cosmos cosmos) -> Choice1Of2 (CosmosArguments cosmos)
+            | Some (EsSourceParameters.Es) -> Choice2Of2 ()
             | _ -> raise (MissingArg "Must specify `cosmos` or `es` checkpoint store when source is `es`")
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-s">]           Connection of string
@@ -354,12 +354,12 @@ module Args =
         member __.BuildCheckpointStoreParams() =
             let es = __.Es
             match es.Checkpoints with
-            | Choice1Of2 () ->
-                Log.Information("Checkpointing in source EventStore ()")
-                Choice1Of2 ()
-            | Choice2Of2 cosmos ->
+            | Choice1Of2 cosmos ->
                 Log.Information("Checkpointing in Database {db} Container {container}", cosmos.Database, cosmos.Container)
-                Choice2Of2 cosmos
+                Choice1Of2 cosmos
+            | Choice2Of2 () ->
+                Log.Information("Checkpointing in source EventStore")
+                Choice2Of2 ()
 //#endif
 #if sss
         member val SqlStreamStore =         SqlStreamStoreSourceArguments(a.GetResult SqlMs)
@@ -461,14 +461,14 @@ let build (args : Args.Arguments) =
     let cache = Equinox.Cache(AppName, sizeMb=10)
     let checkpoints =
         match args.BuildCheckpointStoreParams() with
-        | Choice1Of2 () ->
-            let esClient = connectEs ()
-            let context = EventStoreContext.create esClient
-            Checkpoints.EventStore.create spec.groupName (context, cache)
-        | Choice2Of2 cosmos ->
+        | Choice1Of2 cosmos ->
             let (discovery, database, container, connector) = cosmos.BuildConnectionDetails()
             let context = CosmosContext.create AppName connector discovery (database, container)
             Checkpoints.Cosmos.create spec.groupName (context, cache)
+        | Choice2Of2 () ->
+            let esClient = connectEs ()
+            let context = EventStoreContext.create esClient
+            Checkpoints.EventStore.create spec.groupName (context, cache)
 
 #if     kafka // esdb && kafka
     let (broker, topic) = args.Target.BuildTargetParams()
