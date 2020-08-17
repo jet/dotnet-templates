@@ -238,8 +238,11 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         let containers = Containers(target.Database, target.Container)
         let conn = target.Connect AppName |> Async.RunSynchronously
         let context = Equinox.Cosmos.Core.Context(conn, containers, storeLog)
+        let tryTrimBefore stream index = failwith "TODO" // TODO context.TryTrimBefore(stream, index)
+        let handle = Handler.handle tryTrimBefore
+
         let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
-        Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
+        Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxWriters, handle, stats, args.StatsInterval)
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
