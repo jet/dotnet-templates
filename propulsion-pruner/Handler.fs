@@ -29,6 +29,7 @@ type ProjectorStats(log, statsInterval, stateInterval) =
         log.Information(" Deleted {ops}r {deletedCount}e Deferred {deferred}e Redundant {nops}r {nopCount}e",
                         ops, totalDeletes, nops, totalDeferred, totalRedundant)
         ops <- 0; totalDeletes <- 0; nops <- 0; totalDeferred <- totalDeferred; totalRedundant <- 0
+        Equinox.Cosmos.Store.Log.InternalMetrics.dump log
 
 // As we're not looking at the bodies of the events in the course of the shouldPrune or handle code, we remove them
 //   from the Event immediately in order to avoid consuming lots of memory without purpose while they're queued
@@ -57,7 +58,7 @@ let selectExpired (changeFeedDocument: Microsoft.Azure.Documents.Document) : Pro
 }
 
 // Per set of accumulated events per stream (selected via `selectExpired`), attempt to prune up to the high water mark
-let handle tryTrimBefore (stream, span: Propulsion.Streams.StreamSpan<_>) = async {
+let handle pruneBefore (stream, span: Propulsion.Streams.StreamSpan<_>) = async {
     // The newest event eligible for deletion defines the cutoff point
     let beforeIndex = (Array.last span.events).Index + 1L
     // Depending on the way the events are batched, requests break into three groupings:
@@ -68,7 +69,7 @@ let handle tryTrimBefore (stream, span: Propulsion.Streams.StreamSpan<_>) = asyn
     // 3. Some deletions deferred
     //    (requested trim point was in the middle of a batch; touching it would put the batch out of order)
     //    in this case, we mark the event as handled and await a successor event triggering another attempt
-    let deleted, deferred, trimmedPos = tryTrimBefore stream beforeIndex
+    let! deleted, deferred, trimmedPos = pruneBefore (FsCodec.StreamName.toString stream) beforeIndex
     // Categorize the outcome so the stats handler can summarize the work being carried out
     let res = if deleted = 0 && deferred = 0 then Nop span.events.Length else Ok (deleted, deferred)
     // For case where we discover events have already been deleted beyond our requested position, signal to reader to drop events
