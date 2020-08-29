@@ -30,7 +30,7 @@ type Command =
 let decide command (state : Fold.State) =
     match command with
     | Consume (version, value) ->
-        if state.version <= version then false, [] else
+        if state.version >= version then false, [] else
         true, [Events.Ingested { version = version; value = value }]
 
 type Item = { id: int; order: int; title: string; completed: bool }
