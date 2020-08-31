@@ -144,8 +144,8 @@ module Args =
                     | Choice2Of2 _dstE ->
                         let lc = match srcC.LeaseContainer with Some sc -> sc | None -> srcC.Container + "-aux"
                         srcC.Discovery, { database = srcC.Database; container = lc }
-                Log.Information("Max read backlog: {maxReadAhead}", x.MaxReadAhead)
-                Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
+                Log.Information("Syncing... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
+                Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                     x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))

@@ -322,7 +322,7 @@ module Args =
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 2.
         member x.BuildProcessorParams() =
-            Log.Information("Reading {maxPending} ahead; using {dop} processors", x.MaxReadAhead, x.MaxConcurrentProcessors)
+            Log.Information("Projecting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentProcessors, x.MaxReadAhead)
             (x.MaxReadAhead, x.MaxConcurrentProcessors)
 #if cosmos
         member val Cosmos =                 CosmosArguments(a.GetResult Cosmos)

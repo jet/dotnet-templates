@@ -71,8 +71,8 @@ module Args =
                 match srcC.LeaseContainer with
                 | None ->     { database = srcC.Database; container = srcC.Container + "-aux" }
                 | Some sc ->  { database = srcC.Database; container = sc }
-            Log.Information("Max read backlog: {maxReadAhead}", x.MaxReadAhead)
-            Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
+            Log.Information("Watching... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentStreams, x.MaxReadAhead)
+            Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                 x.ConsumerGroupName, auxColl.database, auxColl.container, srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
