@@ -84,8 +84,8 @@ module Args =
                 | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
                 | None, Some dc ->  dstC.Discovery, { database = dstC.Database; container = dc }
                 | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
-            Log.Information("Syncing... Max batches to read ahead: {maxReadAhead} writers: {writers}", x.MaxReadAhead, x.MaxWriters)
-            Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
+            Log.Information("Archiving... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
+            Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                 x.ConsumerGroupName, db.database, db.container, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))

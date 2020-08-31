@@ -84,8 +84,8 @@ module Args =
                 | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
                 | None, Some dc ->  dstC.Discovery, { database = dstC.Database; container = dc }
                 | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
-            Log.Information("Pruning... Max batches to read ahead: {maxReadAhead} writers: {writers}", x.MaxReadAhead, x.MaxWriters)
-            Log.Information("Processing Lease {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
+            Log.Information("Pruning... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
+            Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                 x.ConsumerGroupName, db.database, db.container, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
@@ -115,7 +115,7 @@ module Args =
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a container name within `Database`"
+                | Container _ ->            "specify a container name within `Database` to apply the pruning to"
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 5."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
@@ -235,17 +235,16 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
 
     let sink =
         let target = source.Sink
+        if (target.Database, target.Container) = (source.Database, source.Container) then
+            raise (Args.MissingArg "Danger! Can not prune a target based on itself")
         let containers = Containers(target.Database, target.Container)
         let conn = target.Connect AppName |> Async.RunSynchronously
         let context = Equinox.Cosmos.Core.Context(conn, containers, storeLog)
-        let pruneBefore stream index = Equinox.Cosmos.Core.Events.prune context stream index
-        let handle = Handler.handle pruneBefore
-        let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
-        Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxWriters, handle, stats, args.StatsInterval)
+        Propulsion.Cosmos.CosmosPruner.Start(Log.Logger, args.MaxReadAhead, context, args.MaxWriters, args.StatsInterval, args.StateInterval)
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect Handler.selectExpired)
+        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect Handler.selectPrunable)
         CosmosSource.Run(log, client, monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
