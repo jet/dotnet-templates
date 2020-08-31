@@ -16,6 +16,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed
 ### Fixed
 
+- Fixed version check logic in `TodoSummary` ingesters [#82](https://github.com/jet/dotnet-templates/pull/82) :pray: [@dunnry](https://github.com/dunnry)
+
 <a name="4.10.0"></a>
 ## [4.10.0] - 2020-07-27
 
