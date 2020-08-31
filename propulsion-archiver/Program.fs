@@ -232,7 +232,7 @@ let [<Literal>] AppName = "ArchiverTemplate"
 
 let build (args : Args.Arguments, log, storeLog : ILogger) =
     let (source, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
-    let sink =
+    let archiverSink =
         let target = source.Sink
         let containers = Containers(target.Database, target.Container)
         let conn = target.Connect AppName |> Async.RunSynchronously
@@ -241,11 +241,11 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect Handler.transformOrFilter)
+        let createObserver () = CosmosSource.CreateObserver(log, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
         CosmosSource.Run(log, client, monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
-    sink, pipeline
+    archiverSink, pipeline
 
 let run (args, log, storeLog) =
     let sink, pipeline = build (args, log, storeLog)

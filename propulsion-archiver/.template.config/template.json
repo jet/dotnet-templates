@@ -12,7 +12,7 @@
     "language": "F#"
   },
   "identity": "Propulsion.Template.Archive",
-  "name": "Propulsion Archiver tool",
+  "name": "Propulsion Archiver service",
   "shortName": "proArchiver",
   "sourceName": "ArchiverTemplate",
   "preferNameDirectory": true,

@@ -11,6 +11,7 @@ let removeDataAndMeta (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEv
 // 1. If a ChangeFeedProcessor (including new ones) needs to be able to walk those events
 // 2. If transactional processing will benefit from being able to load the events using the provisioned capacity on the Primary
 // 3. All relevant systems are configured to be able to fall back to the Secondary where the head of a stream being read has been pruned
+// NOTE - DANGEROUS - events submitted to the CosmosPruner get removed from the supplied Context!
 let shouldPrune category (age : TimeSpan) =
     match category, age.TotalDays with
     // TODO define pruning criteria
@@ -18,6 +19,7 @@ let shouldPrune category (age : TimeSpan) =
     | _ -> false
 
 // Only relevant (copied to secondary container, meeting expiration criteria) events get fed into the CosmosPruner for removal
+// NOTE - DANGEROUS - events submitted to the CosmosPruner get removed from the supplied Context!
 let selectPrunable (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let asOf = DateTimeOffset.UtcNow
     for se in Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents changeFeedDocument do

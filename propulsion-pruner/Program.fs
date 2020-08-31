@@ -233,7 +233,8 @@ let [<Literal>] AppName = "PrunerTemplate"
 let build (args : Args.Arguments, log, storeLog : ILogger) =
     let (source, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
 
-    let sink =
+    // NOTE - DANGEROUS - events submitted to this sink get removed from the supplied Context!
+    let deletingEventsSink =
         let target = source.Sink
         if (target.Database, target.Container) = (source.Database, source.Container) then
             raise (Args.MissingArg "Danger! Can not prune a target based on itself")
@@ -244,11 +245,11 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect Handler.selectPrunable)
+        let createObserver () = CosmosSource.CreateObserver(log, deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
         CosmosSource.Run(log, client, monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
-    sink, pipeline
+    deletingEventsSink, pipeline
 
 let run (args, log, storeLog) =
     let sink, pipeline = build (args, log, storeLog)
