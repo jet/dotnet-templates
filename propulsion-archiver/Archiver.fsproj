@@ -16,7 +16,7 @@
     <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
     <PackageReference Include="Microsoft.Azure.DocumentDB.ChangeFeedProcessor" Version="2.3.2" />
     <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="2.11.6" />
-    <PackageReference Include="Propulsion.Cosmos" Version="2.9.0-rc1" />
+    <PackageReference Include="Propulsion.Cosmos" Version="2.9.0-rc2" />
     <PackageReference Include="Serilog.Sinks.Async" Version="1.4.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
     <PackageReference Include="Serilog.Sinks.Seq" Version="4.0.0" />
