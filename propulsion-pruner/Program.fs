@@ -140,9 +140,9 @@ module Args =
             | _ -> raise (MissingArg "Must specify cosmos for Sink")
         member x.MonitoringParams() =
             let (Discovery.UriAndKey (endpointUri, _)) as discovery = x.Discovery
-            Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
+            Log.Information("Reference Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
-            Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+            Log.Information("Reference Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, { database = x.Database; container = x.Container }, c
@@ -178,9 +178,9 @@ module Args =
         /// Connect with the provided parameters and/or environment variables
         member x.Connect appName : Async<Equinox.Cosmos.Connection> =
             let (Discovery.UriAndKey (endpointUri, _masterKey)) as discovery = x.Discovery
-            Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Container {container}",
+            Log.Information("DELETION Target CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
-            Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+            Log.Information("DELETION Target CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             c.Connect(appName, discovery)
