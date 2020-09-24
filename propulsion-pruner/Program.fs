@@ -205,11 +205,12 @@ module Logging =
                         let cfpLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
             |> fun c -> let ingesterLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamStates<_>>.FullName, ingesterLevel)
+                        c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                         c.MinimumLevel.Override(typeof<Propulsion.Cosmos.Internal.Writer.Result>.FullName, generalLevel)
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
+            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Message:lj} {Properties}{NewLine}{Exception}"
+                        let t = if verbose then t else t.Replace("{Properties}", "")
                         let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                             a.Logger(fun l ->
                                 l.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
@@ -221,16 +222,15 @@ module Logging =
                                 let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
                                 let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
                                 let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                                (if changeFeedProcessorVerbose then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterB x || isCfp x))
-                                    .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-                                    |> ignore) |> ignore
+                                let l = if changeFeedProcessorVerbose then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterB x || isCfp x)
+                                l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t) |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> c.CreateLogger()
-        Log.ForContext<Propulsion.Streams.Scheduling.StreamStates<_>>(), Log.ForContext<Core.Context>()
+        Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Core.Context>()
 
 let [<Literal>] AppName = "PrunerTemplate"
 
-let build (args : Args.Arguments, log, storeLog : ILogger) =
+let build (args : Args.Arguments, log : ILogger, storeLog : ILogger) =
     let (source, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
 
     // NOTE - DANGEROUS - events submitted to this sink get removed from the supplied Context!
@@ -245,7 +245,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
-        let createObserver () = CosmosSource.CreateObserver(log, deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
+        let createObserver () = CosmosSource.CreateObserver(log.ForContext<CosmosSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
         CosmosSource.Run(log, client, monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
