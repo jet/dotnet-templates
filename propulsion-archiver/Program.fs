@@ -50,7 +50,8 @@ module Args =
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
 
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-W"; Unique>]   WritesVerbose
+        | [<AltCommandLine "-S"; Unique>]   SyncVerbose
+        | [<AltCommandLine "-t"; Unique>]   RuThreshold of float
         | [<AltCommandLine "-C"; Unique>]   CfpVerbose
 
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
@@ -61,7 +62,8 @@ module Args =
                 | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 4."
 
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | WritesVerbose ->          "request Verbose Writes Logging. Default: off"
+                | SyncVerbose ->            "request Logging for Sync operations (Writes). Default: off"
+                | RuThreshold _ ->          "minimum request charge required to log. Default: 0"
                 | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
 
                 | SrcCosmos _ ->            "Cosmos input parameters."
@@ -71,7 +73,7 @@ module Args =
         member __.MaxWriters =              a.GetResult(MaxWriters, 4)
         member __.Verbose =                 a.Contains Parameters.Verbose
         member __.CfpVerbose =              a.Contains CfpVerbose
-        member __.WritesVerbose =           a.Contains WritesVerbose
+        member __.SyncLogging =             a.Contains SyncVerbose, a.TryGetResult RuThreshold
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 5.
         member val private Source : CosmosSourceArguments =
@@ -199,7 +201,7 @@ module Args =
 module Logging =
 
     open Serilog.Events
-    let initialize verbose writesVerbose changeFeedProcessorVerbose =
+    let initialize verbose (logSyncToConsole, minRu) changeFeedProcessorVerbose =
         Log.Logger <-
             LoggerConfiguration()
                 .Destructure.FSharpTypes()
@@ -207,7 +209,7 @@ module Logging =
             |> fun c -> // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
                         let cfpLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Warning
                         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
-            |> fun c -> let ingesterLevel = if writesVerbose then LogEventLevel.Debug else LogEventLevel.Information
+            |> fun c -> let ingesterLevel = if logSyncToConsole then LogEventLevel.Debug else LogEventLevel.Information
                         c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
             |> fun c -> if verbose then c.MinimumLevel.Debug() else c
             |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
@@ -225,12 +227,13 @@ module Logging =
                                 let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
                                 let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
                                 let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                                let l = if writesVerbose then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterB x)
+                                let l = if logSyncToConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterB x)
                                 let l = if changeFeedProcessorVerbose then l else l.Filter.ByExcluding(fun x -> isCfp x)
-                                let l = l.Filter.ByExcluding(fun x ->
-                                            match x.Properties.TryGetValue "stream" with
-                                            | true, s -> (string s).Contains "LokiPickTicketReservations"
-                                            | false, _ -> false)
+                                let isCheaperThan minRu = function
+                                    | Store.Log.InternalMetrics.Stats.CosmosMetric
+                                        (Store.Log.Event.SyncSuccess m | Store.Log.Event.SyncConflict m) -> m.ru < minRu
+                                    | _ -> false
+                                let l = match minRu with Some mru -> l.Filter.ByExcluding(fun x -> isCheaperThan mru x) | None -> l
                                 l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t) |> ignore) |> ignore
                         c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
             |> fun c -> c.CreateLogger()
@@ -264,7 +267,7 @@ let run (args, log, storeLog) =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try let log, storeLog = Logging.initialize args.Verbose args.WritesVerbose args.CfpVerbose
+        try let log, storeLog = Logging.initialize args.Verbose args.SyncLogging args.CfpVerbose
             try Configuration.initialize ()
                 if run (args, log, storeLog) then 0 else 3
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
