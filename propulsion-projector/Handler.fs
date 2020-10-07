@@ -5,20 +5,7 @@ module ProjectorTemplate.Handler
 // Here we pass the items directly through to the handler without parsing them
 let mapToStreamItems (x : System.Collections.Generic.IReadOnlyList<'a>) : seq<'a> = upcast x
 #else // cosmos && !parallelOnly
-#if    !synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
-//let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
-//    if x.Data.Length < 900_000 then x
-//    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp)
-//
-//let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
-//    { stream = e.stream; event = replaceLongDataWithNull e.event }
-
-let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
-    docs
-    |> Seq.collect Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents
-    // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
-    // |> Seq.map hackDropBigBodies
-#else // cosmos && !parallelOnly && synthesizeSequence
+#if    synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
 /// StreamsProjector buffers and deduplicates messages from a contiguous stream with each event bearing an `index`.
 /// Where the messages we consume don't have such characteristics, we need to maintain a fake `index` by keeping an int per stream in a dictionary
 /// Thread-safe, as it needs to be given batches of incoming events can be parsed in parallel
@@ -48,6 +35,19 @@ let parseDocumentAsEvent (doc : Microsoft.Azure.Documents.Document) : Propulsion
 
 let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<byte[]> seq =
     docs |> Seq.map parseDocumentAsEvent
+#else // cosmos && !parallelOnly && synthesizeSequence
+//let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
+//    if x.Data.Length < 900_000 then x
+//    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp)
+//
+//let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
+//    { stream = e.stream; event = replaceLongDataWithNull e.event }
+
+let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
+    docs
+    |> Seq.collect Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents
+    // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
+    // |> Seq.map hackDropBigBodies
 #endif // cosmos && !parallelOnly && synthesizeSequence
 #endif // !parallelOnly
 //#endif // cosmos
