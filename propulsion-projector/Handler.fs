@@ -6,7 +6,7 @@ module ProjectorTemplate.Handler
 let mapToStreamItems (x : System.Collections.Generic.IReadOnlyList<'a>) : seq<'a> = upcast x
 #else // cosmos && !parallelOnly
 #if    synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
-let indices = Propulsion.Kafka.Core.StreamNameSequenceGenerator()
+let indices = Propulsion.Kafka.StreamNameSequenceGenerator()
 
 let parseDocumentAsEvent (doc : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<byte[]> =
     let docId = doc.Id
