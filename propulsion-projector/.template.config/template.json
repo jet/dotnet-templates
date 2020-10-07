@@ -53,6 +53,13 @@
       "type": "computed",
       "value": "(source == \"cosmos\")"
     },
+    "synthesizeSequence": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "(--source=cosmos only) Include example custom parsing / sequence generation logic for projecting arbitrary CosmosDB document changes."
+    },
     "kafka": {
       "type": "parameter",
       "datatype": "bool",
