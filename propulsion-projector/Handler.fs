@@ -41,6 +41,8 @@ let parseDocumentAsEvent (doc : Microsoft.Azure.Documents.Document) : Propulsion
     let ts = let raw = doc.Timestamp in raw.ToUniversalTime() |> System.DateTimeOffset
     let docType = "DocumentTypeA" // each Event requires an EventType - enables the handler to route without having to parse the Data first
     let data = string doc |> System.Text.Encoding.UTF8.GetBytes
+    // Ideally, we'd extract a monotonically incrementing index/version from the source and use that
+    // (Using this technique neuters the deduplication mechanism)
     let streamIndex = indices.GenerateIndex streamName
     { stream = streamName; event = FsCodec.Core.TimelineEvent.Create(streamIndex, docType, data, timestamp=ts) }
 

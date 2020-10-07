@@ -58,7 +58,7 @@
       "datatype": "bool",
       "isRequired": false,
       "defaultValue": "false",
-      "description": "(--source=cosmos only) Include example custom parsing / sequence generation logic for projecting arbitrary CosmosDB document changes."
+      "description": "(--source=cosmos only) Include custom parsing / sequence generation logic for projecting arbitrary CosmosDB document changes, maintaining ordering."
     },
     "kafka": {
       "type": "parameter",

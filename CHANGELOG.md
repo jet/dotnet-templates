@@ -10,7 +10,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
-- `eqxProjector --source cosmos --kafka --synthesizeSequence`: Sample code for custom parsing of document changes:  [#83](https://github.com/jet/dotnet-templates/pull/83)
+- `eqxProjector --source cosmos --kafka --synthesizeSequence`: Sample code for custom parsing of document changes [#84](https://github.com/jet/dotnet-templates/pull/84)
 
 ### Changed
 ### Removed
