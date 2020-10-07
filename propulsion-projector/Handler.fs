@@ -6,20 +6,7 @@ module ProjectorTemplate.Handler
 let mapToStreamItems (x : System.Collections.Generic.IReadOnlyList<'a>) : seq<'a> = upcast x
 #else // cosmos && !parallelOnly
 #if    synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
-/// StreamsProjector buffers and deduplicates messages from a contiguous stream with each event bearing an `index`.
-/// Where the messages we consume don't have such characteristics, we need to maintain a fake `index` by keeping an int per stream in a dictionary
-/// Thread-safe, as it needs to be given batches of incoming events can be parsed in parallel
-type StreamNameSequenceGenerator() =
-
-    // Last-used index per streamName
-    let indices = System.Collections.Concurrent.ConcurrentDictionary()
-
-    /// Generates an index for the specified StreamName. Sequence starts at 0, incrementing per call.
-    member __.GenerateIndex(streamName : FsCodec.StreamName) =
-        let streamName = FsCodec.StreamName.toString streamName
-        indices.AddOrUpdate(streamName, 0L, fun _k v -> v + 1L)
-
-let indices = StreamNameSequenceGenerator()
+let indices = Propulsion.Kafka.Core.StreamNameSequenceGenerator()
 
 let parseDocumentAsEvent (doc : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<byte[]> =
     let docId = doc.Id
