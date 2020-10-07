@@ -22,6 +22,8 @@ The following templates focus specifically on the usage of `Propulsion` componen
  
        * `-k --parallelOnly` schedule kafka emission to operate in parallel at document (rather than accumulated span of events for a stream) level
 
+       * `-k --synthesizeSequence` parse documents, preserving input order as items are produced to Kafka
+
     2. `--source eventStore`: EventStoreDB's `$all` feed
     
     3. `--source sqlStreamStore`: [`SqlStreamStore`](https://github.com/SQLStreamStore/SQLStreamStore)'s `$all` feed

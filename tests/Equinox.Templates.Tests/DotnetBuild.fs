@@ -51,6 +51,7 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] eqxShipping ()                 = run "eqxShipping" []
     [<ClassData(typeof<ProProjector>)>]
     let [<Theory>] proProjector args            = run "proProjector" args
+    let [<Fact>] proProjectorSynth ()           = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]
     let [<Fact>] proConsumer ()                 = run "proConsumer" []
     let [<Fact>] trackingConsumer ()            = run "trackingConsumer" []
     let [<Fact>] summaryConsumer ()             = run "summaryConsumer" []
