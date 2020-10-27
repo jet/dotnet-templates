@@ -369,10 +369,15 @@ module Args =
 //#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse argv =
+    let private parse argv =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
+
+    let tryParse (argv : string[]) =
+        try parse argv |> Ok
+        with:? Argu.ArguParseException as e -> Error e.Message
+            | MissingArg msg -> Error msg
 
 //#if esdb
 
@@ -472,24 +477,41 @@ let build (args : Args.Arguments) =
 //#endif // sss
     sink, pipeline
 
-let run args =
+type ServiceResult =
+   | FailedToStart of message : string
+   | Unhealthy
+   | Completed
+
+let run args : Async<ServiceResult> = async {
     let sink, pipeline = build args
     pipeline |> Async.Start
-    sink.AwaitCompletion() |> Async.RunSynchronously
-    sink.RanToCompletion
+    do! sink.AwaitCompletion()
+    return if sink.RanToCompletion then Completed else Unhealthy
+}
+
+type ServiceMain() =
+    static member Run(argv, parseArgs, configureLog, initConfig, run) =
+        try match parseArgs argv with
+            | Error msg -> eprintfn "%s" msg; 1
+            | Ok args ->
+                try let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configureLog args
+                    Log.Logger <- loggerConfiguration.CreateLogger()
+                    try match initConfig args with
+                        | Error msg -> eprintfn "%s" msg; 1
+                        | Ok () ->
+                            match run args |> Async.RunSynchronously with
+                            | FailedToStart msg -> eprintfn "%s" msg; 1
+                            | Completed -> 0
+                            | Unhealthy -> 3
+                    with e -> Log.Fatal(e, "Exiting"); 2
+                finally Log.CloseAndFlush()
+        with e -> eprintfn "%O" e; 1
 
 [<EntryPoint>]
 let main argv =
-    try let args = Args.parse argv
 #if cosmos
-        try Logging.Initialize(verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
+    let initLog (args : Args.Arguments) c = Logging.Initialize(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
 #else
-        try Logging.Initialize(verbose=args.Verbose)
+    let initLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose)
 #endif
-            try Configuration.initialize ()
-                if run args then 0 else 3
-            with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
-        finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | e -> eprintf "Exception %s" e.Message; 1
+    ServiceMain.Run(argv, Args.tryParse, initLog, ignore >> Configuration.initialize, run)
