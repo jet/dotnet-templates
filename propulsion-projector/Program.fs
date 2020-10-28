@@ -523,8 +523,8 @@ type ServiceMain() =
 [<EntryPoint>]
 let main argv =
 #if cosmos
-    let configLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
+    let configureLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
 #else
-    let configLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose)
+    let configureLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose)
 #endif
-    ServiceMain.Run(argv, Args.parse, configLog, Configuration.initialize, run)
+    ServiceMain.Run(argv, Args.parse, configureLog, Configuration.initialize, run)
