@@ -25,7 +25,7 @@ module Configuration =
             printfn "Setting %s from %A" var key
             EnvVar.set var (loadF key)
 
-    let initialize () =
+    let load () =
         // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
@@ -440,47 +440,44 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
-module Logging =
+open Serilog.Events
 
-    open Serilog.Events
-    let initialize verbose changeFeedProcessorVerbose maybeSeqEndpoint =
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
-                        let cfpLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Warning
-                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
-            |> fun c -> let ingesterLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
-                        c.MinimumLevel.Override(typeof<Propulsion.Cosmos.Internal.Writer.Result>.FullName, generalLevel)
-                         .MinimumLevel.Override(typeof<Propulsion.EventStore.Internal.Writer.Result>.FullName, generalLevel)
-                         .MinimumLevel.Override(typeof<Checkpoint.CheckpointSeries>.FullName, LogEventLevel.Information)
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
-                        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
-                            a.Logger(fun l ->
-                                l.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
-                                 .WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
-                            a.Logger(fun l ->
-                                let isEqx = Filters.Matching.FromSource<Core.Context>().Invoke
-                                let isWriterA = Filters.Matching.FromSource<Propulsion.EventStore.Internal.Writer.Result>().Invoke
-                                let isWriterB = Filters.Matching.FromSource<Propulsion.Cosmos.Internal.Writer.Result>().Invoke
-                                let isCp = Filters.Matching.FromSource<Checkpoint.CheckpointSeries>().Invoke
-                                let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-                                let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-                                let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                                let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-                                let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                                (if changeFeedProcessorVerbose then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterA x || isWriterB x || isCp x || isCfp x))
-                                    .WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-                                    |> ignore) |> ignore
-                        c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
-            |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
-            |> fun c -> c.CreateLogger()
-        Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Core.Context>()
+// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
+type Logging() =
+
+    static member Initialize(configure) =
+        let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configure
+        Log.Logger <- loggerConfiguration.CreateLogger()
+
+    static member Configure(configuration : LoggerConfiguration, verbose, changeFeedProcessorVerbose, ?maybeSeqEndpoint) =
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> c.ConfigureChangeFeedProcessorLogging(changeFeedProcessorVerbose)
+        |> fun c -> let ingesterLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Information
+                    c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
+        |> fun c -> if verbose then c.MinimumLevel.Debug() else c
+        |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
+                    c.MinimumLevel.Override(typeof<Propulsion.Cosmos.Internal.Writer.Result>.FullName, generalLevel)
+                     .MinimumLevel.Override(typeof<Propulsion.EventStore.Internal.Writer.Result>.FullName, generalLevel)
+                     .MinimumLevel.Override(typeof<Propulsion.EventStore.Checkpoint.CheckpointSeries>.FullName, LogEventLevel.Information)
+        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Tranche} {Message:lj} {NewLine}{Exception}"
+                    let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+                        a.Logger(fun l ->
+                            l.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
+                             .WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
+                        a.Logger(fun l ->
+                            let isEqx = Filters.Matching.FromSource<Equinox.Cosmos.Core.Context>().Invoke
+                            let isWriterA = Filters.Matching.FromSource<Propulsion.EventStore.Internal.Writer.Result>().Invoke
+                            let isWriterB = Filters.Matching.FromSource<Propulsion.Cosmos.Internal.Writer.Result>().Invoke
+                            let isCp = Filters.Matching.FromSource<Propulsion.EventStore.Checkpoint.CheckpointSeries>().Invoke
+                            let l =
+                                if changeFeedProcessorVerbose then l
+                                else l.Filter.ByExcluding(fun x -> isEqx x || isWriterA x || isWriterB x || isCp x)
+                            l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+                            |> ignore) |> ignore
+                    c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
+        |> fun c -> match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
 
  //#if marveleqx
 [<RequireQualifiedAccess>]
@@ -646,18 +643,20 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
 
-let run (args, log, storeLog) =
+let run args = async {
+    let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.Cosmos.Core.Context>()
     let sink, pipeline = build (args, log, storeLog)
     pipeline |> Async.Start
-    sink.AwaitCompletion() |> Async.RunSynchronously
-    sink.RanToCompletion
+    return! sink.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try let log, storeLog = Logging.initialize args.Verbose args.CfpVerbose args.MaybeSeqEndpoint
-            try Configuration.initialize ()
-                if run (args, log, storeLog) then 0 else 3
+        try Logging.Initialize(fun c -> Logging.Configure(c, args.Verbose, args.CfpVerbose, ?maybeSeqEndpoint = args.MaybeSeqEndpoint))
+            try Configuration.load ()
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1

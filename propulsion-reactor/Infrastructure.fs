@@ -51,25 +51,27 @@ type LoggerConfigurationExtensions() =
         // LibLog writes to the global logger, so we need to control the emission
         let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-        |> fun c -> if verbose then c.ExcludeChangeFeedProcessorV2InternalDiagnostics() else c
+        |> fun c -> if verbose then c else c.ExcludeChangeFeedProcessorV2InternalDiagnostics()
 
 #endif
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful Args.parse
+// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
 type Logging() =
 
+    static member Initialize(configure) =
+        let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configure
+        Log.Logger <- loggerConfiguration.CreateLogger()
+
 #if (!kafkaEventSpans)
-    static member Initialize(?verbose, ?changeFeedProcessorVerbose) =
+    static member Configure(configuration : LoggerConfiguration, ?verbose, ?changeFeedProcessorVerbose) =
 #else
-    static member Initialize(?minimumLevel) =
+    static member Configure(configuration : LoggerConfiguration, ?minimumLevel) =
 #endif
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 #if (!kafkaEventSpans)
-            |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
+        |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
 #endif
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
-                        c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-            |> fun c -> c.CreateLogger()
+        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
+                    c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)

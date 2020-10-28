@@ -18,7 +18,7 @@ module Configuration =
             printfn "Setting %s from %A" var key
             EnvVar.set var (loadF key)
 
-    let initialize () =
+    let load () =
         // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
@@ -143,17 +143,18 @@ let start (args : Args.Arguments) =
         (   Log.Logger, config, sequencer.ConsumeResultToStreamEvent(), Ingester.ingest service, args.MaxConcurrentStreams,
             stats, args.StateInterval)
 
-let run args =
+let run args = async {
     use consumer = start args
-    consumer.AwaitCompletion() |> Async.RunSynchronously
-    if consumer.RanToCompletion then 0 else 3
+    return! consumer.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(verbose=args.Verbose)
-            try Configuration.initialize ()
-                run args
+        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose))
+            try Configuration.load ()
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1

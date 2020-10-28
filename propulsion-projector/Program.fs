@@ -21,7 +21,7 @@ module Configuration =
             printfn "Setting %s from %A" var key
             EnvVar.set var (loadF key)
 
-    let initialize () =
+    let load () =
         // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
@@ -355,9 +355,9 @@ module Args =
         member __.BuildSqlStreamStoreParams() =
             let src = __.SqlStreamStore
             let spec : Propulsion.SqlStreamStore.ReaderSpec =
-                {    consumerGroup         = __.ConsumerGroupName
-                     maxBatchSize          = src.MaxBatchSize
-                     tailSleepInterval     = src.TailInterval }
+                {    consumerGroup          = __.ConsumerGroupName
+                     maxBatchSize           = src.MaxBatchSize
+                     tailSleepInterval      = src.TailInterval }
             src, spec
 //#endif
 //#if kafka
@@ -369,15 +369,10 @@ module Args =
 //#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let private parse argv =
+    let parse argv =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
-
-    let tryParse (argv : string[]) =
-        try parse argv |> Ok
-        with:? Argu.ArguParseException as e -> Error e.Message
-            | MissingArg msg -> Error msg
 
 //#if esdb
 
@@ -477,41 +472,59 @@ let build (args : Args.Arguments) =
 //#endif // sss
     sink, pipeline
 
-type ServiceResult =
-   | FailedToStart of message : string
-   | Unhealthy
-   | Completed
-
-let run args : Async<ServiceResult> = async {
+let run args = async {
     let sink, pipeline = build args
     pipeline |> Async.Start
     do! sink.AwaitCompletion()
-    return if sink.RanToCompletion then Completed else Unhealthy
 }
 
+module ExitExceptions =
+
+    let (|MessageException|_|) : exn -> Option<string> = function
+         | (:? Argu.ArguParseException) as e -> Some e.Message
+         | Args.MissingArg msg -> Some msg
+         | _ -> None
+
+    let mapExitExceptionsAsync f x = async {
+        try let! res = f x
+            return Ok res
+        with MessageException message -> return Error message
+    }
+
+    let mapExitExceptions f x =
+        try Ok (f x)
+        with MessageException message -> Error message
+
 type ServiceMain() =
-    static member Run(argv, parseArgs, configureLog, initConfig, run) =
-        try match parseArgs argv with
+
+    static member Run(argv, parseArguments, configureLog, loadConfiguration, run) =
+        try match parseArguments argv with
             | Error msg -> eprintfn "%s" msg; 1
             | Ok args ->
-                try let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configureLog args
-                    Log.Logger <- loggerConfiguration.CreateLogger()
-                    try match initConfig args with
+                try Logging.Initialize(configureLog args)
+                    try match loadConfiguration args with
                         | Error msg -> eprintfn "%s" msg; 1
                         | Ok () ->
                             match run args |> Async.RunSynchronously with
-                            | FailedToStart msg -> eprintfn "%s" msg; 1
-                            | Completed -> 0
-                            | Unhealthy -> 3
+                            | Error msg -> eprintfn "%s" msg; 1
+                            | Ok () -> 0
                     with e -> Log.Fatal(e, "Exiting"); 2
                 finally Log.CloseAndFlush()
         with e -> eprintfn "%O" e; 1
 
+    static member Run(argv : string[], parseArguments, configureLog, loadConfiguration : unit -> unit, run) =
+        ServiceMain.Run
+            (   argv,
+                parseArguments |> ExitExceptions.mapExitExceptions,
+                configureLog,
+                (ignore >> loadConfiguration) |> ExitExceptions.mapExitExceptions,
+                run |> ExitExceptions.mapExitExceptionsAsync)
+
 [<EntryPoint>]
 let main argv =
 #if cosmos
-    let initLog (args : Args.Arguments) c = Logging.Initialize(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
+    let configLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
 #else
-    let initLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose)
+    let configLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose)
 #endif
-    ServiceMain.Run(argv, Args.tryParse, initLog, ignore >> Configuration.initialize, run)
+    ServiceMain.Run(argv, Args.parse, configLog, Configuration.load, run)

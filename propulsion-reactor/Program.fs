@@ -27,7 +27,7 @@ module Configuration =
             printfn "Setting %s from %A" var key
             EnvVar.set var (loadF key)
 
-    let initialize () =
+    let load () =
         // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
@@ -672,26 +672,27 @@ let build (args : Args.Arguments) =
         sink, pipeline
 #endif // !kafkaEventSpans
 
-let run args =
+let run args = async {
 #if (!kafkaEventSpans)
     let sink, pipeline = build args
     pipeline |> Async.Start
 #else
     let sink = build args
 #endif
-    sink.AwaitCompletion() |> Async.RunSynchronously
-    sink.RanToCompletion
+    return! sink.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
 #if (!kafkaEventSpans)
-        try Logging.Initialize(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose)
+        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose))
 #else
-        try Logging.Initialize(verbose=args.Verbose)
+        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose))
 #endif
-            try Configuration.initialize ()
-                if run args then 0 else 3
+            try Configuration.load ()
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1

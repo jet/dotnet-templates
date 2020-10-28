@@ -221,7 +221,7 @@ _Responsible for: Loading secrets and custom configuration, supplying defaults w
 
 Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an application's interaction with its environment and/or data storage mechanisms. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`module Args` section](#module-args)
 
-The `Settings` module is responsible for the following:
+The `Configuration` module is responsible for the following:
 1. Feeding defaults into process-local Environment Variables, _where those are not already supplied_
 2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `module Args`
 
@@ -260,8 +260,16 @@ _Responsible for applying logging config and setting up loggers for the applicat
 ```
 type Logging() =
 
-    static member Initialize(?verbose) =
-        Log.Logger <- LoggerConfiguration(….)
+    static member Initialize(configure) =
+        let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configure
+        Log.Logger <- loggerConfiguration.CreateLogger()
+
+    static member Configure(configuration : LoggingConfiguration, ?verbose) =
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        // etc.
 ```
 
 ### `start` function
@@ -290,17 +298,18 @@ The `run` function formalizes the overall pattern. It is responsible for:
 #### example
 
 ```
-let run args =
+let run args = async {
     use consumer = start args
-    consumer.AwaitCompletion() |> Async.RunSynchronously
-    consumer.RanToCompletion
+    return! consumer.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(verbose=args.Verbose)
-            try Configuration.initialize ()
-                if run args then 0 else 3
+        try Logging.Initialize(fun c -> Logging.Configure c, verbose=args.Verbose))
+            try Configuration.load ()
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
