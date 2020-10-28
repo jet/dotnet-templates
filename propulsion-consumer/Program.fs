@@ -18,7 +18,7 @@ module Configuration =
             printfn "Setting %s from %A" var key
             EnvVar.set var (loadF key)
 
-    let load () =
+    let initialize () =
         // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
@@ -98,7 +98,7 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(fun c-> Logging.Configure(c, verbose=args.Verbose))
+        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose))
             try Configuration.load ()
                 run args |> Async.RunSynchronously
                 0

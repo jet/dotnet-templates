@@ -21,7 +21,7 @@ module Configuration =
             printfn "Setting %s from %A" var key
             EnvVar.set var (loadF key)
 
-    let load () =
+    let initialize () =
         // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
@@ -497,12 +497,12 @@ module ExitExceptions =
 
 type ServiceMain() =
 
-    static member Run(argv, parseArguments, configureLog, loadConfiguration, run) =
+    static member Run(argv, parseArguments, configureLog, initializeConfiguration, run) =
         try match parseArguments argv with
             | Error msg -> eprintfn "%s" msg; 1
             | Ok args ->
                 try Logging.Initialize(configureLog args)
-                    try match loadConfiguration args with
+                    try match initializeConfiguration args with
                         | Error msg -> eprintfn "%s" msg; 1
                         | Ok () ->
                             match run args |> Async.RunSynchronously with
@@ -512,12 +512,12 @@ type ServiceMain() =
                 finally Log.CloseAndFlush()
         with e -> eprintfn "%O" e; 1
 
-    static member Run(argv : string[], parseArguments, configureLog, loadConfiguration : unit -> unit, run) =
+    static member Run(argv : string[], parseArguments, configureLog, initializeConfiguration : unit -> unit, run) =
         ServiceMain.Run
             (   argv,
                 parseArguments |> ExitExceptions.mapExitExceptions,
                 configureLog,
-                (ignore >> loadConfiguration) |> ExitExceptions.mapExitExceptions,
+                (ignore >> initializeConfiguration) |> ExitExceptions.mapExitExceptions,
                 run |> ExitExceptions.mapExitExceptionsAsync)
 
 [<EntryPoint>]
@@ -527,4 +527,4 @@ let main argv =
 #else
     let configLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose)
 #endif
-    ServiceMain.Run(argv, Args.parse, configLog, Configuration.load, run)
+    ServiceMain.Run(argv, Args.parse, configLog, Configuration.initialize, run)

@@ -25,7 +25,7 @@ module Configuration =
             printfn "Setting %s from %A" var key
             EnvVar.set var (loadF key)
 
-    let load () =
+    let initialize () =
         // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
         () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
 
