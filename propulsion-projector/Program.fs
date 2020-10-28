@@ -478,6 +478,24 @@ let run args = async {
     do! sink.AwaitCompletion()
 }
 
+#if !PROPOSAL
+[<EntryPoint>]
+let main argv =
+    try let args = Args.parse argv
+#if cosmos
+        try Logging.Initialize(fun c -> Logging.Configure(c, args.Verbose args.Cosmos.CfpVerbose)
+#else
+        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose))
+#endif
+            try Configuration.initialize ()
+                run args  |> Async.RunSynchronously
+                0
+            with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
+        finally Log.CloseAndFlush()
+    with Args.MissingArg msg -> eprintfn "%s" msg; 1
+        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | e -> eprintf "Exception %s" e.Message; 1
+#else
 module ExitExceptions =
 
     let (|MessageException|_|) : exn -> Option<string> = function
@@ -519,7 +537,6 @@ type ServiceMain() =
                 configureLog,
                 (ignore >> initializeConfiguration) |> ExitExceptions.mapExitExceptions,
                 run |> ExitExceptions.mapExitExceptionsAsync)
-
 [<EntryPoint>]
 let main argv =
 #if cosmos
@@ -528,3 +545,4 @@ let main argv =
     let configureLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose)
 #endif
     ServiceMain.Run(argv, Args.parse, configureLog, Configuration.initialize, run)
+#endif
