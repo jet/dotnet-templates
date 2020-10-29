@@ -478,7 +478,6 @@ let run args = async {
     do! sink.AwaitCompletion()
 }
 
-#if !PROPOSAL
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
@@ -495,54 +494,3 @@ let main argv =
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1
-#else
-module ExitExceptions =
-
-    let (|MessageException|_|) : exn -> Option<string> = function
-         | (:? Argu.ArguParseException) as e -> Some e.Message
-         | Args.MissingArg msg -> Some msg
-         | _ -> None
-
-    let mapExitExceptionsAsync f x = async {
-        try let! res = f x
-            return Ok res
-        with MessageException message -> return Error message
-    }
-
-    let mapExitExceptions f x =
-        try Ok (f x)
-        with MessageException message -> Error message
-
-type ServiceMain() =
-
-    static member Run(argv, parseArguments, configureLog, initializeConfiguration, run) =
-        try match parseArguments argv with
-            | Error msg -> eprintfn "%s" msg; 1
-            | Ok args ->
-                try Logging.Initialize(configureLog args)
-                    try match initializeConfiguration args with
-                        | Error msg -> eprintfn "%s" msg; 1
-                        | Ok () ->
-                            match run args |> Async.RunSynchronously with
-                            | Error msg -> eprintfn "%s" msg; 1
-                            | Ok () -> 0
-                    with e -> Log.Fatal(e, "Exiting"); 2
-                finally Log.CloseAndFlush()
-        with e -> eprintfn "%O" e; 1
-
-    static member Run(argv : string[], parseArguments, configureLog, initializeConfiguration : unit -> unit, run) =
-        ServiceMain.Run
-            (   argv,
-                parseArguments |> ExitExceptions.mapExitExceptions,
-                configureLog,
-                (ignore >> initializeConfiguration) |> ExitExceptions.mapExitExceptions,
-                run |> ExitExceptions.mapExitExceptionsAsync)
-[<EntryPoint>]
-let main argv =
-#if cosmos
-    let configureLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose)
-#else
-    let configureLog (args : Args.Arguments) c = Logging.Configure(c, verbose=args.Verbose)
-#endif
-    ServiceMain.Run(argv, Args.parse, configureLog, Configuration.initialize, run)
-#endif
