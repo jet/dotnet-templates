@@ -30,7 +30,7 @@ type Logging() =
 
     [<Extension>]
 #if cosmos
-    static member Configure(configuration : LoggerConfiguration, ?minimumLevel, ?changeFeedProcessorVerbose) =
+    static member Configure(configuration : LoggerConfiguration, ?verbose, ?changeFeedProcessorVerbose) =
 #else
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
 #endif

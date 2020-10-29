@@ -61,7 +61,7 @@ type Logging() =
 #if (!kafkaEventSpans)
     static member Configure(configuration : LoggerConfiguration, ?verbose, ?changeFeedProcessorVerbose) =
 #else
-    static member Configure(configuration : LoggerConfiguration, ?minimumLevel) =
+    static member Configure(configuration : LoggerConfiguration, ?verbose) =
 #endif
         configuration
             .Destructure.FSharpTypes()
