@@ -1,6 +1,7 @@
 ﻿[<AutoOpen>]
 module private ConsumerTemplate.Infrastructure
 
+open Serilog
 open System
 open System.Threading.Tasks
 
@@ -48,3 +49,15 @@ type System.Threading.SemaphoreSlim with
         try return! workflow
         finally semaphore.Release() |> ignore
     }
+
+[<System.Runtime.CompilerServices.Extension>]
+type Logging() =
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
+                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")

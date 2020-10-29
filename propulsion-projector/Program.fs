@@ -355,9 +355,9 @@ module Args =
         member __.BuildSqlStreamStoreParams() =
             let src = __.SqlStreamStore
             let spec : Propulsion.SqlStreamStore.ReaderSpec =
-                {    consumerGroup         = __.ConsumerGroupName
-                     maxBatchSize          = src.MaxBatchSize
-                     tailSleepInterval     = src.TailInterval }
+                {    consumerGroup          = __.ConsumerGroupName
+                     maxBatchSize           = src.MaxBatchSize
+                     tailSleepInterval      = src.TailInterval }
             src, spec
 //#endif
 //#if kafka
@@ -374,34 +374,6 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
-module Logging =
-
-#if cosmos
-    let initialize verbose changeFeedProcessorVerbose =
-#else
-    let initialize verbose =
-#endif
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-#if cosmos
-            // LibLog writes to the global logger, so we need to control the emission
-            |> fun c -> let cfpl = if changeFeedProcessorVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
-                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-            |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-                        let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-                        let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                        let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-                        let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                        if changeFeedProcessorVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
-#endif
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
-                        c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-            |> fun c -> c.CreateLogger()
 //#if esdb
 
 module Checkpoints =
@@ -500,22 +472,23 @@ let build (args : Args.Arguments) =
 //#endif // sss
     sink, pipeline
 
-let run args =
+let run args = async {
     let sink, pipeline = build args
     pipeline |> Async.Start
-    sink.AwaitCompletion() |> Async.RunSynchronously
-    sink.RanToCompletion
+    do! sink.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
 #if cosmos
-        try Logging.initialize args.Verbose args.Cosmos.CfpVerbose
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose).CreateLogger()
 #else
-        try Logging.initialize args.Verbose
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
 #endif
             try Configuration.initialize ()
-                if run args then 0 else 3
+                run args  |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1

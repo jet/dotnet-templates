@@ -81,7 +81,6 @@
         {
           "condition": "blank && !kafka",
           "exclude": [
-            "Infrastructure.fs",
             "Todo.fs",
             "Contract.fs"
           ]

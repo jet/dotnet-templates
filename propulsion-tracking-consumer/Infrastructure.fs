@@ -1,6 +1,8 @@
 ﻿namespace ConsumerTemplate
 
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
+open Serilog
+open System.Runtime.CompilerServices
 
 module EventCodec =
 
@@ -21,3 +23,15 @@ module SkuId =
     let toString (value : SkuId) : string = % value
     let parse (value : string) : SkuId = let raw = value in % raw
     let (|Parse|) = parse
+
+[<Extension>]
+type Logging() =
+
+    [<Extension>]
+    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
+                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")

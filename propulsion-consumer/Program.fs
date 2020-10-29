@@ -77,20 +77,6 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         parser.ParseCommandLine argv |> Arguments
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
-module Logging =
-
-    let initialize verbose =
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
-                        c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
-            |> fun c -> c.CreateLogger()
-
 let [<Literal>] AppName = "ConsumerTemplate"
 
 let start (args : Args.Arguments) =
@@ -104,17 +90,18 @@ let start (args : Args.Arguments) =
     //NultiMessages.Parallel.Start(c, args.MaxDop)
     MultiStreams.start(c, args.MaxDop)
 
-let run args =
+let run args = async {
     use consumer = start args
-    consumer.AwaitCompletion() |> Async.RunSynchronously
-    consumer.RanToCompletion
+    return! consumer.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.initialize args.Verbose
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
             try Configuration.initialize ()
-                if run args then 0 else 3
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1

@@ -175,27 +175,6 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
-module Logging =
-
-    let initialize verbose changeFeedProcessorVerbose =
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            // LibLog writes to the global logger, so we need to control the emission
-            |> fun c -> let cfpl = if changeFeedProcessorVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
-                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-            |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-                        let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-                        let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                        let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-                        let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                        if changeFeedProcessorVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
-                        c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-            |> fun c -> c.CreateLogger()
-
 let [<Literal>] AppName = "Watchdog"
 
 let startWatchdog log (processingTimeout, stats : Handler.Stats) (maxReadAhead, maxConcurrentStreams) driveTransaction
@@ -233,18 +212,19 @@ let build (args : Args.Arguments) =
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     sink, pipeline
 
-let run args =
+let run args = async {
     let sink, pipeline = build args
     pipeline |> Async.Start
-    sink.AwaitCompletion() |> Async.RunSynchronously
-    sink.RanToCompletion
+    return! sink.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.initialize args.Verbose args.CfpVerbose
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose).CreateLogger()
             try Configuration.initialize ()
-                if run args then 0 else 3
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1

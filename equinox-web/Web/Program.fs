@@ -4,14 +4,16 @@ open Microsoft.AspNetCore
 open Microsoft.AspNetCore.Hosting
 open Serilog
 
-let initLogging () =
-    Log.Logger <-
-        LoggerConfiguration()
+[<System.Runtime.CompilerServices.Extension>]
+type Logging() =
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Configure(c : LoggerConfiguration) =
+        c
             .MinimumLevel.Debug()
             .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
             .Enrich.FromLogContext()
             .WriteTo.Console()
-            .CreateLogger()
 
 let createWebHostBuilder args : IWebHostBuilder =
     WebHost
@@ -21,7 +23,7 @@ let createWebHostBuilder args : IWebHostBuilder =
 
 [<EntryPoint>]
 let main argv =
-    try initLogging ()
+    try Log.Logger <- LoggerConfiguration().Configure().CreateLogger()
         createWebHostBuilder(argv).Build().Run()
         0
     with e ->

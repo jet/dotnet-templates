@@ -109,7 +109,8 @@ module Args =
 #endif
 
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
-    let c = LoggerConfiguration().Destructure.FSharpTypes()
+    let c = LoggerConfiguration()
+                .Destructure.FSharpTypes()
     let c = if verbose then c.MinimumLevel.Debug() else c
 //#if eventStore
     let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())

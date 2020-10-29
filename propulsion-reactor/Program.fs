@@ -101,12 +101,12 @@ module Args =
 #endif
     and Arguments(a : ParseResults<Parameters>) =
         member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.Verbose =                 a.Contains Parameters.Verbose
 //#if (!kafkaEventSpans)
         member __.CfpVerbose =              a.Contains CfpVerbose
 //#endif
         member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
         member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
+        member __.Verbose =                 a.Contains Parameters.Verbose
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 5.
 //#if filter
@@ -488,35 +488,6 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful Args.parse
-module Logging =
-
-#if (!kafkaEventSpans)
-    let initialize verbose changeFeedProcessorVerbose =
-#else
-    let initialize verbose =
-#endif
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-#if (!kafkaEventSpans)
-            // LibLog writes to the global logger, so we need to control the emission
-            |> fun c -> let cfpl = if changeFeedProcessorVerbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
-                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-            |> fun c -> let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-                        let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-                        let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                        let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-                        let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                        if changeFeedProcessorVerbose then c else c.Filter.ByExcluding(fun x -> isCfp x)
-#endif
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
-                        c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-            |> fun c -> c.CreateLogger()
-
 let [<Literal>] AppName = "ReactorTemplate"
 
 //#if multiSource
@@ -701,26 +672,27 @@ let build (args : Args.Arguments) =
         sink, pipeline
 #endif // !kafkaEventSpans
 
-let run args =
+let run args = async {
 #if (!kafkaEventSpans)
     let sink, pipeline = build args
     pipeline |> Async.Start
 #else
     let sink = build args
 #endif
-    sink.AwaitCompletion() |> Async.RunSynchronously
-    sink.RanToCompletion
+    return! sink.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
 #if (!kafkaEventSpans)
-        try Logging.initialize args.Verbose args.CfpVerbose
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose).CreateLogger()
 #else
-        try Logging.initialize args.Verbose
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
 #endif
             try Configuration.initialize ()
-                if run args then 0 else 3
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
