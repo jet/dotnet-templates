@@ -23,13 +23,10 @@ type LoggerConfigurationExtensions() =
         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
         |> fun c -> if verbose then c else c.ExcludeChangeFeedProcessorV2InternalDiagnostics()
 
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
+[<Extension>]
 type Logging() =
 
-    static member Initialize(configure) =
-        let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configure
-        Log.Logger <- loggerConfiguration.CreateLogger()
-
+    [<Extension>]
     static member Configure(configuration : LoggerConfiguration, ?verbose, ?changeFeedProcessorVerbose) =
         configuration
             .Destructure.FSharpTypes()

@@ -260,10 +260,7 @@ _Responsible for applying logging config and setting up loggers for the applicat
 ```
 type Logging() =
 
-    static member Initialize(configure) =
-        let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configure
-        Log.Logger <- loggerConfiguration.CreateLogger()
-
+    [<Extension>]
     static member Configure(configuration : LoggingConfiguration, ?verbose) =
         configuration
             .Destructure.FSharpTypes()
@@ -306,8 +303,8 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(fun c -> Logging.Configure c, verbose=args.Verbose))
-            try Configuration.load ()
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
+            try Configuration.initialize ()
                 run args |> Async.RunSynchronously
                 0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

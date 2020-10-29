@@ -2,6 +2,7 @@
 
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
 open Serilog
+open System.Runtime.CompilerServices
 
 module EventCodec =
 
@@ -23,13 +24,10 @@ module SkuId =
     let parse (value : string) : SkuId = let raw = value in % raw
     let (|Parse|) = parse
 
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
+[<Extension>]
 type Logging() =
 
-    static member Initialize(configure) =
-        let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configure
-        Log.Logger <- loggerConfiguration.CreateLogger()
-
+    [<Extension>]
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
             .Destructure.FSharpTypes()

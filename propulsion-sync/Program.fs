@@ -442,13 +442,10 @@ module Args =
 
 open Serilog.Events
 
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
+[<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
-    static member Initialize(configure) =
-        let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configure
-        Log.Logger <- loggerConfiguration.CreateLogger()
-
+    [<System.Runtime.CompilerServices.Extension>]
     static member Configure(configuration : LoggerConfiguration, verbose, changeFeedProcessorVerbose, ?maybeSeqEndpoint) =
         configuration
             .Destructure.FSharpTypes()
@@ -653,8 +650,8 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(fun c -> Logging.Configure(c, args.Verbose, args.CfpVerbose, ?maybeSeqEndpoint = args.MaybeSeqEndpoint))
-            try Configuration.load ()
+        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose, args.CfpVerbose, ?maybeSeqEndpoint = args.MaybeSeqEndpoint).CreateLogger()
+            try Configuration.initialize ()
                 run args |> Async.RunSynchronously
                 0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

@@ -221,8 +221,8 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose))
-            try Configuration.load ()
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose).CreateLogger()
+            try Configuration.initialize ()
                 run args |> Async.RunSynchronously
                 0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

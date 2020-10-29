@@ -686,11 +686,11 @@ let run args = async {
 let main argv =
     try let args = Args.parse argv
 #if (!kafkaEventSpans)
-        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose))
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose).CreateLogger()
 #else
-        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose))
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
 #endif
-            try Configuration.load ()
+            try Configuration.initialize ()
                 run args |> Async.RunSynchronously
                 0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2

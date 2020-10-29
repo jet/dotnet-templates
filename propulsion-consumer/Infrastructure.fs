@@ -50,13 +50,10 @@ type System.Threading.SemaphoreSlim with
         finally semaphore.Release() |> ignore
     }
 
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
+[<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
-    static member Initialize(configure) =
-        let loggerConfiguration : LoggerConfiguration = LoggerConfiguration() |> configure
-        Log.Logger <- loggerConfiguration.CreateLogger()
-
+    [<System.Runtime.CompilerServices.Extension>]
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
             .Destructure.FSharpTypes()

@@ -483,9 +483,9 @@ let run args = async {
 let main argv =
     try let args = Args.parse argv
 #if cosmos
-        try Logging.Initialize(fun c -> Logging.Configure(c, args.Verbose args.Cosmos.CfpVerbose)
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose).CreateLogger()
 #else
-        try Logging.Initialize(fun c -> Logging.Configure(c, verbose=args.Verbose))
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
 #endif
             try Configuration.initialize ()
                 run args  |> Async.RunSynchronously
