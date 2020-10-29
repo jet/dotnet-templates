@@ -191,49 +191,12 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
-module Logging =
-
-    open Serilog.Events
-    let initialize verbose changeFeedProcessorVerbose =
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
-                        let cfpLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Warning
-                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
-            |> fun c -> let ingesterLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
-                        c.MinimumLevel.Override(typeof<Propulsion.Cosmos.Internal.Writer.Result>.FullName, generalLevel)
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Message:lj} {Properties}{NewLine}{Exception}"
-                        let t = if verbose then t else t.Replace("{Properties}", "")
-                        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
-                            a.Logger(fun l ->
-                                l.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
-                            a.Logger(fun l ->
-                                let isEqx = Filters.Matching.FromSource<Core.Context>().Invoke
-                                let isWriterB = Filters.Matching.FromSource<Propulsion.Cosmos.Internal.Writer.Result>().Invoke
-                                let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-                                let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-                                let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                                let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-                                let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                                let l = if changeFeedProcessorVerbose then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterB x || isCfp x)
-                                l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t) |> ignore) |> ignore
-                        c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
-            |> fun c -> c.CreateLogger()
-        Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Core.Context>()
-
 let [<Literal>] AppName = "PrunerTemplate"
 
 let build (args : Args.Arguments, log : ILogger, storeLog : ILogger) =
     let (source, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) = args.SourceParams()
 
-    // NOTE - DANGEROUS - events submitted to this sink get removed from the supplied Context!
+    // NOTE - DANGEROUS - events submitted to this sink get DELETED from the supplied Context!
     let deletingEventsSink =
         let target = source.Sink
         if (target.Database, target.Container) = (source.Database, source.Container) then
@@ -251,18 +214,20 @@ let build (args : Args.Arguments, log : ILogger, storeLog : ILogger) =
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
     deletingEventsSink, pipeline
 
-let run (args, log, storeLog) =
+let run args = async {
+    let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.Cosmos.Core.Context>()
     let sink, pipeline = build (args, log, storeLog)
     pipeline |> Async.Start
-    sink.AwaitCompletion() |> Async.RunSynchronously
-    sink.RanToCompletion
+    return! sink.AwaitCompletion()
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try let log, storeLog = Logging.initialize args.Verbose args.CfpVerbose
+        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose, args.CfpVerbose).CreateLogger()
             try Configuration.initialize ()
-                if run (args, log, storeLog) then 0 else 3
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1

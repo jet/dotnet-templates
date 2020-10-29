@@ -196,49 +196,6 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         parser.ParseCommandLine argv |> Arguments
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-logging
-// Application logic assumes the global `Serilog.Log` is initialized _immediately_ after a successful ArgumentParser.ParseCommandline
-module Logging =
-
-    open Serilog.Events
-    let initialize verbose (logSyncToConsole, minRu) changeFeedProcessorVerbose =
-        Log.Logger <-
-            LoggerConfiguration()
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> // LibLog writes to the global logger, so we need to control the emission if we don't want to pass loggers everywhere
-                        let cfpLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Warning
-                        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpLevel)
-            |> fun c -> let ingesterLevel = if logSyncToConsole then LogEventLevel.Debug else LogEventLevel.Information
-                        c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
-            |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-            |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
-                        c.MinimumLevel.Override(typeof<Propulsion.Cosmos.Internal.Writer.Result>.FullName, generalLevel)
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId} {Message:lj} {Properties}{NewLine}{Exception}"
-                        let t = if verbose then t else t.Replace("{Properties}", "")
-                        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
-                            a.Logger(fun l ->
-                                l.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
-                            a.Logger(fun l ->
-                                let isEqx = Filters.Matching.FromSource<Core.Context>().Invoke
-                                let isWriterB = Filters.Matching.FromSource<Propulsion.Cosmos.Internal.Writer.Result>().Invoke
-                                let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-                                let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-                                let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-                                let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-                                let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-                                let l = if logSyncToConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterB x)
-                                let l = if changeFeedProcessorVerbose then l else l.Filter.ByExcluding(fun x -> isCfp x)
-                                let isCheaperThan minRu = function
-                                    | Store.Log.InternalMetrics.Stats.CosmosMetric
-                                        (Store.Log.Event.SyncSuccess m | Store.Log.Event.SyncConflict m) -> m.ru < minRu
-                                    | _ -> false
-                                let l = match minRu with Some mru -> l.Filter.ByExcluding(fun x -> isCheaperThan mru x) | None -> l
-                                l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t) |> ignore) |> ignore
-                        c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
-            |> fun c -> c.CreateLogger()
-        Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Core.Context>()
-
 let [<Literal>] AppName = "ArchiverTemplate"
 
 let build (args : Args.Arguments, log, storeLog : ILogger) =
@@ -258,18 +215,20 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
     archiverSink, pipeline
 
-let run (args, log, storeLog) =
+let run args = async {
+    let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.Cosmos.Core.Context>()
     let sink, pipeline = build (args, log, storeLog)
     pipeline |> Async.Start
     sink.AwaitCompletion() |> Async.RunSynchronously
-    sink.RanToCompletion
+}
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try let log, storeLog = Logging.initialize args.Verbose args.SyncLogging args.CfpVerbose
+        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose, args.SyncLogging, args.CfpVerbose).CreateLogger()
             try Configuration.initialize ()
-                if run (args, log, storeLog) then 0 else 3
+                run args |> Async.RunSynchronously
+                0
             with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with Args.MissingArg msg -> eprintfn "%s" msg; 1
