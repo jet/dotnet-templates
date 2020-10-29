@@ -11,6 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 ### Changed
 
+- Cleaned and moved `Logging` logic out to `Infrastructure.fs` [#76](https://github.com/jet/dotnet-templates/pull/76) 
 - Polished `SemaphoreSlim` extensions [#79](https://github.com/jet/dotnet-templates/pull/79) 
 
 ### Removed

@@ -34,12 +34,12 @@ type Logging() =
 #else
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
 #endif
-            configuration
-                .Destructure.FSharpTypes()
-                .Enrich.FromLogContext()
-            |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 #if cosmos
-            |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
+        |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
 #endif
-            |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
-                        c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
+                    c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)

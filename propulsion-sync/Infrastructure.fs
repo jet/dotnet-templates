@@ -31,10 +31,10 @@ type Logging() =
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
+        |> fun c -> if verbose then c.MinimumLevel.Debug() else c
         |> fun c -> c.ConfigureChangeFeedProcessorLogging(changeFeedProcessorVerbose)
         |> fun c -> let ingesterLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Information
                     c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
-        |> fun c -> if verbose then c.MinimumLevel.Debug() else c
         |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.Cosmos.Internal.Writer.Result>.FullName, generalLevel)
                      .MinimumLevel.Override(typeof<Propulsion.EventStore.Internal.Writer.Result>.FullName, generalLevel)

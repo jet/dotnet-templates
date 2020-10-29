@@ -8,19 +8,23 @@ using System.Threading.Tasks;
 
 namespace TodoBackendTemplate.Web
 {
+    static class Logging
+    {
+        public static LoggerConfiguration Configure(this LoggerConfiguration c) =>
+            c
+                .MinimumLevel.Debug()
+                .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+                // .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+                .Enrich.FromLogContext()
+                .WriteTo.Console();
+    }
     static class Program
     {
         public static async Task<int> Main(string[] argv)
         {
             try
             {
-                Log.Logger = new LoggerConfiguration()
-                    .MinimumLevel.Debug()
-                    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-                    // .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-                    .Enrich.FromLogContext()
-                    .WriteTo.Console()
-                    .CreateLogger();
+                Log.Logger = new LoggerConfiguration().Configure().CreateLogger();
                 var host = WebHost
                     .CreateDefaultBuilder(argv)
                     .UseSerilog()
