@@ -219,7 +219,7 @@ let run args = async {
     let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.Cosmos.Core.Context>()
     let sink, pipeline = build (args, log, storeLog)
     pipeline |> Async.Start
-    sink.AwaitCompletion() |> Async.RunSynchronously
+    return! sink.AwaitCompletion()
 }
 
 [<EntryPoint>]
