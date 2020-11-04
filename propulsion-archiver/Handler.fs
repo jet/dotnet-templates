@@ -4,7 +4,8 @@ type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     override __.HandleOk(()) = ()
-    override __.HandleExn(log, exn) = log.Information(exn, "Unhandled")
+    override __.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
 
 let (|Archivable|NotArchivable|) = function
     // TODO define Categories that should be copied to the secondary Container

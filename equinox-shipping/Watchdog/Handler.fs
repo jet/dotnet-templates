@@ -16,7 +16,7 @@ type Stats(log, statsInterval, stateInterval) =
         | Outcome.Completed -> completed <- completed + 1
         | Outcome.Deferred -> deferred <- deferred + 1
         | Outcome.Resolved successfully -> if successfully then succeeded <- succeeded + 1 else failed <- failed + 1
-    override __.HandleExn exn =
+    override __.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
     override __.DumpStats() =

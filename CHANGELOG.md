@@ -17,6 +17,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - Cleaned and moved `Logging` logic out to `Infrastructure.fs` [#76](https://github.com/jet/dotnet-templates/pull/76) 
 - Polished `SemaphoreSlim` extensions
+- Target `Propulsion` v `2.9.0`, `Equinox` v `2.3.0`, `FsKafka` v `1.5.2`
 
 ### Removed
 ### Fixed

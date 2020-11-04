@@ -518,7 +518,8 @@ type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     override __.HandleOk(()) = ()
-    override __.HandleExn exn = log.Information(exn, "Unhandled")
+    override __.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
 
 let build (args : Args.Arguments, log, storeLog : ILogger) =
     let maybeDstCosmos, sink, streamFilter =

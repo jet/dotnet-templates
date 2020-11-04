@@ -44,9 +44,11 @@ type ProductionStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
-    override __.HandleOk(()) = log.Warning("Produced")
+    override __.HandleOk(()) =
+        log.Warning("Produced")
     // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
-    override __.HandleExn exn = log.Information(exn, "Unhandled")
+    override __.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
 
 /// Responsible for wrapping a span of events for a specific stream into an envelope
 /// The well-defined Propulsion.Codec `RenderedSpan` represents the accumulated span of events for a given stream as an
@@ -74,7 +76,7 @@ type ProjectorStats(log, statsInterval, stateInterval) =
     override __.HandleOk count =
         totalCount <- totalCount + count
     // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
-    override __.HandleExn exn =
+    override __.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
     override __.DumpStats() =

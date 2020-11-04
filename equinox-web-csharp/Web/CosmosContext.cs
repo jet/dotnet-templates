@@ -76,7 +76,7 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new Resolver<TEvent, TState, object>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy);
+            var resolver = new Resolver<TEvent, TState, object>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy, compressUnfolds:FSharpOption<bool>.None);
             return t => resolver.Resolve(t);
         }
     }

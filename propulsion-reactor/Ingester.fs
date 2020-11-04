@@ -24,7 +24,11 @@ type Stats(log, statsInterval, stateInterval) =
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
+#if kafkaEventSpans
     override __.HandleExn exn =
+#else
+    override __.HandleExn(log, exn) =
+#endif
         log.Information(exn, "Unhandled")
 
     override __.DumpStats() =
