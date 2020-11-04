@@ -62,6 +62,17 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
 - [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
+- [`proArchiver`](propulsion-archiver/README.md) - Boilerplate for a console app that that syncs Events from relevant Categories from a Hot container and to an associated warm [`Equinox.Cosmos` stores](https://github.com/jet/equinox) archival container using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion).
+    - An Archiver is intended to run continually as an integral part of a production system.
+
+- [`proPruner`](propulsion-pruner/README.md) - Boilerplate for a console app that that inspects Events from relevant Categories in an [`Equinox.Cosmos` store's](https://github.com/jet/equinox) Hot container and uses that to drive the removal of (archived) Events that have Expired from the associated Hot Container using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion).
+    
+    - While a Pruner does not consume a large amount of RU capacity from either the Hot or Warm Containers, running one continually is definitely optional; a Pruner only has a purpose when there are Expired events in the Hot Container; running periodically during low-load periods may be appropriate, depending on the lifetime profile of the events in your system
+    
+    - Reducing the traversal frequency needs to be balanced against the primary goal of deleting from the Hot Container: preventing it splitting into multiple physical Ranges.
+    
+    - It is necessary to reset the CFP checkpoint (delete the checkpoint documents, or use a new Consumer Group Name) to trigger a re-traversal if events have expired since the lsat time a traversal took place.
+
 <a name="eqxShipping"></a>
 - [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey)
  
