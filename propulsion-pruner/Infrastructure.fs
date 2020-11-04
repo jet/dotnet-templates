@@ -37,16 +37,16 @@ type Logging() =
         |> fun c -> let ingesterLevel = if cfpVerbose then Events.LogEventLevel.Debug else Events.LogEventLevel.Information
                     c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
         |> fun c -> let generalLevel = if verbose then Events.LogEventLevel.Information else Events.LogEventLevel.Warning
-                    c.MinimumLevel.Override(typeof<Propulsion.Cosmos.Internal.Writer.Result>.FullName, generalLevel)
+                    c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
         |> fun c ->
             let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {Properties}{NewLine}{Exception}"
             let t = if verbose then t else t.Replace("{Properties}", "")
             let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                 a.Logger(fun l ->
-                    l.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
+                    l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore
                 a.Logger(fun l ->
-                    let isEqx = Filters.Matching.FromSource<Equinox.Cosmos.Core.Context>().Invoke
-                    let isWriterB = Filters.Matching.FromSource<Propulsion.Cosmos.Internal.Writer.Result>().Invoke
+                    let isEqx = Filters.Matching.FromSource<Equinox.CosmosStore.Core.EventsContext>().Invoke
+                    let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
                     let l = if cfpVerbose then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterB x)
                     l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t) |> ignore)
                 |> ignore

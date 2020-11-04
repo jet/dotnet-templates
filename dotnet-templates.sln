@@ -111,6 +111,8 @@ EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Pruner", "propulsion-pruner\Pruner.fsproj", "{A0FB44F5-15E5-47C8-81E5-1991269849CB}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Propulsion.CosmosStore", "..\propulsion\src\Propulsion.CosmosStore\Propulsion.CosmosStore.fsproj", "{5EF0F049-E457-4170-BF70-6A6886AB15F0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -191,6 +193,10 @@ Global
 		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5EF0F049-E457-4170-BF70-6A6886AB15F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5EF0F049-E457-4170-BF70-6A6886AB15F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5EF0F049-E457-4170-BF70-6A6886AB15F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5EF0F049-E457-4170-BF70-6A6886AB15F0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
