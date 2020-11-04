@@ -9,17 +9,24 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.11.0"></a>
+## [4.11.0] - 2020-11-04
+
+### Added
 
 - `proArchiver`: CosmosDB ChangeFeedProcessor that syncs events from specified Hot Container's categories into a Warm Container [#79](https://github.com/jet/dotnet-templates/pull/79)
 - `proPruner`: CosmosDB ChangeFeedProcessor that prunes events from a Hot Container based on Expiration status determined by inspecting the Warm version of the Events synced by the `proArchiver` [#79](https://github.com/jet/dotnet-templates/pull/79) 
 
 ### Changed
 
-- Cleaned and moved `Logging` logic out to `Infrastructure.fs` [#76](https://github.com/jet/dotnet-templates/pull/76) 
+- Cleaned and moved `Logging` logic out to `Infrastructure.fs` [#76](https://github.com/jet/dotnet-templates/pull/76) :pray: [@enricosada](https://github.com/enricosada)
 - Polished `SemaphoreSlim` extensions
-- Target `Propulsion` v `2.9.0`, `Equinox` v `2.3.0`, `FsKafka` v `1.5.2`
+- Target `Propulsion` v `2.9.0`, `Equinox` v `2.3.0`
 
-### Removed
 ### Fixed
 
 - Fixed version check logic in `TodoSummary` ingesters [#82](https://github.com/jet/dotnet-templates/pull/82) :pray: [@dunnry](https://github.com/dunnry)
@@ -472,7 +479,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.10.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.11.0...HEAD
+[4.11.0]: https://github.com/jet/dotnet-templates/compare/4.10.0...4.11.0
 [4.10.0]: https://github.com/jet/dotnet-templates/compare/4.9.0...4.10.0
 [4.9.0]: https://github.com/jet/dotnet-templates/compare/4.8.0...4.9.0
 [4.8.0]: https://github.com/jet/dotnet-templates/compare/4.7.2...4.8.0
