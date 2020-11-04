@@ -9,10 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proArchiver`: CosmosDB ChangeFeedProcessor that syncs events from specified Hot Container's categories into a Warm Container [#79](https://github.com/jet/dotnet-templates/pull/79)
+- `proPruner`: CosmosDB ChangeFeedProcessor that prunes events from a Hot Container based on Expiration status determined by inspecting the Warm version of the Events synced by the `proArchiver` [#79](https://github.com/jet/dotnet-templates/pull/79) 
+
 ### Changed
 
 - Cleaned and moved `Logging` logic out to `Infrastructure.fs` [#76](https://github.com/jet/dotnet-templates/pull/76) 
-- Polished `SemaphoreSlim` extensions [#79](https://github.com/jet/dotnet-templates/pull/79) 
+- Polished `SemaphoreSlim` extensions
 
 ### Removed
 ### Fixed

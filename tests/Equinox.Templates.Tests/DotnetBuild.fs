@@ -60,6 +60,9 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] ``proSync-marvelEqx`` ()       = run "proSync" ["--marveleqx"]
 #endif
 
+    let [<Fact>] proArchiver ()                 = run "proArchiver" []
+    let [<Fact>] proPruner ()                   = run "proPruner" []
+
     [<ClassData(typeof<EqxWebs>)>]
     let [<Theory>] eqxweb (template, args)      = run template args
 
