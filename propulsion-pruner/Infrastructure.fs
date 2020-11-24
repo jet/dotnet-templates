@@ -27,8 +27,7 @@ type LoggerConfigurationExtensions() =
 type Logging() =
 
     [<Extension>]
-    static member Configure(configuration : LoggerConfiguration, appName, ?verbose, ?changeFeedProcessorVerbose) =
-        let verbose, cfpVerbose = defaultArg verbose false, defaultArg changeFeedProcessorVerbose false
+    static member Configure(configuration : LoggerConfiguration, appName, verbose, cfpVerbose, metrics) =
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
@@ -44,8 +43,8 @@ type Logging() =
             let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                 a.Logger(fun l ->
                     l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
-                     .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
-                    |> ignore) |> ignore
+                      |> fun l -> if not metrics then l else l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
+                      |> ignore) |> ignore
                 a.Logger(fun l ->
                     let isEqx = Filters.Matching.FromSource<Equinox.CosmosStore.Core.EventsContext>().Invoke
                     let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke

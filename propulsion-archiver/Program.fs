@@ -1,4 +1,4 @@
-﻿module ArchiverTemplate.Program
+module ArchiverTemplate.Program
 
 open Propulsion.Cosmos
 open Serilog
@@ -52,6 +52,7 @@ module Args =
         | [<AltCommandLine "-S"; Unique>]   SyncVerbose
         | [<AltCommandLine "-t"; Unique>]   RuThreshold of float
         | [<AltCommandLine "-C"; Unique>]   CfpVerbose
+        | [<AltCommandLine "-p"; Unique>]   PrometheusPort of int
 
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
@@ -64,6 +65,7 @@ module Args =
                 | SyncVerbose ->            "request Logging for Sync operations (Writes). Default: off"
                 | RuThreshold _ ->          "minimum request charge required to log. Default: 0"
                 | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
+                | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off"
 
                 | SrcCosmos _ ->            "Cosmos input parameters."
     and Arguments(a : ParseResults<Parameters>) =
@@ -72,6 +74,8 @@ module Args =
         member __.MaxWriters =              a.GetResult(MaxWriters, 4)
         member __.Verbose =                 a.Contains Parameters.Verbose
         member __.CfpVerbose =              a.Contains CfpVerbose
+        member __.PrometheusPort =          a.TryGetResult PrometheusPort
+        member __.MetricsEnabled =          a.Contains PrometheusPort
         member __.SyncLogging =             a.Contains SyncVerbose, a.TryGetResult RuThreshold
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 5.
@@ -215,21 +219,26 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
     archiverSink, pipeline
 
+// A typical app will likely have health checks etc, implying the wireup would be via `UseMetrics()` and thus not use this ugly code directly
+let startMetricsServer port : IDisposable =
+    let metricsServer = new Prometheus.KestrelMetricServer(port = port)
+    let ms = metricsServer.Start()
+    Log.Information("Prometheus /metrics endpoint on port {port}", port)
+    { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
+
 let run args = async {
     let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.CosmosStore.Core.EventsContext>()
     let sink, pipeline = build (args, log, storeLog)
     pipeline |> Async.Start
-    use metricServer = new Prometheus.KestrelMetricServer(port = 1235)
-    let ms = metricServer.Start()
+    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     do! sink.AwaitCompletion()
-    ms.Stop()
 }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        let appName = "archiver:"+args.ConsumerGroupName.Replace("ruben","")
-        try Log.Logger <- LoggerConfiguration().Configure(appName, args.Verbose, args.SyncLogging, args.CfpVerbose).CreateLogger()
+        let appName = sprintf "archiver:%s" args.ConsumerGroupName
+        try Log.Logger <- LoggerConfiguration().Configure(appName, args.Verbose, args.SyncLogging, args.CfpVerbose, args.MetricsEnabled).CreateLogger()
             try Configuration.initialize ()
                 run args |> Async.RunSynchronously
                 0
