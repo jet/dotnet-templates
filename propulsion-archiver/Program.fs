@@ -219,13 +219,17 @@ let run args = async {
     let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.CosmosStore.Core.EventsContext>()
     let sink, pipeline = build (args, log, storeLog)
     pipeline |> Async.Start
-    return! sink.AwaitCompletion()
+    use metricServer = new Prometheus.KestrelMetricServer(port = 1235)
+    let ms = metricServer.Start()
+    do! sink.AwaitCompletion()
+    ms.Stop()
 }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse argv
-        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose, args.SyncLogging, args.CfpVerbose).CreateLogger()
+        let appName = "archiver:"+args.ConsumerGroupName.Replace("ruben","")
+        try Log.Logger <- LoggerConfiguration().Configure(appName, args.Verbose, args.SyncLogging, args.CfpVerbose).CreateLogger()
             try Configuration.initialize ()
                 run args |> Async.RunSynchronously
                 0
