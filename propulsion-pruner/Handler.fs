@@ -14,8 +14,9 @@ let removeDataAndMeta (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEv
 // NOTE - DANGEROUS - events submitted to the CosmosPruner get removed from the supplied Context!
 let shouldPrune category (age : TimeSpan) =
     match category, age.TotalDays with
-    // TODO define pruning criteria
-    | "CategoryName",  age -> age > 30.
+    | "LokiPickTicketReservations",  age -> age > 30.
+    | "LokiDcBatch",                 age -> age > 6. * 30.
+    | "LokiDcTransmissions",         age -> age > 7.
     | _ -> false
 
 // Only relevant (copied to secondary container, meeting expiration criteria) events get fed into the CosmosPruner for removal
