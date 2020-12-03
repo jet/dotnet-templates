@@ -43,7 +43,9 @@ type Logging() =
             let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                 a.Logger(fun l ->
                     l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
-                      |> fun l -> if not metrics then l else l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
+                      |> fun l -> if not metrics then l else
+                                    l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
+                                     .WriteTo.Sink(Propulsion.Cosmos.Prometheus.LogSink(appName))
                       |> ignore) |> ignore
                 a.Logger(fun l ->
                     let isEqx = Filters.Matching.FromSource<Equinox.CosmosStore.Core.EventsContext>().Invoke

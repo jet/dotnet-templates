@@ -213,7 +213,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
-        let createObserver () = CosmosSource.CreateObserver(log.ForContext<CosmosSource>(), archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
+        let createObserver context () = CosmosSource.CreateObserver(log.ForContext<CosmosSource>(), context, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
         CosmosSource.Run(log, client, monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
