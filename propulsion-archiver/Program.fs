@@ -53,6 +53,7 @@ module Args =
         | [<AltCommandLine "-t"; Unique>]   RuThreshold of float
         | [<AltCommandLine "-C"; Unique>]   CfpVerbose
         | [<AltCommandLine "-p"; Unique>]   PrometheusPort of int
+        | [<AltCommandLine "-k"; Unique>]   MaxKib of int
 
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
@@ -64,6 +65,7 @@ module Args =
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | SyncVerbose ->            "request Logging for Sync operations (Writes). Default: off"
                 | RuThreshold _ ->          "minimum request charge required to log. Default: 0"
+                | MaxKib _ ->               "max KiB to submit to Sync operation. Default: 512"
                 | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
                 | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off"
 
@@ -79,6 +81,7 @@ module Args =
         member __.SyncLogging =             a.Contains SyncVerbose, a.TryGetResult RuThreshold
         member __.StatsInterval =           TimeSpan.FromMinutes 1.
         member __.StateInterval =           TimeSpan.FromMinutes 5.
+        member __.MaxBytes =                a.GetResult(MaxKib, 512) * 1024
         member val private Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> (CosmosSourceArguments cosmos)
@@ -92,7 +95,7 @@ module Args =
                 | Some sc, None ->  srcC.Connection, { database = srcC.Database; container = sc }
                 | None, Some dc ->  dstC.Connection, { database = dstC.Database; container = dc }
                 | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
-            Log.Information("Archiving... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
+            Log.Information("Archiving... {dop} writers, max {maxReadAhead} batches read ahead, max write batch {maxKib} KiB", x.MaxWriters, x.MaxReadAhead, x.MaxBytes / 1024)
             Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                 x.ConsumerGroupName, db.database, db.container, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
@@ -209,7 +212,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         let conn = Equinox.CosmosStore.CosmosStoreConnection(client, target.Database, target.Container)
         let context = Equinox.CosmosStore.CosmosStoreContext.Create(conn, tipMaxEvents=100_000, tipMaxJsonLength=100_000)
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, storeLog)
-        Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
+        Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, maxBytes = args.MaxBytes)
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)

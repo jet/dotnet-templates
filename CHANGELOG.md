@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proArchiver`: Parameterize limit, default to 512KiB
+
 ### Changed
 ### Removed
 ### Fixed
