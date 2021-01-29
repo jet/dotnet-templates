@@ -27,7 +27,7 @@ type LoggerConfigurationExtensions() =
 type Logging() =
 
     [<Extension>]
-    static member Configure(configuration : LoggerConfiguration, appName, verbose, cfpVerbose, metrics) =
+    static member Configure(configuration : LoggerConfiguration, appName, group, verbose, cfpVerbose, metrics) =
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
@@ -45,6 +45,7 @@ type Logging() =
                     l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
                       |> fun l -> if not metrics then l else
                                     l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
+                                     .WriteTo.Sink(Propulsion.Prometheus.LogSink(appName, group))
                                      .WriteTo.Sink(Propulsion.Cosmos.Prometheus.LogSink(appName))
                       |> ignore) |> ignore
                 a.Logger(fun l ->

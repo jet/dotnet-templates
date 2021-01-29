@@ -17,7 +17,7 @@ let (|Archivable|NotArchivable|) = function
 let selectArchivable (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let s = changeFeedDocument.GetPropertyValue("p") |> string
     if s.StartsWith("events-") then () else
-    for batch in Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
+    for batch in Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents changeFeedDocument do
         let (FsCodec.StreamName.CategoryAndId (cat,_)) = batch.stream
         match cat with
         | Archivable -> yield batch
