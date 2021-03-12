@@ -10,7 +10,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
-- `proArchiver`: Parameterize limit, default to 512KiB
+- `proArchiver`: Parameterize max Sync batch size limit, default to 512KiB
 
 ### Changed
 ### Removed
