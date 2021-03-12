@@ -181,7 +181,7 @@ module Args =
         /// Connect with the provided parameters and/or environment variables
         member x.Connect() =
             let f = Equinox.CosmosStore.CosmosStoreClientFactory(x.Timeout, x.Retries, x.MaxRetryWaitTime, mode=x.Mode)
-            let client = f.Create(x.Discovery)
+            let client = f.CreateUninitialized(x.Discovery)
             Log.Information("DELETION Target CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, client.Endpoint, x.Database, x.Container)
             Log.Information("DELETION Target CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
@@ -212,7 +212,7 @@ let build (args : Args.Arguments, log : ILogger, storeLog : ILogger) =
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
-        let createObserver context () = CosmosSource.CreateObserver(log.ForContext<CosmosSource>(), context, deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
+        let createObserver context = CosmosSource.CreateObserver(log.ForContext<CosmosSource>(), context, deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
         CosmosSource.Run(log, client, monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)

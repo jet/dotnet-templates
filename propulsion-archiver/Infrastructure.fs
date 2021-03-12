@@ -23,6 +23,16 @@ type LoggerConfigurationExtensions() =
         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
         |> fun c -> if verbose then c else c.ExcludeChangeFeedProcessorV2InternalDiagnostics()
 
+    [<Extension>]
+    static member inline ForwardMetricsFromEquinoxAndPropulsionToPrometheus(a : Configuration.LoggerSinkConfiguration, appName, group, metrics) =
+        a.Logger(fun l ->
+            l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
+              |> fun l -> if not metrics then l else
+                            l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
+                             .WriteTo.Sink(Propulsion.Prometheus.LogSink(["app", appName], group))
+                             .WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(["app",appName]))
+              |> ignore) |> ignore
+
 [<Extension>]
 type Logging() =
 
@@ -41,13 +51,7 @@ type Logging() =
             let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {Properties}{NewLine}{Exception}"
             let t = if verbose then t else t.Replace("{Properties}", "")
             let configure (a : Configuration.LoggerSinkConfiguration) : unit =
-                a.Logger(fun l ->
-                    l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
-                      |> fun l -> if not metrics then l else
-                                    l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
-                                     .WriteTo.Sink(Propulsion.Prometheus.LogSink(["app",appName], group))
-//                                     .WriteTo.Sink(Propulsion.Cosmos.Prometheus.LogSink(appName))
-                      |> ignore) |> ignore
+                a.ForwardMetricsFromEquinoxAndPropulsionToPrometheus(appName, group, metrics)
                 a.Logger(fun l ->
                     let isEqx = Filters.Matching.FromSource<Equinox.CosmosStore.CosmosStoreContext>().Invoke
                     let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke

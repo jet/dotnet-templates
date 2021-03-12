@@ -189,7 +189,7 @@ module Args =
         /// Connect with the provided parameters and/or environment variables
         member x.Connect() =
             let f = Equinox.CosmosStore.CosmosStoreClientFactory(x.Timeout, x.Retries, x.MaxRetryWaitTime, mode=x.Mode)
-            let client = f.Create(x.Discovery)
+            let client = f.CreateUninitialized(x.Discovery)
             Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, client.Endpoint, x.Database, x.Container)
             Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
@@ -212,11 +212,11 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         let conn = Equinox.CosmosStore.CosmosStoreConnection(client, target.Database, target.Container)
         let context = Equinox.CosmosStore.CosmosStoreContext.Create(conn, tipMaxEvents=100_000, tipMaxJsonLength=100_000)
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, storeLog)
-        Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, maxBytes = args.MaxBytes)
+        Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, (*purgeInterval=TimeSpan.FromMinutes 10.,*) maxBytes = args.MaxBytes)
     let pipeline =
         let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
-        let createObserver context () = CosmosSource.CreateObserver(log.ForContext<CosmosSource>(), context, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
+        let createObserver context = CosmosSource.CreateObserver(log.ForContext<CosmosSource>(), context, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
         CosmosSource.Run(log, client, monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=auxClient)
