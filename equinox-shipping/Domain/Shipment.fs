@@ -47,20 +47,20 @@ let interpretAssign transactionId containerId : Fold.State -> Events.Event list 
 
 type Service internal (resolve : ShipmentId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-    member __.TryReserve(shipmentId, transactionId) : Async<bool> =
-        let stream = resolve shipmentId
-        stream.Transact(decideReserve transactionId)
+    member _.TryReserve(shipmentId, transactionId) : Async<bool> =
+        let decider = resolve shipmentId
+        decider.Transact(decideReserve transactionId)
 
-    member __.Revoke(shipmentId, transactionId) : Async<unit> =
-        let stream = resolve shipmentId
-        stream.Transact(interpretRevoke transactionId)
+    member _.Revoke(shipmentId, transactionId) : Async<unit> =
+        let decider = resolve shipmentId
+        decider.Transact(interpretRevoke transactionId)
 
-    member __.Assign(shipmentId, containerId, transactionId) : Async<unit> =
-        let stream = resolve shipmentId
-        stream.Transact(interpretAssign transactionId containerId)
+    member _.Assign(shipmentId, containerId, transactionId) : Async<unit> =
+        let decider = resolve shipmentId
+        decider.Transact(interpretAssign transactionId containerId)
 
-let create resolve =
-    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts=3)
+let create resolveStream =
+    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolveStream (streamName id), maxAttempts=3)
     Service(resolve)
 
 module Cosmos =

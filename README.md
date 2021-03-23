@@ -228,15 +228,13 @@ There are established conventions documented in [Equinox's `module Aggregate` ov
 
 All the templates herein attempt to adhere to a consistent structure for the [composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/) `module` (the one containing an Application’s `main`), consisting of the following common elements:
 
-### `module Configuration`
+### `type Configuration`
 
 _Responsible for: Loading secrets and custom configuration, supplying defaults when environment variables are not set_
 
 Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an application's interaction with its environment and/or data storage mechanisms. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`module Args` section](#module-args)
 
-The `Configuration` module is responsible for the following:
-1. Feeding defaults into process-local Environment Variables, _where those are not already supplied_
-2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `module Args`
+The `Configuration` type is responsible for encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `module Args`
 
 - DO (sparingly) rely on inputs from the command line to drive the lookup process
 - DONT log values (`module Args`’s `Arguments` wrappers should do that as applicable as part of the wireup process)
@@ -315,14 +313,13 @@ let run args = async {
 
 [<EntryPoint>]
 let main argv =
-    try let args = Args.parse argv
+    try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
-            try Configuration.initialize ()
-                run args |> Async.RunSynchronously
+            try run args |> Async.RunSynchronously
                 0
-            with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn "%s" msg; 1
+    with MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1
 ```

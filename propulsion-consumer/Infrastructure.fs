@@ -5,6 +5,10 @@ open Serilog
 open System
 open System.Threading.Tasks
 
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+
 type FSharp.Control.Async with
     static member AwaitTaskCorrect (task : Task<'T>) : Async<'T> =
         Async.FromContinuations <| fun (k, ek, _) ->

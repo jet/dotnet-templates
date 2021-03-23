@@ -35,18 +35,18 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 
     let mutable ok, skipped, na = 0, 0, 0
 
-    override __.HandleOk res = res |> function
+    override _.HandleOk res = res |> function
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
 #if kafkaEventSpans
-    override __.HandleExn exn =
+    override _.HandleExn exn =
 #else
-    override __.HandleExn(log, exn) =
+    override _.HandleExn(log, exn) =
 #endif
         log.Information(exn, "Unhandled")
         
-    override __.DumpStats() =
+    override _.DumpStats() =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0

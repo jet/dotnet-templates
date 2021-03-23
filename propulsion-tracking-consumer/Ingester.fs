@@ -25,12 +25,12 @@ type Stats(log, statsInterval, stateInterval) =
 
     let mutable ok, skipped = 0, 0
 
-    override __.HandleOk res = res |> function
+    override _.HandleOk res = res |> function
         | Completed (used, unused) -> ok <- ok + used; skipped <- skipped + unused
-    override __.HandleExn exn =
+    override _.HandleExn exn =
         log.Information(exn, "Unhandled")
 
-    override __.DumpStats() =
+    override _.DumpStats() =
         if ok <> 0 || skipped <> 0 then
             log.Information(" Used {ok} Skipped {skipped}", ok, skipped)
             ok <- 0; skipped <- 0

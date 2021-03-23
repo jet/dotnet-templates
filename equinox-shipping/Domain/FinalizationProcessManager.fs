@@ -49,11 +49,11 @@ type Service
         loop
 
     // Caller should generate the TransactionId via a deterministic hash of the shipmentIds in order to ensure idempotency (and sharing of fate) of identical requests
-    member __.TryFinalizeContainer(transactionId, containerId, shipmentIds) : Async<bool> =
+    member _.TryFinalizeContainer(transactionId, containerId, shipmentIds) : Async<bool> =
         if Array.isEmpty shipmentIds then invalidArg "shipmentIds" "must not be empty"
         let initialRequest = Events.FinalizationRequested {| container = containerId; shipments = shipmentIds |}
         execute transactionId (Some initialRequest)
 
     /// Used by watchdog service to drive processing to a conclusion where a given request was orphaned
-    member __.Drive(transactionId : TransactionId) =
+    member _.Drive(transactionId : TransactionId) =
         execute transactionId None

@@ -4,6 +4,10 @@ module TestbedTemplate.Infrastructure
 open FSharp.UMX
 open System
 
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+
 type Exception with
     // https://github.com/fsharp/fslang-suggestions/issues/660
     member this.Reraise () =

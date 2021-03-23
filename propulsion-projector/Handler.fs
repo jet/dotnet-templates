@@ -63,10 +63,10 @@ type ProductionStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
-    override __.HandleOk(()) =
+    override _.HandleOk(()) =
         log.Warning("Produced")
     // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
-    override __.HandleExn(log, exn) =
+    override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
 /// Responsible for wrapping a span of events for a specific stream into an envelope
@@ -92,13 +92,13 @@ type ProjectorStats(log, statsInterval, stateInterval) =
 
     // TODO consider best balance between logging or gathering summary information per handler invocation
     // here we don't log per invocation (such high level stats are already gathered and emitted) but accumulate for periodic emission
-    override __.HandleOk count =
+    override _.HandleOk count =
         totalCount <- totalCount + count
     // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
-    override __.HandleExn(log, exn) =
+    override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
-    override __.DumpStats() =
+    override _.DumpStats() =
         log.Information(" Total events processed {total}", totalCount)
         totalCount <- 0
 

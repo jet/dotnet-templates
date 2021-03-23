@@ -65,38 +65,39 @@ module Args =
 //#if cosmos
                 | Cosmos _ ->           "Run transactions in-process against CosmosDb."
 //#endif
-    and TestArguments(a : ParseResults<TestParameters>) =
-        member __.Options =             a.GetResults Cached @ a.GetResults Unfolds
-        member __.Cache =               a.Contains Cached
-        member __.Unfolds =             a.Contains Unfolds
-        member __.BatchSize =           a.GetResult(BatchSize, 500)
-        member __.Test =                a.GetResult(Name, Tests.Favorite)
-        member __.ErrorCutoff =         a.GetResult(ErrorCutoff, 10000L)
-        member __.TestsPerSecond =      a.GetResult(TestsPerSecond, 100)
-        member __.Duration =            a.GetResult(DurationM, 30.) |> TimeSpan.FromMinutes
-        member __.ReportingIntervals =
+    and TestArguments(c : Storage.Configuration, a : ParseResults<TestParameters>) =
+        let duration =                  a.GetResult(DurationM, 30.) |> TimeSpan.FromMinutes
+        member val Options =            a.GetResults Cached @ a.GetResults Unfolds
+        member val Cache =              a.Contains Cached
+        member val Unfolds =            a.Contains Unfolds
+        member val BatchSize =          a.GetResult(BatchSize, 500)
+        member val Test =               a.GetResult(Name, Tests.Favorite)
+        member val ErrorCutoff =        a.GetResult(ErrorCutoff, 10000L)
+        member val TestsPerSecond =     a.GetResult(TestsPerSecond, 100)
+        member val Duration =           duration
+        member val ReportingIntervals =
             match a.GetResults(ReportIntervalS) with
             | [] -> TimeSpan.FromSeconds 10.|> Seq.singleton
             | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(float i) }
-            |> fun intervals -> [| yield __.Duration; yield! intervals |]
-        member __.ConfigureStore(log : ILogger, createStoreLog) =
+            |> fun intervals -> [| yield duration; yield! intervals |]
+        member x.ConfigureStore(log : ILogger, createStoreLog) =
             match a.TryGetSubCommand() with
 //#if memoryStore || (!cosmos && !eventStore)
             | Some (Memory _) ->
-                log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", __.Options)
+                log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", x.Options)
                 createStoreLog false, Storage.MemoryStore.config ()
 //#endif
 //#if eventStore
             | Some (Es sargs) ->
                 let storeLog = createStoreLog <| sargs.Contains Storage.EventStore.Parameters.VerboseStore
-                log.Information("Running transactions in-process against EventStore with storage options: {options:l}", __.Options)
-                storeLog, Storage.EventStore.config (log, storeLog) (__.Cache, __.Unfolds, __.BatchSize) sargs
+                log.Information("Running transactions in-process against EventStore with storage options: {options:l}", x.Options)
+                storeLog, Storage.EventStore.config (log, storeLog) (x.Cache, x.Unfolds, x.BatchSize) sargs
 //#endif
 //#if cosmos
             | Some (Cosmos sargs) ->
                 let storeLog = createStoreLog <| sargs.Contains Storage.Cosmos.Parameters.VerboseStore
-                log.Information("Running transactions in-process against CosmosDb with storage options: {options:l}", __.Options)
-                storeLog, Storage.Cosmos.config (log, storeLog) (__.Cache, __.Unfolds, __.BatchSize) (Storage.Cosmos.Arguments sargs)
+                log.Information("Running transactions in-process against CosmosDb with storage options: {options:l}", x.Options)
+                storeLog, Storage.Cosmos.config (log, storeLog) (x.Cache, x.Unfolds, x.BatchSize) (Storage.Cosmos.Arguments (c, sargs))
 //#endif
 #if ((!cosmos && !eventStore) || (cosmos && eventStore))
             | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es, cosmos")
@@ -204,7 +205,7 @@ let main argv =
             let verbose = args.Contains Verbose
             let log = createDomainLog verbose verboseConsole maybeSeq
             let reportFilename = args.GetResult(LogFile, programName+".log") |> fun n -> System.IO.FileInfo(n).FullName
-            LoadTest.run log (verbose, verboseConsole, maybeSeq) reportFilename (TestArguments rargs)
+            LoadTest.run log (verbose, verboseConsole, maybeSeq) reportFilename (TestArguments (Storage.Configuration EnvVar.tryGet, rargs))
         | _ -> failwith "Please specify a valid subcommand :- run"
         0 
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

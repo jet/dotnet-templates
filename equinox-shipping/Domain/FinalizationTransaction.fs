@@ -96,12 +96,12 @@ let decide (update : Events.Event option) (state : Fold.State) : Action * Events
 
 type Service internal (resolve : TransactionId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-    member __.Record(transactionId, update) : Async<Action> =
-        let stream = resolve transactionId
-        stream.Transact(decide update)
+    member _.Record(transactionId, update) : Async<Action> =
+        let decider = resolve transactionId
+        decider.Transact(decide update)
 
-let create resolve =
-    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts=3)
+let create resolveStream =
+    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolveStream (streamName id), maxAttempts=3)
     Service(resolve)
 
 module Cosmos =

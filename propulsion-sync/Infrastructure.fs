@@ -2,12 +2,16 @@ namespace SyncTemplate
 
 open Serilog
 open Serilog.Events
-open System.Runtime.CompilerServices
+open System
 
-[<Extension>]
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+
+[<System.Runtime.CompilerServices.Extension>]
 type LoggerConfigurationExtensions() =
 
-    [<Extension>]
+    [<System.Runtime.CompilerServices.Extension>]
     static member inline ExcludeChangeFeedProcessorV2InternalDiagnostics(c : LoggerConfiguration) =
         let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
         let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
@@ -16,10 +20,10 @@ type LoggerConfigurationExtensions() =
         let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
         c.Filter.ByExcluding(fun x -> isCfp x)
 
-    [<Extension>]
+    [<System.Runtime.CompilerServices.Extension>]
     static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
         // LibLog writes to the global logger, so we need to control the emission
-        let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
+        let cfpl = if verbose then LogEventLevel.Debug else LogEventLevel.Warning
         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
         |> fun c -> if verbose then c else c.ExcludeChangeFeedProcessorV2InternalDiagnostics()
 

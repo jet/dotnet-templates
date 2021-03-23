@@ -10,42 +10,30 @@ open Propulsion.Kafka
 open Serilog
 open System
 
-module EnvVar =
+exception MissingArg of message : string with override this.Message = this.message
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
-    let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
+type Configuration(tryGet) =
 
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-configuration
-// - this is where any custom retrieval of settings not arriving via commandline arguments or environment variables should go
-// - values should be propagated by setting environment variables and/or returning them from `initialize`
-module Configuration =
+    let get key =
+        match tryGet key with
+        | Some value -> value
+        | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
+    let isTrue varName = tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
 
-    let private initEnvVar var key loadF =
-        if None = EnvVar.tryGet var then
-            printfn "Setting %s from %A" var key
-            EnvVar.set var (loadF key)
+    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
+    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
+    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
+    member _.EventStoreHost =               get "EQUINOX_ES_HOST"
+    member _.EventStoreTcp =                isTrue "EQUINOX_ES_TCP"
+    member _.EventStorePort =               tryGet "EQUINOX_ES_PORT" |> Option.map int
+    member _.EventStoreUsername =           get "EQUINOX_ES_USERNAME"
+    member _.EventStorePassword =           get "EQUINOX_ES_PASSWORD"
+#if kafka
+    member _.Broker =                       get "PROPULSION_KAFKA_BROKER"
+    member _.Topic =                        get "PROPULSION_KAFKA_TOPIC"
+#endif
 
-    let initialize () =
-        // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
-        () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
-
-// TODO remove this entire comment after reading https://github.com/jet/dotnet-templates#module-args
-// - this module is responsible solely for parsing/validating the commandline arguments (including falling back to values supplied via environment variables)
-// - It's expected that the properties on *Arguments types will summarize the active settings as a side effect of
-// TODO DONT invest time reorganizing or reformatting this - half the value is having a legible summary of all program parameters in a consistent value
-//      you may want to regenerate it at a different time and/or facilitate comparing it with the `module Args` of other programs
-// TODO NEVER hack temporary overrides in here; if you're going to do that, use commandline arguments that fall back to environment variables
-//      or (as a last resort) supply them via code in `module Configuration`
 module Args =
-
-    exception MissingArg of string
-    let private getEnvVarForArgumentOrThrow varName argName =
-        match EnvVar.tryGet varName with
-        | None -> raise (MissingArg(sprintf "Please provide a %s, either as an argument or via the %s environment variable" argName varName))
-        | Some x -> x
-    let private defaultWithEnvVar varName argName = function
-        | None -> getEnvVarForArgumentOrThrow varName argName
-        | Some x -> x
 
     open Argu
     [<NoEquality; NoComparison>]
@@ -82,25 +70,25 @@ module Args =
 
                 | SrcCosmos _ ->            "Cosmos input parameters."
                 | SrcEs _ ->                "EventStore input parameters."
-    and Arguments(a : ParseResults<Parameters>) =
-        member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 2048)
-        member __.MaxWriters =              a.GetResult(MaxWriters, 512)
-        member __.MaxConnections =          a.GetResult(MaxConnections, 1)
-        member __.MaybeSeqEndpoint =        if a.Contains LocalSeq then Some "http://localhost:5341" else None
-        member __.MaxSubmit =               a.GetResult(MaxSubmit, 8)
+    and Arguments(c : Configuration, a : ParseResults<Parameters>) =
+        member val ConsumerGroupName =      a.GetResult ConsumerGroupName
+        member val MaxReadAhead =           a.GetResult(MaxReadAhead, 2048)
+        member val MaxWriters =             a.GetResult(MaxWriters, 512)
+        member val MaxConnections =         a.GetResult(MaxConnections, 1)
+        member val MaybeSeqEndpoint =       if a.Contains LocalSeq then Some "http://localhost:5341" else None
+        member val MaxSubmit =              a.GetResult(MaxSubmit, 8)
 
-        member __.Verbose =                 a.Contains Parameters.Verbose
-        member __.CfpVerbose =              a.Contains CfpVerbose
+        member val Verbose =                a.Contains Parameters.Verbose
+        member val CfpVerbose =             a.Contains CfpVerbose
         member val Source : Choice<CosmosSourceArguments, EsSourceArguments> =
             match a.TryGetSubCommand() with
-            | Some (SrcCosmos cosmos) -> Choice1Of2 (CosmosSourceArguments cosmos)
-            | Some (SrcEs es) -> Choice2Of2 (EsSourceArguments es)
+            | Some (SrcCosmos cosmos) -> Choice1Of2 (CosmosSourceArguments (c, cosmos))
+            | Some (SrcEs es) -> Choice2Of2 (EsSourceArguments (c, es))
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
 
-        member __.StatsInterval =           TimeSpan.FromMinutes 1.
-        member __.StateInterval =           TimeSpan.FromMinutes 5.
-        member __.CategoryFilterFunction(?excludeLong, ?longOnly): string -> bool =
+        member val StatsInterval =          TimeSpan.FromMinutes 1.
+        member val StateInterval =          TimeSpan.FromMinutes 5.
+        member _.CategoryFilterFunction(?excludeLong, ?longOnly): string -> bool =
             let isLong (streamName : string) =
                 streamName.StartsWith "Inventory-" // Too long
                 || streamName.StartsWith "InventoryCount-" // No Longer used
@@ -126,8 +114,8 @@ module Args =
             | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
             | _, _ -> raise (MissingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed")
 
-        member __.Sink : Choice<CosmosSinkArguments, EsSinkArguments> =
-            match __.Source with
+        member x.Sink : Choice<CosmosSinkArguments, EsSinkArguments> =
+            match x.Source with
             | Choice1Of2 cosmos -> cosmos.Sink
             | Choice2Of2 es -> Choice1Of2 es.Sink
         member x.SourceParams() : Choice<_, _*ReaderSpec> =
@@ -137,13 +125,13 @@ module Args =
                     match srcC.Sink with
                     | Choice1Of2 dstC ->
                         match srcC.LeaseContainer, dstC.LeaseContainer with
-                        | None, None ->     srcC.Discovery, { database = srcC.Database; container = srcC.Container + "-aux" }
-                        | Some sc, None ->  srcC.Discovery, { database = srcC.Database; container = sc }
-                        | None, Some dc ->  dstC.Discovery, { database = dstC.Database; container = dc }
+                        | None, None ->     srcC.Connection, { database = srcC.Database; container = srcC.Container + "-aux" }
+                        | Some sc, None ->  srcC.Connection, { database = srcC.Database; container = sc }
+                        | None, Some dc ->  dstC.Connection, { database = dstC.Database; container = dc }
                         | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
                     | Choice2Of2 _dstE ->
                         let lc = match srcC.LeaseContainer with Some sc -> sc | None -> srcC.Container + "-aux"
-                        srcC.Discovery, { database = srcC.Database; container = lc }
+                        srcC.Connection, { database = srcC.Database; container = lc }
                 Log.Information("Syncing... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
                 Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                     x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
@@ -193,33 +181,32 @@ module Args =
 
                 | DstEs _ ->                "EventStore Sink parameters."
                 | DstCosmos _ ->            "CosmosDb Sink parameters."
-    and CosmosSourceArguments(a : ParseResults<CosmosSourceParameters>) =
-        member __.FromTail =                a.Contains CosmosSourceParameters.FromTail
-        member __.MaxDocuments =            a.TryGetResult MaxDocuments
-        member __.LagFrequency =            a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member __.LeaseContainer =          a.TryGetResult CosmosSourceParameters.LeaseContainer
+    and CosmosSourceArguments(c : Configuration, a : ParseResults<CosmosSourceParameters>) =
+        member val FromTail =               a.Contains CosmosSourceParameters.FromTail
+        member val MaxDocuments =           a.TryGetResult MaxDocuments
+        member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member val LeaseContainer =         a.TryGetResult CosmosSourceParameters.LeaseContainer
 
-        member __.Mode =                    a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Discovery =               Discovery.FromConnectionString __.Connection
-        member __.Connection =              a.TryGetResult CosmosSourceParameters.Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
-        member __.Database =                a.TryGetResult CosmosSourceParameters.Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
-        member __.Container =               a.GetResult CosmosSourceParameters.Container
-        member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
-        member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        member val Mode =                   a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member val Connection =             a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
+        member val Database =               a.TryGetResult CosmosSourceParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val Container =              a.GetResult CosmosSourceParameters.Container
+        member val Timeout =                a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        member val Retries =                a.GetResult(CosmosSourceParameters.Retries, 1)
+        member val MaxRetryWaitTime =       a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         member x.MonitoringParams() =
-            let (Discovery.UriAndKey (endpointUri, _)) as discovery = x.Discovery
+            let Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; container = x.Container }, c
+            c, discovery, { database = x.Database; container = x.Container }
 
         member val Sink =
             match a.TryGetSubCommand() with
-            | Some (DstCosmos cosmos) -> Choice1Of2 (CosmosSinkArguments cosmos)
-            | Some (DstEs es) -> Choice2Of2 (EsSinkArguments es)
+            | Some (DstCosmos cosmos) -> Choice1Of2 (CosmosSinkArguments (c, cosmos))
+            | Some (DstEs es) -> Choice2Of2 (EsSinkArguments (c, es))
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Sink")
     and [<NoEquality; NoComparison>] EsSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
@@ -270,14 +257,14 @@ module Args =
 
                 | Cosmos _ ->               "CosmosDb Sink parameters."
                 | Es _ ->                   "EventStore Sink parameters."
-    and EsSourceArguments(a : ParseResults<EsSourceParameters>) =
-        member __.Gorge =                   a.TryGetResult Gorge
-        member __.StreamReaders =           a.GetResult(StreamReaders, 1)
-        member __.TailInterval =            a.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
-        member __.ForceRestart =            a.Contains ForceRestart
-        member __.StartingBatchSize =       a.GetResult(BatchSize, 4096)
-        member __.MinBatchSize =            a.GetResult(MinBatchSize, 512)
-        member __.StartPos =
+    and EsSourceArguments(c : Configuration, a : ParseResults<EsSourceParameters>) =
+        member val Gorge =                  a.TryGetResult Gorge
+        member val StreamReaders =          a.GetResult(StreamReaders, 1)
+        member val TailInterval =           a.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
+        member val ForceRestart =           a.Contains ForceRestart
+        member val StartingBatchSize =      a.GetResult(BatchSize, 4096)
+        member val MinBatchSize =           a.GetResult(MinBatchSize, 512)
+        member val StartPos =
             match a.TryGetResult Position, a.TryGetResult Chunk, a.TryGetResult Percent, a.Contains FromTail with
             | Some p, _, _, _ ->            Absolute p
             | _, Some c, _, _ ->            StartPos.Chunk c
@@ -285,22 +272,20 @@ module Args =
             | None, None, None, true ->     StartPos.TailOrCheckpoint
             | None, None, None, _ ->        StartPos.StartOrCheckpoint
 
-        member __.Discovery =
-            match __.Tcp, __.Port with
-            | false, None ->   Discovery.GossipDns            __.Host
-            | false, Some p -> Discovery.GossipDnsCustomPort (__.Host, p)
-            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", __.Host, 1113).Uri)
-            | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", __.Host, p).Uri)
-        member __.Tcp =
-            a.Contains EsSourceParameters.Tcp
-            || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
-        member __.Port =                    match a.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
-        member __.Host =                    a.TryGetResult EsSourceParameters.Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
-        member __.User =                    a.TryGetResult EsSourceParameters.Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
-        member __.Password =                a.TryGetResult EsSourceParameters.Password |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "Password"
-        member __.Retries =                 a.GetResult(EsSourceParameters.Retries, 3)
-        member __.Timeout =                 a.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
-        member __.Heartbeat =               a.GetResult(EsSourceParameters.HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
+        member x.Discovery =
+            match x.Tcp, x.Port with
+            | false, None ->   Discovery.GossipDns            x.Host
+            | false, Some p -> Discovery.GossipDnsCustomPort (x.Host, p)
+            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", x.Host, 1113).Uri)
+            | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", x.Host, p).Uri)
+        member val Tcp =                    a.Contains EsSourceParameters.Tcp || c.EventStoreTcp
+        member val Port =                   match a.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> c.EventStorePort
+        member val Host =                   a.TryGetResult EsSourceParameters.Host     |> Option.defaultWith (fun () -> c.EventStoreHost)
+        member val User =                   a.TryGetResult EsSourceParameters.Username |> Option.defaultWith (fun () -> c.EventStoreUsername)
+        member val Password =               a.TryGetResult EsSourceParameters.Password |> Option.defaultWith (fun () -> c.EventStorePassword)
+        member val Retries =                a.GetResult(EsSourceParameters.Retries, 3)
+        member val Timeout =                a.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
+        member val Heartbeat =              a.GetResult(EsSourceParameters.HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
         member x.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
             let discovery = x.Discovery
             let s (x : TimeSpan) = x.TotalSeconds
@@ -311,11 +296,11 @@ module Args =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
                 .Establish(appName, discovery, connectionStrategy)
-        member __.CheckpointInterval =  TimeSpan.FromHours 1.
+        member _.CheckpointInterval =   TimeSpan.FromHours 1.
 
         member val Sink =
             match a.TryGetSubCommand() with
-            | Some (Cosmos cosmos) -> CosmosSinkArguments cosmos
+            | Some (Cosmos cosmos) -> CosmosSinkArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos for Sink if source is `es`")
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
@@ -342,21 +327,20 @@ module Args =
 #if kafka
                 | Kafka _ ->                "specify Kafka target for non-Synced categories. Default: None."
 #endif
-    and CosmosSinkArguments(a : ParseResults<CosmosSinkParameters>) =
-        member __.Mode =                    a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Discovery =               Discovery.FromConnectionString __.Connection
-        member __.Connection =              a.TryGetResult Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
-        member __.Database =                a.TryGetResult Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
-        member __.Container =               a.TryGetResult Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
-        member __.LeaseContainer =          a.TryGetResult LeaseContainer
-        member __.Timeout =                 a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =                 a.GetResult(CosmosSinkParameters.Retries, 0)
-        member __.MaxRetryWaitTime =        a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+    and CosmosSinkArguments(c : Configuration, a : ParseResults<CosmosSinkParameters>) =
+        member val Mode =                   a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member val Connection =             a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
+        member val Database =               a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val Container =              a.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val LeaseContainer =         a.TryGetResult LeaseContainer
+        member val Timeout =                a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        member val Retries =                a.GetResult(CosmosSinkParameters.Retries, 0)
+        member val MaxRetryWaitTime =       a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         /// Connect with the provided parameters and/or environment variables
         member x.Connect
             /// Connection/Client identifier for logging purposes
             appName connIndex : Async<Equinox.Cosmos.Connection> =
-            let (Discovery.UriAndKey (endpointUri, _masterKey)) as discovery = x.Discovery
+            let Discovery.UriAndKey (endpointUri, _masterKey) as discovery = x.Connection
             Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
@@ -366,7 +350,7 @@ module Args =
 #if kafka
         member val KafkaSink =
             match a.TryGetSubCommand() with
-            | Some (Kafka kafka) -> Some (KafkaSinkArguments kafka)
+            | Some (Kafka kafka) -> Some (KafkaSinkArguments (c, kafka))
             | _ -> None
 #endif
     and [<NoEquality; NoComparison>] EsSinkParameters =
@@ -390,23 +374,21 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
                 | Retries _ ->              "specify operation retries. Default: 3."
                 | HeartbeatTimeout _ ->     "specify heartbeat timeout in seconds. Default: 1.5."
-    and EsSinkArguments(a : ParseResults<EsSinkParameters>) =
-        member __.Discovery =
-            match __.Tcp, __.Port with
-            | false, None ->   Discovery.GossipDns            __.Host
-            | false, Some p -> Discovery.GossipDnsCustomPort (__.Host, p)
-            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", __.Host, 1113).Uri)
-            | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", __.Host, p).Uri)
-        member __.Tcp =
-            a.Contains EsSinkParameters.Tcp
-            || EnvVar.tryGet "EQUINOX_ES_TCP" |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
-        member __.Port =                    match a.TryGetResult Port with Some x -> Some x | None -> EnvVar.tryGet "EQUINOX_ES_PORT" |> Option.map int
-        member __.Host =                    a.TryGetResult Host     |> defaultWithEnvVar "EQUINOX_ES_HOST"     "Host"
-        member __.User =                    a.TryGetResult Username |> defaultWithEnvVar "EQUINOX_ES_USERNAME" "Username"
-        member __.Password =                a.TryGetResult Password |> defaultWithEnvVar "EQUINOX_ES_PASSWORD" "Password"
-        member __.Retries =                 a.GetResult(Retries, 3)
-        member __.Timeout =                 a.GetResult(Timeout, 20.) |> TimeSpan.FromSeconds
-        member __.Heartbeat =               a.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
+    and EsSinkArguments(c : Configuration, a : ParseResults<EsSinkParameters>) =
+        member x.Discovery =
+            match x.Tcp, x.Port with
+            | false, None ->   Discovery.GossipDns            x.Host
+            | false, Some p -> Discovery.GossipDnsCustomPort (x.Host, p)
+            | true, None ->    Discovery.Uri                 (UriBuilder("tcp", x.Host, 1113).Uri)
+            | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", x.Host, p).Uri)
+        member val Tcp =                    a.Contains EsSinkParameters.Tcp || c.EventStoreTcp
+        member val Port =                   match a.TryGetResult Port with Some x -> Some x | None -> c.EventStorePort
+        member val Host =                   a.TryGetResult Host     |> Option.defaultWith (fun () -> c.EventStoreHost)
+        member val User =                   a.TryGetResult Username |> Option.defaultWith (fun () -> c.EventStoreUsername)
+        member val Password =               a.TryGetResult Password |> Option.defaultWith (fun () -> c.EventStorePassword)
+        member val Retries =                a.GetResult(Retries, 3)
+        member val Timeout =                a.GetResult(Timeout, 20.) |> TimeSpan.FromSeconds
+        member val Heartbeat =              a.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
         member x.Connect(log: ILogger, storeLog: ILogger, connectionStrategy, appName, connIndex) =
             let discovery = x.Discovery
             let s (x : TimeSpan) = x.TotalSeconds
@@ -427,18 +409,18 @@ module Args =
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)."
                 | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1."
-    and KafkaSinkArguments(a : ParseResults<KafkaSinkParameters>) =
-        member __.Broker =                  a.TryGetResult Broker |> defaultWithEnvVar "PROPULSION_KAFKA_BROKER" "Broker"
-        member __.Topic =                   a.TryGetResult Topic  |> defaultWithEnvVar "PROPULSION_KAFKA_TOPIC"  "Topic"
-        member __.Producers =               a.GetResult(Producers, 1)
+    and KafkaSinkArguments(c : Configuration, a : ParseResults<KafkaSinkParameters>) =
+        member val Broker =                 a.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
+        member val Topic =                  a.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
+        member val Producers =              a.GetResult(Producers, 1)
         member x.BuildTargetParams() =      x.Broker, x.Topic, x.Producers
 #endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse argv : Arguments =
+    let parse tryGetConfigValue argv : Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
-        parser.ParseCommandLine argv |> Arguments
+        Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
  //#if marveleqx
 [<RequireQualifiedAccess>]
@@ -468,12 +450,12 @@ module EventV0Parser =
             member x.IsUnfold = false
             member x.EventType = x.t
             member x.Data = x.d
-            member __.Meta = null
-            member __.EventId = Guid.Empty
+            member _.Meta = null
+            member _.EventId = Guid.Empty
             member x.Timestamp = x.c
-            member __.CorrelationId = null
-            member __.CausationId = null
-            member __.Context = null
+            member _.CorrelationId = null
+            member _.CausationId = null
+            member _.Context = null
 
     type Microsoft.Azure.Documents.Document with
         member document.Cast<'T>() =
@@ -517,8 +499,8 @@ module Checkpoints =
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
-    override __.HandleOk(()) = ()
-    override __.HandleExn(log, exn) =
+    override _.HandleOk(()) = ()
+    override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
 let build (args : Args.Arguments, log, storeLog : ILogger) =
@@ -537,7 +519,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
                 let maxEvents, maxBytes = 100_000, 900_000
                 match cosmos.KafkaSink with
                 | Some kafka ->
-                    let (broker, topic, producers) = kafka.BuildTargetParams()
+                    let broker, topic, producers = kafka.BuildTargetParams()
                     let render (stream: FsCodec.StreamName, span: Propulsion.Streams.StreamSpan<_>) = async {
                         let value =
                             span
@@ -564,7 +546,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-        let discovery, source, connector = srcC.MonitoringParams()
+        let connector, discovery, source = srcC.MonitoringParams()
 #if marveleqx
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 streamFilter))
 #else
@@ -614,13 +596,12 @@ let run args = async {
 
 [<EntryPoint>]
 let main argv =
-    try let args = Args.parse argv
+    try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(args.Verbose, args.CfpVerbose, ?maybeSeqEndpoint = args.MaybeSeqEndpoint).CreateLogger()
-            try Configuration.initialize ()
-                run args |> Async.RunSynchronously
+            try run args |> Async.RunSynchronously
                 0
-            with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn "%s" msg; 1
+    with MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1
