@@ -31,10 +31,10 @@ module Domain =
                 let favorite (e : Events.Favorited) =   dict.[e.skuId] <- e
                 let favoriteAll (xs: Events.Favorited seq) = for x in xs do favorite x
                 do favoriteAll input
-                member __.ReplaceAllWith xs =           dict.Clear(); favoriteAll xs
-                member __.Favorite(e : Events.Favorited) =  favorite e
-                member __.Unfavorite id =               dict.Remove id |> ignore
-                member __.AsState() =                   Seq.toArray dict.Values
+                member _.ReplaceAllWith xs =           dict.Clear(); favoriteAll xs
+                member _.Favorite(e : Events.Favorited) =  favorite e
+                member _.Unfavorite id =               dict.Remove id |> ignore
+                member _.AsState() =                   Seq.toArray dict.Values
 
             let initial : State = [||]
             let private evolve (s: InternalState) = function
@@ -65,9 +65,9 @@ module Domain =
 
         type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-            member __.Execute(clientId, command) =
-                let stream = resolve clientId
-                stream.Transact(interpret command)
+            member _.Execute(clientId, command) =
+                let decider = resolve clientId
+                decider.Transact(interpret command)
 
             member x.Favorite(clientId, skus) =
                 x.Execute(clientId, Command.Favorite (DateTimeOffset.Now, skus))
@@ -75,9 +75,9 @@ module Domain =
             member x.Unfavorite(clientId, skus) =
                 x.Execute(clientId, Command.Unfavorite skus)
 
-            member __.List clientId : Async<Events.Favorited []> =
-                let stream = resolve clientId
-                stream.Query id
+            member _.List clientId : Async<Events.Favorited []> =
+                let decider = resolve clientId
+                decider.Query id
 
         let create log resolve =
             let resolve clientId =
@@ -88,7 +88,7 @@ module Domain =
 open Microsoft.Extensions.DependencyInjection
 
 type StreamResolver(storage) =
-    member __.Resolve
+    member _.Resolve
         (   codec : FsCodec.IEventCodec<'event, byte[], _>,
             fold: ('state -> 'event seq -> 'state),
             initial: 'state,
@@ -113,7 +113,7 @@ type StreamResolver(storage) =
 type ServiceBuilder(storageConfig, handlerLog) =
      let resolver = StreamResolver(storageConfig)
 
-     member __.CreateFavoritesService() =
+     member _.CreateFavoritesService() =
         let fold, initial = Domain.Favorites.Fold.fold, Domain.Favorites.Fold.initial
         let snapshot = Domain.Favorites.Fold.isOrigin, Domain.Favorites.Fold.snapshot
         Domain.Favorites.create handlerLog (resolver.Resolve(Domain.Favorites.Events.codec, fold, initial, snapshot))

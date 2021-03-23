@@ -63,5 +63,5 @@ type EquinoxTemplatesFixture() =
     member val PackagePath = packagePath
 
     interface IDisposable with
-        member __.Dispose() =
+        member _.Dispose() =
             Dotnet.uninstall PackageName

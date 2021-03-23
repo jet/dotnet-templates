@@ -4,32 +4,21 @@ open Propulsion.Cosmos
 open Serilog
 open System
 
-module EnvVar =
+exception MissingArg of message : string with override this.Message = this.message
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
-    let set varName value : unit = Environment.SetEnvironmentVariable(varName, value)
+type Configuration(tryGet) =
 
-module Configuration =
+    let get key =
+        match tryGet key with
+        | Some value -> value
+        | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
 
-    let private initEnvVar var key loadF =
-        if None = EnvVar.tryGet var then
-            printfn "Setting %s from %A" var key
-            EnvVar.set var (loadF key)
-
-    let initialize () =
-        // e.g. initEnvVar     "EQUINOX_COSMOS_CONTAINER"    "CONSUL KEY" readFromConsul
-        () // TODO add any custom logic preprocessing commandline arguments and/or gathering custom defaults from external sources, etc
+    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
+    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
+    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
 
 module Args =
 
-    exception MissingArg of string
-    let private getEnvVarForArgumentOrThrow varName argName =
-        match EnvVar.tryGet varName with
-        | None -> raise (MissingArg(sprintf "Please provide a %s, either as an argument or via the %s environment variable" argName varName))
-        | Some x -> x
-    let private defaultWithEnvVar varName argName = function
-        | None -> getEnvVarForArgumentOrThrow varName argName
-        | Some x -> x
     open Argu
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -51,19 +40,19 @@ module Args =
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off."
                 | Cosmos _ ->               "specify CosmosDB input parameters."
-    and Arguments(a : ParseResults<Parameters>) =
-        member __.ConsumerGroupName =       a.GetResult ConsumerGroupName
-        member __.Verbose =                 a.Contains Verbose
-        member __.CfpVerbose =              a.Contains CfpVerbose
-        member __.MaxReadAhead =            a.GetResult(MaxReadAhead, 16)
-        member __.MaxConcurrentStreams =    a.GetResult(MaxWriters, 8)
-        member __.ProcessManagerMaxDop =    4
-        member __.StatsInterval =           TimeSpan.FromMinutes 1.
-        member __.StateInterval =           TimeSpan.FromMinutes 5.
-        member __.ProcessingTimeout =       a.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
+    and Arguments(c : Configuration, a : ParseResults<Parameters>) =
+        member val ConsumerGroupName =      a.GetResult ConsumerGroupName
+        member val Verbose =                a.Contains Verbose
+        member val CfpVerbose =             a.Contains CfpVerbose
+        member val MaxReadAhead =           a.GetResult(MaxReadAhead, 16)
+        member val MaxConcurrentStreams =   a.GetResult(MaxWriters, 8)
+        member val ProcessManagerMaxDop =   4
+        member val StatsInterval =          TimeSpan.FromMinutes 1.
+        member val StateInterval =          TimeSpan.FromMinutes 5.
+        member val ProcessingTimeout =      a.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
         member val Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
-            | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments cosmos
+            | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos for Src")
         member x.SourceParams() =
             let srcC = x.Source
@@ -108,22 +97,21 @@ module Args =
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 
                 | Cosmos _ ->               "CosmosDb Sink parameters."
-    and CosmosSourceArguments(a : ParseResults<CosmosSourceParameters>) =
-        member __.FromTail =                a.Contains FromTail
-        member __.MaxDocuments =            a.TryGetResult MaxDocuments
-        member __.LagFrequency =            a.TryPostProcessResult(LagFreqM, TimeSpan.FromMinutes)
-        member __.LeaseContainer =          a.TryGetResult LeaseContainer
+    and CosmosSourceArguments(c : Configuration, a : ParseResults<CosmosSourceParameters>) =
+        member val FromTail =               a.Contains FromTail
+        member val MaxDocuments =           a.TryGetResult MaxDocuments
+        member val LagFrequency =           a.TryPostProcessResult(LagFreqM, TimeSpan.FromMinutes)
+        member val LeaseContainer =         a.TryGetResult LeaseContainer
 
-        member __.Mode =                    a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Discovery =               Equinox.Cosmos.Discovery.FromConnectionString __.Connection
-        member __.Connection =              a.TryGetResult CosmosSourceParameters.Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
-        member __.Database =                a.TryGetResult CosmosSourceParameters.Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
-        member __.Container =               a.GetResult CosmosSourceParameters.Container
-        member __.Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
-        member __.MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        member val Mode =                   a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member val Connection =             a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.Cosmos.Discovery.FromConnectionString
+        member val Database =               a.TryGetResult CosmosSourceParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val Container =              a.GetResult CosmosSourceParameters.Container
+        member val Timeout =                a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        member val Retries =                a.GetResult(CosmosSourceParameters.Retries, 1)
+        member val MaxRetryWaitTime =       a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         member x.MonitoringParams() =
-            let (Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _)) as discovery = x.Discovery
+            let Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
@@ -132,7 +120,7 @@ module Args =
             discovery, { database = x.Database; container = x.Container }, connector
         member val Cosmos =
             match a.TryGetSubCommand() with
-            | Some (CosmosSourceParameters.Cosmos cosmos) -> CosmosArguments cosmos
+            | Some (CosmosSourceParameters.Cosmos cosmos) -> CosmosArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos details")
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-s">]           Connection of string
@@ -152,16 +140,16 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
-    and CosmosArguments(a : ParseResults<CosmosParameters>) =
-        member __.Mode =                    a.GetResult(CosmosParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member __.Connection =              a.TryGetResult CosmosParameters.Connection |> defaultWithEnvVar "EQUINOX_COSMOS_CONNECTION" "Connection"
-        member __.Database =                a.TryGetResult CosmosParameters.Database   |> defaultWithEnvVar "EQUINOX_COSMOS_DATABASE"   "Database"
-        member __.Container =               a.TryGetResult CosmosParameters.Container  |> defaultWithEnvVar "EQUINOX_COSMOS_CONTAINER"  "Container"
-        member __.Timeout =                 a.GetResult(CosmosParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member __.Retries =                 a.GetResult(CosmosParameters.Retries, 1)
-        member __.MaxRetryWaitTime =        a.GetResult(CosmosParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+    and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
+        member val Mode =                   a.GetResult(CosmosParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
+        member val Connection =             a.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection)  |> Equinox.Cosmos.Discovery.FromConnectionString
+        member val Database =               a.TryGetResult CosmosParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val Container =              a.TryGetResult CosmosParameters.Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Timeout =                a.GetResult(CosmosParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        member val Retries =                a.GetResult(CosmosParameters.Retries, 1)
+        member val MaxRetryWaitTime =       a.GetResult(CosmosParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         member x.BuildConnectionDetails() =
-            let (Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _) as discovery) = Equinox.Cosmos.Discovery.FromConnectionString x.Connection
+            let Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
@@ -170,10 +158,10 @@ module Args =
             discovery, x.Database, x.Container, connector
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse argv =
+    let parse tryGetConfigValue argv : Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
-        parser.ParseCommandLine argv |> Arguments
+        Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "Watchdog"
 
@@ -195,7 +183,7 @@ let build (args : Args.Arguments) =
 
     // Connect to the Target CosmosDB, wire to Process Manager
     let processManager =
-        let (discovery, database, container, connector) = source.Cosmos.BuildConnectionDetails()
+        let discovery, database, container, connector = source.Cosmos.BuildConnectionDetails()
         let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
         let cache = Equinox.Cache(AppName, sizeMb=10)
         let context = Equinox.Cosmos.Context(connection, database, container)
@@ -220,13 +208,12 @@ let run args = async {
 
 [<EntryPoint>]
 let main argv =
-    try let args = Args.parse argv
+    try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose).CreateLogger()
-            try Configuration.initialize ()
-                run args |> Async.RunSynchronously
+            try run args |> Async.RunSynchronously
                 0
-            with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn "%s" msg; 1
+    with MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1

@@ -32,12 +32,12 @@ let interpretFinalize shipmentIds (state : Fold.State): Events.Event list =
 
 type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fold.State>) =
 
-    member __.Finalize(containerId, shipmentIds) : Async<unit> =
-        let stream = resolve containerId
-        stream.Transact(interpretFinalize shipmentIds)
+    member _.Finalize(containerId, shipmentIds) : Async<unit> =
+        let decider = resolve containerId
+        decider.Transact(interpretFinalize shipmentIds)
 
-let create resolve =
-    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolve (streamName id), maxAttempts=3)
+let create resolveStream =
+    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolveStream (streamName id), maxAttempts=3)
     Service(resolve)
 
 module Cosmos =

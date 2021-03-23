@@ -3,8 +3,8 @@ module ArchiverTemplate.Handler
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
-    override __.HandleOk(()) = ()
-    override __.HandleExn(log, exn) =
+    override _.HandleOk(()) = ()
+    override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
 let (|Archivable|NotArchivable|) = function

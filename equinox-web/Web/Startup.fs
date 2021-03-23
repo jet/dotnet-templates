@@ -95,11 +95,11 @@ module Storage =
 module Services =
     /// Builds a Stream Resolve function appropriate to the store being used
     type StreamResolver(storage : Storage.Instance) =
-        member __.Resolve
+        member _.Resolve
             (   codec : FsCodec.IEventCodec<'event, byte[], _>,
-                fold: ('state -> 'event seq -> 'state),
+                fold: 'state -> 'event seq -> 'state,
                 initial: 'state,
-                snapshot: (('event -> bool) * ('state -> 'event))) =
+                snapshot: ('event -> bool) * ('state -> 'event)) =
             match storage with
 //#if (memoryStore || (!cosmos && !eventStore))
             | Storage.MemoryStore store ->
@@ -121,20 +121,20 @@ module Services =
     /// Binds a storage independent Service's Handler's `resolve` function to a given Stream Policy using the StreamResolver
     type ServiceBuilder(resolver: StreamResolver) =
 //#if todos
-         member __.CreateTodosService() =
+         member _.CreateTodosService() =
             let fold, initial = Todo.Fold.fold, Todo.Fold.initial
             let snapshot = Todo.Fold.isOrigin, Todo.Fold.snapshot
             Todo.create (resolver.Resolve(Todo.Events.codec, fold, initial, snapshot))
 //#endif
 //#if aggregate
-         member __.CreateAggregateService() =
+         member _.CreateAggregateService() =
             let fold, initial = Aggregate.Fold.fold, Aggregate.Fold.initial
             let snapshot = Aggregate.Fold.isOrigin, Aggregate.Fold.snapshot
             Aggregate.create (resolver.Resolve(Aggregate.Events.codec, fold, initial, snapshot))
 //#endif
 //#if (!aggregate && !todos)
         // TODO implement Service builders, e.g. 
-        //member __.CreateThingService() =
+        //member _.CreateThingService() =
         //   let codec = genCodec<Thing.Events.Event>()
         //   let fold, initial = Thing.Fold.fold, Thing.Fold.initial
         //   let snapshot = Thing.Fold.isOrigin, Thing.Fold.compact
@@ -166,7 +166,7 @@ module Services =
 /// Defines the Hosting configuration, including registration of the store and backend services
 type Startup() =
     // This method gets called by the runtime. Use this method to add services to the container.
-    member __.ConfigureServices(services: IServiceCollection) : unit =
+    member _.ConfigureServices(services: IServiceCollection) : unit =
         services
             .AddMvc()
             .SetCompatibilityVersion(CompatibilityVersion.Latest)
@@ -228,7 +228,7 @@ type Startup() =
         Services.register(services, storeConfig)
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-    member __.Configure(app: IApplicationBuilder, env: IHostEnvironment) : unit =
+    member _.Configure(app: IApplicationBuilder, env: IHostEnvironment) : unit =
         if env.IsDevelopment() then app.UseDeveloperExceptionPage() |> ignore
         else app.UseHsts() |> ignore
 

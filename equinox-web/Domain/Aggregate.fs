@@ -38,17 +38,17 @@ type Service internal (resolve : string -> Equinox.Stream<Events.Event, Fold.Sta
 
     /// Read the present state
     // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
-    member __.Read clientId : Async<View> =
-        let stream = resolve clientId
-        stream.Query(fun s -> { sorted = s.happened })
+    member _.Read clientId : Async<View> =
+        let decider = resolve clientId
+        decider.Query(fun s -> { sorted = s.happened })
 
     /// Execute the specified command 
-    member __.Execute(clientId, command) : Async<unit> =
-        let stream = resolve clientId
-        stream.Transact(interpret command)
+    member _.Execute(clientId, command) : Async<unit> =
+        let decider = resolve clientId
+        decider.Transact(interpret command)
 
-let create resolve =
+let create resolveStream =
     let resolve id =
-        let stream = resolve (streamName id)
+        let stream = resolveStream (streamName id)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
     Service(resolve)

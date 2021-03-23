@@ -89,7 +89,7 @@ module MultiStreams =
             | FsCodec.StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span.events)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
-        member __.Handle(streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
+        member _.Handle(streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
             match streamName, span with
             | OtherCategory (cat, count) ->
                 return Propulsion.Streams.SpanResult.AllProcessed, OtherCategory (cat, count)
@@ -115,7 +115,7 @@ module MultiStreams =
         }
 
         // Dump stats relating to how much information is being held - note it's likely for requests to be in flighht during the call
-        member __.DumpState(log : ILogger) =
+        member _.DumpState(log : ILogger) =
             log.Information(" Favorited {total}/{users}", faves.Values |> Seq.sumBy (fun x -> x.Count), faves.Count)
             log.Information(" SavedForLater {total}/{users}", saves.Values |> Seq.sumBy (fun x -> x.Length), saves.Count)
 
@@ -125,15 +125,15 @@ module MultiStreams =
         let mutable faves, saves = 0, 0
         let otherCats = Propulsion.Streams.Internal.CatStats()
 
-        override __.HandleOk res = res |> function
+        override _.HandleOk res = res |> function
             | Faves count -> faves <- faves + count
             | Saves count -> saves <- saves + count
             | OtherCategory (cat, count) -> otherCats.Ingest(cat, int64 count)
-        override __.HandleExn exn =
+        override _.HandleExn exn =
             log.Information(exn, "Unhandled")
 
         // Dump stats relating to the nature of the message processing throughput
-        override __.DumpStats() =
+        override _.DumpStats() =
             if faves <> 0 || saves <> 0 then
                 log.Information(" Processed Faves {faves} Saves {s}", faves, saves)
                 faves <- 0; saves <- 0
@@ -170,13 +170,13 @@ module MultiMessages =
         //   and waits for the work to complete before calling this
         // `ParallelScheduler` ensures that only one call to `logExternalStats` will take place at a time, but it's highly likely that the execution will
         //   overlap with a call to `Handle` (which makes for a slight race condition between the capturing of the values in the log statement and the resetting)
-        member __.DumpStats(log : ILogger) =
+        member _.DumpStats(log : ILogger) =
             log.Information("Favorited {f} Unfavorited {u} Saved {s} Removed {r} Cleared {c} Keys {keyCount} Categories {@catCount}",
                 favorited, unfavorited, saved, removed, cleared, keys.Count, Seq.truncate 5 cats.StatsDescending)
             favorited <- 0; unfavorited <- 0; saved <- 0; removed <- 0; cleared <- 0; cats.Clear(); keys.Clear()
 
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
-        member private __.Interpret(streamName : StreamName, spanJson) : seq<Message> = seq {
+        member private _.Interpret(streamName : StreamName, spanJson) : seq<Message> = seq {
             let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
             let decode tryDecode wrap = RenderedSpan.enum span |> Seq.choose (fun x -> x.event |> tryDecode log streamName |> Option.map wrap)
             match streamName with
@@ -185,8 +185,8 @@ module MultiMessages =
             | StreamName.CategoryAndId (otherCategoryName, _) -> yield OtherCat (otherCategoryName, Seq.length span.e) }
 
         // NB can be called in parallel, so must be thread-safe
-        member __.Handle(streamName : StreamName, spanJson : string) =
-            for x in __.Interpret(streamName, spanJson) do
+        member x.Handle(streamName : StreamName, spanJson : string) =
+            for x in x.Interpret(streamName, spanJson) do
                 match x with
                 | Fave (Favorites.Favorited _) -> Interlocked.Increment &favorited |> ignore
                 | Fave (Favorites.Unfavorited _) -> Interlocked.Increment &unfavorited |> ignore

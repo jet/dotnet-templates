@@ -53,22 +53,22 @@ let interpret command (state : Fold.State) =
 type Service internal (resolve : SkuId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     /// <returns>count of items</returns>
-    member __.Ingest(skuId, items) : Async<int> =
-        let stream = resolve skuId
+    member _.Ingest(skuId, items) : Async<int> =
+        let decider = resolve skuId
         let executeWithCount command : Async<int> =
             let decide state =
                 let events = interpret command state
                 List.length events, events
-            stream.Transact(decide)
+            decider.Transact(decide)
         executeWithCount <| Consume items
 
-    member __.Read skuId: Async<Events.ItemData list> =
-        let stream = resolve skuId
-        stream.Query id
+    member _.Read skuId: Async<Events.ItemData list> =
+        let decider = resolve skuId
+        decider.Query id
 
-let create resolve =
+let create resolveStream =
     let resolve skuId =
-        let stream = resolve (streamName skuId)
+        let stream = resolveStream (streamName skuId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
     Service(resolve)
 

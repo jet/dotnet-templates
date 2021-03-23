@@ -5,17 +5,20 @@ open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and
 #endif
 open Serilog
 open System
-open System.Runtime.CompilerServices
 
 #if (kafka || !blank)
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
     let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x : FsCodec.ITimelineEvent<byte[]>) =
         match codec.TryDecode x with
         | None ->
-            if Serilog.Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                Serilog.Log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
+            if Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
+                Log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
                     .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
             None
         | x -> x
@@ -34,10 +37,10 @@ module ClientId =
 
 #endif
 #if (!kafkaEventSpans)
-[<Extension>]
+[<System.Runtime.CompilerServices.Extension>]
 type LoggerConfigurationExtensions() =
 
-    [<Extension>]
+    [<System.Runtime.CompilerServices.Extension>]
     static member inline ExcludeChangeFeedProcessorV2InternalDiagnostics(c : LoggerConfiguration) =
         let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
         let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
@@ -46,7 +49,7 @@ type LoggerConfigurationExtensions() =
         let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
         c.Filter.ByExcluding(fun x -> isCfp x)
 
-    [<Extension>]
+    [<System.Runtime.CompilerServices.Extension>]
     static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
         // LibLog writes to the global logger, so we need to control the emission
         let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
@@ -54,10 +57,10 @@ type LoggerConfigurationExtensions() =
         |> fun c -> if verbose then c else c.ExcludeChangeFeedProcessorV2InternalDiagnostics()
 
 #endif
-[<Extension>]
+[<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
-    [<Extension>]
+    [<System.Runtime.CompilerServices.Extension>]
 #if (!kafkaEventSpans)
     static member Configure(configuration : LoggerConfiguration, ?verbose, ?changeFeedProcessorVerbose) =
 #else
