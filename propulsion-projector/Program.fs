@@ -193,7 +193,7 @@ module Args =
         member val CheckpointInterval =     TimeSpan.FromHours 1.
         member val Cosmos : CosmosArguments =
             match a.TryGetSubCommand() with
-            | Some (EsSourceParameters.Cosmos cosmos) -> CosmosArguments cosmos
+            | Some (EsSourceParameters.Cosmos cosmos) -> CosmosArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify `cosmos` checkpoint store when source is `es`")
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-s">]           Connection of string
