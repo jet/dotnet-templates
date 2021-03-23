@@ -325,7 +325,7 @@ module Args =
             Log.Information("Projecting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentProcessors, x.MaxReadAhead)
             (x.MaxReadAhead, x.MaxConcurrentProcessors)
 #if cosmos
-        member val Cosmos =                 CosmosArguments(a.GetResult Cosmos)
+        member val Cosmos =                 CosmosArguments (c, a.GetResult Cosmos)
         member x.BuildChangeFeedParams() =
             let c = x.Cosmos
             match c.MaxDocuments with
