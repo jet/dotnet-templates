@@ -17,7 +17,7 @@ type Configuration(tryGet) =
 #if esdb
     let isTrue varName = tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
 #endif
-#if cosmos
+#if cosmos || esdb
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
     member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
@@ -86,7 +86,7 @@ module Args =
         member val LagFrequency =       a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
 
         member val Mode =               a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member val Connection =         a.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
+        member val Connection =         a.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.Cosmos.Discovery.FromConnectionString
         member val Database =           a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val Container =          container
         member val Timeout =            a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -215,9 +215,9 @@ module Args =
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
     and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
         member val Mode =                   a.GetResult(CosmosParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member val Connection =             a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
-        member val Database =               a.TryGetResult CosmosSourceParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =              a.TryGetResult CosmosSourceParameters.Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Connection =             a.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.Cosmos.Discovery.FromConnectionString
+        member val Database =               a.TryGetResult CosmosParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val Container =              a.TryGetResult CosmosParameters.Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val Timeout =                a.GetResult(CosmosParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member val Retries =                a.GetResult(CosmosParameters.Retries, 1)
         member val MaxRetryWaitTime =       a.GetResult(CosmosParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
@@ -240,7 +240,7 @@ module Args =
         | [<AltCommandLine "-p"; Unique>]   Credentials of string
         | [<AltCommandLine "-s">]           Schema of string
         | [<AltCommandLine "-cc"; Unique>]  CheckpointsConnection of string
-        | [<AltCommandLine "-cp"; Unique>] CheckpointsCredentials of string
+        | [<AltCommandLine "-cp"; Unique>]  CheckpointsCredentials of string
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Tail _ ->                 "Polling interval in Seconds. Default: 1"
@@ -337,7 +337,7 @@ module Args =
             { database = c.Database; container = c.AuxContainerName }, x.ConsumerGroupName, c.FromTail, c.MaxDocuments, c.LagFrequency
 #endif
 #if esdb
-        member val Es =                     EsSourceArguments(a.GetResult Es)
+        member val Es =                     EsSourceArguments (c, a.GetResult Es)
         member x.BuildEventStoreParams() =
             let srcE = x.Es
             let startPos, cosmos = srcE.StartPos, srcE.Cosmos
