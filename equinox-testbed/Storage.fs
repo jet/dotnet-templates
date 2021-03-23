@@ -5,7 +5,7 @@ open System
 
 exception MissingArg of message : string with override this.Message = this.message
 
-type Configuration(tryGet) =
+type Configuration(tryGet : string -> string option) =
 
     let get key =
         match tryGet key with
@@ -87,9 +87,9 @@ module Cosmos =
         log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
             (let t = a.Timeout in t.TotalSeconds), a.Retries, (let t = a.MaxRetryWaitTime in t.TotalSeconds))
         let connector = Connector(a.Timeout, a.Retries, a.MaxRetryWaitTime, storeLog, mode=a.Mode)
-        discovery, a.Database, a.Container, connector
+        connector, discovery, a.Database, a.Container
     let config (log: ILogger, storeLog) (cache, unfolds, batchSize) info =
-        let discovery, dbName, containerName, connector = context (log, storeLog) info
+        let connector, discovery, dbName, containerName = context (log, storeLog) info
         let conn = connector.Connect("TestbedTemplate", discovery) |> Async.RunSynchronously
         let cacheStrategy =
             if cache then

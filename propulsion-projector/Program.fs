@@ -99,7 +99,7 @@ module Args =
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 TimeSpan.FromSeconds x.Timeout, x.Retries, TimeSpan.FromSeconds x.MaxRetryWaitTime)
             let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; container = x.Container }, connector
+            connector, discovery, { database = x.Database; container = x.Container }
 #endif
 #if esdb
     open Equinox.EventStore
@@ -413,7 +413,7 @@ let build (args : Args.Arguments) =
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // cosmos && !kafka
     let pipeline =
-        let monitoredDiscovery, monitored, monitoredConnector = args.Cosmos.MonitoringParams()
+        let monitoredConnector, monitoredDiscovery, monitored = args.Cosmos.MonitoringParams()
         let aux, leaseId, startFromTail, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
         let createObserver () = CosmosSource.CreateObserver(Log.ForContext<CosmosSource>(), sink.StartIngester, Handler.mapToStreamItems)
         CosmosSource.Run(

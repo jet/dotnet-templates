@@ -117,7 +117,7 @@ module Args =
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; container = x.Container }, connector
+            connector, discovery, { database = x.Database; container = x.Container }
         member val Cosmos =
             match a.TryGetSubCommand() with
             | Some (CosmosSourceParameters.Cosmos cosmos) -> CosmosArguments (c, cosmos)
@@ -155,7 +155,7 @@ module Args =
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, x.Database, x.Container, connector
+            connector, discovery, x.Database, x.Container
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv : Arguments =
@@ -183,7 +183,7 @@ let build (args : Args.Arguments) =
 
     // Connect to the Target CosmosDB, wire to Process Manager
     let processManager =
-        let discovery, database, container, connector = source.Cosmos.BuildConnectionDetails()
+        let connector, discovery, database, container = source.Cosmos.BuildConnectionDetails()
         let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
         let cache = Equinox.Cache(AppName, sizeMb=10)
         let context = Equinox.Cosmos.Context(connection, database, container)
@@ -194,7 +194,7 @@ let build (args : Args.Arguments) =
         startWatchdog Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Drive
     let pipeline =
         let createObserver () = CosmosSource.CreateObserver(Log.ForContext<CosmosSource>(), sink.StartIngester, Seq.collect Handler.transformOrFilter)
-        let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
+        let monitoredConnector, monitoredDiscovery, monitored = source.MonitoringParams()
         CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
             leaseId, startFromTail, createObserver,
             ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)

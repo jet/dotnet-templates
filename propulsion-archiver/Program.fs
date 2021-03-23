@@ -127,7 +127,7 @@ module Args =
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; container = x.Container }, c
+            c, discovery, { database = x.Database; container = x.Container }
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -183,7 +183,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         let context = Equinox.Cosmos.Core.Context(conn, containers, storeLog)
         CosmosSink.Start(log, args.MaxReadAhead, [|context|], args.MaxWriters, args.StatsInterval, args.StateInterval)
     let pipeline =
-        let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
+        let monitoredConnector, monitoredDiscovery, monitored  = source.MonitoringParams()
         let client, auxClient = monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitoredConnector.CreateClient(AppName, auxDiscovery)
         let createObserver () = CosmosSource.CreateObserver(log.ForContext<CosmosSource>(), archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
         CosmosSource.Run(log, client, monitored, aux,

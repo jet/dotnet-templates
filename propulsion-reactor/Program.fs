@@ -128,7 +128,7 @@ module Args =
 #if changeFeedOnly
         member val Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
-            | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments cosmos
+            | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos for Src")
         member x.SourceParams() =
                 let srcC = x.Source
@@ -172,7 +172,7 @@ module Args =
 #if kafkaEventSpans
         member val Source : KafkaSourceArguments =
             match a.TryGetSubCommand() with
-            | Some (Parameters.Kafka kafka) -> KafkaSourceArguments kafka
+            | Some (Parameters.Kafka kafka) -> KafkaSourceArguments (c, kafka)
             | _ -> raise (MissingArg "Must specify kafka for Src")
      and [<NoEquality; NoComparison>] KafkaSourceParameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
@@ -204,12 +204,12 @@ module Args =
 #if (kafka && blank)
         member val Sink =
             match a.TryGetSubCommand() with
-            | Some (KafkaSourceParameters.Kafka kafka) -> KafkaSinkArguments kafka
+            | Some (KafkaSourceParameters.Kafka kafka) -> KafkaSinkArguments (c, kafka)
             | _ -> raise (MissingArg "Must specify kafka arguments")
 #else
         member val Cosmos =
             match a.TryGetSubCommand() with
-            | Some (KafkaSourceParameters.Cosmos cosmos) -> CosmosArguments cosmos
+            | Some (KafkaSourceParameters.Cosmos cosmos) -> CosmosArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos details")
 #endif
 #else
@@ -272,11 +272,11 @@ module Args =
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; container = x.Container }, connector
+            connector, discovery, { database = x.Database; container = x.Container }
 #if (!multiSource && kafka && blank)
         member val Sink =
             match a.TryGetSubCommand() with
-            | Some (CosmosSourceParameters.Kafka kafka) -> KafkaSinkArguments kafka
+            | Some (CosmosSourceParameters.Kafka kafka) -> KafkaSinkArguments (c, kafka)
             | _ -> raise (MissingArg "Must specify `kafka` arguments")
 #else
         member val Cosmos =
@@ -454,7 +454,7 @@ module Args =
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, x.Database, x.Container, connector
+            connector, discovery, x.Database, x.Container
 //#if kafka
         member val Sink =
             match a.TryGetSubCommand() with
@@ -523,7 +523,7 @@ let build (args : Args.Arguments) =
     | Choice1Of2 (srcE, cosmos, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
         let connectProjEs () = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.PreferSlave)
-        let discovery, database, container, connector = cosmos.BuildConnectionDetails()
+        let connector, discovery, database, container = cosmos.BuildConnectionDetails()
 
         let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb=10)
@@ -580,16 +580,16 @@ let build (args : Args.Arguments) =
 #if changeFeedOnly
         let source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency) = args.SourceParams()
 #endif
-        let monitoredDiscovery, monitored, monitoredConnector = source.MonitoringParams()
+        let monitoredConnector, monitoredDiscovery, monitored = source.MonitoringParams()
 //#if (!(kafka && blank))
         let cosmos = source.Cosmos
-        let discovery, database, container, connector = cosmos.BuildConnectionDetails()
+        let connector, discovery, database, container = cosmos.BuildConnectionDetails()
 //#endif
 #else // !kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
         let source = args.Source
 //#if (!(kafka && blank))
         let cosmos = source.Cosmos
-        let discovery, database, container, connector = cosmos.BuildConnectionDetails()
+        let connector, discovery, database, container = cosmos.BuildConnectionDetails()
 //#endif
         let consumerConfig =
             FsKafka.KafkaConsumerConfig.Create(

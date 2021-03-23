@@ -201,7 +201,7 @@ module Args =
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
             let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            discovery, { database = x.Database; container = x.Container }, c
+            c, discovery, { database = x.Database; container = x.Container }
 
         member val Sink =
             match a.TryGetSubCommand() with
@@ -546,7 +546,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-        let discovery, source, connector = srcC.MonitoringParams()
+        let connector, discovery, source = srcC.MonitoringParams()
 #if marveleqx
         let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 streamFilter))
 #else
