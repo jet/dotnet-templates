@@ -42,6 +42,7 @@ module Args =
                 | Retries _ ->              "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
     type CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
+        let ts (x : TimeSpan) = x.TotalSeconds
         member val Mode =                   a.GetResult(ConnectionMode, ConnectionMode.Direct)
         member val Connection =             a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
         member val Database =               a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
@@ -56,7 +57,7 @@ module Args =
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
                 x.Mode, endpointUri, x.Database, x.Container)
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
+                ts x.Timeout, x.Retries, ts x.MaxRetryWaitTime)
             let! connection = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode).Connect(clientId, discovery)
             return Context(connection, x.Database, x.Container) }
 

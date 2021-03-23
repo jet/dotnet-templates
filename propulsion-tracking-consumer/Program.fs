@@ -55,8 +55,9 @@ module Args =
             let Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}.",
                 x.Mode, endpointUri, x.Database, x.Container)
+            let ts (x : TimeSpan) = x.TotalSeconds
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
+                ts x.Timeout, x.Retries, ts x.MaxRetryWaitTime)
             let! connection = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode).Connect(clientId, discovery)
             return Context(connection, x.Database, x.Container) }
 

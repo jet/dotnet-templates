@@ -262,9 +262,9 @@ module Args =
         member val Connection =             a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
         member val Database =               a.TryGetResult CosmosSourceParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val Container =              a.GetResult CosmosSourceParameters.Container
-        member val Timeout =                 a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member val Retries =                 a.GetResult(CosmosSourceParameters.Retries, 1)
-        member val MaxRetryWaitTime =        a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        member val Timeout =                a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        member val Retries =                a.GetResult(CosmosSourceParameters.Retries, 1)
+        member val MaxRetryWaitTime =       a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         member x.MonitoringParams() =
             let Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",

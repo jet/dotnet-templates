@@ -6,11 +6,11 @@ open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and
 open Serilog
 open System
 
-#if (kafka || !blank)
 module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
+#if (kafka || !blank)
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)

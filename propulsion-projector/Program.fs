@@ -77,9 +77,10 @@ module Args =
                 | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
     open Equinox.Cosmos
     type CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
+        let suffix = a.GetResult(LeaseContainerSuffix, "-aux")
+        let container = a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val CfpVerbose =         a.Contains CfpVerbose
-        member val private Suffix =  a.GetResult(LeaseContainerSuffix, "-aux")
-        member val AuxContainerName =   Container + Suffix
+        member val AuxContainerName =   container + suffix
         member val FromTail =           a.Contains FromTail
         member val MaxDocuments =       a.TryGetResult MaxDocuments
         member val LagFrequency =       a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
@@ -87,7 +88,7 @@ module Args =
         member val Mode =               a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
         member val Connection =         a.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
         member val Database =           a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =          a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Container =          container
         member val Timeout =            a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         member val Retries =            a.GetResult(Retries, 1)
         member val MaxRetryWaitTime =   a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
@@ -95,11 +96,12 @@ module Args =
         member x.MonitoringParams() =
             let Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
-                x.Mode, endpointUri, x.Database, x.Container)
+                x.Mode, endpointUri, x.Database, container)
+            let ts (x : TimeSpan) = x.TotalSeconds
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                TimeSpan.FromSeconds x.Timeout, x.Retries, TimeSpan.FromSeconds x.MaxRetryWaitTime)
+                ts x.Timeout, x.Retries, ts x.MaxRetryWaitTime)
             let connector = Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            connector, discovery, { database = x.Database; container = x.Container }
+            connector, discovery, { database = x.Database; container = container }
 #endif
 #if esdb
     open Equinox.EventStore
@@ -179,9 +181,10 @@ module Args =
 
         member x.Connect(log: ILogger, storeLog: ILogger, appName, nodePreference) =
             let discovery = discovery (x.Host, x.Port, x.Tcp)
+            let ts (x : TimeSpan) = x.TotalSeconds
             log.ForContext("host", x.Host).ForContext("port", x.Port)
                 .Information("EventStore {discovery} heartbeat: {heartbeat}s Timeout: {timeout}s Retries {retries}",
-                    discovery, TimeSpan.FromSeconds x.Heartbeat, TimeSpan.FromSeconds x.Timeout, x.Retries)
+                    discovery, ts x.Heartbeat, ts x.Timeout, x.Retries)
             let log=if storeLog.IsEnabled Serilog.Events.LogEventLevel.Debug then Logger.SerilogVerbose storeLog else Logger.SerilogNormal storeLog
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
@@ -222,8 +225,9 @@ module Args =
             let Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
             Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
+            let ts (x : TimeSpan) = x.TotalSeconds
             Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                TimeSpan.FromSeconds x.Timeout, x.Retries, TimeSpan.FromSeconds x.MaxRetryWaitTime)
+                ts x.Timeout, x.Retries, ts x.MaxRetryWaitTime)
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             discovery, x.Database, x.Container, connector
 #endif

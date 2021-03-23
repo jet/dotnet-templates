@@ -114,8 +114,9 @@ module Args =
             let Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
             Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
                 x.Mode, endpointUri, x.Database, x.Container)
+            let ts (x : TimeSpan) = x.TotalSeconds
             Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
+                ts x.Timeout, x.Retries, ts x.MaxRetryWaitTime)
             let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
             connector, discovery, { database = x.Database; container = x.Container }
         member val Cosmos =

@@ -350,7 +350,7 @@ module Args =
 #if kafka
         member val KafkaSink =
             match a.TryGetSubCommand() with
-            | Some (Kafka kafka) -> Some (KafkaSinkArguments kafka)
+            | Some (Kafka kafka) -> Some (KafkaSinkArguments (c, kafka))
             | _ -> None
 #endif
     and [<NoEquality; NoComparison>] EsSinkParameters =
