@@ -17,7 +17,7 @@ type Configuration(tryGet) =
 #if esdb
     let isTrue varName = tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
 #endif
-#if cosmos || esdb
+#if (cosmos || esdb)
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
     member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
