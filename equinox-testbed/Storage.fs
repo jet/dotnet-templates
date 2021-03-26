@@ -52,8 +52,7 @@ module Cosmos =
         | [<AltCommandLine "-d">]       Database of string
         | [<AltCommandLine "-c">]       Container of string
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
+            member a.Usage = a |> function
                 | VerboseStore ->       "Include low level Store logging."
                 | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->          "specify operation retries. Default: 1."

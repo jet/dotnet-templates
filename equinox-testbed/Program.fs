@@ -18,8 +18,7 @@ module Args =
         | [<AltCommandLine "-l">]       LogFile of string
         | [<CliPrefix(CliPrefix.None); Last; Unique>] Run of ParseResults<TestParameters>
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
+            member a.Usage = a |> function
                 | Verbose ->            "Include low level logging regarding specific test runs."
                 | VerboseConsole ->     "Include low level test and store actions logging in on-screen output to console."
                 | LocalSeq ->           "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"

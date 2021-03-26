@@ -60,8 +60,7 @@ module Args =
         | [<AltCommandLine "-r">]       Retries of int
         | [<AltCommandLine "-rt">]      RetriesWaitTime of float
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
+            member a.Usage = a |> function
                 | CfpVerbose ->         "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | LeaseContainerSuffix _ -> "specify Container Name suffix for Leases container. Default: `-aux`."
                 | FromTail _ ->         "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
@@ -204,8 +203,7 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
+            member a.Usage = a |> function
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
@@ -295,8 +293,7 @@ module Args =
         | [<CliPrefix(CliPrefix.None); AltCommandLine "ms"; Last>] SqlMs of ParseResults<SqlStreamStoreSourceParameters>
 //#endif
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
+            member a.Usage = a |> function
                 | Verbose ->                "Request Verbose Logging. Default: off"
                 | ConsumerGroupName _ ->    "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
