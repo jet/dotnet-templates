@@ -66,8 +66,8 @@ module Args =
                 //.Connect(discovery)
                 .CreateUninitialized(discovery)
 
-        member val Database =                a.TryGetResult CosmosParameters.Database   |> Option.defaultWith (fun () -> config.EquinoxCosmosDatabase)
-        member val Container =               a.TryGetResult CosmosParameters.Container  |> Option.defaultWith (fun () -> config.EquinoxCosmosContainer)
+        member val Database =                a.TryGetResult CosmosParameters.Database  |> Option.defaultWith (fun () -> config.EquinoxCosmosDatabase)
+        member val Container =               a.TryGetResult CosmosParameters.Container |> Option.defaultWith (fun () -> config.EquinoxCosmosContainer)
 //        member x.Connect(connector) =
         member x.Connect(client) =
             Log.Information("CosmosDb Database {database} Container {container}", x.Database, x.Container)
@@ -86,22 +86,20 @@ open Microsoft.Extensions.DependencyInjection
 let registerSingleton<'t when 't : not struct> (services : IServiceCollection) (s : 't) =
     services.AddSingleton s |> ignore
 
-let initAsync (args : Args.Arguments) (services : IServiceCollection)  = async {
-    let cosmos = args.Cosmos
-//    let connector = cosmos.CreateConnector()
-//    let! storeClient = cosmos.Connect(connector)
-//    let conn = Equinox.Cosmos.Connection(storeClient)
-//    let context = Equinox.Cosmos.Context
-    let context = cosmos.CreateClient() |> cosmos.Connect |> Equinox.CosmosStore.CosmosStoreContext
-    let cache = Equinox.Cache(AppName, sizeMb=2)
+[<System.Runtime.CompilerServices.Extension>]
+type AppDependenciesExtensions() =
 
-    let ticketsSeries = Domain.TicketsSeries.Cosmos.create (context, cache)
-    let ticketsEpochs = Domain.TicketsEpoch.Cosmos.createReader (context, cache)
-    let tickets = Domain.Tickets.Cosmos.create (context, cache)
-    ticketsSeries |> registerSingleton services
-    ticketsEpochs |> registerSingleton services
-    tickets |> registerSingleton services
-}
+    [<System.Runtime.CompilerServices.Extension>]
+    static member AddTickets(services : IServiceCollection, context, cache) : unit = Async.RunSynchronously <| async {
+
+        let ticketsSeries = Domain.TicketsSeries.Cosmos.create (context, cache)
+        let ticketsEpochs = Domain.TicketsEpoch.Cosmos.createReader (context, cache)
+        let tickets = Domain.Tickets.Cosmos.create (context, cache)
+
+        ticketsSeries |> registerSingleton services
+        ticketsEpochs |> registerSingleton services
+        tickets |> registerSingleton services
+    }
 
 open Microsoft.Extensions.Hosting
 
@@ -109,8 +107,18 @@ open Microsoft.Extensions.Hosting
 let main argv =
     try Log.Logger <- LoggerConfiguration().Configure().CreateLogger()
         try let args = Args.parse EnvVar.tryGet argv
+
+            let cosmos = args.Cosmos
+        //    let connector = cosmos.CreateConnector()
+        //    let! storeClient = cosmos.Connect(connector)
+        //    let conn = Equinox.Cosmos.Connection(storeClient)
+        //    let context = Equinox.Cosmos.Context
+            let context = cosmos.CreateClient() |> cosmos.Connect |> Equinox.CosmosStore.CosmosStoreContext
+            let cache = Equinox.Cache(AppName, sizeMb=2)
+
             Hosting.createHostBuilder()
-                .ConfigureServices(initAsync args >> Async.RunSynchronously)
+                .ConfigureServices(fun s ->
+                    s.AddTickets(context, cache))
                 .Build()
                 .Run()
             0

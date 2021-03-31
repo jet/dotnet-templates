@@ -2,15 +2,11 @@ namespace FeedApiTemplate
 
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
-open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Serilog
 
-type Startup private () =
-    new (configuration : IConfiguration) as this =
-        Startup() then
-        this.Configuration <- configuration
+type Startup() =
 
     member this.ConfigureServices(services : IServiceCollection) =
         services.AddControllers() |> ignore
@@ -27,8 +23,6 @@ type Startup private () =
         app.UseEndpoints(fun endpoints ->
             endpoints.MapControllers() |> ignore
             ) |> ignore
-
-    member val Configuration : IConfiguration = null with get, set
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =

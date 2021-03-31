@@ -6,16 +6,14 @@
 module FeedApiTemplate.Domain.TicketsEpoch
 
 let [<Literal>] Category = "TicketsEpoch"
-let streamName (fcId : FcId, epochId : TicketsEpochId) = FsCodec.StreamName.compose Category [FcId.toString fcId; TicketsEpochId.toString epochId]
+let streamName (fcId, epochId) = FsCodec.StreamName.compose Category [FcId.toString fcId; TicketsEpochId.toString epochId]
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
 
-    [<Newtonsoft.Json.JsonConverter(typeof<FsCodec.NewtonsoftJson.TypeSafeEnumConverter>)>]
-    type Trigger = Shipped | Picked | DcFinLoki
     type Event =
-        | Ingested of {| ids : TicketId[]; trigger : Trigger |}
+        | Ingested of {| ids : TicketId[] |}
         | Closed
         | Snapshotted of {| ids : TicketId[]; closed : bool |}
         interface TypeShape.UnionContract.IUnionContract
@@ -44,7 +42,7 @@ let decide capacity candidateIds = function
             | [||] -> [||], []
             | news ->
                 let closing = Array.length currentIds + Array.length news >= capacity
-                let ingestEvent = Events.Ingested {| trigger = Events.DcFinLoki; ids = news |}
+                let ingestEvent = Events.Ingested {| ids = news |}
                 news, if closing then [ ingestEvent ; Events.Closed ] else [ ingestEvent ]
         let state' = Fold.fold state events
         { rejected = [||]; added = added; isClosed = snd state'; content = fst state' }, events
@@ -53,8 +51,10 @@ let decide capacity candidateIds = function
 
 type StateDto = { closed : bool; tickets : TicketId[] }
 
+/// Service used for the write side; manages ingestion of items into the series of epochs
 type Service internal (capacity, resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
 
+    /// Handles idempotent deduplicated insertion into the set of items held within the epoch
     member _.Ingest(fcid, epochId, ticketIds) : Async<Result> =
         let decider = resolve (fcid, epochId)
         decider.Transact(decide capacity ticketIds)
@@ -64,10 +64,11 @@ type Service internal (capacity, resolve : FcId * TicketsEpochId -> Equinox.Deci
         let decider = resolve (fcid, epochId)
         decider.Query fst
 
-let private create capacity resolveStream =
-    let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
-    Service(capacity, resolve)
+    static member internal Create(capacity, resolveStream) =
+        let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
+        Service(capacity, resolve)
 
+/// Handles the rendering of items as a feed, covering the read side
 type ReadService internal (resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Yields the current state of this epoch, including an indication of whether reading has completed
@@ -75,7 +76,7 @@ type ReadService internal (resolve : FcId * TicketsEpochId -> Equinox.Decider<Ev
         let decider = resolve (fcid, epochId)
         decider.Query(fun (tickets, closed) -> { closed = closed; tickets = tickets })
 
-    static member Create(resolveStream) =
+    static member internal Create(resolveStream) =
         let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
         ReadService(resolve)
 
@@ -89,5 +90,5 @@ module Cosmos =
         let resolver = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
         fun opt sn -> resolver.Resolve(sn, opt)
 
-    let createIngester capacity (context, cache) = create capacity (resolve (context, cache))
+    let createIngester capacity (context, cache) = Service.Create(capacity, resolve (context, cache))
     let createReader (context, cache) = ReadService.Create(resolve (context, cache))

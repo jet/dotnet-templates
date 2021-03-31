@@ -50,6 +50,7 @@ type Service internal (resolve : TicketsSeriesId -> Equinox.Decider<Events.Event
     // NOTE we use a custom id in order to isolate data for acceptance tests
     let seriesId = defaultArg seriesId TicketsSeriesId.wellKnownId
 
+    /// Exposes the set of tranches for which data is held, enabling a consumer to crawl the full dataset
     member _.ReadIngestionEpochs() : Async<EpochDto seq> =
         let decider = resolve seriesId
         decider.Query EpochDto.ofState

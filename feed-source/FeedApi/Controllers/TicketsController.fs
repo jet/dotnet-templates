@@ -17,7 +17,6 @@ module Checkpoint =
     let ofState (epochId : TicketsEpochId) (s : TicketsEpoch.StateDto) =
         TicketsCheckpoint.ofEpochContent epochId s.closed s.tickets.Length
 
-[<ApiController>]
 [<Route("api/[controller]")>]
 type TicketsController(tickets : Tickets.Service, series : TicketsSeries.Service, epochs : TicketsEpoch.ReadService) =
     inherit ControllerBase()
