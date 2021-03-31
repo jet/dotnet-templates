@@ -1,12 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <WarningLevel>5</WarningLevel>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="WeatherForecast.fs" />
+    <Compile Include="Infrastructure.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="TicketsEpoch.fs" />
+    <Compile Include="TicketsSeries.fs" />
+    <Compile Include="Tickets.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.0-beta.2" />
   </ItemGroup>
 
 </Project>

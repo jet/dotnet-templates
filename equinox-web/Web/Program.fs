@@ -24,8 +24,9 @@ let createWebHostBuilder args : IWebHostBuilder =
 [<EntryPoint>]
 let main argv =
     try Log.Logger <- LoggerConfiguration().Configure().CreateLogger()
-        createWebHostBuilder(argv).Build().Run()
-        0
-    with e ->
-        eprintfn "%s" e.Message
-        1
+        try createWebHostBuilder(argv).Build().Run()
+            0
+        with e ->
+            Log.Fatal(e, "Application Startup failed")
+            1
+    finally Log.CloseAndFlush()

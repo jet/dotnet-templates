@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Controllers/WeatherForecastController.fs" />
+    <Compile Include="Controllers\TicketsController.fs" />
     <Compile Include="Startup.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
@@ -16,4 +16,10 @@
     <ProjectReference Include="..\Domain\Domain.fsproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Argu" Version="6.1.1" />
+    <PackageReference Include="Serilog.AspNetCore" Version="3.2.0" />
+    <PackageReference Include="System.Text.Json" Version="5.0.0-preview.3.20214.6" />
+  </ItemGroup>
+    
 </Project>
