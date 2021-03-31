@@ -113,7 +113,8 @@ let main argv =
         //    let! storeClient = cosmos.Connect(connector)
         //    let conn = Equinox.Cosmos.Connection(storeClient)
         //    let context = Equinox.Cosmos.Context
-            let context = cosmos.CreateClient() |> cosmos.Connect |> Equinox.CosmosStore.CosmosStoreContext
+            let conn = cosmos.CreateClient() |> cosmos.Connect
+            let context = Equinox.CosmosStore.CosmosStoreContext.Create(conn, tipMaxEvents=1000)
             let cache = Equinox.Cache(AppName, sizeMb=2)
 
             Hosting.createHostBuilder()
