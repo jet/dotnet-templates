@@ -52,7 +52,7 @@ let decide capacity candidateIds = function
 type StateDto = { closed : bool; tickets : TicketId[] }
 
 /// Service used for the write side; manages ingestion of items into the series of epochs
-type Service internal (capacity, resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
+type IngestionService internal (capacity, resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Handles idempotent deduplicated insertion into the set of items held within the epoch
     member _.Ingest(fcid, epochId, ticketIds) : Async<Result> =
@@ -66,7 +66,7 @@ type Service internal (capacity, resolve : FcId * TicketsEpochId -> Equinox.Deci
 
     static member internal Create(capacity, resolveStream) =
         let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
-        Service(capacity, resolve)
+        IngestionService(capacity, resolve)
 
 /// Handles the rendering of items as a feed, covering the read side
 type ReadService internal (resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
@@ -90,5 +90,5 @@ module Cosmos =
         let resolver = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
         fun opt sn -> resolver.Resolve(sn, opt)
 
-    let createIngester capacity (context, cache) = Service.Create(capacity, resolve (context, cache))
+    let createIngester capacity (context, cache) = IngestionService.Create(capacity, resolve (context, cache))
     let createReader (context, cache) = ReadService.Create(resolve (context, cache))

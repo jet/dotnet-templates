@@ -79,7 +79,7 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
-let [<Literal>] AppName = "Financials.Api"
+let [<Literal>] AppName = "FeedApiTemplate"
 
 open Microsoft.Extensions.DependencyInjection
 

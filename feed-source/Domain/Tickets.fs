@@ -16,7 +16,7 @@ type internal TicketsCache() =
 
 /// Maintains active EpochId in a thread-safe manner while ingesting items into the chain of `epochs` indexed by the `series`
 /// Prior to first add, reads `lookBack` batches to seed the cache, in order to minimize the number of duplicated tickets we ingest
-type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.Service, series : TicketsSeries.Service, lookBack, linger) =
+type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.IngestionService, series : TicketsSeries.Service, lookBack, linger) =
 
     // Maintains what we believe to be the currently open EpochId.
     // NOTE not valid/initialized until invocation of `previousTicket.AwaitValue()` has completed
