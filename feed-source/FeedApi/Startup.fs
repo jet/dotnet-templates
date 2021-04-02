@@ -28,12 +28,14 @@ type Startup() =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(c : LoggerConfiguration) =
+    static member Configure(c : LoggerConfiguration, ?verbose) =
         c
-            .MinimumLevel.Debug()
-            .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
             .Enrich.FromLogContext()
-            .WriteTo.Console()
+            .Destructure.FSharpTypes()
+            .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
+                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
 
 module Hosting =
 

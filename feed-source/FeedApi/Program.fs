@@ -103,32 +103,30 @@ type AppDependenciesExtensions() =
 
 open Microsoft.Extensions.Hosting
 
+let run (args : Args.Arguments) =
+    let cosmos = args.Cosmos
+    //    let connector = cosmos.CreateConnector()
+    //    let! storeClient = cosmos.Connect(connector)
+    //    let conn = Equinox.Cosmos.Connection(storeClient)
+    //    let context = Equinox.Cosmos.Context
+    let conn = cosmos.CreateClient() |> cosmos.Connect
+    let context = Equinox.CosmosStore.CosmosStoreContext.Create(conn, tipMaxEvents=1000)
+    let cache = Equinox.Cache(AppName, sizeMb=2)
+
+    Hosting.createHostBuilder()
+        .ConfigureServices(fun s ->
+            s.AddTickets(context, cache))
+        .Build()
+        .Run()
+
 [<EntryPoint>]
 let main argv =
-    try Log.Logger <- LoggerConfiguration().Configure().CreateLogger()
-        try let args = Args.parse EnvVar.tryGet argv
-
-            let cosmos = args.Cosmos
-        //    let connector = cosmos.CreateConnector()
-        //    let! storeClient = cosmos.Connect(connector)
-        //    let conn = Equinox.Cosmos.Connection(storeClient)
-        //    let context = Equinox.Cosmos.Context
-            let conn = cosmos.CreateClient() |> cosmos.Connect
-            let context = Equinox.CosmosStore.CosmosStoreContext.Create(conn, tipMaxEvents=1000)
-            let cache = Equinox.Cache(AppName, sizeMb=2)
-
-            Hosting.createHostBuilder()
-                .ConfigureServices(fun s ->
-                    s.AddTickets(context, cache))
-                .Build()
-                .Run()
-            0
-        with
-        | :? Argu.ArguParseException
-        | :? MissingArg as e ->
-            eprintfn "%s" e.Message
-            1
-        | e ->
-            Log.Fatal(e, "Application Startup failed")
-            2
-    finally Log.CloseAndFlush()
+    try let args = Args.parse EnvVar.tryGet argv
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
+            try run args
+                0
+            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+        finally Log.CloseAndFlush()
+    with MissingArg msg -> eprintfn "%s" msg; 1
+        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | e -> eprintf "Exception %s" e.Message; 1

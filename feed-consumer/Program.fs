@@ -26,38 +26,36 @@ module Args =
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
 
-        | [<AltCommandLine "-f"; Unique>]   BaseUri of string
         | [<AltCommandLine "-g"; Unique>]   Group of string
+        | [<AltCommandLine "-f"; Unique>]   BaseUri of string
 
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   FcsDop of int
         | [<AltCommandLine "-t"; Unique>]   TicketsDop of int
 
-        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose _ ->              "request verbose logging."
-                | BaseUri _ ->              "specify Api endpoint. (optional if environment variable API_BASE_URI specified)"
                 | Group _ ->                "specify Api Consumer Group Id. (optional if environment variable API_CONSUMER_GROUP specified)"
+                | BaseUri _ ->              "specify Api endpoint. (optional if environment variable API_BASE_URI specified)"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 8."
                 | FcsDop _ ->               "maximum number of FCs to process in parallel. Default: 4"
                 | TicketsDop _ ->           "maximum number of Tickets to process in parallel (per FC). Default: 4"
                 | Cosmos _ ->               "Cosmos Store parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
+        member val Verbose =                a.Contains Parameters.Verbose
+        member val Group =                  a.TryGetResult Group        |> Option.defaultWith (fun () -> c.Group)
         member val BaseUri =                a.TryGetResult BaseUri  |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
-        member val Group =                  a.TryGetResult Group    |> Option.defaultWith (fun () -> c.Group)
         member val MaxReadAhead =           a.GetResult(MaxReadAhead,8)
         member val FcsDop =                 a.TryGetResult FcsDop       |> Option.defaultValue 4
         member val TicketsDop =             a.TryGetResult TicketsDop   |> Option.defaultValue 4
-
-        member val Verbose =                a.Contains Parameters.Verbose
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val CheckpointInterval =     TimeSpan.FromHours 1.
-
         member val Cosmos : CosmosArguments =
             match a.TryGetSubCommand() with
-            | Some (Cosmos es) -> CosmosArguments(c, es)
+            | Some (Cosmos cosmos) -> CosmosArguments(c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos")
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-cm">]          ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
@@ -121,11 +119,14 @@ let build (args : Args.Arguments) =
     let handle = Ingester.handle args.TicketsDop
     let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
-    let source = Propulsion.Feed.FeedSource(Log.Logger, args.StatsInterval, sourceId, tailSleepInterval, checkpoints, feed.Poll, sink)
-    let pipeline = source.Pump feed.ReadTranches
-    sink, pipeline
+    let source =
+        Propulsion.Feed.FeedSource(
+            Log.Logger, args.StatsInterval, sourceId, tailSleepInterval,
+            checkpoints, args.CheckpointInterval, feed.Poll, sink)
+    let pumpSource = source.Pump feed.ReadTranches
+    sink, pumpSource
 
-let mainAsync args = async {
+let run args = async {
     let sink, pumpSource = build args
     let! _source = pumpSource |> Async.StartChild
     do! sink.AwaitCompletion()
@@ -134,15 +135,11 @@ let mainAsync args = async {
 
 [<EntryPoint>]
 let main argv =
-    try Log.Logger <- LoggerConfiguration().WriteTo.Console().CreateLogger()
-        try let args = Args.parse EnvVar.tryGet argv
-            mainAsync args |> Async.RunSynchronously
-        with
-        | :? Argu.ArguParseException
-        | :? MissingArg as e ->
-            eprintfn "%s" e.Message
-            1
-        | e ->
-            Log.Fatal(e, "Application Startup failed")
-            2
-    finally Log.CloseAndFlush()
+    try let args = Args.parse EnvVar.tryGet argv
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
+            try run args |> Async.RunSynchronously
+            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+        finally Log.CloseAndFlush()
+    with MissingArg msg -> eprintfn "%s" msg; 1
+        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+        | e -> eprintf "Exception %s" e.Message; 1

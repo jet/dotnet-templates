@@ -53,8 +53,8 @@ type TicketsClient(session: Session) =
         return! response |> HttpRes.deserializeOkJsonNet<SliceDto>
     }
 
-    member _.Poll(fc : FcId, checkpoint : Nullable<TicketsCheckpoint>) : Async<SliceDto> = async {
-        let request = HttpReq.post () |> HttpReq.withPathf "%s/%O/slice/%O" basePath fc checkpoint
+    member _.Poll(fc : FcId, checkpoint: TicketsCheckpoint) : Async<SliceDto> = async {
+        let request = HttpReq.create () |> HttpReq.withPathf "%s/%O/slice/%O" basePath fc checkpoint
         let! response = session.Send request
         return! response |> HttpRes.deserializeOkJsonNet<SliceDto>
     }
@@ -70,8 +70,8 @@ type TicketsFeed(baseUri) =
 
     // TODO add retries - consumer loop will abort if this throws
     member _.Poll(trancheId, pos) : Async<Propulsion.Feed.Page<byte[]>> = async {
-        let pos = pos |> Option.map TicketsCheckpoint.ofPosition |> Option.toNullable
-        let! pg = tickets.Poll(TrancheId.toFcId trancheId, pos)
+        let checkpoint = TicketsCheckpoint.ofPosition pos
+        let! pg = tickets.Poll(TrancheId.toFcId trancheId, checkpoint)
         let baseIndex = TicketsCheckpoint.toStreamIndex pg.position
         let items = pg.tickets |> Array.mapi (fun i -> Ingester.PipelineEvent.ofIndexAndTicketId (baseIndex + int64 i))
         return { checkpoint = TicketsCheckpoint.toPosition pg.checkpoint; items = items; isTail = not pg.closed }
