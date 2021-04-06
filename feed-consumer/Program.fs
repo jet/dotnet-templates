@@ -134,6 +134,18 @@ let run args = async {
     return if sink.RanToCompletion then 0 else 3
 }
 
+[<System.Runtime.CompilerServices.Extension>]
+type Logging() =
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
+                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
+
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
