@@ -1,8 +1,25 @@
 [<AutoOpen>]
 module FeedConsumerTemplate.HttpHelpers
 
+open Serilog
 open System
 open System.Text
+
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+
+[<System.Runtime.CompilerServices.Extension>]
+type Logging() =
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
+                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
 
 type Async with
     static member Sleep(t : TimeSpan) : Async<unit> = Async.Sleep(int t.TotalMilliseconds)
@@ -180,35 +197,3 @@ module HttpRes =
     /// Deserialize body using default Json.Net profile - throw with content details if StatusCode is not OK or decoding fails
     let deserializeOkJsonNet<'t> =
         deserializeExpectedJsonNet<'t> HttpStatusCode.OK
-
-[<AutoOpen>]
-module DiscoveryExtensions =
-
-    let (|AccountEndpoint|) connectionString =
-        match System.Data.Common.DbConnectionStringBuilder(ConnectionString = connectionString).TryGetValue "AccountEndpoint" with
-        | true, (:? string as s) when not (System.String.IsNullOrEmpty s) -> s
-        | _ -> invalidOp "Connection string does not contain an \"AccountEndpoint\""
-
-    type Equinox.CosmosStore.Discovery with
-
-        member x.Endpoint : System.Uri = x |> function
-            | Equinox.CosmosStore.Discovery.AccountUriAndKey (u, _k) -> u
-            | Equinox.CosmosStore.Discovery.ConnectionString (AccountEndpoint e) -> System.Uri e
-
-module EnvVar =
-
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
-
-open Serilog
-
-[<System.Runtime.CompilerServices.Extension>]
-type Logging() =
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
-        configuration
-            .Destructure.FSharpTypes()
-            .Enrich.FromLogContext()
-        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
-                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
