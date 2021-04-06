@@ -1,5 +1,6 @@
 ﻿module FeedConsumerTemplate.Program
 
+open Equinox.CosmosStore
 open Serilog
 open System
 
@@ -15,6 +16,7 @@ type Configuration(tryGet) =
     member _.EquinoxCosmosConnection        = get "EQUINOX_COSMOS_CONNECTION"
     member _.EquinoxCosmosDatabase          = get "EQUINOX_COSMOS_DATABASE"
     member _.EquinoxCosmosContainer         = get "EQUINOX_COSMOS_CONTAINER"
+
     member _.BaseUri                        = get "API_BASE_URI"
     member _.Group                          = get "API_CONSUMER_GROUP"
 
@@ -82,21 +84,18 @@ module Args =
         member val Retries =                a.GetResult(Retries, 9)
         member val MaxRetryWaitTime =       a.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
 
-        member x.Connect(clientId) =
+        member x.CreateConnector() =
             let discovery = x.Connection
             Log.Information("CosmosDb {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 x.Mode, discovery.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-            CosmosStoreClientFactory(x.Timeout, x.Retries, x.MaxRetryWaitTime, mode=x.Mode)
-                //.Connect(discovery)
-                .CreateUninitialized(discovery)
+            CosmosClientFactory(x.Timeout, x.Retries, x.MaxRetryWaitTime, mode=x.Mode)
+                .Connect(discovery)
 
         member val Database =               a.TryGetResult Database   |> Option.defaultWith (fun () -> c.EquinoxCosmosDatabase)
         member val Container =              a.TryGetResult Container  |> Option.defaultWith (fun () -> c.EquinoxCosmosContainer)
-//      member x.Connect(connector) =
-        member x.CreateContext(client) =
+        member x.Connect(connector) =
             Log.Information("CosmosDb Database {database} Container {container}", x.Database, x.Container)
-            CosmosStoreConnection(client, x.Database, x.Container)
-            |> fun c -> CosmosStoreContext.Create(c, tipMaxEvents=1000)
+            CosmosStoreClient.Connect(connector, x.Database, x.Container)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv =
@@ -108,7 +107,9 @@ let [<Literal>] AppName = "FeedConsumerTemplate"
 
 let build (args : Args.Arguments) =
     let target = args.Cosmos
-    let context = target.Connect(AppName) (*|> Async.RunSynchronously*) |> target.CreateContext
+    let connector = target.CreateConnector()
+    let client = target.Connect connector |> Async.RunSynchronously
+    let context = CosmosStoreContext(client, tipMaxEvents=100)
     let cache = Equinox.Cache (AppName, sizeMb = 10)
 
     let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (context, cache)

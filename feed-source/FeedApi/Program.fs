@@ -58,20 +58,18 @@ module Args =
         member val Timeout =                 a.GetResult(CosmosParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         member val Retries =                 a.GetResult(CosmosParameters.Retries, 9)
         member val MaxRetryWaitTime =        a.GetResult(CosmosParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
-        member x.CreateClient() =
+        member x.CreateConnector() =
             let discovery = Equinox.CosmosStore.Discovery.ConnectionString x.Connection
             Log.Information("CosmosDb {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
                 x.Mode, discovery.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-            Equinox.CosmosStore.CosmosStoreClientFactory(x.Timeout, x.Retries, x.MaxRetryWaitTime, mode=x.Mode)
-                //.Connect(discovery)
-                .CreateUninitialized(discovery)
+            Equinox.CosmosStore.CosmosClientFactory(x.Timeout, x.Retries, x.MaxRetryWaitTime, mode=x.Mode)
+                .Connect(discovery)
 
         member val Database =                a.TryGetResult CosmosParameters.Database  |> Option.defaultWith (fun () -> config.EquinoxCosmosDatabase)
         member val Container =               a.TryGetResult CosmosParameters.Container |> Option.defaultWith (fun () -> config.EquinoxCosmosContainer)
-//        member x.Connect(connector) =
-        member x.Connect(client) =
+        member x.Connect(connector) =
             Log.Information("CosmosDb Database {database} Container {container}", x.Database, x.Container)
-            Equinox.CosmosStore.CosmosStoreConnection(client, x.Database, x.Container)
+            Equinox.CosmosStore.CosmosStoreClient.Connect(connector, x.Database, x.Container)
 
     /// Parse the commandline; can throw MissingArg or Argu.ArguParseException in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv =
@@ -105,12 +103,9 @@ open Microsoft.Extensions.Hosting
 
 let run (args : Args.Arguments) =
     let cosmos = args.Cosmos
-    //    let connector = cosmos.CreateConnector()
-    //    let! storeClient = cosmos.Connect(connector)
-    //    let conn = Equinox.Cosmos.Connection(storeClient)
-    //    let context = Equinox.Cosmos.Context
-    let conn = cosmos.CreateClient() |> cosmos.Connect
-    let context = Equinox.CosmosStore.CosmosStoreContext.Create(conn, tipMaxEvents=1000)
+    let connector = cosmos.CreateConnector()
+    let storeClient = cosmos.Connect(connector) |> Async.RunSynchronously
+    let context = Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=100)
     let cache = Equinox.Cache(AppName, sizeMb=2)
 
     Hosting.createHostBuilder()
