@@ -1,7 +1,6 @@
 module FeedConsumerTemplate.ApiClient
 
 open FSharp.UMX
-open System
 open System.Net.Http
 
 open FeedConsumerTemplate.Domain

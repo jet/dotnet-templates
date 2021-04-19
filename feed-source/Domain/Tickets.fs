@@ -9,10 +9,10 @@ open FSharp.UMX
 
 type internal TicketsCache() =
     // NOTE: Bounded only by relatively low number of physical pick tickets IRL
-    let all = System.Collections.Concurrent.ConcurrentDictionary<TicketId,unit>()
+    let all = System.Collections.Generic.HashSet<TicketId>()
     static member Create init = let x = TicketsCache() in x.Add init; x
-    member _.Add tickets = for x in tickets do all.[x] <- ()
-    member _.Contains ticket = all.ContainsKey ticket
+    member _.Add tickets = all.UnionWith tickets
+    member _.Contains ticket = all.Contains ticket
 
 /// Maintains active EpochId in a thread-safe manner while ingesting items into the chain of `epochs` indexed by the `series`
 /// Prior to first add, reads `lookBack` batches to seed the cache, in order to minimize the number of duplicated tickets we ingest
@@ -24,25 +24,24 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
     let mutable activeEpochId = uninitializedSentinel
     let effectiveEpochId () = if activeEpochId = uninitializedSentinel then TicketsEpochId.initial else %activeEpochId
 
-    // We want max one request in flight to establish the pre-existing items from which the tickets cache will be seeded
-    let previousEpochs = AsyncCacheCell<AsyncCacheCell<TicketId[]> list> <| async {
+    // establish the pre-existing items from which the tickets cache will be seeded
+    let loadPreviousEpochs loadDop : Async<TicketId[][]> = async {
         match! series.TryReadIngestionEpochId fcId with
         | None ->
             log.Information("No starting epoch registered for {fcId}", fcId)
-            return []
+            return Array.empty
         | Some startingId ->
             log.Information("Walking back from {fcId}/{epochId}", fcId, startingId)
             activeEpochId <- %startingId
             let readEpoch epochId =
                 log.Information("Reading {fcId}/{epochId}", fcId, epochId)
                 epochs.ReadTickets(fcId, epochId)
-            return [ for epochId in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> AsyncCacheCell(readEpoch %epochId) ] }
+            return! Async.Parallel(seq { for epochId in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> readEpoch %epochId }, loadDop) }
 
     // Tickets cache - used to maintain a list of tickets that have already been ingested in order to avoid db round-trips
     let previousTickets : AsyncCacheCell<TicketsCache> = AsyncCacheCell <| async {
-        let! batches = previousEpochs.AwaitValue()
-        let! tickets = seq { for x in batches -> x.AwaitValue() } |> Async.Parallel
-        return TicketsCache.Create(Seq.concat tickets) }
+        let! batches = loadPreviousEpochs 4
+        return TicketsCache.Create(Seq.concat batches) }
 
     let tryIngest items = async {
         let! previousTickets = previousTickets.AwaitValue()
@@ -71,7 +70,7 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
                 match res.rejected with
                 | [||] -> return ingestedTickets
                 | remaining -> return! aux (TicketsEpochId.next epochId) ingestedTickets remaining }
-        return! aux firstEpochId [||] items
+        return! aux firstEpochId [||] (Array.concat items)
     }
 
     /// Within the processing for a given FC, we have a Scheduler running N streams concurrently
@@ -88,22 +87,22 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
     let batchedIngest = AsyncBatchingGate(tryIngest, linger)
 
     /// Upon startup, we initialize the Tickets cache from recent epochs; we want to kick that process off before our first ingest
-    member _.Initialize() = previousEpochs.AwaitValue() |> Async.Ignore
+    member _.Initialize() = previousTickets.AwaitValue() |> Async.Ignore
 
     /// Attempts to feed the items into the sequence of epochs. Returns the subset that actually got fed in this time around.
-    member _.IngestMany(items : TicketId[]) : Async<TicketId seq> = async {
-        let! results = items |> Seq.map batchedIngest.Execute |> Async.Parallel
-        return (Seq.collect id results, items) |> System.Linq.Enumerable.Intersect
+    member _.IngestMany(items : TicketId[]) : Async<TicketId[]> = async {
+        let! results = batchedIngest.Execute items
+        return System.Linq.Enumerable.Intersect(items, results) |> Array.ofSeq
     }
 
     /// Attempts to feed the item into the sequence of batches. Returns true if the item actually got included into an Epoch this time around.
     member _.TryIngest(item : TicketId) : Async<bool> = async {
-        let! result = batchedIngest.Execute item
+        let! result = batchedIngest.Execute(Array.singleton item)
         return result |> Array.contains item
     }
 
 let private createFcService (epochs, lookBackLimit) series linger fcId =
-    let log = Serilog.Log.ForContext<ServiceForFc>().ForContext("fcId", fcId)
+    let log = Serilog.Log.ForContext<ServiceForFc>()
     ServiceForFc(log, fcId, epochs, series, lookBack=lookBackLimit, linger=linger)
 
 /// Each ServiceForFc maintains significant state (set of tickets looking back through e.g. 100 epochs), which we obv need to cache
