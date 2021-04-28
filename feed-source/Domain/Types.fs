@@ -23,10 +23,9 @@ type TicketsEpochId = int<ticketsEpochId>
 module TicketsEpochId =
     let unknown = -1<ticketsEpochId>
     let initial = 0<ticketsEpochId>
-    let effectiveValue (value : TicketsEpochId) : int = if value = unknown then %initial else %value
     let value (value : TicketsEpochId) : int = %value
-    let toString (value : TicketsEpochId) : string = string %value
     let next (value : TicketsEpochId) : TicketsEpochId = % (%value + 1)
+    let toString (value : TicketsEpochId) : string = string %value
 
 (* Identifies the series pointing to the active TicketsEpochId per FC *)
 
