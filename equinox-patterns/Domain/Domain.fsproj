@@ -7,7 +7,7 @@
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
     <Compile Include="Types.fs" />
-    <Compile Include="Epoch.fs" />
+    <Compile Include="Period.fs" />
   </ItemGroup>
 
   <ItemGroup>

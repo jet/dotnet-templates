@@ -1,12 +1,12 @@
-﻿/// Illustrates a high level approach to how one might manage a chained series of epochs which can be logically Closed
-/// When the target Epoch is Closed, all write attempts attempts are required to adhere to a protocol consisting of
-/// a) all preceding epochs must be closed, idempotently computing and persisting or honoring a previous computed balance
-/// b) the decision is processed within the target epoch (which may be either Open, or being opened as part of this flow)
-/// c) if appropriate, the target epoch may be closed as part of the same decision flow if `decideCarryForward` yields Some
-module Patterns.Domain.Epoch
+﻿/// Illustrates a high level approach to how one might manage a chained series of periods which can be logically Closed
+/// All write attempts adhere to a common protocol to effect this semantic:-
+/// a) all preceding periods must be closed, idempotently i) computing and persisting a balance OR ii) honoring a previously recorded one
+/// b) the decision is processed within the target period (which may be either Open, or being opened as part of this flow)
+/// c) if appropriate, the target period may be closed as part of the same decision flow if `decideCarryForward` yields Some
+module Patterns.Domain.Period
 
-let [<Literal>] Category = "Epoch"
-let streamName epochId = FsCodec.StreamName.create Category (EpochId.toString epochId)
+let [<Literal>] Category = "Period"
+let streamName periodId = FsCodec.StreamName.create Category (PeriodId.toString periodId)
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -38,7 +38,7 @@ module Fold =
         | CarriedForward e -> Closed (items, e.items)
     let fold = Seq.fold evolve
 
-    /// Handles one-time opening of the Epoch, if applicable
+    /// Handles one-time opening of the Period, if applicable
     let maybeOpen (getIncomingBalance : unit -> Async<Balance>) state = async {
         match state with
         | Initial ->        let! balance = getIncomingBalance ()
@@ -75,13 +75,13 @@ type Result<'request, 'result> =
         residual            : 'request
         /// The result of the decision (assuming processing took place)
         result              : 'result option
-        /// balance being carried forward in the event that the successor epoch has yet to have the BroughtForward event generated
+        /// balance being carried forward in the event that the successor period has yet to have the BroughtForward event generated
         carryForward        : Events.Balance option }
 
-/// Decision function ensuring the high level rules of an Epoch are adhered to viz.
-/// 1. Streams must open with a BroughtForward event (obtained via Rules.getIncomingBalance if this is an uninitialized Epoch)
-/// 2. (If the Epoch has not closed) Rules.decide gets to map the request to events and a residual
-/// 3. Rules.decideCarryForward may trigger the closing of the Epoch based on the residual and the stream State by emitting Some balance
+/// Decision function ensuring the high level rules of an Period are adhered to viz.
+/// 1. Streams must open with a BroughtForward event (obtained via Rules.getIncomingBalance if this is an uninitialized Period)
+/// 2. (If the Period has not closed) Rules.decide gets to map the request to events and a residual
+/// 3. Rules.decideCarryForward may trigger the closing of the Period based on the residual and/or the State by emitting Some balance
 let decideIngestWithCarryForward rules req s : Async<Result<'result, 'req> * Events.Event list> = async {
     let acc = Accumulator(s, Fold.fold)
     do! acc.TransactAsync(Fold.maybeOpen rules.getIncomingBalance)
@@ -90,50 +90,50 @@ let decideIngestWithCarryForward rules req s : Async<Result<'result, 'req> * Eve
     return { residual = residual; result = result; carryForward = carryForward }, acc.Events
 }
 
-/// Manages Application of Requests to the Epoch's stream, including closing preceding epochs as appropriate
-type Service(resolve : EpochId -> Equinox.Decider<Events.Event, Fold.State>) =
+/// Manages Application of Requests to the Period's stream, including closing preceding periods as appropriate
+type Service(resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     let calcBalance state =
         let createEventsBalance items : Events.Balance = { items = items }
         async { return createEventsBalance state }
     let genBalance state = async { let! bal = calcBalance state in return Some bal }
 
-    /// Walks back as far as necessary to ensure any preceding Epochs that are not yet Closed are, then closes the target if necessary
-    /// Yields the accumulated balance to be carried forward into the next epoch
-    member private x.Close epochId : Async<Events.Balance> =
+    /// Walks back as far as necessary to ensure any preceding Periods that are not yet Closed are, then closes the target if necessary
+    /// Yields the accumulated balance to be carried forward into the next period
+    member private x.Close periodId : Async<Events.Balance> =
         let rules : Rules<unit, unit> =
-            {   getIncomingBalance  = fun ()        -> x.Close epochId
+            {   getIncomingBalance  = fun ()        -> x.Close periodId
                 decideIngestion     = fun () _state -> (), (), []
                 decideCarryForward  = fun ()        -> genBalance } // always close
-        let decider = resolve epochId
+        let decider = resolve periodId
         decider.TransactEx((fun c -> decideIngestWithCarryForward rules () c.State), fun r _c -> Option.get r.carryForward)
 
-    /// Runs the decision function on the specified Epoch, closing and bringing forward balances from preceding Epochs if necessary
-    member private x.TryTransact(epochId, getIncoming, decide : 'request -> Fold.State -> 'request * 'result * Events.Event list, request, shouldClose) : Async<Result<'request, 'result>> =
+    /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
+    member private x.TryTransact(periodId, getIncoming, decide : 'request -> Fold.State -> 'request * 'result * Events.Event list, request, shouldClose) : Async<Result<'request, 'result>> =
         let rules : Rules<'request, 'result> =
             {   getIncomingBalance  = getIncoming
                 decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
                 decideCarryForward  = fun res state -> async { if shouldClose res then return! genBalance state else return None } } // also close, if we should
-        let decider = resolve epochId
+        let decider = resolve periodId
         decider.TransactEx((fun c -> decideIngestWithCarryForward rules request c.State), fun r _c -> r)
 
-    /// Runs the decision function on the specified Epoch, closing and bringing forward balances from preceding Epochs if necessary
+    /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     /// Processing completes when `decide` yields None for the residual of the 'request
-    member x.Transact(epochId, decide : 'request -> Fold.State -> 'request option * 'result * Events.Event list, request : 'request) : Async<'result> =
-        let rec aux epochId getIncoming req = async {
+    member x.Transact(periodId, decide : 'request -> Fold.State -> 'request option * 'result * Events.Event list, request : 'request) : Async<'result> =
+        let rec aux periodId getIncoming req = async {
             let decide req state = decide (Option.get req) state
-            match! x.TryTransact(epochId, getIncoming, decide, req, Option.isSome) with
+            match! x.TryTransact(periodId, getIncoming, decide, req, Option.isSome) with
             | { residual = None; result = Some r } -> return r
-            | { residual = r; carryForward = cf } -> return! aux (EpochId.next epochId) (fun () -> async { return Option.get cf }) r }
+            | { residual = r; carryForward = cf } -> return! aux (PeriodId.next periodId) (fun () -> async { return Option.get cf }) r }
         let getIncoming () =
-            match EpochId.tryPrev epochId with
+            match PeriodId.tryPrev periodId with
             | None -> calcBalance [||]
-            | Some prevEpochId -> x.Close prevEpochId
-        aux epochId getIncoming (Some request)
+            | Some prevPeriodId -> x.Close prevPeriodId
+        aux periodId getIncoming (Some request)
 
     /// Exposes the full state to a reader (which is appropriate for a demo but is an anti-pattern in the general case)
-    member _.Read epochId =
-         let decider = resolve epochId
+    member _.Read periodId =
+         let decider = resolve periodId
          decider.Query id
 
 let private create resolveStream =
@@ -143,6 +143,5 @@ let private create resolveStream =
 module MemoryStore =
 
     let create store =
-//        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), Fold.fold, Fold.initial)
         let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
         create cat.Resolve
