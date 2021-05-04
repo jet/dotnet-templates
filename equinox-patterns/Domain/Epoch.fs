@@ -117,11 +117,12 @@ type Service(resolve : EpochId -> Equinox.Decider<Events.Event, Fold.State>) =
         decider.TransactEx((fun c -> decideIngestWithCarryForward rules request c.State), fun r _c -> r)
 
     /// Runs the decision function on the specified Epoch, closing and bringing forward balances from preceding Epochs if necessary
-    member x.Transact(epochId, decide : 'request -> Fold.State -> 'result * Events.Event list, request : 'request) : Async<'result> =
+    /// Processing completes when `decide` yields None for the residual of the 'request
+    member x.Transact(epochId, decide : 'request -> Fold.State -> 'request option * 'result * Events.Event list, request : 'request) : Async<'result> =
         let rec aux epochId getIncoming request = async {
             let decide req state =
-                let res, es = decide (Option.get req) state
-                None, res, es
+                let residual, result, es = decide (Option.get req) state
+                residual, result, es
             match! x.TryTransact(epochId, getIncoming, decide, request) with
             | { residual = None; result = Some r } -> return r
             | { residual = r; carryForward = cf } -> return! aux (EpochId.next epochId) (fun () -> async { return Option.get cf }) r }
@@ -130,16 +131,7 @@ type Service(resolve : EpochId -> Equinox.Decider<Events.Event, Fold.State>) =
             | None -> calcBalance [||]
             | Some prevEpochId -> x.Close prevEpochId
         aux epochId getIncoming (Some request)
-(*
-/// The result of the overall ingestion, consisting of
-type Result<'request, 'result> =
-    {   /// residual of the request, in the event where it was not possible to ingest it completely
-        residual            : 'request
-        /// The result of the decision (assuming processing took place)
-        result              : 'result option
-        /// balance being carried forward in the event that the successor epoch has yet to have the BroughtForward event generated
-        carryForward        : Events.Balance option }
-*)
+
     /// Exposes the full state to a reader (which is appropriate for a demo but is an anti-pattern in the general case)
     member _.Read epochId =
          let decider = resolve epochId
