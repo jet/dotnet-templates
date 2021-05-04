@@ -96,6 +96,7 @@ type Service(resolve : EpochId -> Equinox.Decider<Events.Event, Fold.State>) =
     let calcBalance state =
         let createEventsBalance items : Events.Balance = { items = items }
         async { return createEventsBalance state }
+    let genBalance state = async { let! bal = calcBalance state in return Some bal }
 
     /// Walks back as far as necessary to ensure any preceding Epochs that are not yet Closed are, then closes the target if necessary
     /// Yields the accumulated balance to be carried forward into the next epoch
@@ -103,27 +104,25 @@ type Service(resolve : EpochId -> Equinox.Decider<Events.Event, Fold.State>) =
         let rules : Rules<unit, unit> =
             {   getIncomingBalance  = fun ()        -> x.Close epochId
                 decideIngestion     = fun () _state -> (), (), []
-                decideCarryForward  = fun () state  -> async { let! bal = calcBalance state in return Some bal } } // always close
+                decideCarryForward  = fun ()        -> genBalance } // always close
         let decider = resolve epochId
         decider.TransactEx((fun c -> decideIngestWithCarryForward rules () c.State), fun r _c -> Option.get r.carryForward)
 
     /// Runs the decision function on the specified Epoch, closing and bringing forward balances from preceding Epochs if necessary
-    member private x.TryTransact(epochId, getIncoming, decide : 'request -> Fold.State -> 'request * 'result * Events.Event list, request) : Async<Result<'request, 'result>> =
+    member private x.TryTransact(epochId, getIncoming, decide : 'request -> Fold.State -> 'request * 'result * Events.Event list, request, shouldClose) : Async<Result<'request, 'result>> =
         let rules : Rules<'request, 'result> =
             {   getIncomingBalance  = getIncoming
-                decideIngestion     = fun request state  -> let residual, result, events = decide request state in residual, result, events
-                decideCarryForward  = fun _res _state -> async { return None } } // never close
+                decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
+                decideCarryForward  = fun res state -> async { if shouldClose res then return! genBalance state else return None } } // also close, if we should
         let decider = resolve epochId
         decider.TransactEx((fun c -> decideIngestWithCarryForward rules request c.State), fun r _c -> r)
 
     /// Runs the decision function on the specified Epoch, closing and bringing forward balances from preceding Epochs if necessary
     /// Processing completes when `decide` yields None for the residual of the 'request
     member x.Transact(epochId, decide : 'request -> Fold.State -> 'request option * 'result * Events.Event list, request : 'request) : Async<'result> =
-        let rec aux epochId getIncoming request = async {
-            let decide req state =
-                let residual, result, es = decide (Option.get req) state
-                residual, result, es
-            match! x.TryTransact(epochId, getIncoming, decide, request) with
+        let rec aux epochId getIncoming req = async {
+            let decide req state = decide (Option.get req) state
+            match! x.TryTransact(epochId, getIncoming, decide, req, Option.isSome) with
             | { residual = None; result = Some r } -> return r
             | { residual = r; carryForward = cf } -> return! aux (EpochId.next epochId) (fun () -> async { return Option.get cf }) r }
         let getIncoming () =
@@ -144,5 +143,6 @@ let private create resolveStream =
 module MemoryStore =
 
     let create store =
+//        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), Fold.fold, Fold.initial)
         let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
         create cat.Resolve
