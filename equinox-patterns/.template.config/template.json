@@ -4,7 +4,10 @@
   "classifications": [
     "Equinox",
     "Event Sourcing",
-    "Closing Books"
+    "Closing Books",
+    "Epoch",
+    "Series",
+    "Period"
   ],
   "tags": {
     "language": "F#",

@@ -1,4 +1,4 @@
-/// This test and implementation pairing demonstrates how one might accomplish a pattern
+/// Integration suite for `Period`
 module Patterns.Domain.Tests.PeriodsCarryingForward
 
 open Patterns.Domain

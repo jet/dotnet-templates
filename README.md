@@ -9,6 +9,9 @@ These templates focus solely on Consistent Processing using Equinox Stores:
 - [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox).
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
 - [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox](https://github.com/jet/equinox), using different stores and/or store configuration parameters.
+- [`eqxPatterns`](equinox-patterns/README.md) - Equinox Skeleton Deciders and Tests implementing various event sourcing patterns: 
+  - [x] Period (with Rolling Balance carried forward)  
+  - [ ] Epochs/Series with deduplication
 
 ## [Propulsion](https://github.com/jet/propulsion) related
 

@@ -114,6 +114,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxPatterns", "eqxPatterns", "{76721F1E-851C-4970-A276-DF61FCE3DA23}"
 ProjectSection(SolutionItems) = preProject
 	equinox-patterns\.template.config\template.json = equinox-patterns\.template.config\template.json
+	equinox-patterns\README.md = equinox-patterns\README.md
 EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-patterns\Domain\Domain.fsproj", "{8D9867A9-1B5D-4AD3-A890-ACC81D011C00}"
