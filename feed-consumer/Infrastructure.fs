@@ -186,7 +186,7 @@ module HttpRes =
 
     /// Deserialize body using default Json.Net profile - throw with content details if StatusCode is unexpected or decoding fails
     let deserializeExpectedJsonNet<'t> expectedStatusCode (res : HttpResponseMessage) =
-        res.Interpret(expectedStatusCode, Newtonsoft.Json.JsonConvert.DeserializeObject<'t>)
+        res.Interpret(expectedStatusCode, FsCodec.NewtonsoftJson.Serdes.Deserialize<'t>)
 
     /// Deserialize body using default Json.Net profile - throw with content details if StatusCode is not OK or decoding fails
     let deserializeOkJsonNet<'t> =
