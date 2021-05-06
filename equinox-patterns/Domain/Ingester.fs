@@ -20,8 +20,9 @@ type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : Epoc
     // Maintains what we believe to be the currently open EpochId
     // NOTE not valid/initialized until invocation of `previousIds.AwaitValue()` has completed
     let uninitializedSentinel = %EpochId.unknown
-    let mutable activeEpochId = uninitializedSentinel
-    let effectiveEpochId () = if activeEpochId = uninitializedSentinel then EpochId.initial else %activeEpochId
+    let mutable activeEpochId_ = uninitializedSentinel
+    // NOTE see above - must not be called prior to previousIds.AwaitValue()
+    let effectiveEpochId () = if activeEpochId_ = uninitializedSentinel then EpochId.initial else %activeEpochId_
 
     // establish the pre-existing items from which the previousIds cache will be seeded
     let loadPreviousEpochs loadDop : Async<ItemId[][]> = async {
@@ -31,7 +32,7 @@ type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : Epoc
             return Array.empty
         | Some startingId ->
             log.Information("Walking back from {trancheId}/{epochId}", trancheId, startingId)
-            activeEpochId <- %startingId
+            activeEpochId_ <- %startingId
             let readEpoch epochId =
                 log.Information("Reading {trancheId}/{epochId}", trancheId, epochId)
                 epochs.ReadIds(trancheId, epochId)
@@ -62,11 +63,11 @@ type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : Epoc
                 // The adding is potentially redundant; we don't care
                 previousIds.Add res.content
                 // Any writer noticing we've moved to a new Epoch shares the burden of marking it active in the Series
-                if not res.closed && activeEpochId < EpochId.value epochId then
+                if not res.closed && activeEpochId_ < EpochId.value epochId then
                     log.Information("Marking {trancheId}/{epochId} active", trancheId, epochId)
                     do! series.MarkIngestionEpochId(trancheId, epochId)
-                    System.Threading.Interlocked.CompareExchange(&activeEpochId, %epochId, activeEpochId) |> ignore
-                match res.rejected with
+                    System.Threading.Interlocked.CompareExchange(&activeEpochId_, %epochId, activeEpochId_) |> ignore
+                match res.residual with
                 | [||] -> return ingestedItemIds
                 | remaining -> return! aux (EpochId.next epochId) ingestedItemIds remaining }
         return! aux firstEpochId [||] (Array.concat items)
@@ -120,9 +121,12 @@ type Service internal (createForTranche : TrancheId -> ServiceForTranche) =
 module Cosmos =
 
     let create (context, cache) =
-        let maxItemsPerEpoch, lookBackLimit = 10_000, 100
-        let epochs = Epoch.Cosmos.create maxItemsPerEpoch (context, cache)
+        let maxItemsPerEpoch = 10_000
+        let remainingBatchCapacity _candidateItems currentItems =
+            let l = Array.length currentItems
+            max 0 (maxItemsPerEpoch - l)
+        let epochs = Epoch.Cosmos.create remainingBatchCapacity (context, cache)
         let series = Series.Cosmos.create (context, cache)
-        let linger = System.TimeSpan.FromMilliseconds 200.
+        let linger, lookBackLimit = System.TimeSpan.FromMilliseconds 200., 100
         let createForTranche = createServiceForTranche (epochs, lookBackLimit) series linger
         Service(createForTranche)

@@ -37,7 +37,7 @@ let notAlreadyIn (ids : ItemId seq) =
     let ids = System.Collections.Generic.HashSet ids
     fun (x : Events.Item) -> (not << ids.Contains) x.id
 
-type Result = { accepted : ItemId[]; rejected : Events.Item[]; content : ItemId[]; closed : bool }
+type Result = { accepted : ItemId[]; residual : Events.Item[]; content : ItemId[]; closed : bool }
 
 // Note there aren't ever rejected Items in this implementation; the size of an epoch may actually exceed the capacity
 // Pros for not rejecting:
@@ -47,32 +47,38 @@ type Result = { accepted : ItemId[]; rejected : Events.Item[]; content : ItemId[
 //   i.e. we did not have 10 items 2s ago and 3 just now - we had 13 2s ago
 let decide capacity candidates (currentIds, closed as state) =
     match closed, candidates |> Array.filter (notAlreadyIn currentIds) with
-    | true, freshCandidates -> { accepted = [||]; rejected = freshCandidates; content = currentIds; closed = closed }, []
-    | false, [||] ->           { accepted = [||]; rejected = [||];            content = currentIds; closed = closed }, []
+    | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, []
+    | false, [||] ->           { accepted = [||]; residual = [||];            content = currentIds; closed = closed }, []
     | false, freshItems ->
+        let capacityNow = capacity freshItems currentIds
+        let acceptingCount = min capacityNow freshItems.Length
+        let closing = acceptingCount = capacityNow
+        let ItemIds addedItemIds as itemsIngested, residualItems = Array.splitAt acceptingCount freshItems
         let events =
-            let closingNow = Array.length currentIds + Array.length freshItems >= capacity
-            let maybeClosingEvent = if closingNow then [ Events.Closed ] else []
-            Events.Ingested { items = freshItems } :: maybeClosingEvent
+            [   if closing then yield Events.Closed
+                if (not << Array.isEmpty) itemsIngested then yield Events.Ingested { items = itemsIngested } ]
         let currentIds, closed = Fold.fold state events
-        let (ItemIds addedItemIds) = freshItems
-        { accepted = addedItemIds; rejected = [||]; content = currentIds; closed = closed }, events
+        { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, events
 
 (* Alternate implementation of the `decide` above employing the `Accumulator` helper.
    While it's a subjective thing, the takeaway should be that an accumulator rarely buys one code clarity *)
 let equivalentDecideUsingAnAccumulator capacity candidates (currentIds, closed as initialState) =
     match closed, candidates |> Array.filter (notAlreadyIn currentIds) with
-    | true, freshCandidates -> { accepted = [||]; rejected = freshCandidates; content = currentIds; closed = closed }, []
-    | false, [||] ->           { accepted = [||]; rejected = [||];            content = currentIds; closed = closed }, []
+    | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, []
+    | false, [||] ->           { accepted = [||]; residual = [||];            content = currentIds; closed = closed }, []
     | false, freshItems ->
+        let capacityNow = capacity freshItems currentIds
+        let acceptingCount = min capacityNow freshItems.Length
+        let closing = acceptingCount = capacityNow
+        let ItemIds addedItemIds as itemsIngested, residualItems = Array.splitAt acceptingCount freshItems
+
         let acc = Accumulator(initialState, Fold.fold)
-        acc.Transact(fun _ -> [ Events.Ingested { items = freshItems } ])
+        if (not << Array.isEmpty) itemsIngested then acc.Transact(fun _ -> [ Events.Ingested { items = itemsIngested } ])
         let currentIds, closed =
             acc.Transact(fun (currentIds, _) ->
-                let closing = Array.length currentIds >= capacity
                 ((currentIds, closing), if closing then [Events.Closed] else []))
-        let (ItemIds addedItemIds) = freshItems
-        { accepted = addedItemIds; rejected = [||]; content = currentIds; closed = closed }, acc.Events
+
+        { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, acc.Events
 
 /// Used by the Ingester to manages ingestion of items into the epoch, i.e. the Write side
 type IngestionService internal (capacity, resolve : TrancheId * EpochId -> Equinox.Decider<Events.Event, Fold.State>) =
