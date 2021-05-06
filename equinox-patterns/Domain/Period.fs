@@ -11,7 +11,7 @@ let streamName periodId = FsCodec.StreamName.create Category (PeriodId.toString 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    type ItemIds = { items : string[] }
+    type ItemIds = { items : ItemId[] }
     type Balance = ItemIds
     type Event =
         | BroughtForward of Balance
@@ -26,8 +26,8 @@ module Fold =
     type State =
         | Initial
         | Open of items : OpenState
-        | Closed of items : string[] * carryingForward : string[]
-     and OpenState = string[]
+        | Closed of items : ItemId[] * carryingForward : ItemId[]
+     and OpenState = ItemId[]
     let initial : State = Initial
     let (|Items|) = function Initial -> [||] | Open i | Closed (i, _) -> i
     open Events
