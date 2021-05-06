@@ -106,25 +106,24 @@ module Args =
 let [<Literal>] AppName = "FeedConsumerTemplate"
 
 let build (args : Args.Arguments) =
+    let cache = Equinox.Cache (AppName, sizeMb = 10)
     let target = args.Cosmos
     let connector = target.CreateConnector()
-    let client = target.Connect connector |> Async.RunSynchronously
-    let context = CosmosStoreContext(client, tipMaxEvents=100)
-    let cache = Equinox.Cache (AppName, sizeMb = 10)
+    let context = target.Connect(connector) |> Async.RunSynchronously |> CosmosStoreContext.create
 
-    let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (context, cache)
-    let sourceId, tailSleepInterval = Propulsion.Feed.SourceId.parse "FeedConsumerTemplate", TimeSpan.FromSeconds 1.
-
-    let feed = ApiClient.TicketsFeed args.BaseUri
-
-    let handle = Ingester.handle args.TicketsDop
-    let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
-    let source =
-        Propulsion.Feed.FeedSource(
-            Log.Logger, args.StatsInterval, sourceId, tailSleepInterval,
-            checkpoints, args.CheckpointInterval, feed.Poll, sink)
-    let pumpSource = source.Pump feed.ReadTranches
+    let sink =
+        let handle = Ingester.handle args.TicketsDop
+        let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
+        Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
+    let pumpSource =
+        let sourceId, tailSleepInterval = Propulsion.Feed.SourceId.parse args.Group, TimeSpan.FromSeconds 1.
+        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (context, cache)
+        let feed = ApiClient.TicketsFeed args.BaseUri
+        let source =
+            Propulsion.Feed.FeedSource(
+                Log.Logger, args.StatsInterval, sourceId, tailSleepInterval,
+                checkpoints, args.CheckpointInterval, feed.Poll, sink)
+        source.Pump feed.ReadTranches
     sink, pumpSource
 
 let run args = async {
