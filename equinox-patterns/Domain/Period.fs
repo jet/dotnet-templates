@@ -100,16 +100,16 @@ type Service(resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Walks back as far as necessary to ensure any preceding Periods that are not yet Closed are, then closes the target if necessary
     /// Yields the accumulated balance to be carried forward into the next period
-    member private x.Close periodId : Async<Events.Balance> =
+    let rec close periodId : Async<Events.Balance> =
         let rules : Rules<unit, unit> =
-            {   getIncomingBalance  = fun ()        -> x.Close periodId
+            {   getIncomingBalance  = fun ()        -> close periodId
                 decideIngestion     = fun () _state -> (), (), []
                 decideCarryForward  = fun ()        -> genBalance } // always close
         let decider = resolve periodId
         decider.TransactEx((fun c -> decideIngestWithCarryForward rules () c.State), fun r _c -> Option.get r.carryForward)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
-    member private x.TryTransact(periodId, getIncoming, decide : 'request -> Fold.State -> 'request * 'result * Events.Event list, request, shouldClose) : Async<Result<'request, 'result>> =
+    let tryTransact periodId getIncoming (decide : 'request -> Fold.State -> 'request * 'result * Events.Event list) request shouldClose : Async<Result<'request, 'result>> =
         let rules : Rules<'request, 'result> =
             {   getIncomingBalance  = getIncoming
                 decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
@@ -119,16 +119,16 @@ type Service(resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     /// Processing completes when `decide` yields None for the residual of the 'request
-    member x.Transact(periodId, decide : 'request -> Fold.State -> 'request option * 'result * Events.Event list, request : 'request) : Async<'result> =
+    member _.Transact(periodId, decide : 'request -> Fold.State -> 'request option * 'result * Events.Event list, request : 'request) : Async<'result> =
         let rec aux periodId getIncoming req = async {
             let decide req state = decide (Option.get req) state
-            match! x.TryTransact(periodId, getIncoming, decide, req, Option.isSome) with
+            match! tryTransact periodId getIncoming decide req Option.isSome with
             | { residual = None; result = Some r } -> return r
             | { residual = r; carryForward = cf } -> return! aux (PeriodId.next periodId) (fun () -> async { return Option.get cf }) r }
         let getIncoming () =
             match PeriodId.tryPrev periodId with
             | None -> calcBalance [||]
-            | Some prevPeriodId -> x.Close prevPeriodId
+            | Some prevPeriodId -> close prevPeriodId
         aux periodId getIncoming (Some request)
 
     /// Exposes the full state to a reader (which is appropriate for a demo but is an anti-pattern in the general case)
