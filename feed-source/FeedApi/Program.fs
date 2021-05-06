@@ -101,11 +101,17 @@ type AppDependenciesExtensions() =
 
 open Microsoft.Extensions.Hosting
 
+module CosmosStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+        let maxEvents = 256 // default is 0
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+
 let run (args : Args.Arguments) =
     let cosmos = args.Cosmos
     let connector = cosmos.CreateConnector()
-    let storeClient = cosmos.Connect(connector) |> Async.RunSynchronously
-    let context = Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=100)
+    let context = cosmos.Connect(connector) |> Async.RunSynchronously |> CosmosStoreContext.create
     let cache = Equinox.Cache(AppName, sizeMb=2)
 
     Hosting.createHostBuilder()

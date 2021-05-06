@@ -1,15 +1,8 @@
 [<AutoOpen>]
-module FeedConsumerTemplate.HttpHelpers
+module FeedConsumerTemplate.Infrastructure
 
 open System
 open System.Text
-
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256 // default is 0
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
 module EnvVar =
 
