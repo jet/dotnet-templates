@@ -1,17 +1,22 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <!-- We could target netstandard2.0 but we're slipping in a CosmosStore reference -->
+    <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Period.fs" />
+    <Compile Include="Epoch.fs" />
+    <Compile Include="Series.fs" />
+    <Compile Include="Ingester.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Equinox.MemoryStore" Version="3.0.0-beta.4" />
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.0-beta.4" />
     <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.0.1" />
   </ItemGroup>
     

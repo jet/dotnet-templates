@@ -42,9 +42,9 @@ module Fold =
     let maybeOpen (getIncomingBalance : unit -> Async<Balance>) state = async {
         match state with
         | Initial ->        let! balance = getIncomingBalance ()
-                            return (), [BroughtForward balance]
+                            return [BroughtForward balance]
         | Open _
-        | Closed _ ->       return (), [] }
+        | Closed _ ->       return [] }
 
     /// Handles attempting to apply the request to the stream (assuming it's not already closed)
     /// The `decide` function can signal a need to close and/or split the request by emitting it as the residual
