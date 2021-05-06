@@ -9,9 +9,9 @@
     <Compile Include="Infrastructure.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Period.fs" />
-    <Compile Include="Epoch.fs" />
-    <Compile Include="Series.fs" />
-    <Compile Include="Ingester.fs" />
+    <Compile Include="ItemEpoch.fs" />
+    <Compile Include="ItemSeries.fs" />
+    <Compile Include="ItemIngester.fs" />
   </ItemGroup>
 
   <ItemGroup>

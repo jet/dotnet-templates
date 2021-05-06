@@ -1,7 +1,7 @@
 /// Application Service that controls the ingestion of Items into a chain of `Epoch` streams per Tranche
 /// - the `Series` aggregate maintains a pointer to the current Epoch for each Tranche
 /// - as `Epoch`s complete (have `Closed` events logged), we update the `active` Epoch in the Series to reference the new one
-module Patterns.Domain.Ingester
+module Patterns.Domain.ItemIngester
 
 open Equinox.Core
 open FSharp.UMX
@@ -15,14 +15,14 @@ type internal IdsCache() =
 
 /// Maintains active EpochId in a thread-safe manner while ingesting items into the chain of `epochs` indexed by the `series`
 /// Prior to first add, reads `lookBack` batches to seed the cache, in order to minimize the number of duplicated items we ingest
-type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : Epoch.IngestionService, series : Series.Service, lookBack, linger) =
+type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : ItemEpoch.IngestionService, series : ItemSeries.Service, lookBack, linger) =
 
     // Maintains what we believe to be the currently open EpochId
     // NOTE not valid/initialized until invocation of `previousIds.AwaitValue()` has completed
-    let uninitializedSentinel = %EpochId.unknown
+    let uninitializedSentinel = %ItemEpochId.unknown
     let mutable activeEpochId_ = uninitializedSentinel
     // NOTE see above - must not be called prior to previousIds.AwaitValue()
-    let effectiveEpochId () = if activeEpochId_ = uninitializedSentinel then EpochId.initial else %activeEpochId_
+    let effectiveEpochId () = if activeEpochId_ = uninitializedSentinel then ItemEpochId.initial else %activeEpochId_
 
     // establish the pre-existing items from which the previousIds cache will be seeded
     let loadPreviousEpochs loadDop : Async<ItemId[][]> = async {
@@ -48,7 +48,7 @@ type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : Epoc
         let firstEpochId = effectiveEpochId ()
 
         let rec aux epochId ingestedItems items = async {
-            let dup, freshItems = items |> Array.partition (Epoch.itemId >> previousIds.Contains)
+            let dup, freshItems = items |> Array.partition (ItemEpoch.itemId >> previousIds.Contains)
             let fullCount = Array.length items
             let dropping = fullCount - Array.length freshItems
             if dropping <> 0 then
@@ -63,13 +63,13 @@ type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : Epoc
                 // The adding is potentially redundant; we don't care
                 previousIds.Add res.content
                 // Any writer noticing we've moved to a new Epoch shares the burden of marking it active in the Series
-                if not res.closed && activeEpochId_ < EpochId.value epochId then
+                if not res.closed && activeEpochId_ < ItemEpochId.value epochId then
                     log.Information("Marking {trancheId}/{epochId} active", trancheId, epochId)
                     do! series.MarkIngestionEpochId(trancheId, epochId)
                     System.Threading.Interlocked.CompareExchange(&activeEpochId_, %epochId, activeEpochId_) |> ignore
                 match res.residual with
                 | [||] -> return ingestedItemIds
-                | remaining -> return! aux (EpochId.next epochId) ingestedItemIds remaining }
+                | remaining -> return! aux (ItemEpochId.next epochId) ingestedItemIds remaining }
         return! aux firstEpochId [||] (Array.concat items)
     }
 
@@ -91,16 +91,16 @@ type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : Epoc
 
     /// Attempts to feed the items into the sequence of epochs.
     /// Returns the subset that actually got fed in this time around.
-    member _.IngestMany(items : Epoch.Events.Item[]) : Async<ItemId seq> = async {
+    member _.IngestMany(items : ItemEpoch.Events.Item[]) : Async<ItemId seq> = async {
         let! results = batchedIngest.Execute items
-        return System.Linq.Enumerable.Intersect(Seq.map Epoch.itemId items, results)
+        return System.Linq.Enumerable.Intersect(Seq.map ItemEpoch.itemId items, results)
     }
 
     /// Attempts to feed the item into the sequence of batches.
     /// Returns true if the item actually got included into an Epoch this time around.
-    member _.TryIngest(item : Epoch.Events.Item) : Async<bool> = async {
+    member _.TryIngest(item : ItemEpoch.Events.Item) : Async<bool> = async {
         let! result = batchedIngest.Execute(Array.singleton item)
-        return result |> Array.contains (Epoch.itemId item)
+        return result |> Array.contains (ItemEpoch.itemId item)
     }
 
 let private createServiceForTranche (epochs, lookBackLimit) series linger trancheId =
@@ -108,11 +108,11 @@ let private createServiceForTranche (epochs, lookBackLimit) series linger tranch
     ServiceForTranche(log, trancheId, epochs, series, lookBack=lookBackLimit, linger=linger)
 
 /// Each ServiceForTranche maintains significant state (set of itemIds looking back through e.g. 100 epochs), which we obv need to cache
-type Service internal (createForTranche : TrancheId -> ServiceForTranche) =
+type Service internal (createForTranche : ItemTrancheId -> ServiceForTranche) =
 
     // Its important we don't risk >1 instance https://andrewlock.net/making-getoradd-on-concurrentdictionary-thread-safe-using-lazy/
     // while it would be safe, there would be a risk of incurring the cost of multiple initialization loops
-    let forTranche = System.Collections.Concurrent.ConcurrentDictionary<TrancheId, Lazy<ServiceForTranche>>()
+    let forTranche = System.Collections.Concurrent.ConcurrentDictionary<ItemTrancheId, Lazy<ServiceForTranche>>()
     let build trancheId = lazy createForTranche trancheId
 
     member _.ForTranche trancheId : ServiceForTranche =
@@ -125,8 +125,8 @@ module Cosmos =
         let remainingBatchCapacity _candidateItems currentItems =
             let l = Array.length currentItems
             max 0 (maxItemsPerEpoch - l)
-        let epochs = Epoch.Cosmos.create remainingBatchCapacity (context, cache)
-        let series = Series.Cosmos.create (context, cache)
+        let epochs = ItemEpoch.Cosmos.create remainingBatchCapacity (context, cache)
+        let series = ItemSeries.Cosmos.create (context, cache)
         let linger, lookBackLimit = System.TimeSpan.FromMilliseconds 200., 100
         let createForTranche = createServiceForTranche (epochs, lookBackLimit) series linger
         Service(createForTranche)

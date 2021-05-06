@@ -1,7 +1,7 @@
-module Patterns.Domain.Epoch
+module Patterns.Domain.ItemEpoch
 
-let [<Literal>] Category = "Epoch"
-let streamName (trancheId : TrancheId, epochId : EpochId) = FsCodec.StreamName.compose Category [TrancheId.toString trancheId; EpochId.toString epochId]
+let [<Literal>] Category = "ItemEpoch"
+let streamName (trancheId : ItemTrancheId, epochId : ItemEpochId) = FsCodec.StreamName.compose Category [ItemTrancheId.toString trancheId; ItemEpochId.toString epochId]
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -81,7 +81,7 @@ let equivalentDecideUsingAnAccumulator capacity candidates (currentIds, closed a
         { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, acc.Events
 
 /// Used by the Ingester to manages ingestion of items into the epoch, i.e. the Write side
-type IngestionService internal (capacity, resolve : TrancheId * EpochId -> Equinox.Decider<Events.Event, Fold.State>) =
+type IngestionService internal (capacity, resolve : ItemTrancheId * ItemEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Obtains a complete list of all the items in the specified trancheId/epochId
     member _.ReadIds(trancheId, epochId) : Async<ItemId[]> =
@@ -124,7 +124,7 @@ module Reader =
         | Events.Snapshotted _ -> state // there's nothing useful in the snapshot for us to take
     let fold : ReadState -> Events.Event seq -> ReadState = Seq.fold evolve
 
-    type Service private (resolve : TrancheId * EpochId -> Equinox.Decider<Events.Event, ReadState>) =
+    type Service private (resolve : ItemTrancheId * ItemEpochId -> Equinox.Decider<Events.Event, ReadState>) =
 
         /// Returns all the items currently held in the stream
         member _.Read(trancheId, epochId) : Async<ReadState> =
