@@ -47,9 +47,9 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] ``*pending*`` ()               = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]
     #endif
 
+    let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []
     let [<Fact>] eqxTestbed ()                  = run "eqxTestbed" []
     let [<Fact>] eqxShipping ()                 = run "eqxShipping" []
-    let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []
     [<ClassData(typeof<ProProjector>)>]
     let [<Theory>] proProjector args            = run "proProjector" args
     let [<Fact>] proProjectorSynth ()           = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]

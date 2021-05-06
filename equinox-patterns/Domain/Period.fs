@@ -91,7 +91,7 @@ let decideIngestWithCarryForward rules req s : Async<Result<'result, 'req> * Eve
 }
 
 /// Manages Application of Requests to the Period's stream, including closing preceding periods as appropriate
-type Service(resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     let calcBalance state =
         let createEventsBalance items : Events.Balance = { items = items }

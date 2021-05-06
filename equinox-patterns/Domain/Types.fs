@@ -1,6 +1,7 @@
 namespace Patterns.Domain
 
 open FSharp.UMX
+
 type PeriodId = int<periodId>
 and [<Measure>] periodId
 
