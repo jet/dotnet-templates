@@ -65,14 +65,20 @@ let private create seriesOverride resolveStream =
     let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
     Service(resolve, ?seriesId = seriesOverride)
 
+module MemoryStore =
+
+    let create store =
+        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+        create None resolveStream
+
 module Cosmos =
 
     open Equinox.CosmosStore
 
     let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let private resolve (context, cache) =
+    let create (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        fun opt sn -> resolver.Resolve(sn, ?option = opt)
-
-    let create (context, cache) = create None (resolve (context, cache))
+        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+        create None resolveStream

@@ -118,15 +118,27 @@ type Service internal (createForTranche : ItemTrancheId -> ServiceForTranche) =
     member _.ForTranche trancheId : ServiceForTranche =
         forTranche.GetOrAdd(trancheId, build).Value
 
+let private maxItemsPerEpoch = 10_000
+let private linger, lookBackLimit = System.TimeSpan.FromMilliseconds 200., 100
+
+type MemoryStore() =
+
+    static member Create(store, linger, maxItemsPerEpoch, lookBackLimit) =
+        let remainingBatchCapacity _candidateItems currentItems =
+            let l = Array.length currentItems
+            max 0 (maxItemsPerEpoch - l)
+        let epochs = ItemEpoch.MemoryStore.create remainingBatchCapacity store
+        let series = ItemSeries.MemoryStore.create store
+        let createForTranche = createServiceForTranche (epochs, lookBackLimit) series linger
+        Service createForTranche
+
 module Cosmos =
 
     let create (context, cache) =
-        let maxItemsPerEpoch = 10_000
         let remainingBatchCapacity _candidateItems currentItems =
             let l = Array.length currentItems
             max 0 (maxItemsPerEpoch - l)
         let epochs = ItemEpoch.Cosmos.create remainingBatchCapacity (context, cache)
         let series = ItemSeries.Cosmos.create (context, cache)
-        let linger, lookBackLimit = System.TimeSpan.FromMilliseconds 200., 100
         let createForTranche = createServiceForTranche (epochs, lookBackLimit) series linger
-        Service(createForTranche)
+        Service createForTranche

@@ -138,7 +138,7 @@ type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.
 
 let private create resolveStream =
     let resolve id = Equinox.Decider(Serilog.Log.ForContext<Service>(), streamName id |> resolveStream, maxAttempts = 3)
-    Service(resolve)
+    Service resolve
 
 module MemoryStore =
 

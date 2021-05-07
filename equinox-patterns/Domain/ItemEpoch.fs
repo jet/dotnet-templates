@@ -98,17 +98,23 @@ let private create capacity resolveStream =
     let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
     IngestionService(capacity, resolve)
 
+module MemoryStore =
+
+    let create capacity store =
+        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+        let resolveStream opt sn = cat.Resolve(sn, opt)
+        create capacity resolveStream
+
 module Cosmos =
 
     open Equinox.CosmosStore
 
     let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let private resolve (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        fun opt sn -> resolver.Resolve(sn, opt)
     let create capacity (context, cache) =
-        create capacity (resolve (context, cache))
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolveStream opt sn = cat.Resolve(sn, opt)
+        create capacity resolveStream
 
 /// Custom Fold and caching logic compared to the IngesterService
 /// - When reading, we want the full Items
@@ -124,25 +130,29 @@ module Reader =
         | Events.Snapshotted _ -> state // there's nothing useful in the snapshot for us to take
     let fold : ReadState -> Events.Event seq -> ReadState = Seq.fold evolve
 
-    type Service private (resolve : ItemTrancheId * ItemEpochId -> Equinox.Decider<Events.Event, ReadState>) =
+    type Service internal (resolve : ItemTrancheId * ItemEpochId -> Equinox.Decider<Events.Event, ReadState>) =
 
         /// Returns all the items currently held in the stream
         member _.Read(trancheId, epochId) : Async<ReadState> =
             let decider = resolve (trancheId, epochId)
             decider.Query id
 
-        static member internal Create(resolveStream) =
-            let resolve = streamName >> resolveStream >> Equinox.createDecider
-            Service(resolve)
+    let private create resolveStream =
+        let resolve = streamName >> resolveStream >> Equinox.createDecider
+        Service resolve
+
+    module MemoryStore =
+
+        let create store =
+            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, fold, initial)
+            create cat.Resolve
 
     module Cosmos =
 
         open Equinox.CosmosStore
 
         let accessStrategy = AccessStrategy.Unoptimized
-        let resolve (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 1.)
-            let resolver = CosmosStoreCategory(context, Events.codec, fold, initial, cacheStrategy, accessStrategy)
-            resolver.Resolve
         let create (context, cache) =
-            Service.Create(resolve (context, cache))
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 1.)
+            let cat = CosmosStoreCategory(context, Events.codec, fold, initial, cacheStrategy, accessStrategy)
+            create cat.Resolve
