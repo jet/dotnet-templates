@@ -5,7 +5,7 @@ open Microsoft.AspNetCore.Mvc
 open FeedApiTemplate.Domain
 
 type TicketsTranchesDto = { activeEpochs : TrancheReferenceDto[] }
-and TrancheReferenceDto = { fc : FcId; epochId : TicketsEpochId }
+ and TrancheReferenceDto = { fc : FcId; epochId : TicketsEpochId }
 
 type SliceDto = { closed : bool; tickets : TicketId[]; position : TicketsCheckpoint; checkpoint : TicketsCheckpoint }
 

@@ -7,10 +7,10 @@ module FeedApiTemplate.Domain.Tickets
 open Equinox.Core
 open FSharp.UMX
 
-type internal TicketsCache() =
+type internal IdsCache() =
     // NOTE: Bounded only by relatively low number of physical pick tickets IRL
     let all = System.Collections.Generic.HashSet<TicketId>()
-    static member Create init = let x = TicketsCache() in x.Add init; x
+    static member Create init = let x = IdsCache() in x.Add init; x
     member _.Add tickets = all.UnionWith tickets
     member _.Contains ticket = all.Contains ticket
 
@@ -39,9 +39,9 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
             return! Async.Parallel(seq { for epochId in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> readEpoch %epochId }, loadDop) }
 
     // Tickets cache - used to maintain a list of tickets that have already been ingested in order to avoid db round-trips
-    let previousTickets : AsyncCacheCell<TicketsCache> = AsyncCacheCell <| async {
+    let previousTickets : AsyncCacheCell<IdsCache> = AsyncCacheCell <| async {
         let! batches = loadPreviousEpochs 4
-        return TicketsCache.Create(Seq.concat batches) }
+        return IdsCache.Create(Seq.concat batches) }
 
     let tryIngest items = async {
         let! previousTickets = previousTickets.AwaitValue()

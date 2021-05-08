@@ -13,16 +13,16 @@ module TrancheId =
     let ofFcId (x : FcId) : Propulsion.Feed.TrancheId = %x
 
 type TicketsEpochId = int<ticketsEpochId>
-and [<Measure>] ticketsEpochId
+ and [<Measure>] ticketsEpochId
 
 [<NoComparison; NoEquality>]
 type TicketsTranchesDto = { activeEpochs : TrancheReferenceDto[] }
-and TrancheReferenceDto = { fc : FcId; epochId : TicketsEpochId }
+ and TrancheReferenceDto = { fc : FcId; epochId : TicketsEpochId }
 
 (* Each Tranche response includes a checkpoint, which can be presented to Poll in order to resume consumption *)
 
 type TicketsCheckpoint = int64<ticketsCheckpoint>
-and [<Measure>] ticketsCheckpoint
+ and [<Measure>] ticketsCheckpoint
 module TicketsCheckpoint =
     let ofPosition (x : Propulsion.Feed.Position) : TicketsCheckpoint = %x
     let toPosition (x : TicketsCheckpoint) : Propulsion.Feed.Position = %x

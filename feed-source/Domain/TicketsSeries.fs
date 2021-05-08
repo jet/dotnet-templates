@@ -35,7 +35,7 @@ let readEpochId fcId (state : Fold.State) =
     |> Map.tryFind fcId
 
 let interpret (fcId, epochId) (state : Fold.State) =
-    [if state |> Map.tryFind fcId |> Option.forall (fun cur -> cur < epochId) && epochId >= TicketsEpochId.initial then
+    [if state |> readEpochId fcId |> Option.forall (fun cur -> cur < epochId) && epochId >= TicketsEpochId.initial then
         yield Events.Started {| fcId = fcId; epochId = epochId |}]
 
 type EpochDto = { fc : FcId; ingestionEpochId : TicketsEpochId }
@@ -61,7 +61,7 @@ type Service internal (resolve : TicketsSeriesId -> Equinox.Decider<Events.Event
         decider.Query(readEpochId fcid)
 
     /// Mark specified `epochId` as live for the purposes of ingesting TicketIds
-    /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by reporting the successor via this
+    /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by anointing the successor via this
     member _.MarkIngestionEpochId(fcid, epochId) : Async<unit> =
         let decider = resolve seriesId
         decider.Transact(interpret (fcid, epochId))
@@ -75,9 +75,8 @@ module Cosmos =
     open Equinox.CosmosStore
 
     let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let private resolve (context, cache) =
+    let  create (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        fun opt sn -> resolver.Resolve(sn, opt)
-
-    let create (context, cache) = create None (resolve (context, cache))
+        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolveStream opt sn = cat.Resolve(sn, opt)
+        create None resolveStream
