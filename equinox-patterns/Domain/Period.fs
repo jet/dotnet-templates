@@ -14,9 +14,9 @@ module Events =
     type ItemIds = { items : ItemId[] }
     type Balance = ItemIds
     type Event =
-        | BroughtForward    of Balance
-        | Added             of ItemIds
-        | CarriedForward    of Balance
+        | BroughtForward of Balance
+        | Added of          ItemIds
+        | CarriedForward of Balance
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
@@ -63,18 +63,18 @@ module Fold =
 
 [<NoComparison; NoEquality>]
 type Rules<'request, 'result> =
-    {   getIncomingBalance  : unit -> Async<Events.Balance>
-        decideIngestion     : 'request -> Fold.State -> 'request * 'result * Events.Event list
-        decideCarryForward  : 'request -> Fold.OpenState -> Async<Events.Balance option> }
+    {   getIncomingBalance: unit -> Async<Events.Balance>
+        decideIngestion :   'request -> Fold.State -> 'request * 'result * Events.Event list
+        decideCarryForward: 'request -> Fold.OpenState -> Async<Events.Balance option> }
 
 /// The result of the overall ingestion, consisting of
 type Result<'request, 'result> =
     {   /// residual of the request, in the event where it was not possible to ingest it completely
-        residual            : 'request
+        residual :          'request
         /// The result of the decision (assuming processing took place)
-        result              : 'result option
+        result :            'result option
         /// balance being carried forward in the event that the successor period has yet to have the BroughtForward event generated
-        carryForward        : Events.Balance option }
+        carryForward :      Events.Balance option }
 
 /// Decision function ensuring the high level rules of an Period are adhered to viz.
 /// 1. Streams must open with a BroughtForward event (obtained via Rules.getIncomingBalance if this is an uninitialized Period)
