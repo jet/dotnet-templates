@@ -16,7 +16,6 @@ module Events =
     type Event =
         | BroughtForward    of Balance
         | Added             of ItemIds
-        | Removed           of ItemIds
         | CarriedForward    of Balance
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
@@ -25,8 +24,8 @@ module Fold =
 
     type State =
         | Initial
-        | Open              of items : OpenState
-        | Closed            of items : ItemId[] * carryingForward : ItemId[]
+        | Open of           items : OpenState
+        | Closed of         items : ItemId[] * carryingForward : ItemId[]
      and OpenState = ItemId[]
     let initial : State = Initial
     let (|Items|) = function Initial -> [||] | Open i | Closed (i, _) -> i
@@ -34,7 +33,6 @@ module Fold =
     let evolve (Items items) = function
         | BroughtForward e
         | Added e ->        Open (Array.append items e.items)
-        | Removed e ->      Open (items |> Array.except e.items)
         | CarriedForward e -> Closed (items, e.items)
     let fold = Seq.fold evolve
 
