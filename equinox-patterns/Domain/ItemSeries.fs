@@ -11,8 +11,8 @@ let streamName seriesId = FsCodec.StreamName.create Category (ItemSeriesId.toStr
 module Events =
 
     type Event =
-        | Started of {| trancheId : ItemTrancheId; epochId : ItemEpochId |}
-        | Snapshotted of {| active : Map<ItemTrancheId, ItemEpochId> |}
+        | Started       of {| trancheId : ItemTrancheId; epochId : ItemEpochId |}
+        | Snapshotted   of {| active : Map<ItemTrancheId, ItemEpochId> |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
@@ -21,7 +21,7 @@ module Fold =
     type State = Map<ItemTrancheId, ItemEpochId>
     let initial = Map.empty
     let evolve state = function
-        | Events.Started e -> state |> Map.add e.trancheId e.epochId
+        | Events.Started e     -> state |> Map.add e.trancheId e.epochId
         | Events.Snapshotted e -> e.active
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
@@ -36,8 +36,8 @@ let interpret trancheId epochId (state : Fold.State) =
 
 type Service internal (resolve_ : Equinox.ResolveOption option -> ItemSeriesId -> Equinox.Decider<Events.Event, Fold.State>, ?seriesId) =
 
-    let resolveUncached = resolve_ None
-    let resolveCached = resolve_ (Some Equinox.AllowStale)
+    let resolve = resolve_ None
+    let resolveStale = resolve_ (Some Equinox.AllowStale)
 
     // For now we have a single global sequence. This provides us an extension point should we ever need to reprocess
     // NOTE we use a custom id in order to isolate data for acceptance tests
@@ -46,19 +46,19 @@ type Service internal (resolve_ : Equinox.ResolveOption option -> ItemSeriesId -
     /// Exposes the set of tranches for which data is held
     /// Never yields a cached value, in order to ensure a reader can traverse all tranches
     member _.Read() : Async<Fold.State> =
-        let decider = resolveUncached seriesId
+        let decider = resolve seriesId
         decider.Query id
 
     /// Determines the current active epoch for the specified `trancheId`
     /// Uses cached values as epoch transitions are rare, and caller needs to deal with the inherent race condition in any case
     member _.TryReadIngestionEpochId trancheId : Async<ItemEpochId option> =
-        let decider = resolveCached seriesId
+        let decider = resolveStale seriesId
         decider.Query(tryFindEpochOfTranche trancheId)
 
     /// Mark specified `epochId` as live for the purposes of ingesting
     /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by anointing a successor via this
     member _.MarkIngestionEpochId(trancheId, epochId) : Async<unit> =
-        let decider = resolveCached seriesId
+        let decider = resolveStale seriesId
         decider.Transact(interpret trancheId epochId)
 
 let private create seriesOverride resolveStream =

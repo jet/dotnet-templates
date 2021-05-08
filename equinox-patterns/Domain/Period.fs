@@ -132,16 +132,33 @@ type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.
         aux periodId getIncoming (Some request)
 
     /// Exposes the full state to a reader (which is appropriate for a demo but is an anti-pattern in the general case)
+    /// NOTE the resolve function below uses Equinox.AllowStale - you may want to remove that option of you write a read
+    ///      function like this for real (i.e. if the active Period is constantly being appended to in another process/machine)
+    ///      then this read function will continually serve the same value, as it has been instructed not to make a store round-trio
     member _.Read periodId =
          let decider = resolve periodId
          decider.Query id
 
 let private create resolveStream =
-    let resolve id = Equinox.Decider(Serilog.Log.ForContext<Service>(), streamName id |> resolveStream, maxAttempts = 3)
+    let resolve = streamName >> resolveStream (Some Equinox.AllowStale) >> Equinox.createDecider
     Service resolve
 
 module MemoryStore =
 
     let create store =
         let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-        create cat.Resolve
+        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+        create resolveStream
+
+module Cosmos =
+
+    open Equinox.CosmosStore
+
+    // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
+    // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
+    let accessStrategy = AccessStrategy.Unoptimized
+    let create (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+        create resolveStream

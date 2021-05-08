@@ -22,8 +22,8 @@ type Accumulator<'event, 'state>(originState, fold : 'state -> 'event seq -> 'st
         r
 
     /// Run a decision function that does not yield a result
-    member x.Transact decide =
-        x.Transact(fun state -> (), decide state)
+//    member x.Transact decide =
+//        x.Transact(fun state -> (), decide state)
 
     /// Run an Async decision function, buffering and applying any Events yielded
     member _.TransactAsync decide = async {

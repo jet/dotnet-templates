@@ -11,9 +11,9 @@ module Events =
      and Item = { id : ItemId; payload : string }
     type Snapshotted = { ids : ItemId[]; closed : bool }
     type Event =
-        | Ingested of Ingested
+        | Ingested      of Ingested
         | Closed
-        | Snapshotted of Snapshotted
+        | Snapshotted   of Snapshotted
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
@@ -55,30 +55,10 @@ let decide capacity candidates (currentIds, closed as state) =
         let closing = acceptingCount = capacityNow
         let ItemIds addedItemIds as itemsIngested, residualItems = Array.splitAt acceptingCount freshItems
         let events =
-            [   if closing then yield Events.Closed
-                if (not << Array.isEmpty) itemsIngested then yield Events.Ingested { items = itemsIngested } ]
+            [   if (not << Array.isEmpty) itemsIngested then yield Events.Ingested { items = itemsIngested }
+                if closing then yield Events.Closed ]
         let currentIds, closed = Fold.fold state events
         { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, events
-
-(* Alternate implementation of the `decide` above employing the `Accumulator` helper.
-   While it's a subjective thing, the takeaway should be that an accumulator rarely buys one code clarity *)
-let equivalentDecideUsingAnAccumulator capacity candidates (currentIds, closed as initialState) =
-    match closed, candidates |> Array.filter (notAlreadyIn currentIds) with
-    | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, []
-    | false, [||] ->           { accepted = [||]; residual = [||];            content = currentIds; closed = closed }, []
-    | false, freshItems ->
-        let capacityNow = capacity freshItems currentIds
-        let acceptingCount = min capacityNow freshItems.Length
-        let closing = acceptingCount = capacityNow
-        let ItemIds addedItemIds as itemsIngested, residualItems = Array.splitAt acceptingCount freshItems
-
-        let acc = Accumulator(initialState, Fold.fold)
-        if (not << Array.isEmpty) itemsIngested then acc.Transact(fun _ -> [ Events.Ingested { items = itemsIngested } ])
-        let currentIds, closed =
-            acc.Transact(fun (currentIds, _) ->
-                ((currentIds, closing), if closing then [Events.Closed] else []))
-
-        { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, acc.Events
 
 /// Used by the Ingester to manages ingestion of items into the epoch, i.e. the Write side
 type IngestionService internal (capacity, resolve : ItemTrancheId * ItemEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
@@ -95,14 +75,14 @@ type IngestionService internal (capacity, resolve : ItemTrancheId * ItemEpochId 
         decider.Transact(decide capacity items)
 
 let private create capacity resolveStream =
-    let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
+    let resolve = streamName >> resolveStream (Some Equinox.AllowStale) >> Equinox.createDecider
     IngestionService(capacity, resolve)
 
 module MemoryStore =
 
     let create capacity store =
         let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-        let resolveStream opt sn = cat.Resolve(sn, opt)
+        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
         create capacity resolveStream
 
 module Cosmos =
@@ -113,7 +93,7 @@ module Cosmos =
     let create capacity (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        let resolveStream opt sn = cat.Resolve(sn, opt)
+        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
         create capacity resolveStream
 
 /// Custom Fold and caching logic compared to the IngesterService
