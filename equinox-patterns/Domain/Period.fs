@@ -14,10 +14,10 @@ module Events =
     type ItemIds = { items : ItemId[] }
     type Balance = ItemIds
     type Event =
-        | BroughtForward of Balance
-        | Added of ItemIds
-        | Removed of ItemIds
-        | CarriedForward of Balance
+        | BroughtForward    of Balance
+        | Added             of ItemIds
+        | Removed           of ItemIds
+        | CarriedForward    of Balance
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
@@ -25,8 +25,8 @@ module Fold =
 
     type State =
         | Initial
-        | Open of items : OpenState
-        | Closed of items : ItemId[] * carryingForward : ItemId[]
+        | Open              of items : OpenState
+        | Closed            of items : ItemId[] * carryingForward : ItemId[]
      and OpenState = ItemId[]
     let initial : State = Initial
     let (|Items|) = function Initial -> [||] | Open i | Closed (i, _) -> i
@@ -136,8 +136,8 @@ type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.
     ///      function like this for real (i.e. if the active Period is constantly being appended to in another process/machine)
     ///      then this read function will continually serve the same value, as it has been instructed not to make a store round-trio
     member _.Read periodId =
-         let decider = resolve periodId
-         decider.Query id
+        let decider = resolve periodId
+        decider.Query id
 
 let private create resolveStream =
     let resolve = streamName >> resolveStream (Some Equinox.AllowStale) >> Equinox.createDecider
