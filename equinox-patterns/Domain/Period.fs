@@ -131,8 +131,9 @@ type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.
 
     /// Exposes the full state to a reader (which is appropriate for a demo but is an anti-pattern in the general case)
     /// NOTE the resolve function below uses Equinox.AllowStale - you may want to remove that option of you write a read
-    ///      function like this for real (i.e. if the active Period is constantly being appended to in another process/machine)
-    ///      then this read function will continually serve the same value, as it has been instructed not to make a store round-trio
+    ///      function like this for real (i.e. if the active Period is constantly being appended to in another process/
+    ///      machine) then this read function will continually serve the same value, as it has been instructed not to
+    ///      make a store round-trip
     member _.Read periodId =
         let decider = resolve periodId
         decider.Query id

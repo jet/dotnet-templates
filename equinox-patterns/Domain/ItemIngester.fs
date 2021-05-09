@@ -86,7 +86,11 @@ type ServiceForTranche internal (log : Serilog.ILogger, trancheId, epochs : Item
     ///   c) readers will less frequently encounter sustained 429s on the batch
     let batchedIngest = AsyncBatchingGate(tryIngest, linger)
 
-    /// Upon startup, we initialize the ItemIds cache from recent epochs; we want to kick that process off before our first ingest
+    /// Optional API enabling one to preemptively initialize the cache based on the walk back of previous epochs to load
+    /// ItemIds for deduplication (which would otherwise add to the latency of the first incoming request(s)). It's safe
+    /// to ignore the result of this call (i.e., trigger it via <c>Async.Start</c>) as the usual semantics of
+    /// <c>AsyncBatchingGate</c> pertain:- everyone gets to see the exception from the batch being processed, including
+    /// that initialization, and a failed attempt is never cached)
     member _.Initialize() = previousIds.AwaitValue() |> Async.Ignore
 
     /// Attempts to feed the items into the sequence of epochs.
