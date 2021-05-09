@@ -39,17 +39,17 @@ let notAlreadyIn (ids : ItemId seq) =
 
 type Result = { accepted : ItemId[]; residual : Events.Item[]; content : ItemId[]; closed : bool }
 
-// Note there aren't ever rejected Items in this implementation; the size of an epoch may actually exceed the capacity
-// Pros for not rejecting:
-// - snapshots should compress well
-// - we want to avoid a second roundtrip
-// - splitting a batched write into multiple writes with multiple events misrepresents the facts
-//   i.e. we did not have 10 items 2s ago and 3 just now - we had 13 2s ago
 let decide capacity candidates (currentIds, closed as state) =
     match closed, candidates |> Array.filter (notAlreadyIn currentIds) with
     | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, []
     | false, [||] ->           { accepted = [||]; residual = [||];            content = currentIds; closed = closed }, []
     | false, freshItems ->
+        // NOTE we in some cases end up triggering splitting of a request (or set of requests coalesced in the AsyncBatchingGate)
+        // In some cases it might be better to be a little tolerant and not be rigid about limiting things as
+        // - snapshots should compress well (no major incremental cost for a few more items)
+        // - its always good to avoid a second store roundtrip
+        // - splitting a batched write into multiple writes with multiple events misrepresents the facts i.e. we did
+        //   not have 10 items 2s ago and 3 just now - we had 13 2s ago
         let capacityNow = capacity freshItems currentIds
         let acceptingCount = min capacityNow freshItems.Length
         let closing = acceptingCount = capacityNow
@@ -61,9 +61,14 @@ let decide capacity candidates (currentIds, closed as state) =
         { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, events
 
 /// Used by the Ingester to manages ingestion of items into the epoch, i.e. the Write side
-type IngestionService internal (capacity, resolve : ItemTrancheId * ItemEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
+type IngestionService internal
+    (   capacity : Events.Item[] -> ItemId[] -> int, // let outer layers decide how many candidate items to accept given supplied Epoch state
+        resolve : ItemTrancheId * ItemEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Obtains a complete list of all the items in the specified trancheId/epochId
+    /// NOTE this exposes stale cached state - which is OK for the ingestion use case it needs to deal with such stale
+    /// state as part of handling normal race conditions, but should not be passed to anyone that's going to infer the
+    /// current state or version of the Epoch
     member _.ReadIds(trancheId, epochId) : Async<ItemId[]> =
         let decider = resolve (trancheId, epochId)
         decider.Query fst
@@ -72,6 +77,9 @@ type IngestionService internal (capacity, resolve : ItemTrancheId * ItemEpochId 
     /// and facilitate deduplication of incoming items in order to avoid null store round-trips where possible
     member _.Ingest(trancheId, epochId, items) : Async<Result> =
         let decider = resolve (trancheId, epochId)
+        /// NOTE decider which will initially transact against potentially stale cached state, which will trigger a
+        /// resync if another writer has gotten in before us. This is a conscious decision in this instance; the bulk
+        /// of writes are presumed to be coming from within this same process
         decider.Transact(decide capacity items)
 
 let private create capacity resolveStream =
@@ -99,7 +107,7 @@ module Cosmos =
 /// Custom Fold and caching logic compared to the IngesterService
 /// - When reading, we want the full Items
 /// - Caching only for one minute
-/// - There's no value in using the snapshot
+/// - There's no value in using the snapshot as it does not have the full state
 module Reader =
 
     type ReadState = Events.Item[] * bool
