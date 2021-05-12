@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="../../equinox-*/**/*.*;../../propulsion-*/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*;**/.idea/**/*" Pack="true" PackagePath="content" />
+    <None Include="../../equinox-*/**/*.*;../../propulsion-*/**/*.*;../../feed-*/**/*.*" Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*;**/.idea/**/*" Pack="true" PackagePath="content" />
   </ItemGroup>
 
   <ItemGroup>
