@@ -80,7 +80,7 @@ type Result<'request, 'result> =
 /// 1. Streams must open with a BroughtForward event (obtained via Rules.getIncomingBalance if this is an uninitialized Period)
 /// 2. (If the Period has not closed) Rules.decide gets to map the request to events and a residual
 /// 3. Rules.decideCarryForward may trigger the closing of the Period based on the residual and/or the State by emitting Some balance
-let decideIngestWithCarryForward rules req s : Async<Result<'result, 'req> * Events.Event list> = async {
+let decideIngestWithCarryForward rules req s : Async<Result<'req, 'result> * Events.Event list> = async {
     let acc = Accumulator(s, Fold.fold)
     do! acc.TransactAsync(Fold.maybeOpen rules.getIncomingBalance)
     let residual, result = acc.Transact(Fold.tryIngest rules.decideIngestion req)

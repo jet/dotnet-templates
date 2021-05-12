@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Equinox",
+    "Propulsion",
+    "Event Sourcing",
+    "Feed"
+  ],
+  "tags": {
+    "language": "F#",
+    "type": "project"
+  },
+  "identity": "FeedConsumer",
+  "name": "Propulsion FeedConsumer",
+  "shortName": "feedConsumer",
+  "sourceName": "FeedConsumerTemplate",
+  "preferNameDirectory": true
+}
