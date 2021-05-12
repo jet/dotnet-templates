@@ -10,6 +10,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
+- `eqxPatterns`: `Period`: Skeleton Deciders+Tests for `Period` with Rolling Balance [#89](https://github.com/jet/dotnet-templates/pull/89)
+- `eqxPatterns`: `Series`+`Epoch`: Skeleton Deciders+Tests for deduplicated ingestion of items [#89](https://github.com/jet/dotnet-templates/pull/89)
 - `eqxProjector --source cosmos --kafka --synthesizeSequence`: Sample code for custom parsing of document changes [#84](https://github.com/jet/dotnet-templates/pull/84)
 
 ### Changed
