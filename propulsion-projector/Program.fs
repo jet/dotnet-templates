@@ -402,7 +402,7 @@ let build (args : Args.Arguments) =
 #if cosmos // cosmos
 #if     kafka // cosmos && kafka
     let broker, topic = args.Target.BuildTargetParams()
-    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
+    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
 #if         parallelOnly // cosmos && kafka && parallelOnly
     let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentStreams, Handler.render, producer, args.StatsInterval)
 #else // cosmos && kafka && !parallelOnly
@@ -416,7 +416,7 @@ let build (args : Args.Arguments) =
     let pipeline =
         let monitoredConnector, monitoredDiscovery, monitored = args.Cosmos.MonitoringParams()
         let aux, leaseId, startFromTail, maxDocuments, lagFrequency = args.BuildChangeFeedParams()
-        let createObserver () = CosmosSource.CreateObserver(Log.ForContext<CosmosSource>(), sink.StartIngester, Handler.mapToStreamItems)
+        let createObserver ctx = CosmosSource.CreateObserver(Log.ForContext<CosmosSource>(), ctx, sink.StartIngester, Handler.mapToStreamItems)
         CosmosSource.Run(
             Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored,
             aux, leaseId, startFromTail, createObserver,
@@ -435,7 +435,7 @@ let build (args : Args.Arguments) =
 
 #if     kafka // esdb && kafka
     let broker, topic = args.Target.BuildTargetParams()
-    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
+    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
     let stats = Handler.ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
 #else // esdb && !kafka
@@ -458,7 +458,7 @@ let build (args : Args.Arguments) =
 
 #if     kafka // sss && kafka
     let broker, topic = args.Target.BuildTargetParams()
-    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
+    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
     let stats = Handler.ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
 #else // sss && !kafka
