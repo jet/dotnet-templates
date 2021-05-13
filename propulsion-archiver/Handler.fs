@@ -8,9 +8,8 @@ type Stats(log, statsInterval, stateInterval) =
         log.Information(exn, "Unhandled")
 
 let (|Archivable|NotArchivable|) = function
-    | "LokiPickTicketReservations"
-    | "LokiDcBatch"
-    | "LokiDcTransmissions" ->
+    // TODO define Categories that should be copied to the secondary Container
+    | "CategoryName" ->
         Archivable
     | _ ->
         NotArchivable
