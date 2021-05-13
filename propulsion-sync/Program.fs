@@ -548,9 +548,9 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
     | Choice1Of2 (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
         let connector, discovery, source = srcC.MonitoringParams()
 #if marveleqx
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformV0 streamFilter))
+        let createObserver ctx = CosmosSource.CreateObserver(log, ctx, sink.StartIngester, Seq.collect (transformV0 streamFilter))
 #else
-        let createObserver () = CosmosSource.CreateObserver(log, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
+        let createObserver ctx = CosmosSource.CreateObserver(log, ctx, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
 #endif
         let runPipeline =
             CosmosSource.Run(log, connector.CreateClient(AppName, discovery), source, aux,

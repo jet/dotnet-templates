@@ -13,7 +13,7 @@ type Outcome =
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
 type Stats(log, statsInterval, stateInterval) =
 #if (!kafkaEventSpans)
-    inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
     inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, statsInterval, stateInterval)
 #endif

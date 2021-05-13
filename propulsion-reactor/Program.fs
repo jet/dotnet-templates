@@ -657,7 +657,7 @@ let build (args : Args.Arguments) =
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
         let pipeline =
-            let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
+            let createObserver ctx = CosmosSource.CreateObserver(Log.Logger, ctx, sink.StartIngester, mapToStreamItems)
             CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
                 leaseId, startFromTail, createObserver,
                 ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)

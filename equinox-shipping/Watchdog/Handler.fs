@@ -7,7 +7,7 @@ type Outcome = Completed | Deferred | Resolved of successfully : bool
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
 type Stats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable completed, deferred, failed, succeeded = 0, 0, 0, 0
     member val StatsInterval = statsInterval

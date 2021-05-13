@@ -192,7 +192,7 @@ let build (args : Args.Arguments) =
         let stats = Handler.Stats(Serilog.Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
         startWatchdog Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Drive
     let pipeline =
-        let createObserver () = CosmosSource.CreateObserver(Log.ForContext<CosmosSource>(), sink.StartIngester, Seq.collect Handler.transformOrFilter)
+        let createObserver ctx = CosmosSource.CreateObserver(Log.ForContext<CosmosSource>(), ctx, sink.StartIngester, Seq.collect Handler.transformOrFilter)
         let monitoredConnector, monitoredDiscovery, monitored = source.MonitoringParams()
         CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
             leaseId, startFromTail, createObserver,
