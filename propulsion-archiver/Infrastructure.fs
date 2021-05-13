@@ -29,12 +29,13 @@ type LoggerConfigurationExtensions() =
 
     [<System.Runtime.CompilerServices.Extension>]
     static member inline ForwardMetricsFromEquinoxAndPropulsionToPrometheus(a : Configuration.LoggerSinkConfiguration, appName, group, metrics) =
+        let customTags = ["app", appName]
         a.Logger(fun l ->
             l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
               |> fun l -> if not metrics then l else
-                            l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
-                             .WriteTo.Sink(Propulsion.Prometheus.LogSink(["app", appName], group))
-                             .WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(["app",appName]))
+                            l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
+                             .WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
+                             .WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
               |> ignore) |> ignore
 
 [<System.Runtime.CompilerServices.Extension>]
