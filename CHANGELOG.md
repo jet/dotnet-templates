@@ -17,6 +17,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - `feedConsumer`: Template for Feed Consumer tracking a `feedApi` [#88](https://github.com/jet/dotnet-templates/pull/88)
 - `proArchiver`: Parameterize max Sync batch size limit, default to 512KiB
 - `proAchiver`, `proPruner`, `eqxWeb`, `eqxWebCs`: Added `prometheus-net` integration
+- `proAchiver`, `proPruner`: Target Equinox V 3
 
 ### Changed
 
