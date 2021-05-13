@@ -13,7 +13,7 @@ type Logging() =
             .MinimumLevel.Debug()
             .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
 #if cosmos
-            .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
+            .WriteTo.Sink(Equinox.Cosmos.Prometheus.LogSink(appName))
 #endif
             .Enrich.FromLogContext()
             .WriteTo.Console()
