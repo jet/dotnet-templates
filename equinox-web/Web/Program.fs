@@ -8,10 +8,13 @@ open Serilog
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(c : LoggerConfiguration) =
+    static member Configure(c : LoggerConfiguration, appName) =
         c
             .MinimumLevel.Debug()
             .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+#if cosmos
+            .WriteTo.Sink(Equinox.Cosmos.Prometheus.LogSink(appName))
+#endif
             .Enrich.FromLogContext()
             .WriteTo.Console()
 
@@ -21,9 +24,11 @@ let createWebHostBuilder args : IWebHostBuilder =
         .UseSerilog()
         .UseStartup<Startup>()
 
+let [<Literal>] AppName = "TodoApp"
+
 [<EntryPoint>]
 let main argv =
-    try Log.Logger <- LoggerConfiguration().Configure().CreateLogger()
+    try Log.Logger <- LoggerConfiguration().Configure(AppName).CreateLogger()
         try createWebHostBuilder(argv).Build().Run()
             0
         with e ->

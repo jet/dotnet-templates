@@ -4,6 +4,7 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Mvc
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
+open Prometheus
 open Serilog
 open System
 //#if (aggregate || todos)
@@ -239,5 +240,7 @@ type Startup() =
             // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
             .UseCors(fun x -> x.WithOrigins([|"https://www.todobackend.com"|]).AllowAnyHeader().AllowAnyMethod() |> ignore)
 #endif        
-            .UseEndpoints(fun endpoints -> endpoints.MapControllers() |> ignore)
+            .UseEndpoints(fun endpoints ->
+                endpoints.MapMetrics() |> ignore // Host /metrics for Prometheus
+                endpoints.MapControllers() |> ignore)
             |> ignore

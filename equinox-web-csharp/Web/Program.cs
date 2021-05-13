@@ -10,21 +10,25 @@ namespace TodoBackendTemplate.Web
 {
     static class Logging
     {
-        public static LoggerConfiguration Configure(this LoggerConfiguration c) =>
+        public static LoggerConfiguration Configure(this LoggerConfiguration c, string appName) =>
             c
                 .MinimumLevel.Debug()
                 .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-                // .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+#if cosmos
+                .WriteTo.Sink(new Equinox.Cosmos.Prometheus.LogSink(appName))
+#endif
                 .Enrich.FromLogContext()
                 .WriteTo.Console();
     }
     static class Program
     {
+        private const string AppName = "TodoApp";
+
         public static async Task<int> Main(string[] argv)
         {
             try
             {
-                Log.Logger = new LoggerConfiguration().Configure().CreateLogger();
+                Log.Logger = new LoggerConfiguration().Configure(AppName).CreateLogger();
                 var host = WebHost
                     .CreateDefaultBuilder(argv)
                     .UseSerilog()
