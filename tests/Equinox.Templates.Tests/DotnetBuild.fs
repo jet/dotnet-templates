@@ -44,13 +44,17 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
         Dotnet.build [folder]
 
     #if DEBUG // Use this one to trigger an individual test
-    let [<Fact>] ``*pending*`` ()               = run "proReactor" ["--source changeFeedOnly"; "--kafka"]
+    let [<Fact>] ``*pending*`` ()               = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]
     #endif
 
+    let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []
     let [<Fact>] eqxTestbed ()                  = run "eqxTestbed" []
     let [<Fact>] eqxShipping ()                 = run "eqxShipping" []
+    let [<Fact>] feedApi ()                     = run "feedApi" []
+    let [<Fact>] feedConsumer ()                = run "feedConsumer" []
     [<ClassData(typeof<ProProjector>)>]
     let [<Theory>] proProjector args            = run "proProjector" args
+    let [<Fact>] proProjectorSynth ()           = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]
     let [<Fact>] proConsumer ()                 = run "proConsumer" []
     let [<Fact>] trackingConsumer ()            = run "trackingConsumer" []
     let [<Fact>] summaryConsumer ()             = run "summaryConsumer" []

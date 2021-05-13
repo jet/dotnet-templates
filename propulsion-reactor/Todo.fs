@@ -54,14 +54,14 @@ module Fold =
 type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     /// Load and render the state
-    member __.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =
-        let stream = resolve clientId
+    member _.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =
+        let decider = resolve clientId
         // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
-        stream.QueryEx(fun c -> c.Version, render c.State)
+        decider.QueryEx(fun c -> c.Version, render c.State)
 
-let create resolve =
+let create resolveStream =
     let resolve clientId =
-        let stream = resolve (streamName clientId)
+        let stream = resolveStream (streamName clientId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
     Service(resolve)
 
@@ -79,5 +79,5 @@ module Cosmos =
     let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
     let create (context, cache) =
         let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver  = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
         create resolver.Resolve

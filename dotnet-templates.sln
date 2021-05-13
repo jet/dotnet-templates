@@ -111,7 +111,31 @@ EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Pruner", "propulsion-pruner\Pruner.fsproj", "{A0FB44F5-15E5-47C8-81E5-1991269849CB}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Equinox.CosmosStore.Prometheus", "..\equinox\src\Equinox.CosmosStore.Prometheus\Equinox.CosmosStore.Prometheus.fsproj", "{EB7C61DE-A855-442D-9205-718A18689100}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxPatterns", "eqxPatterns", "{76721F1E-851C-4970-A276-DF61FCE3DA23}"
+ProjectSection(SolutionItems) = preProject
+	equinox-patterns\.template.config\template.json = equinox-patterns\.template.config\template.json
+	equinox-patterns\README.md = equinox-patterns\README.md
+EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-patterns\Domain\Domain.fsproj", "{8D9867A9-1B5D-4AD3-A890-ACC81D011C00}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "equinox-patterns\Domain.Tests\Domain.Tests.fsproj", "{C899EB07-FEC8-41F8-95DC-203DA80F5A32}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "feedApi", "feedApi", "{CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}"
+ProjectSection(SolutionItems) = preProject
+	feed-source\.template.config\template.json = feed-source\.template.config\template.json
+EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FeedApi", "feed-source\FeedApi\FeedApi.fsproj", "{28B7FEDA-9F91-49D3-990B-1E4D7B71932A}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "feed-source\Domain\Domain.fsproj", "{28EBD7E4-6130-4444-B44F-BB741172A233}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "feedConsumer", "feedConsumer", "{EDC5EB0D-EE6D-489A-B0B0-DA85ECDF04B2}"
+ProjectSection(SolutionItems) = preProject
+	feed-consumer\.template.config\template.json = feed-consumer\.template.config\template.json
+EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FeedConsumer", "feed-consumer\FeedConsumer.fsproj", "{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -193,10 +217,26 @@ Global
 		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A0FB44F5-15E5-47C8-81E5-1991269849CB}.Release|Any CPU.Build.0 = Release|Any CPU
-		{EB7C61DE-A855-442D-9205-718A18689100}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{EB7C61DE-A855-442D-9205-718A18689100}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{EB7C61DE-A855-442D-9205-718A18689100}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{EB7C61DE-A855-442D-9205-718A18689100}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8D9867A9-1B5D-4AD3-A890-ACC81D011C00}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8D9867A9-1B5D-4AD3-A890-ACC81D011C00}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8D9867A9-1B5D-4AD3-A890-ACC81D011C00}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8D9867A9-1B5D-4AD3-A890-ACC81D011C00}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C899EB07-FEC8-41F8-95DC-203DA80F5A32}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C899EB07-FEC8-41F8-95DC-203DA80F5A32}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C899EB07-FEC8-41F8-95DC-203DA80F5A32}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C899EB07-FEC8-41F8-95DC-203DA80F5A32}.Release|Any CPU.Build.0 = Release|Any CPU
+		{28B7FEDA-9F91-49D3-990B-1E4D7B71932A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{28B7FEDA-9F91-49D3-990B-1E4D7B71932A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{28B7FEDA-9F91-49D3-990B-1E4D7B71932A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{28B7FEDA-9F91-49D3-990B-1E4D7B71932A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{28EBD7E4-6130-4444-B44F-BB741172A233}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{28EBD7E4-6130-4444-B44F-BB741172A233}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{28EBD7E4-6130-4444-B44F-BB741172A233}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{28EBD7E4-6130-4444-B44F-BB741172A233}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
@@ -216,5 +256,10 @@ Global
 		{83BA87C3-6288-40F4-BC4F-EC3A54586CDF} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
 		{B9976751-C3A6-4F8B-BEF4-278382D8EAA6} = {BBD6F425-C2F4-4857-BD68-2B13D0B4EDDE}
 		{A0FB44F5-15E5-47C8-81E5-1991269849CB} = {7F80222A-2687-4E91-8F5B-4717DD13DEF5}
+		{8D9867A9-1B5D-4AD3-A890-ACC81D011C00} = {76721F1E-851C-4970-A276-DF61FCE3DA23}
+		{C899EB07-FEC8-41F8-95DC-203DA80F5A32} = {76721F1E-851C-4970-A276-DF61FCE3DA23}
+		{28B7FEDA-9F91-49D3-990B-1E4D7B71932A} = {CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}
+		{28EBD7E4-6130-4444-B44F-BB741172A233} = {CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}
+		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5} = {EDC5EB0D-EE6D-489A-B0B0-DA85ECDF04B2}
 	EndGlobalSection
 EndGlobal

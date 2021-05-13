@@ -23,7 +23,7 @@ let shouldPrune category (age : TimeSpan) =
 // NOTE - DANGEROUS - events submitted to the CosmosPruner get removed from the supplied Context!
 let selectPrunable (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
     let asOf = DateTimeOffset.UtcNow
-    for se in Propulsion.Cosmos.EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
+    for se in Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents changeFeedDocument do
         let (FsCodec.StreamName.CategoryAndId (cat,_)) = se.stream
         let age = asOf - se.event.Timestamp
         if shouldPrune cat age then

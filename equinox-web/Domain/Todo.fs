@@ -79,14 +79,14 @@ type View = { id: int; order: int; title: string; completed: bool }
 type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     let execute clientId command =
-        let stream = resolve clientId
-        stream.Transact(interpret command)
+        let decider = resolve clientId
+        decider.Transact(interpret command)
     let query clientId projection =
-        let stream = resolve clientId
-        stream.Query projection
+        let decider = resolve clientId
+        decider.Query projection
     let handle clientId command =
-        let stream = resolve clientId
-        stream.Transact(fun state ->
+        let decider = resolve clientId
+        decider.Transact(fun state ->
             let events = interpret command state
             let state' = Fold.fold state events
             state'.items, events)
@@ -100,33 +100,33 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
     (* READ *)
 
     /// List all open items
-    member __.List clientId  : Async<View seq> =
+    member _.List clientId  : Async<View seq> =
         query clientId (fun x -> seq { for x in x.items -> render x })
 
     /// Load details for a single specific item
-    member __.TryGet(clientId, id) : Async<View option> =
+    member _.TryGet(clientId, id) : Async<View option> =
         query clientId (fun x -> x.items |> List.tryFind (fun x -> x.id = id) |> Option.map render)
 
     (* WRITE *)
 
     /// Execute the specified (blind write) command 
-    member __.Execute(clientId , command) : Async<unit> =
+    member _.Execute(clientId , command) : Async<unit> =
         execute clientId command
 
     (* WRITE-READ *)
 
     /// Create a new ToDo List item; response contains the generated `id`
-    member __.Create(clientId, template: Props) : Async<View> = async {
+    member _.Create(clientId, template: Props) : Async<View> = async {
         let! state' = handle clientId (Add template)
         return List.head state' |> render }
 
     /// Update the specified item as referenced by the `item.id`
-    member __.Patch(clientId, id: int, value: Props) : Async<View> = async {
+    member _.Patch(clientId, id: int, value: Props) : Async<View> = async {
         let! state' = handle clientId (Update (id, value))
         return state' |> List.find (fun x -> x.id = id) |> render}
 
-let create resolve =
+let create resolveStream =
     let resolve clientId =
-        let stream = resolve (streamName clientId)
+        let stream = resolveStream (streamName clientId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
     Service(resolve)

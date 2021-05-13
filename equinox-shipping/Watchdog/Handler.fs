@@ -12,14 +12,14 @@ type Stats(log, statsInterval, stateInterval) =
     let mutable completed, deferred, failed, succeeded = 0, 0, 0, 0
     member val StatsInterval = statsInterval
 
-    override __.HandleOk res = res |> function
+    override _.HandleOk res = res |> function
         | Outcome.Completed -> completed <- completed + 1
         | Outcome.Deferred -> deferred <- deferred + 1
         | Outcome.Resolved successfully -> if successfully then succeeded <- succeeded + 1 else failed <- failed + 1
-    override __.HandleExn(log, exn) =
+    override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
-    override __.DumpStats() =
+    override _.DumpStats() =
         if completed <> 0 || deferred <> 0 || failed <> 0 || succeeded <> 0 then
             log.Information(" Completed {completed} Deferred {deferred} Failed {failed} Succeeded {succeeded}", completed, deferred, failed, succeeded)
             completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0

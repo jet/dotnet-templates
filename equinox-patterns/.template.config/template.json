@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Equinox",
+    "Event Sourcing",
+    "Closing Books",
+    "Epoch",
+    "Series",
+    "Period"
+  ],
+  "tags": {
+    "language": "F#",
+    "type": "project"
+  },
+  "identity": "Equinox.Patterns",
+  "name": "Equinox Patterns Sample",
+  "shortName": "eqxPatterns",
+  "sourceName": "Patterns",
+  "preferNameDirectory": true
+}

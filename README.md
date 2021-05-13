@@ -9,6 +9,9 @@ These templates focus solely on Consistent Processing using Equinox Stores:
 - [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox).
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
 - [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox](https://github.com/jet/equinox), using different stores and/or store configuration parameters.
+- [`eqxPatterns`](equinox-patterns/README.md) - Equinox Skeleton Deciders and Tests implementing various event sourcing patterns: 
+  - [x] Periods with Rolling Balance carried forward  
+  - [x] Epochs/Series/Ingester with deduplication
 
 ## [Propulsion](https://github.com/jet/propulsion) related
 
@@ -21,6 +24,8 @@ The following templates focus specifically on the usage of `Propulsion` componen
     1. _(default)_ `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
  
        * `-k --parallelOnly` schedule kafka emission to operate in parallel at document (rather than accumulated span of events for a stream) level
+
+       * `-k --synthesizeSequence` parse documents, preserving input order as items are produced to Kafka
 
     2. `--source eventStore`: EventStoreDB's `$all` feed
     
@@ -55,6 +60,9 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
    - `--filter` - include category filtering boilerplate
 
   **NOTE At present, checkpoint storage when projecting from EventStore uses Azure CosmosDB - help wanted ;)**
+  
+- [`feedApi`](feed-source/) - Boilerplate for an ASP.NET Core Web Api serving a feed of items stashed in an `Equinox.CosmosStore`. See `dotnet new feedConsumer` for the associated consumption logic
+- [`feedConsumer`](feed-consumer/) - Boilerplate for a service consuming a feed of items served by `dotnet new feedApi` using [`Propulsion.Feed`](https://github.com/jet/propulsion)
   
 - [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new proReactor --kafka`
 
@@ -226,15 +234,13 @@ There are established conventions documented in [Equinox's `module Aggregate` ov
 
 All the templates herein attempt to adhere to a consistent structure for the [composition root](https://blog.ploeh.dk/2011/07/28/CompositionRoot/) `module` (the one containing an Application’s `main`), consisting of the following common elements:
 
-### `module Configuration`
+### `type Configuration`
 
 _Responsible for: Loading secrets and custom configuration, supplying defaults when environment variables are not set_
 
 Wiring up retrieval of configuration values is the most environment-dependent aspect of the wiring up of an application's interaction with its environment and/or data storage mechanisms. This is particularly relevant where there is variance between local (development time), testing and production deployments. For this reason, the retrieval of values from configuration stores or key vaults is not managed directly within the [`module Args` section](#module-args)
 
-The `Configuration` module is responsible for the following:
-1. Feeding defaults into process-local Environment Variables, _where those are not already supplied_
-2. Encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `module Args`
+The `Configuration` type is responsible for encapsulating all bindings to Configuration or Secret stores (Vaults) in order that this does not have to be complected with the argument parsing or defaulting in `module Args`
 
 - DO (sparingly) rely on inputs from the command line to drive the lookup process
 - DONT log values (`module Args`’s `Arguments` wrappers should do that as applicable as part of the wireup process)
@@ -313,14 +319,13 @@ let run args = async {
 
 [<EntryPoint>]
 let main argv =
-    try let args = Args.parse argv
+    try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
-            try Configuration.initialize ()
-                run args |> Async.RunSynchronously
+            try run args |> Async.RunSynchronously
                 0
-            with e when not (e :? Args.MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn "%s" msg; 1
+    with MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1
 ```

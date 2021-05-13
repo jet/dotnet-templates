@@ -10,9 +10,17 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
+- `eqxPatterns`: `Period`: Skeleton Deciders+Tests for `Period` with Rolling Balance [#89](https://github.com/jet/dotnet-templates/pull/89)
+- `eqxPatterns`: `Series`+`Epoch`: Skeleton Deciders+Tests for deduplicated ingestion of items [#89](https://github.com/jet/dotnet-templates/pull/89)
+- `eqxProjector --source cosmos --kafka --synthesizeSequence`: Sample code for custom parsing of document changes [#84](https://github.com/jet/dotnet-templates/pull/84)
+- `feedApi`: Template for a Web API serving a feed that can be tracked by a `feedConsumer` [#88](https://github.com/jet/dotnet-templates/pull/88)
+- `feedConsumer`: Template for Feed Consumer tracking a `feedApi` [#88](https://github.com/jet/dotnet-templates/pull/88)
 - `proArchiver`: Parameterize max Sync batch size limit, default to 512KiB
 
 ### Changed
+
+- Clean up configuration management [#87](https://github.com/jet/dotnet-templates/pull/87)
+
 ### Removed
 ### Fixed
 

@@ -2,12 +2,16 @@
 module PrunerTemplate.Infrastructure
 
 open Serilog
-open System.Runtime.CompilerServices
+open System
 
-[<Extension>]
+module EnvVar =
+
+    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+
+[<System.Runtime.CompilerServices.Extension>]
 type LoggerConfigurationExtensions() =
 
-    [<Extension>]
+    [<System.Runtime.CompilerServices.Extension>]
     static member inline ExcludeChangeFeedProcessorV2InternalDiagnostics(c : LoggerConfiguration) =
         let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
         let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
@@ -16,28 +20,29 @@ type LoggerConfigurationExtensions() =
         let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
         c.Filter.ByExcluding(fun x -> isCfp x)
 
-    [<Extension>]
+    [<System.Runtime.CompilerServices.Extension>]
     static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
         // LibLog writes to the global logger, so we need to control the emission
         let cfpl = if verbose then Events.LogEventLevel.Debug else Events.LogEventLevel.Warning
         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
         |> fun c -> if verbose then c else c.ExcludeChangeFeedProcessorV2InternalDiagnostics()
 
-    [<Extension>]
+    [<System.Runtime.CompilerServices.Extension>]
     static member inline ForwardMetricsFromEquinoxAndPropulsionToPrometheus(a : Configuration.LoggerSinkConfiguration, appName, group, metrics) =
         a.Logger(fun l ->
             l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
               |> fun l -> if not metrics then l else
                             l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(appName))
-                             .WriteTo.Sink(Propulsion.Prometheus.LogSink(appName, group))
-                             .WriteTo.Sink(Propulsion.Cosmos.Prometheus.LogSink(appName))
+                             .WriteTo.Sink(Propulsion.Prometheus.LogSink(["app", appName], group))
+                             .WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(["app",appName]))
               |> ignore) |> ignore
 
-[<Extension>]
+[<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
-    [<Extension>]
-    static member Configure(configuration : LoggerConfiguration, appName, group, verbose, cfpVerbose, metrics) =
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Configure(configuration : LoggerConfiguration, appName, group, ?verbose, ?changeFeedProcessorVerbose, ?metrics) =
+        let verbose, cfpVerbose = defaultArg verbose false, defaultArg changeFeedProcessorVerbose false
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
@@ -51,7 +56,7 @@ type Logging() =
             let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {Properties}{NewLine}{Exception}"
             let t = if verbose then t else t.Replace("{Properties}", "")
             let configure (a : Configuration.LoggerSinkConfiguration) : unit =
-                a.ForwardMetricsFromEquinoxAndPropulsionToPrometheus(appName, group, metrics)
+                a.ForwardMetricsFromEquinoxAndPropulsionToPrometheus(appName, group, (metrics = Some true))
                 a.Logger(fun l ->
                     let isEqx = Filters.Matching.FromSource<Equinox.CosmosStore.Core.EventsContext>().Invoke
                     let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke

@@ -47,17 +47,17 @@ let render : Fold.State -> Item[] = function
 type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
 
     /// Returns false if the ingestion was rejected due to being an older version of the data than is presently being held
-    member __.TryIngest(clientId, version, value) : Async<bool> =
-        let stream = resolve clientId
-        stream.Transact(decide (Consume (version, value)))
+    member _.TryIngest(clientId, version, value) : Async<bool> =
+        let decider = resolve clientId
+        decider.Transact(decide (Consume (version, value)))
 
-    member __.Read clientId: Async<Item[]> =
-        let stream = resolve clientId
-        stream.Query render
+    member _.Read clientId: Async<Item[]> =
+        let decider = resolve clientId
+        decider.Query render
 
-let create resolve =
+let create resolveStream =
     let resolve clientId =
-        let stream = resolve (streamName clientId)
+        let stream = resolveStream (streamName clientId)
         Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
     Service(resolve)
 

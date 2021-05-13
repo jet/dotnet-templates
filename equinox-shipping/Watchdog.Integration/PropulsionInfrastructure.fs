@@ -20,7 +20,7 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
     let mutable checkpointed = None
 
     let queue = new System.Collections.Concurrent.BlockingCollection<_>(1024)
-    member __.Pump = async {
+    member _.Pump = async {
         for epoch, checkpoint, events, markCompleted in queue.GetConsumingEnumerable() do
             let! _ = ingester.Submit(epoch, checkpoint, events, markCompleted) in ()
     }
@@ -32,7 +32,7 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
         instance
 
     /// Accepts an individual batch of events from a stream for submission into the <c>inner</c> projector
-    member __.Submit(stream, events : 'E seq) =
+    member _.Submit(stream, events : 'E seq) =
         let epoch = Interlocked.Increment &epoch
         log.Debug("Submitted! {stream} {epoch}", stream, epoch)
         let markCompleted () =
@@ -46,7 +46,7 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
         Observable.subscribe this.Submit source
 
     /// Waits until all <c>Submit</c>ted batches have been fed into the <c>inner</c> Projector
-    member __.AwaitCompletion
+    member _.AwaitCompletion
         (   /// sleep time while awaiting completion
             ?delay,
             /// interval at which to log progress of Projector loop
@@ -83,7 +83,7 @@ type TestOutputAdapter(testOutput : Xunit.Abstractions.ITestOutputHelper) =
         formatter.Format(logEvent, writer)
         writer |> string |> testOutput.WriteLine
         writer |> string |> System.Diagnostics.Debug.Write
-    interface Serilog.Core.ILogEventSink with member __.Emit logEvent = writeSerilogEvent logEvent
+    interface Serilog.Core.ILogEventSink with member _.Emit logEvent = writeSerilogEvent logEvent
 
 module TestOutputLogger =
 

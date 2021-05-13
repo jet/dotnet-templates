@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <WarningLevel>5</WarningLevel>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Infrastructure.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Ingester.fs" />
+    <Compile Include="ApiClient.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FSharp.Core" Version="4.7.1" />
+    <PackageReference Include="Argu" Version="6.1.1" />
+    <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
+    <PackageReference Include="Propulsion.Feed" Version="[2.10.0-rc10]" />
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.0-beta.4" />
+    <PackageReference Include="Propulsion.CosmosStore" Version="[2.10.0-rc10]" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @bartelink",
+  "classifications": [
+    "Equinox",
+    "Event Sourcing",
+    "Feed"
+  ],
+  "tags": {
+    "language": "F#",
+    "type": "project"
+  },
+  "identity": "FeedApi",
+  "name": "Equinox Feed Api",
+  "shortName": "feedApi",
+  "sourceName": "FeedApiTemplate",
+  "preferNameDirectory": true
+}
