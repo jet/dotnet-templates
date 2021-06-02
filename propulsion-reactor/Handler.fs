@@ -24,10 +24,10 @@ type Outcome =
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
 type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 #if kafkaEventSpans
-    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
 #if blank
-    inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
     inherit Propulsion.Streams.Sync.Stats<Outcome>(log, statsInterval, stateInterval)
 #endif
@@ -39,11 +39,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
-#if kafkaEventSpans
-    override _.HandleExn exn =
-#else
     override _.HandleExn(log, exn) =
-#endif
         log.Information(exn, "Unhandled")
         
     override _.DumpStats() =

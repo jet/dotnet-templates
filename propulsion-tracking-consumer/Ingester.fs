@@ -21,13 +21,13 @@ type Outcome = Completed of used : int * unused : int
 
 /// Gathers stats based on the outcome of each Span processed for emission at intervals controlled by `StreamsConsumer`
 type Stats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Kafka.StreamsConsumerStats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable ok, skipped = 0, 0
 
     override _.HandleOk res = res |> function
         | Completed (used, unused) -> ok <- ok + used; skipped <- skipped + unused
-    override _.HandleExn exn =
+    override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
     override _.DumpStats() =

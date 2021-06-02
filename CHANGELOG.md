@@ -18,6 +18,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - `proArchiver`: Parameterize max Sync batch size limit, default to 512KiB
 - `proAchiver`, `proPruner`, `eqxWeb`, `eqxWebCs`: Added `prometheus-net` integration
 - `proAchiver`, `proPruner`: Target `Equinox` v `3.0.0`, `Propulsion` v `2.10.0`
+- Target `Propulsion` v `2.10.0`, `Equinox` v `2.6.0`/`3.0.0`
 
 ### Changed
 

@@ -86,7 +86,7 @@ let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
 // The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls
 type ProjectorStats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Projector.Stats<int>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Stats<int>(log, statsInterval, stateInterval)
 
     let mutable totalCount = 0
 

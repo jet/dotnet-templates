@@ -529,7 +529,7 @@ let build (args : Args.Arguments) =
         let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
 #if kafka
         let broker, topic = srcE.Cosmos.Sink.BuildTargetParams()
-        let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
+        let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
             producer.Produce(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 #if blank
@@ -601,7 +601,7 @@ let build (args : Args.Arguments) =
 #else
         let broker, topic = source.Cosmos.Sink.BuildTargetParams()
 #endif
-        let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, topic)
+        let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
             producer.Produce(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
 #if blank
@@ -657,7 +657,7 @@ let build (args : Args.Arguments) =
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
         let pipeline =
-            let createObserver () = CosmosSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
+            let createObserver ctx = CosmosSource.CreateObserver(Log.Logger, ctx, sink.StartIngester, mapToStreamItems)
             CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
                 leaseId, startFromTail, createObserver,
                 ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
