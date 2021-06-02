@@ -27,7 +27,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
 #if blank
-    inherit Propulsion.Streams.Projector.Stats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
     inherit Propulsion.Streams.Sync.Stats<Outcome>(log, statsInterval, stateInterval)
 #endif
