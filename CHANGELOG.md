@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="4.12.0"></a>
+## [4.12.0] - 2021-06-02
+
+### Added
 
 - `eqxPatterns`: `Period`: Skeleton Deciders+Tests for `Period` with Rolling Balance [#89](https://github.com/jet/dotnet-templates/pull/89)
 - `eqxPatterns`: `Series`+`Epoch`: Skeleton Deciders+Tests for deduplicated ingestion of items [#89](https://github.com/jet/dotnet-templates/pull/89)
@@ -17,15 +25,12 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - `feedConsumer`: Template for Feed Consumer tracking a `feedApi` [#88](https://github.com/jet/dotnet-templates/pull/88)
 - `proArchiver`: Parameterize max Sync batch size limit, default to 512KiB
 - `proAchiver`, `proPruner`, `eqxWeb`, `eqxWebCs`: Added `prometheus-net` integration
-- `proAchiver`, `proPruner`: Target `Equinox` v `3.0.0`, `Propulsion` v `2.10.0`
-- Target `Propulsion` v `2.10.0`, `Equinox` v `2.6.0`/`3.0.0`
 
 ### Changed
 
 - Clean up configuration management [#87](https://github.com/jet/dotnet-templates/pull/87)
-
-### Removed
-### Fixed
+- `proAchiver`, `proPruner`: Target `Equinox` v `3.0.0`, `Propulsion` v `2.10.0`
+- Target `Propulsion` v `2.10.0`, `Equinox` v `2.6.0`/`3.0.0`
 
 <a name="4.11.0"></a>
 ## [4.11.0] - 2020-11-04
@@ -493,7 +498,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.11.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.12.0...HEAD
+[4.12.0]: https://github.com/jet/dotnet-templates/compare/4.11.0...4.12.0
 [4.11.0]: https://github.com/jet/dotnet-templates/compare/4.10.0...4.11.0
 [4.10.0]: https://github.com/jet/dotnet-templates/compare/4.9.0...4.10.0
 [4.9.0]: https://github.com/jet/dotnet-templates/compare/4.8.0...4.9.0
