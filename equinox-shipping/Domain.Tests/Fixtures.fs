@@ -8,22 +8,22 @@ module FinalizationTransaction =
     module MemoryStore =
         open Equinox.MemoryStore
         let create store =
-            let resolver = Resolver(store, Events.codec, Fold.fold, Fold.initial)
-            create resolver.Resolve
+            let cat = MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+            create cat.Resolve
 module Container =
     open Container
     module MemoryStore =
         open Equinox.MemoryStore
         let create store =
-            let resolver = Resolver(store, Events.codec, Fold.fold, Fold.initial)
-            create resolver.Resolve
+            let cat = MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+            create cat.Resolve
 module Shipment =
     open Shipment
     module MemoryStore =
         open Equinox.MemoryStore
         let create store =
-            let resolver = Resolver(store, Events.codec, Fold.fold, Fold.initial)
-            create resolver.Resolve
+            let cat = MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+            create cat.Resolve
 
 let createProcessManager maxDop store =
     let transactions = FinalizationTransaction.MemoryStore.create store

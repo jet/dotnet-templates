@@ -4,6 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <WarningLevel>5</WarningLevel>
+	  <DefineConstants>cosmos;kafka</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,22 +18,26 @@
     <PackageReference Include="Argu" Version="6.1.1" />
     <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
     <!--#if (esdb)-->
-    <PackageReference Include="Equinox.Cosmos" Version="2.6.0" />
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.1" />
     <!--#endif-->
     <!--#if cosmos-->
-    <PackageReference Include="Propulsion.Cosmos" Version="2.10.0" />
+    <!--<PackageReference Include="Propulsion.CosmosStore" Version="2.10.0" />-->
     <!--#endif-->
     <!--#if (esdb)-->
     <PackageReference Include="Propulsion.EventStore" Version="2.10.0" />
     <!--#endif-->
     <!--#if (sss)-->
-    <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="2.6.0" />
+    <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="3.0.1" />
     <PackageReference Include="Propulsion.SqlStreamStore" Version="2.10.0" />
     <!--#endif-->
     <!--#if kafka-->
     <PackageReference Include="Propulsion.Kafka" Version="2.10.0" />
     <!--#endif-->
     <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\propulsion\src\Propulsion.CosmosStore\Propulsion.CosmosStore.fsproj" />
   </ItemGroup>
 
 </Project>

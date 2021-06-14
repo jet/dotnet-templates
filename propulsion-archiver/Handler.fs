@@ -14,8 +14,8 @@ let (|Archivable|NotArchivable|) = function
     | _ ->
         NotArchivable
 
-let selectArchivable (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
-    let s = changeFeedDocument.GetPropertyValue("p") |> string
+let selectArchivable (changeFeedDocument : Newtonsoft.Json.Linq.JObject) : Propulsion.Streams.StreamEvent<_> seq = seq {
+    let s = changeFeedDocument.GetValue("p") |> string
     if s.StartsWith("events-") then () else
     for batch in Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents changeFeedDocument do
         let (FsCodec.StreamName.CategoryAndId (cat,_)) = batch.stream

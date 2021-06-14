@@ -18,3 +18,16 @@ module TransactionId =
     let toString (x : TransactionId) : string = %x
     let parse (x : string) = %x
     let (|Parse|) = parse
+
+namespace global
+
+module Log =
+
+    let forMetrics () =
+        Serilog.Log.ForContext("isMetric", true)
+
+module Equinox =
+
+    let createDecider stream =
+        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+

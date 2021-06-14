@@ -52,26 +52,27 @@ module Args =
         member val MetricsEnabled =         a.Contains PrometheusPort
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
-        member val Archive : CosmosSourceArguments =
+        member val Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> (CosmosSourceArguments (c, cosmos))
-            | _ -> raise (MissingArg "Must specify cosmos for Archive")
-        member x.DeletionTarget = x.Archive.Target
+            | _ -> raise (MissingArg "Must specify cosmos for Source")
+        member x.DeletionTarget = x.Source.Target
         member x.MonitoringParams() =
-            let srcC = x.Archive
-            let leasesContainer : Microsoft.Azure.Cosmos.Container =
+            let srcC = x.Source
+            let leases : Microsoft.Azure.Cosmos.Container =
                 let dstC : CosmosSinkArguments = srcC.Target
-                match srcC.LeaseContainer, dstC.LeaseContainer with
-                | None, None ->     srcC.ConnectLeases(srcC.Container + "-aux")
+                match srcC.LeaseContainerId, dstC.LeaseContainerId with
+                | None, None ->     srcC.ConnectLeases(srcC.ContainerId + "-aux")
                 | Some sc, None ->  srcC.ConnectLeases(sc)
                 | None, Some dc ->  dstC.ConnectLeases(dc)
                 | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
             Log.Information("Pruning... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
             Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                x.ConsumerGroupName, leasesContainer.Database.Id, leasesContainer.Id, Option.toNullable srcC.MaxDocuments)
+                x.ConsumerGroupName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
-            (leasesContainer, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+            let monitored = srcC.MonitoredContainer()
+            (monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
@@ -105,26 +106,25 @@ module Args =
                 | DstCosmos _ ->            "CosmosDb Pruning Target parameters."
     and CosmosSourceArguments(c : Configuration, a : ParseResults<CosmosSourceParameters>) =
         let discovery =                     a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
-        let mode =                          a.GetResult(CosmosSourceParameters.ConnectionMode, Microsoft.Azure.Cosmos.ConnectionMode.Direct)
+        let mode =                          a.TryGetResult CosmosSourceParameters.ConnectionMode
         let timeout =                       a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       a.GetResult(CosmosSourceParameters.Retries, 5)
         let maxRetryWaitTime =              a.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
-        let connector =                     CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, mode)
-        member val Database =               a.TryGetResult CosmosSourceParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =              a.GetResult CosmosSourceParameters.Container
-        member x.MonitoredContainer() =     connector.ConnectMonitor(x.Database, x.Container)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        member val DatabaseId =             a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val ContainerId =            a.GetResult CosmosSourceParameters.Container
+        member x.MonitoredContainer() =     connector.ConnectMonitored(x.DatabaseId, x.ContainerId)
         
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
         member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member val LeaseContainer =         a.TryGetResult CosmosSourceParameters.LeaseContainer
-        member x.ConnectLeases containerId = connector.CreateUninitialized(x.Database, containerId)
+        member val LeaseContainerId =       a.TryGetResult CosmosSourceParameters.LeaseContainer
+        member x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
 
         member val Target =
             match a.TryGetSubCommand() with
             | Some (DstCosmos cosmos) -> CosmosSinkArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos for Target")
-
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -146,18 +146,18 @@ module Args =
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
     and CosmosSinkArguments(c : Configuration, a : ParseResults<CosmosSinkParameters>) =
         let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
-        let mode =                          a.GetResult(ConnectionMode, Microsoft.Azure.Cosmos.ConnectionMode.Direct)
+        let mode =                          a.TryGetResult ConnectionMode
         let timeout =                       a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       a.GetResult(CosmosSinkParameters.Retries, 0)
         let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        let connector =                     CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
 
-        member val Database =               a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =              a.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member x.Connect() =                connector.Connect("DELETION Target", x.Database, x.Container)
+        member val DatabaseId =             a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val ContainerId =            a.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member x.Connect() =                connector.ConnectStore("DELETION Target", x.DatabaseId, x.ContainerId)
 
-        member val LeaseContainer =         a.TryGetResult LeaseContainer
-        member x.ConnectLeases containerId = connector.CreateUninitialized(x.Database, containerId)
+        member val LeaseContainerId =       a.TryGetResult LeaseContainer
+        member x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
 
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -176,20 +176,19 @@ module CosmosStoreContext =
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
 let build (args : Args.Arguments, log : ILogger, storeLog : ILogger) =
-    let aux, leaseId, startFromTail, maxDocuments, lagFrequency = args.MonitoringParams()
-
+    let archive = args.Source
     // NOTE - DANGEROUS - events submitted to this sink get DELETED from the supplied Context!
     let deletingEventsSink =
         let target = args.DeletionTarget
-        if (target.Database, target.Container) = (args.Archive.Database, args.Archive.Container) then
+        if (target.DatabaseId, target.ContainerId) = (archive.DatabaseId, archive.ContainerId) then
             raise (MissingArg "Danger! Can not prune a target based on itself")
         let context = target.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, storeLog)
         CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
     let pipeline =
-        let monitored = args.Archive.MonitoredContainer()
         use observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
-        CosmosStoreSource.Run(log, monitored, aux, leaseId, observer, startFromTail, ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
+        let monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.MonitoringParams()
+        CosmosStoreSource.Run(log, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
     deletingEventsSink, pipeline
 
 // A typical app will likely have health checks etc, implying the wireup would be via `UseMetrics()` and thus not use this ugly code directly
@@ -211,7 +210,6 @@ let run args = async {
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         let appName = sprintf "pruner:%s" args.ConsumerGroupName
-        let appName = appName.Replace("ruben","")
         try Log.Logger <- LoggerConfiguration().Configure(appName, args.ConsumerGroupName, args.Verbose, args.CfpVerbose, args.MetricsEnabled).CreateLogger()
             try run args |> Async.RunSynchronously
                 0

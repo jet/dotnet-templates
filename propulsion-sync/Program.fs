@@ -1,8 +1,6 @@
 ﻿module SyncTemplate.Program
 
-open Equinox.Cosmos
 open Equinox.EventStore
-open Propulsion.Cosmos
 open Propulsion.EventStore
 #if kafka
 open Propulsion.Kafka
@@ -118,33 +116,32 @@ module Args =
             match x.Source with
             | Choice1Of2 cosmos -> cosmos.Sink
             | Choice2Of2 es -> Choice1Of2 es.Sink
-        member x.SourceParams() : Choice<_, _*ReaderSpec> =
+        member x.SourceParams() : Choice<_, _*Equinox.CosmosStore.CosmosStoreContext*ReaderSpec> =
             match x.Source with
             | Choice1Of2 srcC ->
-                let disco, db =
+                let leases : Microsoft.Azure.Cosmos.Container =
                     match srcC.Sink with
                     | Choice1Of2 dstC ->
-                        match srcC.LeaseContainer, dstC.LeaseContainer with
-                        | None, None ->     srcC.Connection, { database = srcC.Database; container = srcC.Container + "-aux" }
-                        | Some sc, None ->  srcC.Connection, { database = srcC.Database; container = sc }
-                        | None, Some dc ->  dstC.Connection, { database = dstC.Database; container = dc }
+                        match srcC.LeaseContainerId, dstC.LeaseContainerId with
+                        | _, None ->        srcC.ConnectLeases()
+                        | None, Some dc ->  dstC.ConnectLeases dc
                         | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
-                    | Choice2Of2 _dstE ->
-                        let lc = match srcC.LeaseContainer with Some sc -> sc | None -> srcC.Container + "-aux"
-                        srcC.Connection, { database = srcC.Database; container = lc }
+                    | Choice2Of2 _dstE ->   srcC.ConnectLeases()
                 Log.Information("Syncing... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
                 Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                    x.ConsumerGroupName, db.database, db.container, srcC.MaxDocuments)
+                    x.ConsumerGroupName, leases.Database.Id, leases.Id, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
-                Choice1Of2 (srcC, (disco, db, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
+                let monitored = srcC.MonitoredContainer()
+                Choice1Of2 (monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
             | Choice2Of2 srcE ->
                 let startPos = srcE.StartPos
-                Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Container {container}",
-                    x.ConsumerGroupName, startPos, srcE.ForceRestart, srcE.Sink.Database, srcE.Sink.Container)
+                let checkpointsContext = srcE.Sink.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+                Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart})",
+                    x.ConsumerGroupName, startPos, srcE.ForceRestart)
                 Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxReadAhead} uncommitted batches ahead",
                     srcE.MinBatchSize, srcE.StartingBatchSize, x.MaxReadAhead)
-                Choice2Of2 (srcE,
+                Choice2Of2 (srcE, checkpointsContext,
                     {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                         forceRestart = srcE.ForceRestart
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = srcE.StreamReaders })
@@ -154,7 +151,7 @@ module Args =
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
 
-        | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode 
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c"; Unique>]   Container of string // Actually Mandatory, but stating that is not supported
@@ -182,27 +179,24 @@ module Args =
                 | DstEs _ ->                "EventStore Sink parameters."
                 | DstCosmos _ ->            "CosmosDb Sink parameters."
     and CosmosSourceArguments(c : Configuration, a : ParseResults<CosmosSourceParameters>) =
+        let discovery =                     a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          a.TryGetResult CosmosSourceParameters.ConnectionMode
+        let timeout =                       a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       a.GetResult(CosmosSourceParameters.Retries, 1)
+        let maxRetryWaitTime =              a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let database =                      a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val ContainerId : string =            a.GetResult CosmosSourceParameters.Container
+        member x.MonitoredContainer() =     connector.ConnectMonitored(database, x.ContainerId)
+        
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
         member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member val LeaseContainer =         a.TryGetResult CosmosSourceParameters.LeaseContainer
-
-        member val Mode =                   a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member val Connection =             a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
-        member val Database =               a.TryGetResult CosmosSourceParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =              a.GetResult CosmosSourceParameters.Container
-        member val Timeout =                a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member val Retries =                a.GetResult(CosmosSourceParameters.Retries, 1)
-        member val MaxRetryWaitTime =       a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        member x.MonitoringParams() =
-            let Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
-            Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
-                x.Mode, endpointUri, x.Database, x.Container)
-            Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-            let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            c, discovery, { database = x.Database; container = x.Container }
-
+        member val LeaseContainerId =       a.TryGetResult CosmosSourceParameters.LeaseContainer
+        member private _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
+        member x.ConnectLeases() =          match x.LeaseContainerId with
+                                            | None ->    x.ConnectLeases(x.ContainerId + "-aux")
+                                            | Some sc -> x.ConnectLeases(sc)
         member val Sink =
             match a.TryGetSubCommand() with
             | Some (DstCosmos cosmos) -> Choice1Of2 (CosmosSinkArguments (c, cosmos))
@@ -303,7 +297,7 @@ module Args =
             | Some (Cosmos cosmos) -> CosmosSinkArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos for Sink if source is `es`")
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
-        | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
@@ -328,25 +322,18 @@ module Args =
                 | Kafka _ ->                "specify Kafka target for non-Synced categories. Default: None."
 #endif
     and CosmosSinkArguments(c : Configuration, a : ParseResults<CosmosSinkParameters>) =
-        member val Mode =                   a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member val Connection =             a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Discovery.FromConnectionString
-        member val Database =               a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =              a.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member val LeaseContainer =         a.TryGetResult LeaseContainer
-        member val Timeout =                a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member val Retries =                a.GetResult(CosmosSinkParameters.Retries, 0)
-        member val MaxRetryWaitTime =       a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        /// Connect with the provided parameters and/or environment variables
-        member x.Connect
-            /// Connection/Client identifier for logging purposes
-            appName connIndex : Async<Equinox.Cosmos.Connection> =
-            let Discovery.UriAndKey (endpointUri, _masterKey) as discovery = x.Connection
-            Log.Information("Destination CosmosDb {mode} {endpointUri} Database {database} Container {container}",
-                x.Mode, endpointUri, x.Database, x.Container)
-            Log.Information("Destination CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-            let c = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            c.Connect(sprintf "App=%s Conn=%d" appName connIndex, discovery)
+        let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          a.GetResult(ConnectionMode, Microsoft.Azure.Cosmos.ConnectionMode.Direct)
+        let timeout =                       a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       a.GetResult(CosmosSinkParameters.Retries, 0)
+        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, mode)
+        let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member _.Connect() =                connector.ConnectStore("Destination", database, container)
+
+        member val LeaseContainerId =       a.TryGetResult LeaseContainer
+        member _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
 #if kafka
         member val KafkaSink =
             match a.TryGetSubCommand() with
@@ -457,25 +444,23 @@ module EventV0Parser =
             member _.CausationId = null
             member _.Context = null
 
-    type Microsoft.Azure.Documents.Document with
+    type Newtonsoft.Json.Linq.JObject with
         member document.Cast<'T>() =
-            let tmp = new Microsoft.Azure.Documents.Document()
-            tmp.SetPropertyValue("content", document)
-            tmp.GetPropertyValue<'T>("content")
+            document.ToObject<'T>()
 
     /// We assume all Documents represent Events laid out as above
-    let parse (d : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> =
+    let parse (d : Newtonsoft.Json.Linq.JObject) : Propulsion.Streams.StreamEvent<_> =
         let e = d.Cast<EventV0>()
         { stream = FsCodec.StreamName.parse e.s; event = e } : _
 
-let transformV0 catFilter (v0SchemaDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
+let transformV0 catFilter v0SchemaDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
     let (FsCodec.StreamName.CategoryAndId (cat, _)) = parsed.stream
     if catFilter cat then
         yield parsed }
 //#else
-let transformOrFilter catFilter (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for { stream = FsCodec.StreamName.CategoryAndId (cat, _) } as e in EquinoxCosmosParser.enumStreamEvents changeFeedDocument do
+let transformOrFilter catFilter changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
+    for { stream = FsCodec.StreamName.CategoryAndId (cat, _) } as e in Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter cat then
             yield e }
@@ -488,12 +473,14 @@ module Checkpoints =
     // In this implementation, we keep the checkpoints in Cosmos when consuming from EventStore
     module Cosmos =
 
+        open Equinox.CosmosStore
+
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Checkpoint.Events.Event>()
-        let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
+        let access = AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
         let create groupName (context, cache) =
-            let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let resolver = Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
-            let resolve streamName = resolver.Resolve(streamName, Equinox.AllowStale)
+            let caching = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
+            let resolve streamName = cat.Resolve(streamName, Equinox.AllowStale)
             Checkpoint.CheckpointSeries(groupName, resolve)
 
 type Stats(log, statsInterval, stateInterval) =
@@ -507,13 +494,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
     let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
         | Choice1Of2 cosmos ->
-            let containers = Containers(cosmos.Database, cosmos.Container)
-            let connect connIndex = async {
-                let! c = cosmos.Connect AppName connIndex
-                let lfc = storeLog.ForContext("ConnId", connIndex)
-                return c, Equinox.Cosmos.Core.Context(c, containers, lfc) }
-            let all = Array.init args.MaxConnections connect |> Async.Parallel |> Async.RunSynchronously
-            let mainConn, targets = Equinox.Cosmos.Gateway(fst all.[0], Equinox.Cosmos.BatchingPolicy()), Array.map snd all
+            let target = cosmos.Connect() |> Async.RunSynchronously
             let sink, streamFilter =
 #if kafka
                 let maxEvents, maxBytes = 100_000, 900_000
@@ -533,9 +514,11 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
-                CosmosSink.Start(log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
+                let context = CosmosStoreContext.create target
+                let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, storeLog)
+                Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
                 args.CategoryFilterFunction(excludeLong=true)
-            Some (mainConn, containers), sink, streamFilter
+            Some target, sink, streamFilter
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = storeLog.ForContext("ConnId", connIndex)
@@ -545,26 +528,24 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
             let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
-    | Choice1Of2 (srcC, (auxDiscovery, aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
-        let connector, discovery, source = srcC.MonitoringParams()
+    | Choice1Of2 (monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
 #if marveleqx
-        let createObserver ctx = CosmosSource.CreateObserver(log, ctx, sink.StartIngester, Seq.collect (transformV0 streamFilter))
+        use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformV0 streamFilter)
 #else
-        let createObserver ctx = CosmosSource.CreateObserver(log, ctx, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
+        use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
 #endif
         let runPipeline =
-            CosmosSource.Run(log, connector.CreateClient(AppName, discovery), source, aux,
-                leaseId, startFromTail, createObserver,
-                ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency, auxClient=connector.CreateClient(AppName, auxDiscovery))
+            Propulsion.CosmosStore.CosmosStoreSource.Run(
+                Log.Logger, monitored, leases, processorName, observer, startFromTail,
+                ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
         sink, runPipeline
-    | Choice2Of2 (srcE, spec) ->
+    | Choice2Of2 (srcE, checkpointsContext, spec) ->
         match maybeDstCosmos with
         | None -> failwith "ES->ES checkpointing E_NOTIMPL"
-        | Some (mainConn, containers) ->
+        | Some _ ->
 
-        let context = Equinox.Cosmos.Context(mainConn, containers)
         let cache = Equinox.Cache(AppName, sizeMb=1)
-        let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
+        let checkpoints = Checkpoints.Cosmos.create spec.groupName (checkpointsContext, cache)
 
         let withNullData (e : FsCodec.ITimelineEvent<_>) : FsCodec.ITimelineEvent<_> =
             FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, null, e.Meta, timestamp=e.Timestamp) :> _
@@ -588,7 +569,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         sink, runPipeline
 
 let run args = async {
-    let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.Cosmos.Core.Context>()
+    let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
     let sink, pipeline = build (args, log, storeLog)
     pipeline |> Async.Start
     return! sink.AwaitCompletion()

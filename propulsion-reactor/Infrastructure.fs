@@ -23,6 +23,16 @@ module EventCodec =
             None
         | x -> x
 
+module Log =
+
+    let forMetrics () =
+        Serilog.Log.ForContext("isMetric", true)
+
+module Equinox =
+
+    let createDecider stream =
+        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+
 module Guid =
 
     let inline toStringN (x : Guid) = x.ToString "N"
@@ -75,3 +85,44 @@ type Logging() =
 #endif
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
                     c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+
+module CosmosStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+        let maxEvents = 256 // default is 0
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+
+[<AutoOpen>]
+module ConnectorExtensions =
+
+    type Equinox.CosmosStore.CosmosStoreConnector with
+
+        member private x.LogConfiguration(connectionName, databaseId, containerId) =
+            let o = x.Options
+            let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
+            Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                            connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+            Log.Information("CosmosDb {name} Database {database} Container {container}",
+                            connectionName, databaseId, containerId)
+
+        /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
+        member x.CreateUninitialized(databaseId, containerId) =
+            x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
+        
+        /// Connect a CosmosStoreClient, including warming up
+        member x.ConnectStore(connectionName, databaseId, containerId) =
+            x.LogConfiguration(connectionName, databaseId, containerId)
+            Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
+            
+        /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
+        member x.ConnectMonitored(databaseId, containerId, ?connectionName) =
+            x.LogConfiguration(defaultArg connectionName "Source", databaseId, containerId)
+            x.CreateUninitialized(databaseId, containerId)
+
+        /// Connects to a Store as both a ChangeFeedProcessor Monitored Container and a CosmosStoreClient
+        member x.ConnectStoreAndMonitored(databaseId, containerId) =
+            let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
+            let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
+            storeClient, monitored
+

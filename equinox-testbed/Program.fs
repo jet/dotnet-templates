@@ -96,7 +96,7 @@ module Args =
             | Some (Cosmos sargs) ->
                 let storeLog = createStoreLog <| sargs.Contains Storage.Cosmos.Parameters.VerboseStore
                 log.Information("Running transactions in-process against CosmosDb with storage options: {options:l}", x.Options)
-                storeLog, Storage.Cosmos.config (log, storeLog) (x.Cache, x.Unfolds, x.BatchSize) (Storage.Cosmos.Arguments (c, sargs))
+                storeLog, Storage.Cosmos.config (x.Cache, x.Unfolds, x.BatchSize) (Storage.Cosmos.Arguments (c, sargs))
 //#endif
 #if ((!cosmos && !eventStore) || (cosmos && eventStore))
             | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es, cosmos")
@@ -116,7 +116,7 @@ let createStoreLog verbose verboseConsole maybeSeqEndpoint =
     let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
 //#endif
 //#if cosmos
-    let c = c.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink())
+    let c = c.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
 //#endif
     let c = c.WriteTo.Console((if verbose && verboseConsole then LogEventLevel.Debug else LogEventLevel.Warning), theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
     let c = match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)
@@ -165,7 +165,7 @@ module LoadTest =
         match storeConfig with
 //#if cosmos
         | Storage.StorageConfig.Cosmos _ ->
-            Equinox.Cosmos.Store.Log.InternalMetrics.dump log
+            Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
 //#endif
 //#if eventStore
         | Storage.StorageConfig.Es _ ->
@@ -185,7 +185,7 @@ let createDomainLog verbose verboseConsole maybeSeqEndpoint =
     let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
 //#endif
 //#if cosmos
-    let c = c.WriteTo.Sink(Equinox.Cosmos.Store.Log.InternalMetrics.Stats.LogSink())
+    let c = c.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
 //#endif
     let c = c.WriteTo.Console((if verboseConsole then LogEventLevel.Debug else LogEventLevel.Information), theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
     let c = match maybeSeqEndpoint with None -> c | Some endpoint -> c.WriteTo.Seq(endpoint)

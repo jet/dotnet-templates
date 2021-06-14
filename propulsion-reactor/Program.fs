@@ -1,10 +1,6 @@
 ﻿module ReactorTemplate.Program
 
-//#if (multiSource || !blank)
-open Equinox.Cosmos
-//#endif
 //#if (!kafkaEventSpans)
-open Propulsion.Cosmos
 //#if multiSource
 open Propulsion.EventStore
 //#endif
@@ -139,33 +135,33 @@ module Args =
             | Some (Es es) -> Choice1Of2 (EsSourceArguments (c, es))
             | Some (Parameters.Cosmos cosmos) -> Choice2Of2 (CosmosSourceArguments (c, cosmos))
             | _ -> raise (MissingArg "Must specify one of cosmos or es for Src")
-        member x.SourceParams() : Choice<EsSourceArguments*CosmosArguments*ReaderSpec, CosmosSourceArguments*_> =
+        member x.SourceParams() : Choice<EsSourceArguments*Equinox.CosmosStore.CosmosStoreContext*ReaderSpec, _> =
             match x.Source with
             | Choice1Of2 srcE ->
                 let startPos, cosmos = srcE.StartPos, srcE.Cosmos
                 Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Container {container}",
-                    x.ConsumerGroupName, startPos, srcE.ForceRestart, cosmos.Database, cosmos.Container)
+                    x.ConsumerGroupName, startPos, srcE.ForceRestart, cosmos.DatabaseId, cosmos.ContainerId)
                 Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxReadAhead} uncommitted batches ahead",
                     srcE.MinBatchSize, srcE.StartingBatchSize, x.MaxReadAhead)
-                Choice1Of2 (srcE, cosmos,
+                let context = cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+                Choice1Of2 (srcE, context,
                     {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                         forceRestart = srcE.ForceRestart
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = 0 })
             | Choice2Of2 srcC ->
 //#endif // !changeFeedOnly
-                let auxColl =
-                    match srcC.LeaseContainer with
-                    | None ->     { database = srcC.Database; container = srcC.Container + "-aux" }
-                    | Some sc ->  { database = srcC.Database; container = sc }
+                let leases = srcC.ConnectLeases()
                 Log.Information("Reacting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentStreams, x.MaxReadAhead)
-                Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                    x.ConsumerGroupName, auxColl.database, auxColl.container, srcC.MaxDocuments)
+                Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
+                    x.ConsumerGroupName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
+                let storeClient, monitored = srcC.ConnectStoreAndMonitored()
+                let context = CosmosStoreContext.create storeClient
 #if changeFeedOnly
-                (srcC, (auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
+                (context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #else
-                Choice2Of2 (srcC, (auxColl, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency))
+                Choice2Of2 (context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #endif
 //#endif // kafkaEventSpans
 #if kafkaEventSpans
@@ -218,7 +214,7 @@ module Args =
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
 
-        | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c"; Unique>]   Container of string // Actually Mandatory, but stating that is not supported
@@ -252,26 +248,25 @@ module Args =
                 | Cosmos _ ->               "CosmosDb Sink parameters."
 #endif
     and CosmosSourceArguments(c : Configuration, a : ParseResults<CosmosSourceParameters>) =
+        let discovery =                     a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          a.TryGetResult CosmosSourceParameters.ConnectionMode
+        let timeout =                       a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       a.GetResult(CosmosSourceParameters.Retries, 1)
+        let maxRetryWaitTime =              a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        member val DatabaseId =             a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val ContainerId =            a.GetResult CosmosSourceParameters.Container
+        //member x.MonitoredContainer() =     connector.ConnectMonitored(x.DatabaseId, x.ContainerId)
+        
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
         member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-        member val LeaseContainer =         a.TryGetResult CosmosSourceParameters.LeaseContainer
-
-        member val Mode =                   a.GetResult(CosmosSourceParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member val Connection =             a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.Cosmos.Discovery.FromConnectionString
-        member val Database =               a.TryGetResult CosmosSourceParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =              a.GetResult CosmosSourceParameters.Container
-        member val Timeout =                a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member val Retries =                a.GetResult(CosmosSourceParameters.Retries, 1)
-        member val MaxRetryWaitTime =       a.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        member x.MonitoringParams() =
-            let Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
-            Log.Information("Source CosmosDb {mode} {endpointUri} Database {database} Container {container}",
-                x.Mode, endpointUri, x.Database, x.Container)
-            Log.Information("Source CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-            let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            connector, discovery, { database = x.Database; container = x.Container }
+        member val private LeaseContainerId = a.TryGetResult CosmosSourceParameters.LeaseContainer
+        member private x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
+        member x.ConnectLeases() =          match x.LeaseContainerId with
+                                            | None ->    x.ConnectLeases(x.ContainerId + "-aux")
+                                            | Some sc -> x.ConnectLeases(sc)
+        member x.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(x.DatabaseId, x.ContainerId)
 #if (!multiSource && kafka && blank)
         member val Sink =
             match a.TryGetSubCommand() with
@@ -290,6 +285,7 @@ module Args =
         | [<AltCommandLine "-t"; Unique>]   Tail of intervalS: float
         | [<AltCommandLine "--force"; Unique>] ForceRestart
         | [<AltCommandLine "-m"; Unique>]   BatchSize of int
+
         | [<AltCommandLine "-mim"; Unique>] MinBatchSize of int
         | [<AltCommandLine "-pos"; Unique>] Position of int64
         | [<AltCommandLine "-c"; Unique>]   Chunk of int
@@ -416,7 +412,7 @@ module Args =
 //#if (multiSource || !(blank && kafka))
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-s">]           Connection of string
-        | [<AltCommandLine "-m">]           ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
         | [<AltCommandLine "-o">]           Timeout of float
@@ -438,21 +434,17 @@ module Args =
                 | Kafka _ ->                "Kafka Sink parameters."
 //#endif
     and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
-        member val Mode =                   a.GetResult(CosmosParameters.ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member val Connection =             a.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.Cosmos.Discovery.FromConnectionString
-        member val Database =               a.TryGetResult CosmosParameters.Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =              a.TryGetResult CosmosParameters.Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member val Timeout =                a.GetResult(CosmosParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        member val Retries =                a.GetResult(CosmosParameters.Retries, 1)
-        member val MaxRetryWaitTime =       a.GetResult(CosmosParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        member x.BuildConnectionDetails() =
-            let Equinox.Cosmos.Discovery.UriAndKey (endpointUri, _) as discovery = x.Connection
-            Log.Information("CosmosDb {mode} {endpointUri} Database {database} Container {container}",
-                x.Mode, endpointUri, x.Database, x.Container)
-            Log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-            let connector = Equinox.Cosmos.Connector(x.Timeout, x.Retries, x.MaxRetryWaitTime, Log.Logger, mode=x.Mode)
-            connector, discovery, x.Database, x.Container
+        let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          a.TryGetResult ConnectionMode
+        let timeout =                       a.GetResult(Timeout, 30.) |> TimeSpan.FromSeconds
+        let retries =                       a.GetResult(Retries, 9)
+        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
+        member val DatabaseId =             a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val ContainerId =            a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member x.Connect() =                connector.ConnectStore("Main", x.DatabaseId, x.ContainerId)
+        member x.ConnectLeases() =          connector.CreateUninitialized(x.DatabaseId, x.ContainerId)
+        member x.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(x.DatabaseId, x.ContainerId)
 //#if kafka
         member val Sink =
             match a.TryGetSubCommand() with
@@ -487,15 +479,17 @@ let [<Literal>] AppName = "ReactorTemplate"
 //#if (!changeFeedOnly)
 module Checkpoints =
 
+    open Equinox.CosmosStore
+
     // In this implementation, we keep the checkpoints in Cosmos when consuming from EventStore
     module Cosmos =
 
         let codec = FsCodec.NewtonsoftJson.Codec.Create<Checkpoint.Events.Event>()
-        let access = Equinox.Cosmos.AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
+        let access = AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
         let create groupName (context, cache) =
-            let caching = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let resolver = Equinox.Cosmos.Resolver(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
-            let resolve streamName = resolver.Resolve(streamName, Equinox.AllowStale)
+            let caching = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
+            let resolve streamName = cat.Resolve(streamName, Equinox.AllowStale)
             Checkpoint.CheckpointSeries(groupName, resolve)
 
 //#endif
@@ -506,24 +500,14 @@ module EventStoreContext =
         Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
 
 //#endif
-#if !(kafkaEventSpans && blank)
-module CosmosContext =
-
-    let create (connector : Equinox.Cosmos.Connector) discovery (database, container) =
-        let connection = connector.Connect(AppName, discovery) |> Async.RunSynchronously
-        Equinox.Cosmos.Context(connection, database, container)
-
-#endif
 let build (args : Args.Arguments) =
 #if (!kafkaEventSpans)
 //#if (!changeFeedOnly)
     match args.SourceParams() with
-    | Choice1Of2 (srcE, cosmos, spec) ->
+    | Choice1Of2 (srcE, context, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
         let connectProjEs () = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.PreferSlave)
-        let connector, discovery, database, container = cosmos.BuildConnectionDetails()
 
-        let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb=10)
 
         let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
@@ -573,22 +557,12 @@ let build (args : Args.Arguments) =
                 Log.Logger, sink, checkpoints, connectProjEs, spec, Handler.tryMapEvent filterByStreamName,
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
-    | Choice2Of2 (source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency)) ->
+    | Choice2Of2 (context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
 //#endif // changeFeedOnly
 #if changeFeedOnly
-        let source, (aux, leaseId, startFromTail, maxDocuments, lagFrequency) = args.SourceParams()
+        let context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
 #endif
-        let monitoredConnector, monitoredDiscovery, monitored = source.MonitoringParams()
-//#if (!(kafka && blank))
-        let cosmos = source.Cosmos
-        let connector, discovery, database, container = cosmos.BuildConnectionDetails()
-//#endif
 #else // !kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
-        let source = args.Source
-//#if (!(kafka && blank))
-        let cosmos = source.Cosmos
-        let connector, discovery, database, container = cosmos.BuildConnectionDetails()
-//#endif
         let consumerConfig =
             FsKafka.KafkaConsumerConfig.Create(
                 AppName, source.Broker, [source.Topic], args.ConsumerGroupName, Confluent.Kafka.AutoOffsetReset.Earliest,
@@ -607,7 +581,6 @@ let build (args : Args.Arguments) =
 #if blank
         let handle = Handler.handle produceSummary
 #else
-        let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb=10)
         let service = Todo.Cosmos.create (context, cache)
         let handle = Handler.handle service produceSummary
@@ -618,7 +591,6 @@ let build (args : Args.Arguments) =
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
         let handle = Ingester.handle
 #else // blank -> no specific Ingester source/destination wire-up
-        let context = CosmosContext.create connector discovery (database, container)
         let cache = Equinox.Cache(AppName, sizeMb=10)
         let srcService = Todo.Cosmos.create (context, cache)
         let dstService = TodoSummary.Cosmos.create (context, cache)
@@ -649,18 +621,16 @@ let build (args : Args.Arguments) =
         let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
 #endif
 
-        let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<_> seq =
+        let mapToStreamItems docs : Propulsion.Streams.StreamEvent<_> seq =
             // TODO: customize parsing to events if source is not an Equinox Container
             docs
-            |> Seq.collect EquinoxCosmosParser.enumStreamEvents
+            |> Seq.collect Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents
 #if filter
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
         let pipeline =
-            let createObserver ctx = CosmosSource.CreateObserver(Log.Logger, ctx, sink.StartIngester, mapToStreamItems)
-            CosmosSource.Run(Log.Logger, monitoredConnector.CreateClient(AppName, monitoredDiscovery), monitored, aux,
-                leaseId, startFromTail, createObserver,
-                ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
+            use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
+            Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
         sink, pipeline
 #endif // !kafkaEventSpans
 

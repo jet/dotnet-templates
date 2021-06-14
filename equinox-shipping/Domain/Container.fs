@@ -30,22 +30,22 @@ module Fold =
 let interpretFinalize shipmentIds (state : Fold.State): Events.Event list =
     [ if Array.isEmpty state.shipmentIds then yield Events.Finalized {| shipmentIds = shipmentIds |} ]
 
-type Service internal (resolve : ContainerId -> Equinox.Stream<Events.Event, Fold.State>) =
+type Service internal (resolve : ContainerId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.Finalize(containerId, shipmentIds) : Async<unit> =
         let decider = resolve containerId
         decider.Transact(interpretFinalize shipmentIds)
 
 let create resolveStream =
-    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolveStream (streamName id), maxAttempts=3)
+    let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 
 module Cosmos =
 
-    open Equinox.Cosmos
+    open Equinox.CosmosStore
 
     let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
     let create (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        let resolver = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
         create resolver.Resolve

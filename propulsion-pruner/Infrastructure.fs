@@ -66,71 +66,27 @@ type Logging() =
                 |> ignore
             c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
 
-open Equinox.CosmosStore
-open Microsoft.Azure.Cosmos
+type Equinox.CosmosStore.CosmosStoreConnector with
 
-type OAttribute = System.Runtime.InteropServices.OptionalAttribute
-type DAttribute = System.Runtime.InteropServices.DefaultParameterValueAttribute
-
-/// Manages establishing a CosmosClient, which is used by CosmosStoreClient to read from the underlying Cosmos DB Container.
-type CosmosStoreConnector
-    (   /// CosmosDB endpoint/credentials specification.
-        discovery : Discovery,
-        /// Timeout to apply to individual reads/write round-trips going to CosmosDB. CosmosDB Default: 1m.
-        requestTimeout: TimeSpan,
-        /// Maximum number of times to attempt when failure reason is a 429 from CosmosDB, signifying RU limits have been breached. CosmosDB default: 9
-        maxRetryAttemptsOnRateLimitedRequests: int,
-        /// Maximum number of seconds to wait (especially if a higher wait delay is suggested by CosmosDB in the 429 response). CosmosDB default: 30s
-        maxRetryWaitTimeOnRateLimitedRequests: TimeSpan,
-        /// Connection mode (default: ConnectionMode.Direct (best performance, same as Microsoft.Azure.Cosmos SDK default)
-        /// NOTE: default for Equinox.Cosmos.Connector (i.e. V2) was Gateway (worst performance, least trouble, Microsoft.Azure.DocumentDb SDK default)
-        [<O; D(null)>]?mode : ConnectionMode,
-        /// Connection limit for Gateway Mode. CosmosDB default: 50
-        [<O; D(null)>]?gatewayModeMaxConnectionLimit,
-        /// consistency mode (default: ConsistencyLevel.Session)
-        [<O; D(null)>]?defaultConsistencyLevel : ConsistencyLevel,
-        /// Inhibits certificate verification when set to <c>true</c>, i.e. for working with the CosmosDB Emulator (default <c>false</c>)
-        [<O; D(null)>]?bypassCertificateValidation : bool) =
-
-    let factory =
-        CosmosClientFactory
-          ( requestTimeout, maxRetryAttemptsOnRateLimitedRequests, maxRetryWaitTimeOnRateLimitedRequests,
-            ?gatewayModeMaxConnectionLimit = gatewayModeMaxConnectionLimit, ?mode = mode, ?defaultConsistencyLevel = defaultConsistencyLevel,
-            ?bypassCertificateValidation = bypassCertificateValidation)
-
-    /// The <c>CosmosClientOptions</c> used when connecting to CosmosDB
-    member _.Options = factory.Options
-
-    /// The Endpoint Uri for the target CosmosDB
-    member _.Endpoint = discovery.Endpoint
-
-    /// Creates an instance of CosmosClient without actually validating or establishing the connection
-    /// It's recommended to use <c>Connect()</c> and/or <c>CosmosStoreClient.Connect()</c> in preference to this API
-    ///   in order to avoid latency spikes, and/or deferring discovery of connectivity or permission issues.
-    member _.CreateUninitialized() = factory.CreateUninitialized(discovery)
-
-    /// Creates and validates a Client [including loading metadata](https://devblogs.microsoft.com/cosmosdb/improve-net-sdk-initialization) for the specified containers
-    member _.Connect(containers) = factory.CreateAndInitialize(discovery, containers)
-
-//type Equinox.CosmosStore.CosmosStoreConnector with
-
-    member x.LogConfiguration(log : ILogger, connectionName, database, container) =
+    member private x.LogConfiguration(connectionName, databaseId, containerId) =
         let o = x.Options
-        let timeout, timeout429, retries429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
-        log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, timeout429)
-        log.Information("CosmosDb {name} Database {database} Container {container}",
-                        connectionName, database, container)
+        let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
+        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+        Log.Information("CosmosDb {name} Database {database} Container {container}",
+                        connectionName, databaseId, containerId)
 
-    /// Prefer <c>Connect</c> in order to optimize first request latency
+    /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
     member x.CreateUninitialized(databaseId, containerId) =
         x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
     
-    member x.Connect(connectionName, databaseId, containerId) =
-        x.LogConfiguration(Log.Logger, connectionName, databaseId, containerId)
-        Equinox.CosmosStore.CosmosStoreClient.Connect(x.Connect, databaseId, containerId)
+    /// Connect a CosmosStoreClient, including warming up
+    member x.ConnectStore(connectionName, databaseId, containerId) =
+        x.LogConfiguration(connectionName, databaseId, containerId)
+        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
         
-    member x.ConnectMonitor(databaseId, containerId) =
-        x.LogConfiguration(Log.Logger, "Source", databaseId, containerId)
+    /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
+    member x.ConnectMonitored(databaseId, containerId) =
+        x.LogConfiguration("Source", databaseId, containerId)
         x.CreateUninitialized(databaseId, containerId)
 

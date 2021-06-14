@@ -13,12 +13,12 @@ type Configuration(tryGet) =
         | Some value -> value
         | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
 
-    member _.EquinoxCosmosConnection        = get "EQUINOX_COSMOS_CONNECTION"
-    member _.EquinoxCosmosDatabase          = get "EQUINOX_COSMOS_DATABASE"
-    member _.EquinoxCosmosContainer         = get "EQUINOX_COSMOS_CONTAINER"
+    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
+    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
+    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
 
-    member _.BaseUri                        = get "API_BASE_URI"
-    member _.Group                          = get "API_CONSUMER_GROUP"
+    member _.BaseUri =                      get "API_BASE_URI"
+    member _.Group =                        get "API_CONSUMER_GROUP"
 
 module Args =
 
@@ -77,25 +77,15 @@ module Args =
                 | Retries _ ->              "specify operation retries (default: 9)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 30)"
     and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
-        member val Mode =                   a.GetResult(ConnectionMode, Microsoft.Azure.Cosmos.ConnectionMode.Direct)
-        member val Connection =             a.TryGetResult Connection |> Option.defaultWith (fun () -> c.EquinoxCosmosConnection) |> Discovery.ConnectionString
-
-        member val Timeout =                a.GetResult(Timeout, 30.) |> TimeSpan.FromSeconds
-        member val Retries =                a.GetResult(Retries, 9)
-        member val MaxRetryWaitTime =       a.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
-
-        member x.CreateConnector() =
-            let discovery = x.Connection
-            Log.Information("CosmosDb {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                x.Mode, discovery.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries, (let t = x.MaxRetryWaitTime in t.TotalSeconds))
-            CosmosClientFactory(x.Timeout, x.Retries, x.MaxRetryWaitTime, mode=x.Mode)
-                .Connect(discovery)
-
-        member val Database =               a.TryGetResult Database   |> Option.defaultWith (fun () -> c.EquinoxCosmosDatabase)
-        member val Container =              a.TryGetResult Container  |> Option.defaultWith (fun () -> c.EquinoxCosmosContainer)
-        member x.Connect(connector) =
-            Log.Information("CosmosDb Database {database} Container {container}", x.Database, x.Container)
-            CosmosStoreClient.Connect(connector, x.Database, x.Container)
+        let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          a.TryGetResult ConnectionMode
+        let timeout =                       a.GetResult(Timeout, 30.) |> TimeSpan.FromSeconds
+        let retries =                       a.GetResult(Retries, 9)
+        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
+        let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member _.Connect() =                connector.ConnectStore("Main", database, container)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv =
@@ -114,9 +104,7 @@ module CosmosStoreContext =
 
 let build (args : Args.Arguments) =
     let cache = Equinox.Cache (AppName, sizeMb = 10)
-    let target = args.Cosmos
-    let connector = target.CreateConnector()
-    let context = target.Connect(connector) |> Async.RunSynchronously |> CosmosStoreContext.create
+    let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 
     let sink =
         let handle = Ingester.handle args.TicketsDop

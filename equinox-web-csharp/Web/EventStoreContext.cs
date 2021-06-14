@@ -29,7 +29,7 @@ namespace TodoBackendTemplate
     {
         readonly Cache _cache;
 
-        Context _connection;
+        Equinox.EventStore.EventStoreContext _connection;
         readonly Func<Task> _connect;
 
         public EventStoreContext(EventStoreConfig config)
@@ -40,7 +40,7 @@ namespace TodoBackendTemplate
 
         internal override async Task Connect() => await _connect();
 
-        static async Task<Context> Connect(EventStoreConfig config)
+        static async Task<Equinox.EventStore.EventStoreContext> Connect(EventStoreConfig config)
         {
             var log = Logger.NewSerilogNormal(Serilog.Log.ForContext<EventStoreContext>());
             var c = new Connector(config.Username, config.Password, reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
@@ -48,7 +48,7 @@ namespace TodoBackendTemplate
             var conn = await FSharpAsync.StartAsTask(
                 c.Establish("Twin", Discovery.NewGossipDns(config.Host), ConnectionStrategy.ClusterTwinPreferSlaveReads),
                 null, null);
-            return new Context(conn, new BatchingPolicy(maxBatchSize: 500));
+            return new Equinox.EventStore.EventStoreContext(conn, new BatchingPolicy(maxBatchSize: 500));
         }
 
         public override Func<string, IStream<TEvent, TState>> Resolve<TEvent, TState>(
@@ -65,9 +65,9 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new Resolver<TEvent, TState, object>(_connection, codec, FuncConvert.FromFunc(fold),
+            var cat = new EventStoreCategory<TEvent, TState, object>(_connection, codec, FuncConvert.FromFunc(fold),
                 initial, cacheStrategy, accessStrategy);
-            return t => resolver.Resolve(t);
+            return t => cat.Resolve(t);
         }
     }
 }

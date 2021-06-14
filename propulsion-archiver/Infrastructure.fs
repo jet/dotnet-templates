@@ -72,3 +72,28 @@ type Logging() =
                     l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t) |> ignore)
                 |> ignore
             c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
+
+type Equinox.CosmosStore.CosmosStoreConnector with
+
+    member private x.LogConfiguration(connectionName, databaseId, containerId) =
+        let o = x.Options
+        let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
+        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+        Log.Information("CosmosDb {name} Database {database} Container {container}",
+                        connectionName, databaseId, containerId)
+
+    /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
+    member x.CreateUninitialized(databaseId, containerId) =
+        x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
+    
+    /// Connect a CosmosStoreClient, including warming up
+    member x.ConnectStore(connectionName, databaseId, containerId) =
+        x.LogConfiguration(connectionName, databaseId, containerId)
+        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
+        
+    /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
+    member x.ConnectMonitored(databaseId, containerId) =
+        x.LogConfiguration("Source", databaseId, containerId)
+        x.CreateUninitialized(databaseId, containerId)
+
