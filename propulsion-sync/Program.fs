@@ -460,7 +460,7 @@ let transformV0 catFilter v0SchemaDocument : Propulsion.Streams.StreamEvent<_> s
         yield parsed }
 //#else
 let transformOrFilter catFilter changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for { stream = FsCodec.StreamName.CategoryAndId (cat, _) } as e in Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents changeFeedDocument do
+    for { stream = FsCodec.StreamName.CategoryAndId (cat, _) } as e in Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter cat then
             yield e }

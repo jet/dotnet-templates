@@ -3,7 +3,6 @@ using Equinox.CosmosStore;
 using Microsoft.Azure.Cosmos;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -12,8 +11,7 @@ namespace TodoBackendTemplate
 {
     public class CosmosConfig
     {
-        public CosmosConfig(ConnectionMode mode, string connectionStringWithUriAndKey, string database,
-            string container, int cacheMb)
+        public CosmosConfig(ConnectionMode mode, string connectionStringWithUriAndKey, string database, string container, int cacheMb)
         {
             Mode = mode;
             ConnectionStringWithUriAndKey = connectionStringWithUriAndKey;

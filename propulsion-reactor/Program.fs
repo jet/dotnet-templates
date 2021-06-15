@@ -624,7 +624,7 @@ let build (args : Args.Arguments) =
         let mapToStreamItems docs : Propulsion.Streams.StreamEvent<_> seq =
             // TODO: customize parsing to events if source is not an Equinox Container
             docs
-            |> Seq.collect Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents
+            |> Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents
 #if filter
             |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif

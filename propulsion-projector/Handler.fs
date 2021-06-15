@@ -32,7 +32,7 @@ let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsio
 
 let mapToStreamItems docs : Propulsion.Streams.StreamEvent<_> seq =
     docs
-    |> Seq.collect Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents
+    |> Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
     // |> Seq.map hackDropBigBodies
 #endif // cosmos && !parallelOnly && synthesizeSequence

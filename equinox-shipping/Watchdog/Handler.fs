@@ -31,7 +31,7 @@ let isRelevant = function
     | _ -> false
 
 let transformOrFilter changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for batch in Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents changeFeedDocument do
+    for batch in Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents changeFeedDocument do
         if isRelevant batch.stream then
             yield batch
 }
