@@ -131,7 +131,7 @@ module Args =
                 Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                     x.ConsumerGroupName, leases.Database.Id, leases.Id, srcC.MaxDocuments)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-                srcC.LagFrequency |> Option.iter<TimeSpan> (fun s -> Log.Information("Dumping lag stats at {lagS:n0}s intervals", s.TotalSeconds))
+                srcC.LagFrequency |> Option.iter<TimeSpan> (fun i -> Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", i.TotalSeconds))
                 let monitored = srcC.MonitoredContainer()
                 Choice1Of2 (monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
             | Choice2Of2 srcE ->
