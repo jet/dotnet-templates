@@ -11,7 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 ### Changed
 
-- Target `Propulsion` v `2.10.0`, `Equinox` v `3.0.0`
+- Target `Propulsion` v `2.11.0-rc1`, `Equinox` v `3.0.1`
 
 ### Removed
 ### Fixed

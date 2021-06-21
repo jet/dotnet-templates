@@ -140,10 +140,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "feedConsumer", "feedConsume
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FeedConsumer", "feed-consumer\FeedConsumer.fsproj", "{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion.CosmosStore", "..\propulsion\src\Propulsion.CosmosStore\Propulsion.CosmosStore.fsproj", "{CCA3CCBE-3886-44C8-A0DC-AD9FB5F98423}"
-EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Propulsion", "..\propulsion\src\Propulsion\Propulsion.fsproj", "{19D7BF89-C65E-4C07-B793-C8536FE68CA4}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -246,14 +242,6 @@ Global
 		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Release|Any CPU.Build.0 = Release|Any CPU
-		{CCA3CCBE-3886-44C8-A0DC-AD9FB5F98423}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{CCA3CCBE-3886-44C8-A0DC-AD9FB5F98423}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{CCA3CCBE-3886-44C8-A0DC-AD9FB5F98423}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CCA3CCBE-3886-44C8-A0DC-AD9FB5F98423}.Release|Any CPU.Build.0 = Release|Any CPU
-		{19D7BF89-C65E-4C07-B793-C8536FE68CA4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{19D7BF89-C65E-4C07-B793-C8536FE68CA4}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{19D7BF89-C65E-4C07-B793-C8536FE68CA4}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{19D7BF89-C65E-4C07-B793-C8536FE68CA4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
