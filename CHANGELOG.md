@@ -10,12 +10,16 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+### Removed
+### Fixed
+
+<a name="5.0.0"></a>
+## [5.0.0] - 2021-06-22
+
+### Changed
 
 - Target `Propulsion` v `2.11.0-rc2`, `Equinox` v `3.0.1` [#91](https://github.com/jet/dotnet-templates/pull/91)
 - Target `Destructurama.FSharp` v `1.1.1-dev-00035`
-
-### Removed
-### Fixed
 
 <a name="4.12.0"></a>
 ## [4.12.0] - 2021-06-02
@@ -502,7 +506,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/4.12.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.0.0...HEAD
+[5.0.0]: https://github.com/jet/dotnet-templates/compare/4.12.0...5.0.0
 [4.12.0]: https://github.com/jet/dotnet-templates/compare/4.11.0...4.12.0
 [4.11.0]: https://github.com/jet/dotnet-templates/compare/4.10.0...4.11.0
 [4.10.0]: https://github.com/jet/dotnet-templates/compare/4.9.0...4.10.0
