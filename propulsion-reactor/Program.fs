@@ -574,7 +574,7 @@ let build (args : Args.Arguments) =
 #if (blank && !multiSource)
         let broker, topic = source.Sink.BuildTargetParams()
 #else
-        let broker, topic = source.Cosmos.Sink.BuildTargetParams()
+        let broker, topic = source.Sink.BuildTargetParams()
 #endif
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
