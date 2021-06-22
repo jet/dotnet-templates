@@ -159,7 +159,7 @@ module Args =
                 let storeClient, monitored = srcC.ConnectStoreAndMonitored()
                 let context = CosmosStoreContext.create storeClient
 #if changeFeedOnly
-                (context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+                (srcC, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #else
                 Choice2Of2 (srcC, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #endif
@@ -558,13 +558,13 @@ let build (args : Args.Arguments) =
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
     | Choice2Of2 (source, context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
-//#endif // changeFeedOnly
+//#endif // !changeFeedOnly
 #if changeFeedOnly
-        let source = args.Source
-        let context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
+        let source, context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
 #endif
 #else // kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
         let source = args.Source
+        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let consumerConfig =
             FsKafka.KafkaConsumerConfig.Create(
                 AppName, source.Broker, [source.Topic], args.ConsumerGroupName, Confluent.Kafka.AutoOffsetReset.Earliest,
