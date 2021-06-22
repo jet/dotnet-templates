@@ -27,6 +27,7 @@ module CosmosStoreContext =
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 #endif
 #endif
+//#if (cosmos || esdb)
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =
@@ -57,6 +58,7 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
         storeClient, monitored
 
+//#endif
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
