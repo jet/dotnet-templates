@@ -9,11 +9,12 @@ type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
     static member Configure(c : LoggerConfiguration, appName) =
+        let customTags = ["app",appName]
         c
             .MinimumLevel.Debug()
             .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
 #if cosmos
-            .WriteTo.Sink(Equinox.Cosmos.Prometheus.LogSink(appName))
+            .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
 #endif
             .Enrich.FromLogContext()
             .WriteTo.Console()
