@@ -8,11 +8,18 @@ let mapToStreamItems (x : System.Collections.Generic.IReadOnlyList<'a>) : seq<'a
 #if    synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
 let indices = Propulsion.Kafka.StreamNameSequenceGenerator()
 
-let parseDocumentAsEvent (doc : Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<byte[]> =
-    let docId = doc.Id
+// TODO replace with EquinoxNewtonsoftParser
+module CosmosItemParser =
+
+    let timestamp (doc : Newtonsoft.Json.Linq.JObject) =
+        let unixEpoch = System.DateTime.UnixEpoch
+        unixEpoch.AddSeconds(doc.Value<double>("_ts"))
+
+let parseDocumentAsEvent (doc : Newtonsoft.Json.Linq.JObject) : Propulsion.Streams.StreamEvent<byte[]> =
+    let docId = doc.Value<string>("id")
     //let streamName = Propulsion.Streams.StreamName.internalParseSafe docId // if we're not sure there is a `-` in the id, this helper adds one
     let streamName = FsCodec.StreamName.parse docId // throws if there's no `-` in the id
-    let ts = let raw = doc.Timestamp in raw.ToUniversalTime() |> System.DateTimeOffset
+    let ts = let raw = CosmosItemParser.timestamp doc in raw.ToUniversalTime() |> System.DateTimeOffset
     let docType = "DocumentTypeA" // each Event requires an EventType - enables the handler to route without having to parse the Data first
     let data = string doc |> System.Text.Encoding.UTF8.GetBytes
     // Ideally, we'd extract a monotonically incrementing index/version from the source and use that
@@ -20,7 +27,7 @@ let parseDocumentAsEvent (doc : Microsoft.Azure.Documents.Document) : Propulsion
     let streamIndex = indices.GenerateIndex streamName
     { stream = streamName; event = FsCodec.Core.TimelineEvent.Create(streamIndex, docType, data, timestamp=ts) }
 
-let mapToStreamItems (docs : Microsoft.Azure.Documents.Document seq) : Propulsion.Streams.StreamEvent<byte[]> seq =
+let mapToStreamItems docs : Propulsion.Streams.StreamEvent<byte[]> seq =
     docs |> Seq.map parseDocumentAsEvent
 #else // cosmos && !parallelOnly && synthesizeSequence
 //let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
@@ -51,11 +58,11 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
 
 #if kafka
 #if     (cosmos && parallelOnly) // kafka && cosmos && parallelOnly
-type ExampleOutput = { Id : string }
+type ExampleOutput = { id : string }
 
-let render (doc : Microsoft.Azure.Documents.Document) : string * string =
-    let equinoxPartition, documentId = doc.GetPropertyValue "p", doc.Id
-    equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { Id = documentId }
+let render (doc : Newtonsoft.Json.Linq.JObject) : string * string =
+    let equinoxPartition, itemId = doc.Value<string>("p"), doc.Value<string>("id")
+    equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { id = itemId }
 #else // kafka && !(cosmos && parallelOnly)
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
 // The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls
