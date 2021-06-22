@@ -592,7 +592,8 @@ let build (args : Args.Arguments) =
 #if blank
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
         let handle = Ingester.handle
-#else // blank -> no specific Ingester source/destination wire-up
+#else // !blank -> no specific Ingester source/destination wire-up
+        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let cache = Equinox.Cache(AppName, sizeMb=10)
         let srcService = Todo.Cosmos.create (context, cache)
         let dstService = TodoSummary.Cosmos.create (context, cache)
