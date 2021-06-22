@@ -563,7 +563,7 @@ let build (args : Args.Arguments) =
         let source = args.Source
         let context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
 #endif
-#else // !kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
+#else // kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
         let source = args.Source
         let consumerConfig =
             FsKafka.KafkaConsumerConfig.Create(
@@ -574,8 +574,10 @@ let build (args : Args.Arguments) =
 #if kafka
 #if (blank && !multiSource)
         let broker, topic = source.Sink.BuildTargetParams()
+        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 #else
         let broker, topic = source.Cosmos.Sink.BuildTargetParams()
+        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 #endif
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
