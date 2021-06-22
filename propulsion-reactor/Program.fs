@@ -256,7 +256,6 @@ module Args =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         member val DatabaseId =             a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val ContainerId =            a.GetResult CosmosSourceParameters.Container
-        //member x.MonitoredContainer() =     connector.ConnectMonitored(x.DatabaseId, x.ContainerId)
         
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
@@ -443,8 +442,6 @@ module Args =
         member val DatabaseId =             a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val ContainerId =            a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member x.Connect() =                connector.ConnectStore("Main", x.DatabaseId, x.ContainerId)
-        member x.ConnectLeases() =          connector.CreateUninitialized(x.DatabaseId, x.ContainerId)
-        member x.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(x.DatabaseId, x.ContainerId)
 //#if kafka
         member val Sink =
             match a.TryGetSubCommand() with
@@ -570,12 +567,24 @@ let build (args : Args.Arguments) =
                 maxInFlightBytes = source.MaxInFlightBytes, ?statisticsInterval = source.LagFrequency)
 #endif // kafkaEventSpans
 
-#if kafka
+#if (!kafka)
+#if (!blank) //!kafka && !blank -> wire up a cosmos context to an ingester
+        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+        let cache = Equinox.Cache(AppName, sizeMb=10)
+        let srcService = Todo.Cosmos.create (context, cache)
+        let dstService = TodoSummary.Cosmos.create (context, cache)
+        let handle = Ingester.handle srcService dstService
+#else // !kafka && blank -> no specific Ingester source/destination wire-up
+        // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
+        let handle = Ingester.handle
+#endif // !kafka && blank
+        let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
+#else // kafka
 #if (blank && !multiSource)
         let broker, topic = source.Sink.BuildTargetParams()
 #else
-        let broker, topic = source.Cosmos.Sink.BuildTargetParams()
         let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+        let broker, topic = source.Cosmos.Sink.BuildTargetParams()
 #endif
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
@@ -588,18 +597,6 @@ let build (args : Args.Arguments) =
         let handle = Handler.handle service produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
-#else // !kafka -> Ingester only
-#if blank
-        // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
-        let handle = Ingester.handle
-#else // !blank -> no specific Ingester source/destination wire-up
-        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let cache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Cosmos.create (context, cache)
-        let dstService = TodoSummary.Cosmos.create (context, cache)
-        let handle = Ingester.handle srcService dstService
-#endif // blank
-        let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
 #endif // kafka
 #if filter
         let filterByStreamName = args.FilterFunction()
