@@ -36,13 +36,13 @@
         <!--#if (kafkaEventSpans) -->
         <PackageReference Include="Equinox.CosmosStore" Version="3.0.1" />
         <!--#else-->
-		<PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc1" />
+		<PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc2" />
 		<!--#endif-->
         <!--#if (multiSource) -->
-        <PackageReference Include="Propulsion.EventStore" Version="2.11.0-rc1" />
+        <PackageReference Include="Propulsion.EventStore" Version="2.11.0-rc2" />
         <!--#endif-->
         <!--#if (kafka || kafkaEventSpans) -->
-        <PackageReference Include="Propulsion.Kafka" Version="2.11.0-rc1" />
+        <PackageReference Include="Propulsion.Kafka" Version="2.11.0-rc2" />
         <!--#endif-->
         <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
     </ItemGroup>

@@ -11,7 +11,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 ### Changed
 
-- Target `Propulsion` v `2.11.0-rc1`, `Equinox` v `3.0.1`
+- Target `Propulsion` v `2.11.0-rc2`, `Equinox` v `3.0.1` [#91](https://github.com/jet/dotnet-templates/pull/91)
+- Target `Destructurama.FSharp` v `1.1.1-dev-00035`
 
 ### Removed
 ### Fixed

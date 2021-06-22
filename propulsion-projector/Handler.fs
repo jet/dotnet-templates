@@ -8,18 +8,11 @@ let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : 
 #if    synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
 let indices = Propulsion.Kafka.StreamNameSequenceGenerator()
 
-// TODO replace with EquinoxNewtonsoftParser.timestamp
-module CosmosItemParser =
-
-    let timestamp (doc : Newtonsoft.Json.Linq.JObject) =
-        let unixEpoch = System.DateTime.UnixEpoch
-        unixEpoch.AddSeconds(doc.Value<double>("_ts"))
-
 let parseDocumentAsEvent (doc : Newtonsoft.Json.Linq.JObject) : Propulsion.Streams.StreamEvent<byte[]> =
     let docId = doc.Value<string>("id")
     //let streamName = Propulsion.Streams.StreamName.internalParseSafe docId // if we're not sure there is a `-` in the id, this helper adds one
     let streamName = FsCodec.StreamName.parse docId // throws if there's no `-` in the id
-    let ts = let raw = CosmosItemParser.timestamp doc in raw.ToUniversalTime() |> System.DateTimeOffset
+    let ts = let raw = Propulsion.CosmosStore.EquinoxNewtonsoftParser.timestamp doc in raw.ToUniversalTime() |> System.DateTimeOffset
     let docType = "DocumentTypeA" // each Event requires an EventType - enables the handler to route without having to parse the Data first
     let data = string doc |> System.Text.Encoding.UTF8.GetBytes
     // Ideally, we'd extract a monotonically incrementing index/version from the source and use that
