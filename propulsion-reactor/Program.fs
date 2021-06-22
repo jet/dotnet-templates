@@ -150,7 +150,7 @@ module Args =
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = 0 })
             | Choice2Of2 srcC ->
 //#endif // !changeFeedOnly
-                let leases, cosmos = srcC.ConnectLeases(), srcC.Cosmos
+                let leases = srcC.ConnectLeases()
                 Log.Information("Reacting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentStreams, x.MaxReadAhead)
                 Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                     x.ConsumerGroupName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxDocuments)
@@ -161,7 +161,7 @@ module Args =
 #if changeFeedOnly
                 (context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #else
-                Choice2Of2 (cosmos, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+                Choice2Of2 (srcC, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #endif
 //#endif // kafkaEventSpans
 #if kafkaEventSpans
