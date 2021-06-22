@@ -530,7 +530,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
     match args.SourceParams() with
     | Choice1Of2 (monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
 #if marveleqx
-        use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformV0 streamFilter)
+        use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformV0 streamFilter))
 #else
         use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
 #endif
