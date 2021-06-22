@@ -196,7 +196,7 @@ module Args =
         member val MaxInFlightBytes =       a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map System.TimeSpan.FromMinutes
         member x.BuildSourceParams() =      x.Broker, x.Topic
-#if (kafka)
+#if (kafka && blank)
         member val Sink =
             match a.TryGetSubCommand() with
             | Some (KafkaSourceParameters.Kafka kafka) -> KafkaSinkArguments (c, kafka)
@@ -575,7 +575,7 @@ let build (args : Args.Arguments) =
 #if (blank && !multiSource)
         let broker, topic = source.Sink.BuildTargetParams()
 #else
-        let broker, topic = source.Sink.BuildTargetParams()
+        let broker, topic = source.Cosmos.Sink.BuildTargetParams()
 #endif
         let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
         let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
