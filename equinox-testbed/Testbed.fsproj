@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
-    <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00033" />
+    <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00035" />
     <PackageReference Include="Equinox.CosmosStore" Version="3.0.1" />
     <PackageReference Include="Equinox.EventStore" Version="3.0.1" />
     <PackageReference Include="Equinox.MemoryStore" Version="3.0.1" />
