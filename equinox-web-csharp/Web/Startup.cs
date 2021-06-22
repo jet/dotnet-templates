@@ -99,7 +99,7 @@ namespace TodoBackendTemplate.Web
             if (conn == null || db == null || container == null)
                 throw new Exception(
                     $"Event Storage subsystem requires the following Environment Variables to be specified: {connVar} {dbVar}, {containerVar}");
-            var connMode = Equinox.Cosmos.ConnectionMode.Direct;
+            var connMode = Microsoft.Azure.Cosmos.ConnectionMode.Direct;
             var config = new CosmosConfig(connMode, conn, db, container, cacheMb);
             return new CosmosContext(config);
 #endif

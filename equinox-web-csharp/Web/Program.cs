@@ -15,7 +15,7 @@ namespace TodoBackendTemplate.Web
                 .MinimumLevel.Debug()
                 .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
 #if cosmos
-                .WriteTo.Sink(new Equinox.Cosmos.Prometheus.LogSink(appName))
+                .WriteTo.Sink(new Equinox.CosmosStore.Prometheus.LogSink(appName))
 #endif
                 .Enrich.FromLogContext()
                 .WriteTo.Console();

@@ -150,7 +150,7 @@ module Args =
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = 0 })
             | Choice2Of2 srcC ->
 //#endif // !changeFeedOnly
-                let leases = srcC.ConnectLeases()
+                let leases, cosmos = srcC.ConnectLeases(), srcC.Cosmos
                 Log.Information("Reacting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentStreams, x.MaxReadAhead)
                 Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                     x.ConsumerGroupName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxDocuments)
@@ -161,7 +161,7 @@ module Args =
 #if changeFeedOnly
                 (context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #else
-                Choice2Of2 (context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+                Choice2Of2 (cosmos, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #endif
 //#endif // kafkaEventSpans
 #if kafkaEventSpans
@@ -503,7 +503,6 @@ module EventStoreContext =
 let build (args : Args.Arguments) =
 #if (!kafkaEventSpans)
 //#if (!changeFeedOnly)
-    let source = args.Source
     match args.SourceParams() with
     | Choice1Of2 (srcE, context, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
@@ -558,7 +557,7 @@ let build (args : Args.Arguments) =
                 Log.Logger, sink, checkpoints, connectProjEs, spec, Handler.tryMapEvent filterByStreamName,
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
-    | Choice2Of2 (context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
+    | Choice2Of2 (source, context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
 //#endif // changeFeedOnly
 #if changeFeedOnly
         let source = args.Source
