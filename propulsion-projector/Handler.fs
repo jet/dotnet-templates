@@ -8,7 +8,7 @@ let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : 
 #if    synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
 let indices = Propulsion.Kafka.StreamNameSequenceGenerator()
 
-// TODO replace with EquinoxNewtonsoftParser
+// TODO replace with EquinoxNewtonsoftParser.timestamp
 module CosmosItemParser =
 
     let timestamp (doc : Newtonsoft.Json.Linq.JObject) =

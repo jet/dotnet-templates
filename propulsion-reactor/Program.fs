@@ -564,6 +564,7 @@ let build (args : Args.Arguments) =
         let context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
 #endif
 #else // !kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
+        let source = args.Source
         let consumerConfig =
             FsKafka.KafkaConsumerConfig.Create(
                 AppName, source.Broker, [source.Topic], args.ConsumerGroupName, Confluent.Kafka.AutoOffsetReset.Earliest,
