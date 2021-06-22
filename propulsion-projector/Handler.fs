@@ -3,7 +3,7 @@ module ProjectorTemplate.Handler
 //#if cosmos
 #if     parallelOnly
 // Here we pass the items directly through to the handler without parsing them
-let mapToStreamItems (x : System.Collections.Generic.IReadOnlyList<'a>) : seq<'a> = upcast x
+let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : seq<'a> = upcast x
 #else // cosmos && !parallelOnly
 #if    synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
 let indices = Propulsion.Kafka.StreamNameSequenceGenerator()
