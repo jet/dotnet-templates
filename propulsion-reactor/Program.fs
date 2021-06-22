@@ -503,6 +503,7 @@ module EventStoreContext =
 let build (args : Args.Arguments) =
 #if (!kafkaEventSpans)
 //#if (!changeFeedOnly)
+    let source = args.Source
     match args.SourceParams() with
     | Choice1Of2 (srcE, context, spec) ->
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
@@ -560,6 +561,7 @@ let build (args : Args.Arguments) =
     | Choice2Of2 (context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
 //#endif // changeFeedOnly
 #if changeFeedOnly
+        let source = args.Source
         let context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
 #endif
 #else // !kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store

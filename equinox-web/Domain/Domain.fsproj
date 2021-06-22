@@ -9,7 +9,9 @@
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="Aggregate.fs" />
+	<!--#if (aggregate)-->
+	<Compile Include="Aggregate.fs" />
+	<!--#endif-->
     <Compile Include="Todo.fs" />
   </ItemGroup>
 
