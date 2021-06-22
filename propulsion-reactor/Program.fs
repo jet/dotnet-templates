@@ -564,7 +564,6 @@ let build (args : Args.Arguments) =
 #endif
 #else // kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
         let source = args.Source
-        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let consumerConfig =
             FsKafka.KafkaConsumerConfig.Create(
                 AppName, source.Broker, [source.Topic], args.ConsumerGroupName, Confluent.Kafka.AutoOffsetReset.Earliest,
