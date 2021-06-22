@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.CosmosStore" Version="3.0.0" />
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.1" />
   </ItemGroup>
 
 </Project>

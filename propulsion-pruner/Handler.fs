@@ -20,9 +20,9 @@ let shouldPrune category (age : TimeSpan) =
 
 // Only relevant (copied to secondary container, meeting expiration criteria) events get fed into the CosmosPruner for removal
 // NOTE - DANGEROUS - events submitted to the CosmosPruner get removed from the supplied Context!
-let selectPrunable (changeFeedDocument: Microsoft.Azure.Documents.Document) : Propulsion.Streams.StreamEvent<_> seq = seq {
+let selectPrunable changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
     let asOf = DateTimeOffset.UtcNow
-    for se in Propulsion.CosmosStore.EquinoxCosmosStoreParser.enumStreamEvents changeFeedDocument do
+    for se in Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents changeFeedDocument do
         let (FsCodec.StreamName.CategoryAndId (cat,_)) = se.stream
         let age = asOf - se.event.Timestamp
         if shouldPrune cat age then

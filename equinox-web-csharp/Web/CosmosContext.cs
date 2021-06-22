@@ -1,8 +1,8 @@
 using Equinox;
-using Equinox.Cosmos;
+using Equinox.CosmosStore;
+using Microsoft.Azure.Cosmos;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -11,8 +11,7 @@ namespace TodoBackendTemplate
 {
     public class CosmosConfig
     {
-        public CosmosConfig(ConnectionMode mode, string connectionStringWithUriAndKey, string database,
-            string container, int cacheMb)
+        public CosmosConfig(ConnectionMode mode, string connectionStringWithUriAndKey, string database, string container, int cacheMb)
         {
             Mode = mode;
             ConnectionStringWithUriAndKey = connectionStringWithUriAndKey;
@@ -32,7 +31,7 @@ namespace TodoBackendTemplate
     {
         readonly Cache _cache;
 
-        Context _store;
+        CosmosStoreContext _store;
         readonly Func<Task> _connect;
 
         public CosmosContext(CosmosConfig config)
@@ -40,25 +39,27 @@ namespace TodoBackendTemplate
             _cache = new Cache("Cosmos", config.CacheMb);
             var retriesOn429Throttling = 1; // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             var timeout = TimeSpan.FromSeconds(5); // Timeout applied per request to CosmosDb, including retry attempts
-            var discovery = Discovery.FromConnectionString(config.ConnectionStringWithUriAndKey);
+            var discovery = Discovery.ConnectionString.NewConnectionString(config.ConnectionStringWithUriAndKey);
             _connect = async () =>
             {
-                var gateway = await Connect("App", config.Mode, discovery, timeout, retriesOn429Throttling, timeout);
-                var containers = new Containers(config.Database, config.Container);
-
-                _store = new Context(gateway, containers);
+                var connector = new CosmosStoreConnector(discovery, timeout, retriesOn429Throttling, timeout, config.Mode);
+                _store = await Connect(connector, config.Database, config.Container);
             };
         }
 
         internal override async Task Connect() => await _connect();
 
-        static async Task<Gateway> Connect(string appName, ConnectionMode mode, Discovery discovery, TimeSpan operationTimeout,
-            int maxRetryForThrottling, TimeSpan maxRetryWait)
+        static async Task<CosmosStoreContext> Connect(CosmosStoreConnector connector, string databaseId, string containerId)
         {
-            var log = Log.ForContext<CosmosContext>();
-            var c = new Connector(operationTimeout, maxRetryForThrottling, maxRetryWait, log, mode: mode);
-            var conn = await FSharpAsync.StartAsTask(c.Connect(appName, discovery), null, null);
-            return new Gateway(conn, new BatchingPolicy(defaultMaxItems: 500));
+            var storeClient =
+                await FSharpAsync.StartAsTask(
+                    CosmosStoreClient.Connect(
+                        FuncConvert.FromFunc<(string,string)[], FSharpAsync<CosmosClient>>(connector.CreateAndInitialize),
+                        databaseId,
+                        containerId),
+                    null,
+                    null);
+            return new CosmosStoreContext(storeClient, tipMaxEvents: 256);
         }
 
         public override Func<string, Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
@@ -76,8 +77,8 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var resolver = new Resolver<TEvent, TState, object>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy, compressUnfolds:FSharpOption<bool>.None);
-            return t => resolver.Resolve(t);
+            var cat = new CosmosStoreCategory<TEvent, TState, object>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy, compressUnfolds:FSharpOption<bool>.None);
+            return t => cat.Resolve(t);
         }
     }
 }

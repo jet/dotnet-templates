@@ -44,7 +44,7 @@ let render : Fold.State -> Item[] = function
     | _ -> [||]
 
 /// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
-type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
+type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.TryIngest(clientId, version, value) : Async<bool> =
         let decider = resolve clientId
@@ -55,15 +55,15 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
         decider.Query render
 
 let create resolveStream =
-    let resolve clientId =
-        let stream = resolveStream (streamName clientId)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
+    let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 
 module Cosmos =
 
-    let accessStrategy = Equinox.Cosmos.AccessStrategy.RollingState Fold.snapshot
+    open Equinox.CosmosStore
+
+    let accessStrategy = AccessStrategy.RollingState Fold.snapshot
     let create (context, cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        create resolver.Resolve
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create cat.Resolve

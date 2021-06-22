@@ -23,6 +23,16 @@ module EventCodec =
             None
         | x -> x
 
+module Log =
+
+    let forMetrics () =
+        Serilog.Log.ForContext("isMetric", true)
+
+module Equinox =
+
+    let createDecider stream =
+        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+
 module Guid =
 
     let inline toStringN (x : Guid) = x.ToString "N"
@@ -41,20 +51,10 @@ module ClientId =
 type LoggerConfigurationExtensions() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member inline ExcludeChangeFeedProcessorV2InternalDiagnostics(c : LoggerConfiguration) =
-        let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-        let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-        let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-        let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-        let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-        c.Filter.ByExcluding(fun x -> isCfp x)
-
-    [<System.Runtime.CompilerServices.Extension>]
     static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
-        // LibLog writes to the global logger, so we need to control the emission
         let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
+        // TODO figure out what CFP v3 requires
         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-        |> fun c -> if verbose then c else c.ExcludeChangeFeedProcessorV2InternalDiagnostics()
 
 #endif
 [<System.Runtime.CompilerServices.Extension>]
@@ -73,5 +73,46 @@ type Logging() =
 #if (!kafkaEventSpans)
         |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
 #endif
-        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {NewLine}{Exception}"
+        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
                     c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+
+module CosmosStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+        let maxEvents = 256 // default is 0
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+
+[<AutoOpen>]
+module ConnectorExtensions =
+
+    type Equinox.CosmosStore.CosmosStoreConnector with
+
+        member private x.LogConfiguration(connectionName, databaseId, containerId) =
+            let o = x.Options
+            let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
+            Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                            connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+            Log.Information("CosmosDb {name} Database {database} Container {container}",
+                            connectionName, databaseId, containerId)
+
+        /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
+        member x.CreateUninitialized(databaseId, containerId) =
+            x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
+        
+        /// Connect a CosmosStoreClient, including warming up
+        member x.ConnectStore(connectionName, databaseId, containerId) =
+            x.LogConfiguration(connectionName, databaseId, containerId)
+            Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
+            
+        /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
+        member x.ConnectMonitored(databaseId, containerId, ?connectionName) =
+            x.LogConfiguration(defaultArg connectionName "Source", databaseId, containerId)
+            x.CreateUninitialized(databaseId, containerId)
+
+        /// Connects to a Store as both a ChangeFeedProcessor Monitored Container and a CosmosStoreClient
+        member x.ConnectStoreAndMonitored(databaseId, containerId) =
+            let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
+            let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
+            storeClient, monitored
+

@@ -22,10 +22,10 @@ type StorageConfig =
     | Memory of Equinox.MemoryStore.VolatileStore<obj>
 //#endif
 //#if eventStore
-    | Es of Equinox.EventStore.Context * Equinox.EventStore.CachingStrategy option * unfolds: bool
+    | Es of Equinox.EventStore.EventStoreContext * Equinox.EventStore.CachingStrategy option * unfolds: bool
 //#endif
 //#if cosmos
-    | Cosmos of Equinox.Cosmos.Gateway * Equinox.Cosmos.CachingStrategy * unfolds: bool * databaseId: string * containerId: string
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.CosmosStore.CachingStrategy * unfolds: bool
 //#endif
     
 //#if (memoryStore || (!cosmos && !eventStore))
@@ -44,7 +44,7 @@ module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]       VerboseStore
-        | [<AltCommandLine "-m">]       ConnectionMode of Equinox.Cosmos.ConnectionMode
+        | [<AltCommandLine "-m">]       ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-o">]       Timeout of float
         | [<AltCommandLine "-r">]       Retries of int
         | [<AltCommandLine "-rt">]      RetriesWaitTime of float
@@ -62,40 +62,32 @@ module Cosmos =
                 | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
                 | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
     type Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        member val Mode =               a.GetResult(ConnectionMode, Equinox.Cosmos.ConnectionMode.Direct)
-        member val Connection =         a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.Cosmos.Discovery.FromConnectionString
-        member val Database =           a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val Container =          a.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          a.TryGetResult ConnectionMode
+        let timeout =                       a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       a.GetResult(Retries, 1)
+        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member _.Connect() =                connector.ConnectStore("Main", database, container)
 
-        member val Timeout =            a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-        member val Retries =            a.GetResult(Retries, 1)
-        member val MaxRetryWaitTime =   a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
 
     /// Standing up an Equinox instance is necessary to run for test purposes; You'll need to either:
     /// 1) replace connection below with a connection string or Uri+Key for an initialized Equinox instance with a database and container named "equinox-test"
     /// 2) Set the 3x environment variables and create a local Equinox using tools/Equinox.Tool/bin/Release/net461/eqx.exe `
     ///     init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
-    open Equinox.Cosmos
-    open Serilog
+    open Equinox.CosmosStore
 
-    let private createGateway connection maxItems = Gateway(connection, BatchingPolicy(defaultMaxItems=maxItems))
-    let private context (log: ILogger, storeLog: ILogger) (a : Arguments) =
-        let Discovery.UriAndKey (endpointUri, _) as discovery = a.Connection
-        log.Information("CosmosDb {mode} {connection} Database {database} Container {container}",
-            a.Mode, endpointUri, a.Database, a.Container)
-        log.Information("CosmosDb timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-            (let t = a.Timeout in t.TotalSeconds), a.Retries, (let t = a.MaxRetryWaitTime in t.TotalSeconds))
-        let connector = Connector(a.Timeout, a.Retries, a.MaxRetryWaitTime, storeLog, mode=a.Mode)
-        connector, discovery, a.Database, a.Container
-    let config (log: ILogger, storeLog) (cache, unfolds, batchSize) info =
-        let connector, discovery, dbName, containerName = context (log, storeLog) info
-        let conn = connector.Connect("TestbedTemplate", discovery) |> Async.RunSynchronously
+    let private createContext storeClient maxItems = CosmosStoreContext(storeClient, queryMaxItems = maxItems, tipMaxEvents = 256)
+    let config (cache, unfolds, maxItems) (info : Arguments) =
+        let storeClient = info.Connect() |> Async.RunSynchronously
         let cacheStrategy =
             if cache then
                 let c = Equinox.Cache("TestbedTemplate", sizeMb=50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else CachingStrategy.NoCaching
-        StorageConfig.Cosmos (createGateway conn batchSize, cacheStrategy, unfolds, dbName, containerName)
+        StorageConfig.Cosmos (createContext storeClient maxItems, cacheStrategy, unfolds)
 
 //#endif
 //#if eventStore
@@ -142,7 +134,7 @@ module EventStore =
                 log = (if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
                 tags = ["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
             .Establish("TestbedTemplate", Discovery.GossipDns dnsQuery, ConnectionStrategy.ClusterTwinPreferSlaveReads)
-    let private createContext connection batchSize = Context(connection, BatchingPolicy(maxBatchSize=batchSize))
+    let private createContext connection batchSize = EventStoreContext(connection, BatchingPolicy(maxBatchSize=batchSize))
     let config (log: Serilog.ILogger, storeLog) (cache, unfolds, batchSize) (args : ParseResults<Parameters>) =
         let a = Arguments args
         let timeout, retries as operationThrottling = a.Timeout, a.Retries

@@ -94,22 +94,22 @@ let decide (update : Events.Event option) (state : Fold.State) : Action * Events
     let state' = Fold.fold state events
     nextAction state', events
 
-type Service internal (resolve : TransactionId -> Equinox.Stream<Events.Event, Fold.State>) =
+type Service internal (resolve : TransactionId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.Record(transactionId, update) : Async<Action> =
         let decider = resolve transactionId
         decider.Transact(decide update)
 
 let create resolveStream =
-    let resolve id = Equinox.Stream(Serilog.Log.ForContext<Service>(), resolveStream (streamName id), maxAttempts=3)
+    let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 
 module Cosmos =
 
-    open Equinox.Cosmos
+    open Equinox.CosmosStore
 
     let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
     let create (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        create resolver.Resolve
+        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create cat.Resolve

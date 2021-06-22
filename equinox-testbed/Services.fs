@@ -63,7 +63,7 @@ module Domain =
                 if doesntHave skuId then [] else
                 [ Events.Unfavorited { skuId = skuId } ]
 
-        type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
+        type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
             member _.Execute(clientId, command) =
                 let decider = resolve clientId
@@ -82,7 +82,7 @@ module Domain =
         let create log resolve =
             let resolve clientId =
                 let stream = resolve (streamName clientId)
-                Equinox.Stream(log, stream, maxAttempts=3)
+                Equinox.Decider(log, stream, maxAttempts=3)
             Service(resolve)
 
 open Microsoft.Extensions.DependencyInjection
@@ -96,18 +96,17 @@ type StreamResolver(storage) =
         match storage with
 //#if memoryStore || (!cosmos && !eventStore)
         | Storage.StorageConfig.Memory store ->
-            Equinox.MemoryStore.Resolver(store, FsCodec.Box.Codec.Create(), fold, initial).Resolve
+            Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), fold, initial).Resolve
 //#endif
 //#if eventStore
         | Storage.StorageConfig.Es (gateway, caching, unfolds) ->
             let accessStrategy = if unfolds then Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot |> Some else None
-            Equinox.EventStore.Resolver<'event, 'state, _>(gateway, codec, fold, initial, ?caching = caching, ?access = accessStrategy).Resolve
+            Equinox.EventStore.EventStoreCategory<'event, 'state, _>(gateway, codec, fold, initial, ?caching = caching, ?access = accessStrategy).Resolve
 //#endif
 //#if cosmos
-        | Storage.StorageConfig.Cosmos (gateway, caching, unfolds, databaseId, containerId) ->
-            let store = Equinox.Cosmos.Context(gateway, databaseId, containerId)
-            let accessStrategy = if unfolds then Equinox.Cosmos.AccessStrategy.Snapshot snapshot else Equinox.Cosmos.AccessStrategy.Unoptimized
-            Equinox.Cosmos.Resolver<'event, 'state, _>(store, codec, fold, initial, caching, accessStrategy).Resolve
+        | Storage.StorageConfig.Cosmos (context, caching, unfolds) ->
+            let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot snapshot else Equinox.CosmosStore.AccessStrategy.Unoptimized
+            Equinox.CosmosStore.CosmosStoreCategory<'event, 'state, _>(context, codec, fold, initial, caching, accessStrategy).Resolve
 //#endif
 
 type ServiceBuilder(storageConfig, handlerLog) =

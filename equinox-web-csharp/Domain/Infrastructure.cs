@@ -8,7 +8,6 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
@@ -31,7 +30,7 @@ namespace TodoBackendTemplate
 
     }
 
-    public class EquinoxStream<TEvent, TState> : Stream<TEvent, TState>
+    public class EquinoxStream<TEvent, TState> : Decider<TEvent, TState>
     {
         private readonly Func<TState, IEnumerable<TEvent>, TState> _fold;
 

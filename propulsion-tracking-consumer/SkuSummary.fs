@@ -50,7 +50,7 @@ let interpret command (state : Fold.State) =
     | Consume updates ->
         [for x in updates do if x |> Fold.State.isNewOrUpdated state then yield Events.Ingested x]
 
-type Service internal (resolve : SkuId -> Equinox.Stream<Events.Event, Fold.State>) =
+type Service internal (resolve : SkuId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// <returns>count of items</returns>
     member _.Ingest(skuId, items) : Async<int> =
@@ -67,15 +67,15 @@ type Service internal (resolve : SkuId -> Equinox.Stream<Events.Event, Fold.Stat
         decider.Query id
 
 let create resolveStream =
-    let resolve skuId =
-        let stream = resolveStream (streamName skuId)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
+    let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 
 module Cosmos =
 
-    let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
+    open Equinox.CosmosStore
+
+    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
     let create (context, cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        create resolver.Resolve
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create cat.Resolve

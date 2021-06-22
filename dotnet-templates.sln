@@ -1,141 +1,144 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Projector", "propulsion-projector\Projector.fsproj", "{C3A5A09B-95D1-4C52-8356-61D44BBBE445}"
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31321.278
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Projector", "propulsion-projector\Projector.fsproj", "{C3A5A09B-95D1-4C52-8356-61D44BBBE445}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Consumer", "propulsion-consumer\Consumer.fsproj", "{FA48F72B-0245-49D4-AA09-44A59282978E}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Consumer", "propulsion-consumer\Consumer.fsproj", "{FA48F72B-0245-49D4-AA09-44A59282978E}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "SummaryConsumer", "propulsion-summary-consumer\SummaryConsumer.fsproj", "{A30A8D80-49DF-46BD-B65E-4C11B404E236}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SummaryConsumer", "propulsion-summary-consumer\SummaryConsumer.fsproj", "{A30A8D80-49DF-46BD-B65E-4C11B404E236}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Reactor", "propulsion-reactor\Reactor.fsproj", "{D3A5A09B-95D2-4C52-8356-61D44BBBE446}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Reactor", "propulsion-reactor\Reactor.fsproj", "{D3A5A09B-95D2-4C52-8356-61D44BBBE446}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Sync", "propulsion-sync\Sync.fsproj", "{D7ACBDF8-5F24-420F-9657-20096CE08B49}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Sync", "propulsion-sync\Sync.fsproj", "{D7ACBDF8-5F24-420F-9657-20096CE08B49}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-web\Domain\Domain.fsproj", "{C40BEC14-CD8D-4EA1-8B4F-AD8DB556546A}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Domain", "equinox-web\Domain\Domain.fsproj", "{C40BEC14-CD8D-4EA1-8B4F-AD8DB556546A}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Web", "equinox-web\Web\Web.fsproj", "{6A6C718D-78C3-470F-BE29-4DAA472D8115}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Web", "equinox-web\Web\Web.fsproj", "{6A6C718D-78C3-470F-BE29-4DAA472D8115}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain", "equinox-web-csharp\Domain\Domain.csproj", "{771B3688-3BF0-402A-BA9E-B2F757D34DE5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Domain", "equinox-web-csharp\Domain\Domain.csproj", "{771B3688-3BF0-402A-BA9E-B2F757D34DE5}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Testbed", "equinox-testbed\Testbed.fsproj", "{B6389F9E-A8E4-4BD7-B4C0-703B1A69BEA1}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Testbed", "equinox-testbed\Testbed.fsproj", "{B6389F9E-A8E4-4BD7-B4C0-703B1A69BEA1}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "TrackingConsumer", "propulsion-tracking-consumer\TrackingConsumer.fsproj", "{36C2D70A-F292-4481-8ADA-5066A80F92B2}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "TrackingConsumer", "propulsion-tracking-consumer\TrackingConsumer.fsproj", "{36C2D70A-F292-4481-8ADA-5066A80F92B2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Web", "equinox-web-csharp\Web\Web.csproj", "{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Web", "equinox-web-csharp\Web\Web.csproj", "{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxWebCs", "eqxWebCs", "{B72FFAAE-7801-41B2-86F5-FD90E97A30F7}"
-ProjectSection(SolutionItems) = preProject
-	equinox-web-csharp\.template.config\template.json = equinox-web-csharp\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		equinox-web-csharp\.template.config\template.json = equinox-web-csharp\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".project", ".project", "{DA9B4252-0CFE-428E-A934-D21D8D6BAC1F}"
-ProjectSection(SolutionItems) = preProject
-	CHANGELOG.md = CHANGELOG.md
-	README.md = README.md
-	global.json = global.json
-	build.proj = build.proj
-	azure-pipelines.yml = azure-pipelines.yml
-	Directory.Build.props = Directory.Build.props
-	Directory.Build.targets = Directory.Build.targets
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		azure-pipelines.yml = azure-pipelines.yml
+		build.proj = build.proj
+		CHANGELOG.md = CHANGELOG.md
+		Directory.Build.props = Directory.Build.props
+		Directory.Build.targets = Directory.Build.targets
+		global.json = global.json
+		README.md = README.md
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxWeb", "eqxWeb", "{9FF8FE1F-CB92-4840-BF98-7DF9FCFC6913}"
-ProjectSection(SolutionItems) = preProject
-	equinox-web\.template.config\template.json = equinox-web\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		equinox-web\.template.config\template.json = equinox-web\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proReactor", "proReactor", "{24080834-2B0A-452D-941B-234B54E2E712}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-reactor\.template.config\template.json = propulsion-reactor\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		propulsion-reactor\.template.config\template.json = propulsion-reactor\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proProjector", "proProjector", "{C80353DE-0B5E-4D55-B406-317843D90DA0}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-projector\.template.config\template.json = propulsion-projector\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		propulsion-projector\.template.config\template.json = propulsion-projector\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proConsumer", "proConsumer", "{FC23C841-A0F6-4BCA-AC8F-3B63FBFD1520}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-consumer\.template.config\template.json = propulsion-consumer\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		propulsion-consumer\.template.config\template.json = propulsion-consumer\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "summaryConsumer", "summaryConsumer", "{488821B9-BBC2-4768-9B63-36036BA6B765}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-summary-consumer\.template.config\template.json = propulsion-summary-consumer\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		propulsion-summary-consumer\.template.config\template.json = propulsion-summary-consumer\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proSync", "proSync", "{818D28A6-E6AB-4416-BDA6-1577C5D54447}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-sync\.template.config\template.json = propulsion-sync\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		propulsion-sync\.template.config\template.json = propulsion-sync\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxTestbed", "eqxTestbed", "{E7434881-8655-4C22-82CD-91ADB5123A73}"
-ProjectSection(SolutionItems) = preProject
-	equinox-testbed\.template.config\template.json = equinox-testbed\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		equinox-testbed\.template.config\template.json = equinox-testbed\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "trackingConsumer", "trackingConsumer", "{1F3C9245-F973-43A3-97C9-5E527B93060C}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-tracking-consumer\.template.config\template.json = propulsion-tracking-consumer\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		propulsion-tracking-consumer\.template.config\template.json = propulsion-tracking-consumer\.template.config\template.json
+	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Equinox.Templates", "src\Equinox.Templates\Equinox.Templates.fsproj", "{8C92B728-85A5-4231-863A-E4236E46CC36}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Equinox.Templates", "src\Equinox.Templates\Equinox.Templates.fsproj", "{8C92B728-85A5-4231-863A-E4236E46CC36}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxShipping", "eqxShipping", "{DAE9E2B9-EDA2-4064-B0CE-FD5294549374}"
-ProjectSection(SolutionItems) = preProject
-	equinox-shipping\.template.config\template.json = equinox-shipping\.template.config\template.json
-	equinox-shipping\README.md = equinox-shipping\README.md
-	equinox-shipping\Shipping.sln = equinox-shipping\Shipping.sln
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		equinox-shipping\README.md = equinox-shipping\README.md
+		equinox-shipping\Shipping.sln = equinox-shipping\Shipping.sln
+		equinox-shipping\.template.config\template.json = equinox-shipping\.template.config\template.json
+	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-shipping\Domain\Domain.fsproj", "{7B96FCF8-0BB5-4494-A143-628882A6E50A}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Domain", "equinox-shipping\Domain\Domain.fsproj", "{7B96FCF8-0BB5-4494-A143-628882A6E50A}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Watchdog", "equinox-shipping\Watchdog\Watchdog.fsproj", "{9AFF6138-B63B-4EBF-B86B-4F626E1F1ADF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Watchdog", "equinox-shipping\Watchdog\Watchdog.fsproj", "{9AFF6138-B63B-4EBF-B86B-4F626E1F1ADF}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Equinox.Templates.Tests", "tests\Equinox.Templates.Tests\Equinox.Templates.Tests.fsproj", "{26BFE6BC-5887-4E40-8CFD-F15332F5A104}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Equinox.Templates.Tests", "tests\Equinox.Templates.Tests\Equinox.Templates.Tests.fsproj", "{26BFE6BC-5887-4E40-8CFD-F15332F5A104}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "equinox-shipping\Domain.Tests\Domain.Tests.fsproj", "{5A45EF21-576B-4B40-86BD-F5960ECD66BF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Domain.Tests", "equinox-shipping\Domain.Tests\Domain.Tests.fsproj", "{5A45EF21-576B-4B40-86BD-F5960ECD66BF}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Watchdog.Integration", "equinox-shipping\Watchdog.Integration\Watchdog.Integration.fsproj", "{83BA87C3-6288-40F4-BC4F-EC3A54586CDF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Watchdog.Integration", "equinox-shipping\Watchdog.Integration\Watchdog.Integration.fsproj", "{83BA87C3-6288-40F4-BC4F-EC3A54586CDF}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Archiver", "propulsion-archiver\Archiver.fsproj", "{B9976751-C3A6-4F8B-BEF4-278382D8EAA6}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Archiver", "propulsion-archiver\Archiver.fsproj", "{B9976751-C3A6-4F8B-BEF4-278382D8EAA6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proArchiver", "proArchiver", "{BBD6F425-C2F4-4857-BD68-2B13D0B4EDDE}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-archiver\.template.config\template.json = propulsion-archiver\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		propulsion-archiver\.template.config\template.json = propulsion-archiver\.template.config\template.json
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proPruner", "proPruner", "{7F80222A-2687-4E91-8F5B-4717DD13DEF5}"
-ProjectSection(SolutionItems) = preProject
-	propulsion-pruner\.template.config\template.json = propulsion-pruner\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		propulsion-pruner\.template.config\template.json = propulsion-pruner\.template.config\template.json
+	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Pruner", "propulsion-pruner\Pruner.fsproj", "{A0FB44F5-15E5-47C8-81E5-1991269849CB}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Pruner", "propulsion-pruner\Pruner.fsproj", "{A0FB44F5-15E5-47C8-81E5-1991269849CB}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "eqxPatterns", "eqxPatterns", "{76721F1E-851C-4970-A276-DF61FCE3DA23}"
-ProjectSection(SolutionItems) = preProject
-	equinox-patterns\.template.config\template.json = equinox-patterns\.template.config\template.json
-	equinox-patterns\README.md = equinox-patterns\README.md
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		equinox-patterns\README.md = equinox-patterns\README.md
+		equinox-patterns\.template.config\template.json = equinox-patterns\.template.config\template.json
+	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "equinox-patterns\Domain\Domain.fsproj", "{8D9867A9-1B5D-4AD3-A890-ACC81D011C00}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Domain", "equinox-patterns\Domain\Domain.fsproj", "{8D9867A9-1B5D-4AD3-A890-ACC81D011C00}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "equinox-patterns\Domain.Tests\Domain.Tests.fsproj", "{C899EB07-FEC8-41F8-95DC-203DA80F5A32}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Domain.Tests", "equinox-patterns\Domain.Tests\Domain.Tests.fsproj", "{C899EB07-FEC8-41F8-95DC-203DA80F5A32}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "feedApi", "feedApi", "{CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}"
-ProjectSection(SolutionItems) = preProject
-	feed-source\.template.config\template.json = feed-source\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		feed-source\.template.config\template.json = feed-source\.template.config\template.json
+	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FeedApi", "feed-source\FeedApi\FeedApi.fsproj", "{28B7FEDA-9F91-49D3-990B-1E4D7B71932A}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FeedApi", "feed-source\FeedApi\FeedApi.fsproj", "{28B7FEDA-9F91-49D3-990B-1E4D7B71932A}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "feed-source\Domain\Domain.fsproj", "{28EBD7E4-6130-4444-B44F-BB741172A233}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Domain", "feed-source\Domain\Domain.fsproj", "{28EBD7E4-6130-4444-B44F-BB741172A233}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "feedConsumer", "feedConsumer", "{EDC5EB0D-EE6D-489A-B0B0-DA85ECDF04B2}"
-ProjectSection(SolutionItems) = preProject
-	feed-consumer\.template.config\template.json = feed-consumer\.template.config\template.json
-EndProjectSection
+	ProjectSection(SolutionItems) = preProject
+		feed-consumer\.template.config\template.json = feed-consumer\.template.config\template.json
+	EndProjectSection
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "FeedConsumer", "feed-consumer\FeedConsumer.fsproj", "{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FeedConsumer", "feed-consumer\FeedConsumer.fsproj", "{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -143,18 +146,22 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Release|Any CPU.Build.0 = Release|Any CPU
-		{FA48F72B-0245-49D4-AA09-44A59282978E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{FA48F72B-0245-49D4-AA09-44A59282978E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{FA48F72B-0245-49D4-AA09-44A59282978E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{FA48F72B-0245-49D4-AA09-44A59282978E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C3A5A09B-95D1-4C52-8356-61D44BBBE445}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C3A5A09B-95D1-4C52-8356-61D44BBBE445}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C3A5A09B-95D1-4C52-8356-61D44BBBE445}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C3A5A09B-95D1-4C52-8356-61D44BBBE445}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FA48F72B-0245-49D4-AA09-44A59282978E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA48F72B-0245-49D4-AA09-44A59282978E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FA48F72B-0245-49D4-AA09-44A59282978E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FA48F72B-0245-49D4-AA09-44A59282978E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A30A8D80-49DF-46BD-B65E-4C11B404E236}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D3A5A09B-95D2-4C52-8356-61D44BBBE446}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D3A5A09B-95D2-4C52-8356-61D44BBBE446}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D3A5A09B-95D2-4C52-8356-61D44BBBE446}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D3A5A09B-95D2-4C52-8356-61D44BBBE446}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D7ACBDF8-5F24-420F-9657-20096CE08B49}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{D7ACBDF8-5F24-420F-9657-20096CE08B49}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D7ACBDF8-5F24-420F-9657-20096CE08B49}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -179,8 +186,6 @@ Global
 		{36C2D70A-F292-4481-8ADA-5066A80F92B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{36C2D70A-F292-4481-8ADA-5066A80F92B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{36C2D70A-F292-4481-8ADA-5066A80F92B2}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D3A5A09B-95D2-4C52-8356-61D44BBBE446}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D3A5A09B-95D2-4C52-8356-61D44BBBE446}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -238,18 +243,21 @@ Global
 		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
-		{771B3688-3BF0-402A-BA9E-B2F757D34DE5} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
-		{C40BEC14-CD8D-4EA1-8B4F-AD8DB556546A} = {9FF8FE1F-CB92-4840-BF98-7DF9FCFC6913}
-		{6A6C718D-78C3-470F-BE29-4DAA472D8115} = {9FF8FE1F-CB92-4840-BF98-7DF9FCFC6913}
-		{D3A5A09B-95D2-4C52-8356-61D44BBBE446} = {24080834-2B0A-452D-941B-234B54E2E712}
 		{C3A5A09B-95D1-4C52-8356-61D44BBBE445} = {C80353DE-0B5E-4D55-B406-317843D90DA0}
 		{FA48F72B-0245-49D4-AA09-44A59282978E} = {FC23C841-A0F6-4BCA-AC8F-3B63FBFD1520}
 		{A30A8D80-49DF-46BD-B65E-4C11B404E236} = {488821B9-BBC2-4768-9B63-36036BA6B765}
+		{D3A5A09B-95D2-4C52-8356-61D44BBBE446} = {24080834-2B0A-452D-941B-234B54E2E712}
 		{D7ACBDF8-5F24-420F-9657-20096CE08B49} = {818D28A6-E6AB-4416-BDA6-1577C5D54447}
+		{C40BEC14-CD8D-4EA1-8B4F-AD8DB556546A} = {9FF8FE1F-CB92-4840-BF98-7DF9FCFC6913}
+		{6A6C718D-78C3-470F-BE29-4DAA472D8115} = {9FF8FE1F-CB92-4840-BF98-7DF9FCFC6913}
+		{771B3688-3BF0-402A-BA9E-B2F757D34DE5} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
 		{B6389F9E-A8E4-4BD7-B4C0-703B1A69BEA1} = {E7434881-8655-4C22-82CD-91ADB5123A73}
 		{36C2D70A-F292-4481-8ADA-5066A80F92B2} = {1F3C9245-F973-43A3-97C9-5E527B93060C}
+		{F66A5BFE-7C81-44DC-97DE-3FD8C83B8F06} = {B72FFAAE-7801-41B2-86F5-FD90E97A30F7}
 		{7B96FCF8-0BB5-4494-A143-628882A6E50A} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
 		{9AFF6138-B63B-4EBF-B86B-4F626E1F1ADF} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
 		{5A45EF21-576B-4B40-86BD-F5960ECD66BF} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
@@ -261,5 +269,8 @@ Global
 		{28B7FEDA-9F91-49D3-990B-1E4D7B71932A} = {CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}
 		{28EBD7E4-6130-4444-B44F-BB741172A233} = {CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}
 		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5} = {EDC5EB0D-EE6D-489A-B0B0-DA85ECDF04B2}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D8B64643-4049-466D-BAFC-0437B8C1E508}
 	EndGlobalSection
 EndGlobal

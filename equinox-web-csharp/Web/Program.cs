@@ -10,12 +10,13 @@ namespace TodoBackendTemplate.Web
 {
     static class Logging
     {
+        static Tuple<string, string>[] CustomTags(string appName) => new[] { Tuple.Create("app", appName) };
         public static LoggerConfiguration Configure(this LoggerConfiguration c, string appName) =>
             c
                 .MinimumLevel.Debug()
                 .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
 #if cosmos
-                .WriteTo.Sink(new Equinox.Cosmos.Prometheus.LogSink(appName))
+                .WriteTo.Sink(new Equinox.CosmosStore.Prometheus.LogSink(CustomTags(appName)))
 #endif
                 .Enrich.FromLogContext()
                 .WriteTo.Console();

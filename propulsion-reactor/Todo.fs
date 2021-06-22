@@ -51,7 +51,7 @@ module Fold =
     let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
-type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.State>) =
+type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Load and render the state
     member _.QueryWithVersion(clientId, render : Fold.State -> 'res) : Async<int64*'res> =
@@ -60,9 +60,7 @@ type Service internal (resolve : ClientId -> Equinox.Stream<Events.Event, Fold.S
         decider.QueryEx(fun c -> c.Version, render c.State)
 
 let create resolveStream =
-    let resolve clientId =
-        let stream = resolveStream (streamName clientId)
-        Equinox.Stream(Serilog.Log.ForContext<Service>(), stream, maxAttempts=3)
+    let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 
 //#if multiSource
@@ -76,8 +74,10 @@ module EventStore =
 //#endif
 module Cosmos =
 
-    let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
+    open Equinox.CosmosStore
+
+    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
     let create (context, cache) =
-        let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Equinox.Cosmos.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        create resolver.Resolve
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+        create cat.Resolve

@@ -12,20 +12,10 @@ module EnvVar =
 type LoggerConfigurationExtensions() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member inline ExcludeChangeFeedProcessorV2InternalDiagnostics(c : LoggerConfiguration) =
-        let isCfp429a = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.LeaseManagement.DocumentServiceLeaseUpdater").Invoke
-        let isCfp429b = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.LeaseRenewer").Invoke
-        let isCfp429c = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.PartitionManagement.PartitionLoadBalancer").Invoke
-        let isCfp429d = Filters.Matching.FromSource("Microsoft.Azure.Documents.ChangeFeedProcessor.FeedProcessing.PartitionProcessor").Invoke
-        let isCfp x = isCfp429a x || isCfp429b x || isCfp429c x || isCfp429d x
-        c.Filter.ByExcluding(fun x -> isCfp x)
-
-    [<System.Runtime.CompilerServices.Extension>]
     static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
-        // LibLog writes to the global logger, so we need to control the emission
         let cfpl = if verbose then Events.LogEventLevel.Debug else Events.LogEventLevel.Warning
+        // TODO figure out what CFP v3 requires
         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-        |> fun c -> if verbose then c else c.ExcludeChangeFeedProcessorV2InternalDiagnostics()
 
     [<System.Runtime.CompilerServices.Extension>]
     static member inline ForwardMetricsFromEquinoxAndPropulsionToPrometheus(a : Configuration.LoggerSinkConfiguration, appName, group, metrics) =
@@ -54,7 +44,7 @@ type Logging() =
         |> fun c -> let generalLevel = if verbose then Events.LogEventLevel.Information else Events.LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
         |> fun c ->
-            let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {partitionKeyRangeId,2} {Message:lj} {Properties}{NewLine}{Exception}"
+            let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}"
             let t = if verbose then t else t.Replace("{Properties}", "")
             let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                 a.ForwardMetricsFromEquinoxAndPropulsionToPrometheus(appName, group, (metrics = Some true))
@@ -65,3 +55,28 @@ type Logging() =
                     l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t) |> ignore)
                 |> ignore
             c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
+
+type Equinox.CosmosStore.CosmosStoreConnector with
+
+    member private x.LogConfiguration(connectionName, databaseId, containerId) =
+        let o = x.Options
+        let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
+        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+        Log.Information("CosmosDb {name} Database {database} Container {container}",
+                        connectionName, databaseId, containerId)
+
+    /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
+    member x.CreateUninitialized(databaseId, containerId) =
+        x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
+    
+    /// Connect a CosmosStoreClient, including warming up
+    member x.ConnectStore(connectionName, databaseId, containerId) =
+        x.LogConfiguration(connectionName, databaseId, containerId)
+        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
+        
+    /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
+    member x.ConnectMonitored(databaseId, containerId) =
+        x.LogConfiguration("Source", databaseId, containerId)
+        x.CreateUninitialized(databaseId, containerId)
+

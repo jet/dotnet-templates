@@ -8,11 +8,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="*.fs" />
+    <Compile Include="Infrastructure.fs" />
+	<!--#if (aggregate)-->
+	<Compile Include="Aggregate.fs" />
+	<!--#endif-->
+    <Compile Include="Todo.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox" Version="2.6.0" />
+    <PackageReference Include="Equinox" Version="3.0.1" />
     <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.0.1" />
   </ItemGroup>
 

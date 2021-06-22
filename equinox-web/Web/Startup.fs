@@ -23,7 +23,7 @@ module Storage =
         | ES of host: string * username: string * password: string * cacheMb: int
 //#endif
 //#if cosmos
-        | Cosmos of mode: Equinox.Cosmos.ConnectionMode * connectionStringWithUriAndKey: string * database: string * container: string * cacheMb: int
+        | Cosmos of mode: Microsoft.Azure.Cosmos.ConnectionMode * connectionStringWithUriAndKey: string * database: string * container: string * cacheMb: int
 //#endif
 
     /// Holds an initialized/customized/configured of the store as defined by the `Config`
@@ -32,10 +32,10 @@ module Storage =
         | MemoryStore of Equinox.MemoryStore.VolatileStore<obj>
 //#endif
 //#if eventStore
-        | EventStore of context: Equinox.EventStore.Context * cache: Equinox.Cache
+        | EventStore of context: Equinox.EventStore.EventStoreContext * cache: Equinox.Cache
 //#endif
 //#if cosmos
-        | CosmosStore of store: Equinox.Cosmos.Context * cache: Equinox.Cache
+        | CosmosStore of context: Equinox.CosmosStore.CosmosStoreContext * cache: Equinox.Cache
 //#endif
 
 //#if (memoryStore || (!cosmos && !eventStore))
@@ -54,18 +54,23 @@ module Storage =
             let log = Logger.SerilogNormal (Log.ForContext<Instance>())
             let c = Connector(username, password, reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
             let conn = c.Establish ("Twin", Discovery.GossipDns host, ConnectionStrategy.ClusterTwinPreferSlaveReads) |> Async.RunSynchronously
-            Context(conn, BatchingPolicy(maxBatchSize=500))
+            EventStoreContext(conn, BatchingPolicy(maxBatchSize=500))
 
 //#endif
 //#if cosmos
-    /// CosmosDb wiring, uses Equinox.Cosmos nuget package
+    /// CosmosDb wiring, uses Equinox.CosmosStore nuget package
     module private Cosmos =
-        open Equinox.Cosmos
-        let connect appName (mode, discovery) (operationTimeout, maxRetryForThrottling, maxRetryWait) =
-            let log = Log.ForContext<Instance>()
-            let c = Connector(log=log, mode=mode, requestTimeout=operationTimeout, maxRetryAttemptsOnRateLimitedRequests=maxRetryForThrottling, maxRetryWaitTimeOnRateLimitedRequests=maxRetryWait)
-            let conn = c.Connect(appName, discovery) |> Async.RunSynchronously
-            Gateway(conn, BatchingPolicy(defaultMaxItems=500))
+        open Equinox.CosmosStore
+        module CosmosStoreContext =
+
+            /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+            let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+                let maxEvents = 256 // default is 0
+                Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+
+        let connect (mode, discovery, databaseId, containerId) (operationTimeout, maxRetryForThrottling, maxRetryWait) =
+            let c = CosmosStoreConnector(discovery, operationTimeout, maxRetryForThrottling, maxRetryWait, mode)
+            CosmosStoreClient.Connect(c.CreateAndInitialize, databaseId, containerId) |> Async.RunSynchronously |> CosmosStoreContext.create
 
 //#endif
     /// Creates and/or connects to a specific store as dictated by the specified config
@@ -86,9 +91,7 @@ module Storage =
             let cache = Equinox.Cache("Cosmos", sizeMb=10)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
-            let gateway = Cosmos.connect "App" (mode, Equinox.Cosmos.Discovery.FromConnectionString connectionString) (timeout, retriesOn429Throttling, timeout)
-            let containers = Equinox.Cosmos.Containers(database, container)
-            let context = Equinox.Cosmos.Context(gateway, containers)
+            let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (timeout, retriesOn429Throttling, timeout)
             Instance.CosmosStore (context, cache)
 //#endif
 
@@ -104,19 +107,19 @@ module Services =
             match storage with
 //#if (memoryStore || (!cosmos && !eventStore))
             | Storage.MemoryStore store ->
-                Equinox.MemoryStore.Resolver(store, FsCodec.Box.Codec.Create(), fold, initial).Resolve
+                Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), fold, initial).Resolve
 //#endif
 //#if eventStore
             | Storage.EventStore (gateway, cache) ->
                 let accessStrategy = Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot
                 let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.EventStore.Resolver<'event, 'state, _>(gateway, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
+                Equinox.EventStore.EventStoreCategory<'event, 'state, _>(gateway, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
 //#endif
 //#if cosmos
             | Storage.CosmosStore (store, cache) ->
-                let accessStrategy = Equinox.Cosmos.AccessStrategy.Snapshot snapshot
-                let cacheStrategy = Equinox.Cosmos.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.Cosmos.Resolver<'event, 'state, _>(store, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
+                let accessStrategy = Equinox.CosmosStore.AccessStrategy.Snapshot snapshot
+                let cacheStrategy = Equinox.CosmosStore.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+                Equinox.CosmosStore.CosmosStoreCategory<'event, 'state, _>(store, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
 //#endif
 
     /// Binds a storage independent Service's Handler's `resolve` function to a given Stream Policy using the StreamResolver
@@ -205,14 +208,14 @@ type Startup() =
             let read key = Environment.GetEnvironmentVariable key |> Option.ofObj
             match read connectionVar, read databaseVar, read containerVar with
             | Some connection, Some database, Some container ->
-                let connMode = Equinox.Cosmos.ConnectionMode.Direct // Best perf - select one of the others iff using .NETCore on linux or encounter firewall issues
+                let connMode = Microsoft.Azure.Cosmos.ConnectionMode.Direct // Best perf - select one of the others iff using .NETCore on linux or encounter firewall issues
                 Storage.Config.Cosmos (connMode, connection, database, container, cacheMb) 
 //#if cosmosSimulator
             | None, Some database, Some container ->
                 // alternately, you can feed in this connection string in as a parameter externally and remove this special casing
                 let wellKnownConnectionStringForCosmosDbSimulator =
                     "AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
-                Storage.Config.Cosmos (Equinox.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
+                Storage.Config.Cosmos (Microsoft.Azure.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
 //#endif
             | _ ->
                 failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar containerVar

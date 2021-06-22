@@ -21,7 +21,7 @@ namespace TodoBackendTemplate
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> toSnapshot = null)
         {
-            var resolver = new Resolver<TEvent, TState, byte[], object>(_store, codec, FuncConvert.FromFunc(fold), initial);
+            var resolver = new MemoryStoreCategory<TEvent, TState, byte[], object>(_store, codec, FuncConvert.FromFunc(fold), initial);
             return target => resolver.Resolve(target);
         }
 
