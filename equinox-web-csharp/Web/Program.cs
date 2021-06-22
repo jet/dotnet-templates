@@ -10,7 +10,7 @@ namespace TodoBackendTemplate.Web
 {
     static class Logging
     {
-        static (string, string)[] CustomTags(string appName) => new[] { ("app", appName) };
+        static Tuple<string, string>[] CustomTags(string appName) => new[] { Tuple.Create("app", appName) };
         public static LoggerConfiguration Configure(this LoggerConfiguration c, string appName) =>
             c
                 .MinimumLevel.Debug()
