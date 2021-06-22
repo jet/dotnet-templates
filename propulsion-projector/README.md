@@ -138,7 +138,7 @@ This project was generated using:
         $env:PROPULSION_KAFKA_BROKER="instance.kafka.example.com:9092" # or use -b
 
 //#if   cosmos // kafka && cosmos
-        # `-g default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
+        # `-g default` defines the Projector Group identity - each has separated state in the Leases (`-aux`) Container (aka processorName)
         # `-t topic0` identifies the Kafka topic to which the Projector should write
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         # `-md 1000` sets the change feed maximum document limit to 1000
@@ -165,10 +165,10 @@ This project was generated using:
 //#if   cosmos
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
 
-        # `-g default` defines the Projector Group identity - each id has separated state in the aux container (aka LeaseId)
+        # `-g default` defines the Projector Group identity - each has separated state in the Leases (`-aux`) Container (aka processorName)
         # cosmos specifies the source (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
         # `-md 1000` sets the max batch size to 1000
-       dotnet run -- -g default cosmos -md 1000 
+        dotnet run -- -g default cosmos -md 1000 
 
         # NB (assuming you've scaled up enough to have >1 physical partition range, you can run a second instance in a second console with the same arguments)
 //#endif // !kafka && cosmos

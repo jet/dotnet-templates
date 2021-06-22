@@ -17,6 +17,7 @@ type LoggerConfigurationExtensions() =
         let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
         // TODO figure out what CFP v3 requires
         c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
+
 #else
 #if esdb
 module CosmosStoreContext =
@@ -26,6 +27,7 @@ module CosmosStoreContext =
         let maxEvents = 256 // default is 0
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 #endif
+
 #endif
 //#if (cosmos || esdb)
 type Equinox.CosmosStore.CosmosStoreConnector with

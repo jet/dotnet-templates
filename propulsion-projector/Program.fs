@@ -62,12 +62,12 @@ module Args =
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
-                | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `SourceContainer` + `-aux`."
 
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
                 | Container _ ->            "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
+                | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `SourceContainer` + `-aux`."
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
@@ -298,8 +298,8 @@ module Args =
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Verbose
         member val ConsumerGroupName =      a.GetResult ConsumerGroupName
-        member val MaxReadAhead =           a.GetResult(MaxReadAhead, 64)
-        member val MaxConcurrentProcessors =a.GetResult(MaxWriters, 1024)
+        member val private MaxReadAhead =   a.GetResult(MaxReadAhead, 64)
+        member val private MaxConcurrentProcessors =a.GetResult(MaxWriters, 1024)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 2.
         member x.BuildProcessorParams() =
@@ -310,7 +310,6 @@ module Args =
         member x.MonitoringParams() =
             let srcC = x.Cosmos
             let leases : Microsoft.Azure.Cosmos.Container = srcC.ConnectLeases()
-            Log.Information("Processing... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentProcessors, x.MaxReadAhead)
             Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                 x.ConsumerGroupName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
@@ -326,8 +325,7 @@ module Args =
             let context = srcE.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
             Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Container {container}",
                 x.ConsumerGroupName, startPos, srcE.ForceRestart)
-            Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxReadAhead} uncommitted batches ahead",
-                srcE.MinBatchSize, srcE.StartingBatchSize, x.MaxReadAhead)
+            Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}]", srcE.MinBatchSize, srcE.StartingBatchSize)
             srcE, context,
                 {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                     forceRestart = srcE.ForceRestart
@@ -358,7 +356,6 @@ module Args =
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 //#if esdb
-
 module Checkpoints =
 
     open Equinox.CosmosStore
@@ -374,8 +371,8 @@ module Checkpoints =
             let cat = CosmosStoreCategory(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
             let resolve streamName = cat.Resolve(streamName, Equinox.AllowStale)
             Checkpoint.CheckpointSeries(groupName, resolve)
-//#endif // esdb
 
+//#endif // esdb
 let [<Literal>] AppName = "ProjectorTemplate"
 
 let build (args : Args.Arguments) =
@@ -391,7 +388,7 @@ let build (args : Args.Arguments) =
     let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
 #endif // cosmos && kafka && !parallelOnly
 #else // cosmos && !kafka
-    let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // cosmos && !kafka
     let pipeline =
@@ -413,14 +410,14 @@ let build (args : Args.Arguments) =
     let stats = Handler.ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
 #else // esdb && !kafka
-    let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // esdb && !kafka
     let pipeline =
         let filterByStreamName _ = true // see `dotnet new proReactor --filter` for an example of how to rig filtering arguments
         Propulsion.EventStore.EventStoreSource.Run(
             Log.Logger, sink, checkpoints, connectEs, spec, Handler.tryMapEvent filterByStreamName,
-            args.MaxReadAhead, args.StatsInterval)
+            maxReadAhead, args.StatsInterval)
 #endif // esdb
 //#if sss
     let srcSql, spec = args.BuildSqlStreamStoreParams()
@@ -436,7 +433,7 @@ let build (args : Args.Arguments) =
     let stats = Handler.ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
 #else // sss && !kafka
-    let stats = Handler.ProjectorStats(Log.Logger, args.StatsInterval, args.StateInterval)
+    let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // sss && !kafka
     let pipeline = Propulsion.SqlStreamStore.SqlStreamStoreSource.Run(Log.Logger, monitored, checkpointer, spec, sink, args.StatsInterval)
