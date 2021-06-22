@@ -196,7 +196,7 @@ module Args =
         member val MaxInFlightBytes =       a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map System.TimeSpan.FromMinutes
         member x.BuildSourceParams() =      x.Broker, x.Topic
-#if (kafka && blank)
+#if (kafka)
         member val Sink =
             match a.TryGetSubCommand() with
             | Some (KafkaSourceParameters.Kafka kafka) -> KafkaSinkArguments (c, kafka)
