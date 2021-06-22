@@ -573,7 +573,6 @@ let build (args : Args.Arguments) =
 #if kafka
 #if (blank && !multiSource)
         let broker, topic = source.Sink.BuildTargetParams()
-        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 #else
         let broker, topic = source.Cosmos.Sink.BuildTargetParams()
         let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
