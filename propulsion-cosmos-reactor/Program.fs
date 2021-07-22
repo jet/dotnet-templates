@@ -55,9 +55,8 @@ module Args =
                 x.ConsumerGroupName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             srcC.LagFrequency |> Option.iter<TimeSpan> (fun i -> Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", i.TotalSeconds))
-            let storeClient, monitored = srcC.ConnectStoreAndMonitored()
-            let context = CosmosStoreContext.create storeClient
-            (srcC, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+            let monitored = srcC.ConnectMonitored()
+            (srcC, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]       FromTail
         | [<AltCommandLine "-md"; Unique>]      MaxDocuments of int
@@ -101,11 +100,13 @@ module Args =
         member val MaxDocuments =               a.TryGetResult MaxDocuments
         member val LagFrequency =               a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member val private LeaseContainerId =   a.TryGetResult CosmosSourceParameters.LeaseContainer
+
         member private x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
         member x.ConnectLeases() =              match x.LeaseContainerId with
                                                 | None ->    x.ConnectLeases(x.ContainerId + "-aux")
                                                 | Some sc -> x.ConnectLeases(sc)
-        member x.ConnectStoreAndMonitored() =   connector.ConnectStoreAndMonitored(x.DatabaseId, x.ContainerId)
+        member x.ConnectMonitored() =           connector.ConnectMonitored(x.DatabaseId, x.ContainerId)
+        member x.Connect() =                    connector.ConnectStore("Main", x.DatabaseId, x.ContainerId)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv : Arguments =
@@ -116,9 +117,9 @@ module Args =
 let [<Literal>] AppName = "ReactorTemplate"
 
 let build (args : Args.Arguments) =
-    let source, context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
+    let source, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
 
-    let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+    let context = source.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
     let cache = Equinox.Cache(AppName, sizeMb=10)
     let srcService = Todo.Cosmos.create (context, cache)
     let dstService = TodoSummary.Cosmos.create (context, cache)
