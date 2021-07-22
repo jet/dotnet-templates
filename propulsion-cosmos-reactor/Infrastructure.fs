@@ -94,12 +94,5 @@ module ConnectorExtensions =
             Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
 
         /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
-        member x.ConnectMonitored(databaseId, containerId, ?connectionName) =
-            x.LogConfiguration(defaultArg connectionName "Source", databaseId, containerId)
+        member x.ConnectMonitored(databaseId, containerId) =
             x.CreateUninitialized(databaseId, containerId)
-
-        /// Connects to a Store as both a ChangeFeedProcessor Monitored Container and a CosmosStoreClient
-        member x.ConnectStoreAndMonitored(databaseId, containerId) =
-            let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
-            let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
-            storeClient, monitored
