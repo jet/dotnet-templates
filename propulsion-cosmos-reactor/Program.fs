@@ -90,7 +90,9 @@ module Args =
 
                 | Cosmos _ ->                   "CosmosDb Sink parameters."
     and CosmosSourceArguments(c : Configuration, a : ParseResults<CosmosSourceParameters>) =
-        let discovery =                         a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                         a.TryGetResult CosmosSourceParameters.Connection
+                                                |> Option.defaultWith (fun () -> c.CosmosConnection)
+                                                |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                              a.TryGetResult CosmosSourceParameters.ConnectionMode
         let timeout =                           a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                           a.GetResult(CosmosSourceParameters.Retries, 1)
