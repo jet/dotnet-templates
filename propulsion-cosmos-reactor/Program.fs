@@ -48,16 +48,16 @@ module Args =
             | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos for Src")
         member x.SourceParams() =
-                let srcC = x.Source
-                let leases = srcC.ConnectLeases()
-                Log.Information("Reacting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentStreams, x.MaxReadAhead)
-                Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                    x.ConsumerGroupName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxDocuments)
-                if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-                srcC.LagFrequency |> Option.iter<TimeSpan> (fun i -> Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", i.TotalSeconds))
-                let storeClient, monitored = srcC.ConnectStoreAndMonitored()
-                let context = CosmosStoreContext.create storeClient
-                (srcC, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+            let srcC = x.Source
+            let leases = srcC.ConnectLeases()
+            Log.Information("Reacting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentStreams, x.MaxReadAhead)
+            Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
+                x.ConsumerGroupName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxDocuments)
+            if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
+            srcC.LagFrequency |> Option.iter<TimeSpan> (fun i -> Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", i.TotalSeconds))
+            let storeClient, monitored = srcC.ConnectStoreAndMonitored()
+            let context = CosmosStoreContext.create storeClient
+            (srcC, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]       FromTail
         | [<AltCommandLine "-md"; Unique>]      MaxDocuments of int
