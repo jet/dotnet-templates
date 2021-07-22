@@ -132,9 +132,9 @@ module Args =
     and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
         let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          a.TryGetResult ConnectionMode
-        let timeout =                       a.GetResult(Timeout, 30.) |> TimeSpan.FromSeconds
-        let retries =                       a.GetResult(Retries, 9)
-        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
+        let timeout =                       a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       a.GetResult(Retries, 1)
+        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
         member val DatabaseId =             a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val ContainerId =            a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
