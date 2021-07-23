@@ -59,7 +59,7 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
         decider.QueryEx(fun c -> c.Version, render c.State)
 
-let create resolveStream =
+let private create resolveStream =
     let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 

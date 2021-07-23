@@ -55,7 +55,7 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         let decider = resolve clientId
         decider.Query render
 
-let create resolveStream =
+let private create resolveStream =
     let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 
