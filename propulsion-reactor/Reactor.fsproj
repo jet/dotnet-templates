@@ -4,7 +4,7 @@
         <OutputType>Exe</OutputType>
         <TargetFramework>netcoreapp3.1</TargetFramework>
         <WarningLevel>5</WarningLevel>
-	</PropertyGroup>
+    </PropertyGroup>
 
     <ItemGroup>
         <!--#if (!kafkaEventSpans) -->
@@ -35,8 +35,9 @@
         <!--#if (kafkaEventSpans) -->
         <PackageReference Include="Equinox.CosmosStore" Version="3.0.1" />
         <!--#else-->
-		<PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc2" />
-		<!--#endif-->
+        <PackageReference Include="Microsoft.Azure.Cosmos" Version="[3.20.0-preview]" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc2" />
+        <!--#endif-->
         <!--#if (multiSource) -->
         <PackageReference Include="Propulsion.EventStore" Version="2.11.0-rc2" />
         <!--#endif-->

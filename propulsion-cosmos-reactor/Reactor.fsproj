@@ -4,7 +4,7 @@
         <OutputType>Exe</OutputType>
         <TargetFramework>netcoreapp3.1</TargetFramework>
         <WarningLevel>5</WarningLevel>
-	</PropertyGroup>
+    </PropertyGroup>
 
     <ItemGroup>
         <None Include="README.md" />
@@ -19,7 +19,8 @@
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
         <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00035" />
-		<PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc2" />
+        <PackageReference Include="Microsoft.Azure.Cosmos" Version="[3.20.0-preview]" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc2" />
         <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
     </ItemGroup>
 </Project>
