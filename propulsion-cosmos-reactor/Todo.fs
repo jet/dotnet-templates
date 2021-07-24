@@ -38,7 +38,7 @@ module Fold =
     let evolve s = function
         | Events.Added item -> { s with items = item :: s.items; nextId = s.nextId + 1 }
         | Events.Updated value -> { s with items = s.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
-        | Events.Deleted e -> { s with items = s.items  |> List.filter (fun x -> x.id <> e.id) }
+        | Events.Deleted e -> { s with items = s.items |> List.filter (fun x -> x.id <> e.id) }
         | Events.Cleared e -> { nextId = e.nextId; items = [] }
         | Events.Snapshotted s -> { nextId = s.nextId; items = List.ofArray s.items }
     /// Folds a set of events from the store into a given `state`
