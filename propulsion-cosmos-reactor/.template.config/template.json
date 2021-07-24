@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @ragiano215 @bartelink",
+  "classifications": [
+    "CosmosDb",
+    "ChangeFeed",
+    "ChangeFeedProcessor",
+    "Event Sourcing",
+    "Equinox",
+    "Propulsion",
+    "Reactor"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Propulsion.Template.CosmosReactor",
+  "name": "Propulsion Cosmos Reactor",
+  "shortName": "proCosmosReactor",
+  "sourceName": "ReactorTemplate",
+  "preferNameDirectory": true
+}
