@@ -15,16 +15,7 @@ module PeriodId =
     let next (value : PeriodId) : PeriodId = %(%value + 1)
     let toString (value : PeriodId) : string = string %value
 
-/// TODO replace the terms `tranche`, `trancheId` and type `TrancheId` with domain term that represents the nature of the separation
-///      i.e. it might be a TenantId or a FulfilmentCenterId
-type ItemTrancheId = string<itemTrancheId>
-and [<Measure>] itemTrancheId
-module ItemTrancheId =
-
-    let parse (value : string) : ItemTrancheId = %value
-    let toString (value : ItemTrancheId) : string = %value
-
-/// Identifies an Epoch that holds a set of Items (within a Tranche)
+/// Identifies an Epoch that holds a set of Items
 /// TODO replace `Item` with a Domain term referencing the specific element being managed
 type ItemEpochId = int<itemEpochId>
 and [<Measure>] itemEpochId
@@ -46,7 +37,7 @@ module ItemId =
     let parse (value : string) : ItemId = %value
     let toString (value : ItemId) : string = %value
 
-/// Identifies a group of chained Epochs (pe Tranche within the series)
+/// Identifies a group of chained Epochs
 /// TODO replace `Item` with a Domain term referencing the specific element being managed
 type [<Measure>] itemSeriesId
 type ItemSeriesId = string<itemSeriesId>

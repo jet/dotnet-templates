@@ -89,7 +89,7 @@ let decideIngestWithCarryForward rules req s : Async<Result<'req, 'result> * Eve
 }
 
 /// Manages Application of Requests to the Period's stream, including closing preceding periods as appropriate
-type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     let calcBalance state =
         let createEventsBalance items : Events.Balance = { items = items }
@@ -103,7 +103,7 @@ type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.
             {   getIncomingBalance  = fun ()        -> close periodId
                 decideIngestion     = fun () _state -> (), (), []
                 decideCarryForward  = fun ()        -> genBalance } // always close
-        let decider = resolve periodId
+        let decider = resolve (Some Equinox.AllowStale) periodId
         decider.TransactEx((fun c -> decideIngestWithCarryForward rules () c.State), fun r _c -> Option.get r.carryForward)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
@@ -112,7 +112,7 @@ type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.
             {   getIncomingBalance  = getIncoming
                 decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
                 decideCarryForward  = fun res state -> async { if shouldClose res then return! genBalance state else return None } } // also close, if we should
-        let decider = resolve periodId
+        let decider = resolve (Some Equinox.AllowStale) periodId
         decider.TransactEx((fun c -> decideIngestWithCarryForward rules request c.State), fun r _c -> r)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
@@ -130,16 +130,13 @@ type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.
         aux periodId getIncoming (Some request)
 
     /// Exposes the full state to a reader (which is appropriate for a demo but is an anti-pattern in the general case)
-    /// NOTE the resolve function below uses Equinox.AllowStale - you may want to remove that option of you write a read
-    ///      function like this for real (i.e. if the active Period is constantly being appended to in another process/
-    ///      machine) then this read function will continually serve the same value, as it has been instructed not to
-    ///      make a store round-trip
+    /// NOTE unlike for the Transact method, we do not supply ResolveOption.AllowStale, which means we'll see updates from other instances
     member _.Read periodId =
-        let decider = resolve periodId
+        let decider = resolve None periodId
         decider.Query id
 
 let private create resolveStream =
-    let resolve = streamName >> resolveStream (Some Equinox.AllowStale) >> Equinox.createDecider
+    let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
     Service resolve
 
 module MemoryStore =

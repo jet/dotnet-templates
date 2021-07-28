@@ -1,21 +1,20 @@
 [<AutoOpen>]
-module Patterns.Domain.Tests.Infrastructure
+module FeedSourceTemplate.Domain.Tests.Infrastructure
 
 open FSharp.UMX
 open System
 open FsCheck
-open Patterns.Domain
+open FeedSourceTemplate.Domain
 
 (* Generic FsCheck helpers *)
 
 let (|Id|) (x : Guid) = x.ToString "N" |> UMX.tag
-let (|Ids|) (xs : Guid[]) = xs |> Array.map (|Id|)
-
 let inline mkId () = Guid.NewGuid() |> (|Id|)
+let (|Ids|) (xs : Guid[]) = xs |> Array.map (|Id|)
 
 type DomainArbs() =
 
-    static member Item : Arbitrary<ItemEpoch.Events.Item> = Arb.fromGen <| gen {
+    static member Item : Arbitrary<TicketsEpoch.Events.Item> = Arb.fromGen <| gen {
         let! r = Arb.Default.Derive() |> Arb.toGen
         let id = mkId () // TODO why doesnt `let (Id id) = Arb.generate` generate fresh every time?
         return { r with id = id }

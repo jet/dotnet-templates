@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <WarningLevel>5</WarningLevel>
     <IsPackable>false</IsPackable>
     <OutputType>Library</OutputType>
@@ -9,8 +9,7 @@
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="PeriodsCarryingForward.fs" />
-    <Compile Include="ExactlyOnceIngesterTests.fs" />
+    <Compile Include="IngesterTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

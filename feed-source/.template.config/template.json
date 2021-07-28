@@ -10,9 +10,9 @@
     "language": "F#",
     "type": "project"
   },
-  "identity": "FeedApi",
-  "name": "Equinox Feed Api",
-  "shortName": "feedApi",
-  "sourceName": "FeedApiTemplate",
+  "identity": "FeedSource",
+  "name": "Equinox Feed Source",
+  "shortName": "feedSource",
+  "sourceName": "FeedSourceTemplate",
   "preferNameDirectory": true
 }

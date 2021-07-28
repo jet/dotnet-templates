@@ -2,7 +2,11 @@
 /// - the `TicketsSeries` aggregate maintains a pointer to the current Epoch for each FC
 /// - as `TicketEpoch`s complete (have `Closed` events logged), we update the `active` Epoch in the TicketsSeries
 ///     to reference the new one
-module FeedApiTemplate.Domain.Tickets
+/// - Ingestion deduplicates on a best-effort basis looking back a predefined number of epochs.
+///   - Re-ingestion of items prior to this window is possible (implying the feed can potentially serve duplicates,
+///     which the feedConsumer is expected to handle idempotently).
+///   - Note also that the IdsCache is presently unbounded
+module FeedSourceTemplate.Domain.TicketsIngester
 
 open Equinox.Core
 open FSharp.UMX
@@ -48,26 +52,26 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
         let firstEpochId = effectiveEpochId ()
 
         let rec aux epochId ingestedTickets items = async {
-            let dup, fresh = items |> Array.partition previousTickets.Contains
+            let dup, freshItems = items |> Array.partition (TicketsEpoch.itemId >> previousTickets.Contains)
             let fullCount = Array.length items
-            let dropping = fullCount - Array.length fresh
+            let dropping = fullCount - Array.length freshItems
             if dropping <> 0 then
                 log.Information("Ignoring {count}/{fullCount} duplicate ids: {ids} for {fcId}/{epochId}", dropping, fullCount, dup, fcId, epochId)
-            if Array.isEmpty fresh then
+            if Array.isEmpty freshItems then
                 return ingestedTickets
             else
-                let! res = epochs.Ingest(fcId, epochId, fresh)
-                let ingestedTickets = Array.append ingestedTickets res.added
-                if (not << Array.isEmpty) res.added then
-                    log.Information("Added {count} items to {fcId:l}/{epochId}", res.added.Length, fcId, epochId)
+                let! res = epochs.Ingest(fcId, epochId, freshItems)
+                let ingestedTickets = Array.append ingestedTickets res.accepted
+                if (not << Array.isEmpty) res.accepted then
+                    log.Information("Added {count} items to {fcId:l}/{epochId}", res.accepted.Length, fcId, epochId)
                 // The adding is potentially redundant; we don't care
                 previousTickets.Add res.content
                 // Any writer noticing we've moved to a new epoch shares the burden of marking it active
-                if not res.isClosed && activeEpochId < TicketsEpochId.value epochId then
+                if not res.closed && activeEpochId < TicketsEpochId.value epochId then
                     log.Information("Marking {fcId:l}/{epochId} active", fcId, epochId)
                     do! series.MarkIngestionEpochId(fcId, epochId)
                     System.Threading.Interlocked.CompareExchange(&activeEpochId, %epochId, activeEpochId) |> ignore
-                match res.rejected with
+                match res.residual with
                 | [||] -> return ingestedTickets
                 | remaining -> return! aux (TicketsEpochId.next epochId) ingestedTickets remaining }
         return! aux firstEpochId [||] (Array.concat items)
@@ -78,7 +82,7 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
     /// Instead, we enable concurrent requests to coalesce by having requests converge in this AsyncBatchingGate
     /// This has the following critical effects:
     /// - Traffic to CosmosDB is naturally constrained to a single flight in progress
-    ///   (BatchingGate does not admit next batch until current has succeeded or throws)
+    ///   (BatchingGate does not release next batch for execution until current has succeeded or throws)
     /// - RU consumption for writing to the batch is optimized (1 write inserting 1 event document vs N writers writing N)
     /// - Peak throughput is more consistent as latency is not impacted by the combination of having to:
     ///   a) back-off, re-read and retry if there's a concurrent write Optimistic Concurrency Check failure when writing the stream
@@ -90,15 +94,15 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
     member _.Initialize() = previousTickets.AwaitValue() |> Async.Ignore
 
     /// Attempts to feed the items into the sequence of epochs. Returns the subset that actually got fed in this time around.
-    member _.IngestMany(items : TicketId[]) : Async<TicketId[]> = async {
+    member _.IngestMany(items : TicketsEpoch.Events.Item[]) : Async<TicketId[]> = async {
         let! results = batchedIngest.Execute items
-        return System.Linq.Enumerable.Intersect(items, results) |> Array.ofSeq
+        return System.Linq.Enumerable.Intersect(Seq.map TicketsEpoch.itemId items, results) |> Array.ofSeq
     }
 
     /// Attempts to feed the item into the sequence of batches. Returns true if the item actually got included into an Epoch this time around.
-    member _.TryIngest(item : TicketId) : Async<bool> = async {
+    member _.TryIngest(item : TicketsEpoch.Events.Item) : Async<bool> = async {
         let! result = batchedIngest.Execute(Array.singleton item)
-        return result |> Array.contains item
+        return result |> Array.contains (TicketsEpoch.itemId item)
     }
 
 let private createFcService (epochs, lookBackLimit) series linger fcId =
@@ -116,11 +120,25 @@ type Service internal (createForFc : FcId -> ServiceForFc) =
     member _.ForFc(fcId) : ServiceForFc =
         forFc.GetOrAdd(fcId, build).Value
 
+type MemoryStore() =
+
+    static member Create(store, linger, maxItemsPerEpoch, lookBackLimit) =
+        let remainingBatchCapacity _candidateItems currentItems =
+            let l = Array.length currentItems
+            max 0 (maxItemsPerEpoch - l)
+        let epochs = TicketsEpoch.MemoryStore.create remainingBatchCapacity store
+        let series = TicketsSeries.MemoryStore.create store
+        let createForFc = createFcService (epochs, lookBackLimit) series linger
+        Service createForFc
+        
 module Cosmos =
 
     let create (context, cache) =
         let maxTicketsPerEpoch, lookBackLimit = 50_000, 100
-        let epochs = TicketsEpoch.Cosmos.createIngester maxTicketsPerEpoch (context, cache)
+        let remainingBatchCapacity _candidateItems currentItems =
+            let l = Array.length currentItems
+            max 0 (maxTicketsPerEpoch - l)
+        let epochs = TicketsEpoch.Cosmos.create remainingBatchCapacity (context, cache)
         let series = TicketsSeries.Cosmos.create (context, cache)
         let linger = System.TimeSpan.FromMilliseconds 200.
         let createForFc = createFcService (epochs, lookBackLimit) series linger

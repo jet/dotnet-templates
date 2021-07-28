@@ -1,4 +1,4 @@
-﻿namespace FeedApiTemplate.Domain
+﻿namespace FeedSourceTemplate.Domain
 
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guid+strings
 

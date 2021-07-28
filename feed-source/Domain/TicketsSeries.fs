@@ -2,7 +2,7 @@
 /// Allows an Ingester to quickly determine the current Epoch which it should commence writing into
 /// As an Epoch is marked `Closed`, `module Tickets` will mark a new epoch `Started` on this aggregate
 /// Can also be used to walk back through time to visit every ticket there has ever been for correlation purposes
-module FeedApiTemplate.Domain.TicketsSeries
+module FeedSourceTemplate.Domain.TicketsSeries
 
 let [<Literal>] Category = "Tickets"
 let streamName seriesId = FsCodec.StreamName.create Category (TicketsSeriesId.toString seriesId)
@@ -80,3 +80,11 @@ module Cosmos =
         let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
         let resolveStream opt sn = cat.Resolve(sn, opt)
         create None resolveStream
+
+module MemoryStore =
+
+    let create store =
+        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+        let resolveStream opt sn = cat.Resolve(sn, opt)
+        create None resolveStream
+
