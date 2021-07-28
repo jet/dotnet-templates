@@ -197,7 +197,7 @@ type Startup() =
 
 //#endif
 //#if cosmos
-        // AZURE COSMOSDB: Events are stored in an Azure CosmosDb Account (using the SQL API)
+        // AZURE COSMOSDB: Events are stored as items in a CosmosDb Container
         // Provisioning Steps:
         // 1) Set the 3x environment variables EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABASE, EQUINOX_COSMOS_CONTAINER
         // 2) Provision a container using the following command sequence:

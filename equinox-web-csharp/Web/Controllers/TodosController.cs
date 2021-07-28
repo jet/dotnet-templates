@@ -22,7 +22,7 @@ namespace TodoBackendTemplate.Controllers
 
     // Fulfills contract dictated by https://www.todobackend.com
     // To run:
-    //     & dotnet run -f netcoreapp3.1 -p Web
+    //     & dotnet run -p Web
     //     https://www.todobackend.com/client/index.html?https://localhost:5001/todos
     //     # NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
     // See also similar backends used as references when implementing:

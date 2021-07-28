@@ -23,7 +23,7 @@ namespace TodoBackendTemplate.Web
     }
     static class Program
     {
-        private const string AppName = "TodoApp";
+        private const string AppName = "TodoBackendTemplate";
 
         public static async Task<int> Main(string[] argv)
         {

@@ -25,7 +25,7 @@ let createWebHostBuilder args : IWebHostBuilder =
         .UseSerilog()
         .UseStartup<Startup>()
 
-let [<Literal>] AppName = "TodoApp"
+let [<Literal>] AppName = "TodoBackendTemplate"
 
 [<EntryPoint>]
 let main argv =
