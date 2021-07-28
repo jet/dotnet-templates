@@ -18,7 +18,7 @@ module Fold =
 
     type State = ItemId[] * bool
     let initial = [||], false
-    let evolve (ids, closed) = function
+    let private evolve (ids, closed) = function
         | Events.Ingested e     -> Array.append e.ids ids, closed
         | Events.Closed         -> (ids, true)
         | Events.Snapshotted e  -> (e.ids, e.closed)
@@ -47,7 +47,6 @@ let decide shouldClose candidateIds = function
 type Service internal
     (   shouldClose : ItemId[] -> ItemId[] -> bool, // let outer layers decide whether ingestion should trigger closing of the batch
         resolve_ : Equinox.ResolveOption option -> ItemEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
-
     let resolve = resolve_ None
     let resolveStale = resolve_ (Some Equinox.AllowStale)
     
