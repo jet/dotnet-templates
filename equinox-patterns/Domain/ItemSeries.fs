@@ -11,8 +11,8 @@ let streamName = ItemSeriesId.toString >> FsCodec.StreamName.create Category
 module Events =
 
     type Event =
-        | Started       of {| epochId : ItemEpochId |}
-        | Snapshotted   of {| active : ItemEpochId option |}
+        | Started of            {| epochId : ItemEpochId |}
+        | Snapshotted of        {| active : ItemEpochId option |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
@@ -20,8 +20,8 @@ module Fold =
 
     type State = ItemEpochId option
     let initial = None
-    let evolve _state = function
-        | Events.Started e     -> Some e.epochId
+    let private evolve _state = function
+        | Events.Started e -> Some e.epochId
         | Events.Snapshotted e -> e.active
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
@@ -49,7 +49,7 @@ type Service internal (resolve_ : Equinox.ResolveOption option -> ItemSeriesId -
 
     /// Mark specified `epochId` as live for the purposes of ingesting
     /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by anointing a successor via this
-    member _.MarkIngestionEpochId(epochId) : Async<unit> =
+    member _.MarkIngestionEpochId epochId : Async<unit> =
         let decider = resolveStale seriesId
         decider.Transact(interpret epochId)
 

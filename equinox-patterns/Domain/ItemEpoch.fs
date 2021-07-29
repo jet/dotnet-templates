@@ -8,9 +8,9 @@ let streamName = ItemEpochId.toString >> FsCodec.StreamName.create Category
 module Events =
 
     type Event =
-        | Ingested    of {| ids : ItemId[] |}
+        | Ingested of           {| ids : ItemId[] |}
         | Closed
-        | Snapshotted of {| ids : ItemId[]; closed : bool |}
+        | Snapshotted of        {| ids : ItemId[]; closed : bool |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
@@ -19,31 +19,35 @@ module Fold =
     type State = ItemId[] * bool
     let initial = [||], false
     let private evolve (ids, closed) = function
-        | Events.Ingested e     -> Array.append e.ids ids, closed
-        | Events.Closed         -> (ids, true)
-        | Events.Snapshotted e  -> (e.ids, e.closed)
+        | Events.Ingested e ->  Array.append e.ids ids, closed
+        | Events.Closed ->      (ids, true)
+        | Events.Snapshotted e -> (e.ids, e.closed)
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot (ids, closed) = Events.Snapshotted {| ids = ids; closed = closed |}
 
-type Result = { residual : ItemId[]; accepted : ItemId[]; closed : bool; content : ItemId[] }
+type Result = { accepted : ItemId[]; closed : bool; residual : ItemId[] }
 
+/// Manages ingestion of only items not already in the list
+/// Yields residual net of items already present in this epoch's list
+// NOTE See feedSource template for more advanced version handling splitting large input requests where epoch limit is strict 
 let decide shouldClose candidateIds = function
     | currentIds, false as state ->
         let added, events =
-            match candidateIds |> Array.except currentIds with
+            // TOCONSIDER in general, one would expect the inputs to naturally be distinct 
+            match candidateIds |> Array.except currentIds (*|> Array.distinct*) with
             | [||] -> [||], []
             | news ->
                 let closing = shouldClose news currentIds
                 let ingestEvent = Events.Ingested {| ids = news |}
                 news, if closing then [ ingestEvent ; Events.Closed ] else [ ingestEvent ]
         let state' = Fold.fold state events
-        { residual = [||]; accepted = added; closed = snd state'; content = fst state' }, events
+        { accepted = added; closed = snd state'; residual = [||] }, events
     | currentIds, true ->
-        { residual = candidateIds |> Array.except currentIds; accepted = [||]; closed = true; content = currentIds }, []
+        { accepted = [||]; closed = true; residual = candidateIds |> Array.except currentIds (*|> Array.distinct*) }, []
 
-/// Used by the Ingester to manage ingestion of items into the epoch, i.e. the Write side
+// NOTE see feedSource for example of separating Service logic into Ingestion and Read Services in order to vary the folding and/or state held
 type Service internal
     (   shouldClose : ItemId[] -> ItemId[] -> bool, // let outer layers decide whether ingestion should trigger closing of the batch
         resolve_ : Equinox.ResolveOption option -> ItemEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
@@ -60,7 +64,7 @@ type Service internal
         decider.Transact(decide shouldClose items)
 
     /// Returns all the items currently held in the stream (Not using AllowStale on the assumption this needs to see updates from other apps)
-    member _.Read(epochId) : Async<Fold.State> =
+    member _.Read epochId : Async<Fold.State> =
         let decider = resolve epochId
         decider.Query id
             

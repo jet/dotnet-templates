@@ -45,6 +45,7 @@ let notAlreadyIn (ids : TicketId seq) =
 type Result = { accepted : TicketId[]; residual : Events.Item[]; content : TicketId[]; closed : bool }
 
 /// NOTE See eqxPatterns template ItemEpoch for a simplified decide function which does not split ingestion requests with a rigid capacity rule
+/// NOTE does not deduplicate (distinct) candidates and/or the residuals on the basis that the caller should guarantee that
 let decide capacity candidates (currentIds, closed as state) =
     match closed, candidates |> Array.filter (notAlreadyIn currentIds) with
     | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, []
