@@ -8,9 +8,9 @@ Consists of:
 
 - `Period`: a Decider that manages ingestion into a chain of periods with each one
 
-  a) Carrying Forward a Balance from its immediate predecessor `Period`; then
-  b) being open for transactions for a period of time; ultimately
-  c) carrying forward a closing balance to its successor Period
+  a. Carrying Forward a Balance from its immediate predecessor `Period`; then
+  b. being open for transactions for a period of time; ultimately
+  c. carrying forward a closing balance to its successor Period
   
 Notes:
 - A given `Period` can thus be read without any need to load any preceding periods, as by definition, all relevant information has been `CarriedForward`
