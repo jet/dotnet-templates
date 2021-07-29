@@ -1,7 +1,7 @@
-module Patterns.Domain.ItemEpoch
+module Patterns.Domain.ListEpoch
 
-let [<Literal>] Category = "ItemEpoch"
-let streamName = ItemEpochId.toString >> FsCodec.StreamName.create Category
+let [<Literal>] Category = "ListEpoch"
+let streamName = ListEpochId.toString >> FsCodec.StreamName.create Category
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -30,7 +30,7 @@ module Fold =
 type Result = { accepted : ItemId[]; closed : bool; residual : ItemId[] }
 
 /// Manages ingestion of only items not already in the list
-/// Yields residual net of items already present in this epoch's list
+/// Yields residual net of items already present in this epoch
 // NOTE See feedSource template for more advanced version handling splitting large input requests where epoch limit is strict 
 let decide shouldClose candidateIds = function
     | currentIds, false as state ->
@@ -50,7 +50,7 @@ let decide shouldClose candidateIds = function
 // NOTE see feedSource for example of separating Service logic into Ingestion and Read Services in order to vary the folding and/or state held
 type Service internal
     (   shouldClose : ItemId[] -> ItemId[] -> bool, // let outer layers decide whether ingestion should trigger closing of the batch
-        resolve_ : Equinox.ResolveOption option -> ItemEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
+        resolve_ : Equinox.ResolveOption option -> ListEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
     let resolve = resolve_ None
     let resolveStale = resolve_ (Some Equinox.AllowStale)
     

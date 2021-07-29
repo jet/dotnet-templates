@@ -3,17 +3,17 @@
 /// - as `Epoch`s complete (have `Closed` events logged), we update the `active` Epoch in the Series to reference the new one
 /// The fact that each request walks forward from a given start point until it either gets to append (or encounters a prior insertion)
 ///   means we can guarantee the insertion/deduplication to be idempotent and insert exactly once per completed execution
-module Patterns.Domain.ItemIngester
+module Patterns.Domain.ListIngester
 
 open FSharp.UMX // %
 
-type Service internal (log : Serilog.ILogger, epochs : ItemEpoch.Service, series : ItemSeries.Service, linger) =
+type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series : ListSeries.Service, linger) =
 
-    let uninitializedSentinel : int = %ItemEpochId.unknown
+    let uninitializedSentinel : int = %ListEpochId.unknown
     let mutable currentEpochId_ = uninitializedSentinel
     let currentEpochId () = if currentEpochId_ = uninitializedSentinel then Some %currentEpochId_ else None
     
-    let tryIngest (items : (ItemEpochId * ItemId)[][]) = async {
+    let tryIngest (items : (ListEpochId * ItemId)[][]) = async {
         let rec aux ingestedItems items = async {
             let epochId = items |> Array.minBy fst |> fst
             let epochItems, futureEpochItems = items |> Array.partition (fun (e,_) -> e = epochId)
@@ -22,7 +22,7 @@ type Service internal (log : Serilog.ILogger, epochs : ItemEpoch.Service, series
             if (not << Array.isEmpty) res.accepted then
                 log.Information("Added {count}/{total} items to {epochId} Residual {residual} Future {future}",
                                 res.accepted.Length, epochItems.Length, epochId, futureEpochItems.Length)
-            let nextEpochId = ItemEpochId.next epochId
+            let nextEpochId = ListEpochId.next epochId
             let pushedToNextEpoch = res.residual |> Array.map (fun x -> nextEpochId, x)
             match Array.append pushedToNextEpoch futureEpochItems with
             | [||] ->
@@ -52,13 +52,13 @@ type Service internal (log : Serilog.ILogger, epochs : ItemEpoch.Service, series
 
     /// Determines the current active epoch
     /// Uses cached values as epoch transitions are rare, and caller needs to deal with the inherent race condition in any case
-    member _.CurrentIngestionEpochId() : Async<ItemEpochId> =
+    member _.CurrentIngestionEpochId() : Async<ListEpochId> =
         match currentEpochId () with
         | Some currentEpochId -> async { return currentEpochId }
         | None -> series.ReadIngestionEpochId()
 
     /// Attempts to feed the items into the sequence of epochs.
-    /// Returns the subset that actually got fed in this time around.
+    /// Returns the subset that actually got fed in this time around, exclusive of items that did not trigger events per idempotency rules.
     member _.IngestMany(epochId, items) : Async<ItemId seq> = async {
         if Array.isEmpty items then return Seq.empty else
             
@@ -66,8 +66,8 @@ type Service internal (log : Serilog.ILogger, epochs : ItemEpoch.Service, series
         return System.Linq.Enumerable.Intersect(items, results)
     }
 
-    /// Attempts to feed the item into the sequence of batches.
-    /// Returns true if the item actually got included into an Epoch this time around.
+    /// Attempts to feed the item into the sequence of epochs.
+    /// Returns true if the item actually got included into an Epoch this time (i.e. will be false if it was an idempotent retry).
     member _.TryIngest(startEpoch, itemId) : Async<bool> = async {
         let! result = batchedIngest.Execute [| startEpoch, itemId |]
         return result |> Array.contains itemId
@@ -84,14 +84,14 @@ type MemoryStore() =
 
     static member Create(store, linger, maxItemsPerEpoch) =
         let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-        let epochs = ItemEpoch.MemoryStore.create shouldClose store
-        let series = ItemSeries.MemoryStore.create store
+        let epochs = ListEpoch.MemoryStore.create shouldClose store
+        let series = ListSeries.MemoryStore.create store
         create epochs series linger
 
 module Cosmos =
 
     let create (context, cache) =
         let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-        let epochs = ItemEpoch.Cosmos.create shouldClose (context, cache)
-        let series = ItemSeries.Cosmos.create (context, cache)
+        let epochs = ListEpoch.Cosmos.create shouldClose (context, cache)
+        let series = ListSeries.Cosmos.create (context, cache)
         create epochs series linger

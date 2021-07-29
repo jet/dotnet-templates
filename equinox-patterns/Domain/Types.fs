@@ -15,17 +15,17 @@ module PeriodId =
     let next (value : PeriodId) : PeriodId = %(%value + 1)
     let toString (value : PeriodId) : string = string %value
 
-/// Identifies an Epoch that holds a set of Items
-/// TODO replace `Item` with a Domain term referencing the specific element being managed
-type ItemEpochId = int<itemEpochId>
-and [<Measure>] itemEpochId
-module ItemEpochId =
+/// Identifies an Epoch that holds a list of Items
+/// TODO replace `List` with a Domain term referencing the specific element being managed
+type ListEpochId = int<listEpochId>
+and [<Measure>] listEpochId
+module ListEpochId =
 
-    let unknown = -1<itemEpochId>
-    let initial = 0<itemEpochId>
-    let next (value : ItemEpochId) : ItemEpochId = % (%value + 1)
-    let value (value : ItemEpochId) : int = %value
-    let toString (value : ItemEpochId) : string = string %value
+    let unknown = -1<listEpochId>
+    let initial = 0<listEpochId>
+    let next (value : ListEpochId) : ListEpochId = % (%value + 1)
+    let value (value : ListEpochId) : int = %value
+    let toString (value : ListEpochId) : string = string %value
 
 /// Identifies an Item stored within an Epoch
 /// TODO replace `Item` with a Domain term referencing the specific element being managed
@@ -38,10 +38,10 @@ module ItemId =
     let toString (value : ItemId) : string = %value
 
 /// Identifies a group of chained Epochs
-/// TODO replace `Item` with a Domain term referencing the specific element being managed
-type [<Measure>] itemSeriesId
-type ItemSeriesId = string<itemSeriesId>
-module ItemSeriesId =
+/// TODO replace `List` with a Domain term referencing the specific element being managed
+type [<Measure>] listSeriesId
+type ListSeriesId = string<listSeriesId>
+module ListSeriesId =
 
-    let wellKnownId : ItemSeriesId = % "0"
-    let toString (value : ItemSeriesId) : string = %value
+    let wellKnownId : ListSeriesId = % "0"
+    let toString (value : ListSeriesId) : string = %value

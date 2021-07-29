@@ -1,51 +1,51 @@
 /// Maintains a pointer into the Epoch chain
 /// Allows the Ingester to quickly determine the current Epoch into which it should commence writing
 /// As an Epoch is marked `Closed`, the Ingester will mark a new Epoch `Started` on this aggregate
-module Patterns.Domain.ItemSeries
+module Patterns.Domain.ListSeries
 
-let [<Literal>] Category = "ItemSeries"
-let streamName = ItemSeriesId.toString >> FsCodec.StreamName.create Category
+let [<Literal>] Category = "ListSeries"
+let streamName = ListSeriesId.toString >> FsCodec.StreamName.create Category
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
 module Events =
 
     type Event =
-        | Started of            {| epochId : ItemEpochId |}
-        | Snapshotted of        {| active : ItemEpochId option |}
+        | Started of            {| epochId : ListEpochId |}
+        | Snapshotted of        {| active : ListEpochId |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
 module Fold =
 
-    type State = ItemEpochId option
+    type State = ListEpochId option
     let initial = None
     let private evolve _state = function
         | Events.Started e -> Some e.epochId
-        | Events.Snapshotted e -> e.active
+        | Events.Snapshotted e -> Some e.active
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
-    let toSnapshot s = Events.Snapshotted {| active = s |}
+    let toSnapshot s = Events.Snapshotted {| active = Option.get s |}
 
 let interpret epochId (state : Fold.State) =
-    [if state |> Option.forall (fun cur -> cur < epochId) && epochId >= ItemEpochId.initial then
+    [if state |> Option.forall (fun cur -> cur < epochId) && epochId >= ListEpochId.initial then
         yield Events.Started {| epochId = epochId |}]
 
-type Service internal (resolve_ : Equinox.ResolveOption option -> ItemSeriesId -> Equinox.Decider<Events.Event, Fold.State>, ?seriesId) =
+type Service internal (resolve_ : Equinox.ResolveOption option -> ListSeriesId -> Equinox.Decider<Events.Event, Fold.State>, ?seriesId) =
 
     let resolve = resolve_ None
     let resolveStale = resolve_ (Some Equinox.AllowStale)
 
     // For now we have a single global sequence. This provides us an extension point should we ever need to reprocess
     // NOTE we use a custom id in order to isolate data for acceptance tests
-    let seriesId = defaultArg seriesId ItemSeriesId.wellKnownId
+    let seriesId = defaultArg seriesId ListSeriesId.wellKnownId
 
     /// Determines the current active epoch
     /// Uses cached values as epoch transitions are rare, and caller needs to deal with the inherent race condition in any case
-    member _.ReadIngestionEpochId() : Async<ItemEpochId> =
+    member _.ReadIngestionEpochId() : Async<ListEpochId> =
         let decider = resolve seriesId
-        decider.Query(Option.defaultValue ItemEpochId.initial)
+        decider.Query(Option.defaultValue ListEpochId.initial)
 
     /// Mark specified `epochId` as live for the purposes of ingesting
     /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by anointing a successor via this
