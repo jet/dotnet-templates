@@ -68,9 +68,9 @@ type Service internal
         let decider = resolve epochId
         decider.Query id
             
-let private create capacity resolveStream =
+let private create shouldClose resolveStream =
     let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
-    Service(capacity, resolve)
+    Service(shouldClose, resolve)
 
 module MemoryStore =
 
