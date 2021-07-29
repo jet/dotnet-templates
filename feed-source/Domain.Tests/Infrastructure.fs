@@ -2,9 +2,9 @@
 module FeedSourceTemplate.Domain.Tests.Infrastructure
 
 open FSharp.UMX
-open System
 open FsCheck
 open FeedSourceTemplate.Domain
+open System
 
 (* Generic FsCheck helpers *)
 
@@ -28,7 +28,7 @@ type DomainProperty() = inherit FsCheck.Xunit.PropertyAttribute(Arbitrary=[|type
 /// b) indirectly validated by running the tests frequently locally in DEBUG mode
 /// that running the test multiple times is not a useful thing to do
 #if !DEBUG
-type AutoDataAttribute() = inherit FsCheck.Xunit.PropertyAttribute(Arbitrary=[|typeof<DomainArbs>|], MaxTest=1, QuietOnSuccess=true)
+type AutoDataAttribute() = inherit DomainProperty(MaxTest=1)
 #else
-type AutoDataAttribute() = inherit FsCheck.Xunit.PropertyAttribute(Arbitrary=[|typeof<DomainArbs>|], MaxTest=5, QuietOnSuccess=true)
+type AutoDataAttribute() = inherit DomainProperty(MaxTest=5)
 #endif

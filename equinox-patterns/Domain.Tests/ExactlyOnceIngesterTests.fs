@@ -8,7 +8,7 @@ let linger, maxPickTicketsPerBatch = System.TimeSpan.FromMilliseconds 1., 5
 
 let createSut store =
     // While we use ~ 200ms when hitting Cosmos, there's no value in doing so in the context of these property based tests
-    ItemIngester.MemoryStore.Create(store, linger=linger, maxItemsPerEpoch=maxPickTicketsPerBatch)
+    ListIngester.MemoryStore.Create(store, linger=linger, maxItemsPerEpoch=maxPickTicketsPerBatch)
 
 let [<DomainProperty>] properties shouldUseSameSut (initialEpochId, Ids initialItems) (Ids items) =
     let store = Equinox.MemoryStore.VolatileStore()
@@ -17,7 +17,7 @@ let [<DomainProperty>] properties shouldUseSameSut (initialEpochId, Ids initialI
     Gen.choose (0, 3) |> Arb.fromGen |> Prop.forAll <| fun gap ->
         
     let mutable nextEpochId = initialEpochId
-    for x in 1 .. gap do nextEpochId <- ItemEpochId.next nextEpochId
+    for x in 1 .. gap do nextEpochId <- ListEpochId.next nextEpochId
         
     Async.RunSynchronously <| async {
         // Initialize with some items
