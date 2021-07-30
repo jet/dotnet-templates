@@ -29,6 +29,6 @@ let [<DomainProperty>] properties shouldUseSameSut (initialEpochId, Ids initialI
         // Add some extra
         let sut = if shouldUseSameSut then initialSut else createSut store
         let! result = sut.IngestMany(nextEpochId, items)
-        let expected = items |> Seq.except initialExpected |> Seq.distinct
+        let expected = items |> Seq.except initialExpected
         return set expected = set result
     }
