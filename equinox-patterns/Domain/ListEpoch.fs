@@ -42,8 +42,8 @@ let decide shouldClose candidateIds = function
                 let closing = shouldClose news currentIds
                 let ingestEvent = Events.Ingested {| ids = news |}
                 news, if closing then [ ingestEvent ; Events.Closed ] else [ ingestEvent ]
-        let state' = Fold.fold state events
-        { accepted = added; closed = snd state'; residual = [||] }, events
+        let (_, closed) = Fold.fold state events
+        { accepted = added; closed = closed; residual = [||] }, events
     | currentIds, true ->
         { accepted = [||]; closed = true; residual = candidateIds |> Array.except currentIds (*|> Array.distinct*) }, []
 
