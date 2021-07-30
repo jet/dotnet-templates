@@ -120,7 +120,7 @@ type Service internal (createForFc : FcId -> ServiceForFc) =
     member _.ForFc(fcId) : ServiceForFc =
         forFc.GetOrAdd(fcId, build).Value
 
-type MemoryStore() =
+type MemoryStore =
 
     static member Create(store, linger, maxItemsPerEpoch, lookBackLimit) =
         let remainingBatchCapacity _candidateItems currentItems =

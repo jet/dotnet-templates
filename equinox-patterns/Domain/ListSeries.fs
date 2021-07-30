@@ -1,6 +1,6 @@
-/// Maintains a pointer into the Epoch chain
-/// Allows the Ingester to quickly determine the current Epoch into which it should commence writing
-/// As an Epoch is marked `Closed`, the Ingester will mark a new Epoch `Started` on this aggregate
+/// Maintains a pointer into the Epoch chain for a given Series
+/// Allows the Ingester to determine the current Epoch into which it commence writing via ReadIngestionEpochId
+/// As an Epoch is marked `Closed`, the Ingester will mark a new Epoch `Started` on this aggregate via MarkIngestionEpochId
 module Patterns.Domain.ListSeries
 
 let [<Literal>] Category = "ListSeries"
@@ -34,7 +34,7 @@ let interpret epochId (state : Fold.State) =
     [if state |> Option.forall (fun cur -> cur < epochId) && epochId >= ListEpochId.initial then
         yield Events.Started {| epochId = epochId |}]
 
-type Service internal (resolve_ : Equinox.ResolveOption option -> unit -> Equinox.Decider<Events.Event, Fold.State>, ?seriesId) =
+type Service internal (resolve_ : Equinox.ResolveOption option -> unit -> Equinox.Decider<Events.Event, Fold.State>) =
 
     let resolve = resolve_ None
     let resolveStale = resolve_ (Some Equinox.AllowStale)

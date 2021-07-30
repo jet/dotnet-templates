@@ -7,6 +7,9 @@ module Patterns.Domain.ListIngester
 
 open FSharp.UMX // %
 
+/// Ensures any given item is only added to the list exactly once by virtue of the following protocol:
+/// 1. Caller obtains an origin epoch via ActiveIngestionEpochId, storing that alongside the source item
+/// 2. Caller deterministically obtains that origin epoch to supply to Ingest/TryIngest such that retries can be idempotent
 type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series : ListSeries.Service, linger) =
 
     let uninitializedSentinel : int = %ListEpochId.unknown
@@ -50,43 +53,45 @@ type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series
     ///   c) readers will less frequently encounter sustained 429s on the batch
     let batchedIngest = Equinox.Core.AsyncBatchingGate(tryIngest, linger)
 
-    /// Determines the current active epoch
-    /// Uses cached values as epoch transitions are rare, and caller needs to deal with the inherent race condition in any case
-    member _.CurrentIngestionEpochId() : Async<ListEpochId> =
-        match currentEpochId () with
-        | Some currentEpochId -> async { return currentEpochId }
-        | None -> series.ReadIngestionEpochId()
-
-    /// Attempts to feed the items into the sequence of epochs.
+    /// Slot the items into the series of epochs.
     /// Returns the subset that actually got fed in this time around, exclusive of items that did not trigger events per idempotency rules.
-    member _.IngestMany(epochId, items) : Async<ItemId seq> = async {
+    member _.IngestMany(originEpoch, items) : Async<ItemId seq> = async {
         if Array.isEmpty items then return Seq.empty else
             
-        let! results = batchedIngest.Execute [| for x in items -> epochId, x |]
+        let! results = batchedIngest.Execute [| for x in items -> originEpoch, x |]
         return System.Linq.Enumerable.Intersect(items, results)
     }
 
-    /// Attempts to feed the item into the sequence of epochs.
+    /// Slot the item into the series of epochs.
     /// Returns true if the item actually got included into an Epoch this time (i.e. will be false if it was an idempotent retry).
-    member _.TryIngest(startEpoch, itemId) : Async<bool> = async {
-        let! result = batchedIngest.Execute [| startEpoch, itemId |]
+    member _.TryIngest(originEpoch, itemId) : Async<bool> = async {
+        let! result = batchedIngest.Execute [| originEpoch, itemId |]
         return result |> Array.contains itemId
     }
+
+    /// Exposes the current high water mark epoch - i.e. the tip epoch to which appends are presently being applied.
+    /// The fact that any Ingest call for a given item (or set of items) always commences from the same origin is key to exactly once insertion guarantee.
+    /// Caller should first store this alongside the item in order to deterministically be able to start from the same origin in idempotent retry cases.
+    /// Uses cached values as epoch transitions are rare, and caller needs to deal with the inherent race condition in any case
+    member _.ActiveIngestionEpochId() : Async<ListEpochId> =
+        match currentEpochId () with
+        | Some currentEpochId -> async { return currentEpochId }
+        | None -> series.ReadIngestionEpochId()
 
 let private create epochs series linger =
     let log = Serilog.Log.ForContext<Service>()
     Service(log, epochs, series, linger=linger)
 
-let private maxItemsPerEpoch = 10_000
-let private linger = System.TimeSpan.FromMilliseconds 200.
-
-type MemoryStore() =
+type MemoryStore =
 
     static member Create(store, linger, maxItemsPerEpoch) =
         let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
         let epochs = ListEpoch.MemoryStore.create shouldClose store
         let series = ListSeries.MemoryStore.create store
         create epochs series linger
+
+let private linger = System.TimeSpan.FromMilliseconds 200.
+let private maxItemsPerEpoch = 10_000
 
 module Cosmos =
 
