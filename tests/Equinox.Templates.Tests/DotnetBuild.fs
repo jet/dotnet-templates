@@ -75,6 +75,8 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] proReactorDefault ()           = run "proReactor" []
     let [<Fact>] proReactorFilter ()            = run "proReactor" ["--filter"]
 
+    let [<Fact>] proCosmosReactor ()            = run "proCosmosReactor" []
+
     interface IClassFixture<EquinoxTemplatesFixture>
 
 module Dummy = let [<EntryPoint>] main _argv = 0
