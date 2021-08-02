@@ -77,7 +77,7 @@ module Args =
             Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                 x.ConsumerGroupName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-            srcC.LagFrequency |> Option.iter<TimeSpan> (fun i -> Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", i.TotalSeconds))
+            Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
             let monitored = srcC.MonitoredContainer()
             (monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
@@ -99,7 +99,7 @@ module Args =
             member a.Usage = a |> function
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
-                | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: off"
+                | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: 1"
                 | LeaseContainer _ ->       "specify Container Name for Leases container. Default: `sourceContainer` + `-aux`."
 
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
@@ -124,7 +124,7 @@ module Args =
         
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
-        member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member val LagFrequency : TimeSpan = a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val LeaseContainer =         a.TryGetResult CosmosSourceParameters.LeaseContainer
         member private _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
         member x.ConnectLeases() =          match x.LeaseContainer with
@@ -191,7 +191,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
     let pipeline =
         use observer = CosmosStoreSource.CreateObserver(log, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
         let monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.MonitoringParams()
-        CosmosStoreSource.Run(log, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
+        CosmosStoreSource.Run(log, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxDocuments, lagReportFreq=lagFrequency)
     archiverSink, pipeline
 
 // A typical app will likely have health checks etc, implying the wireup would be via `UseMetrics()` and thus not use this ugly code directly

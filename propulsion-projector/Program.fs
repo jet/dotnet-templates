@@ -61,7 +61,7 @@ module Args =
                 | CfpVerbose ->             "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
-                | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
+                | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
 
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
@@ -85,7 +85,7 @@ module Args =
         member val CfpVerbose =             a.Contains CfpVerbose
         member val FromTail =               a.Contains FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
-        member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member val LagFrequency =           a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val LeaseContainerId =       a.TryGetResult LeaseContainer
         member private x.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
         member x.ConnectLeases() =          match x.LeaseContainerId with
@@ -313,7 +313,7 @@ module Args =
             Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
                 x.ConsumerGroupName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxDocuments)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-            srcC.LagFrequency |> Option.iter<TimeSpan> (fun i -> Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", i.TotalSeconds))
+            Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
             let monitored = srcC.MonitoredContainer()
             (monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 #endif
@@ -394,7 +394,7 @@ let build (args : Args.Arguments) =
     let pipeline =
         use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
         let monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.MonitoringParams()
-        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxDocuments, ?lagReportFreq=lagFrequency)
+        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxDocuments, lagReportFreq=lagFrequency)
 #endif // cosmos
 #if esdb
     let srcE, context, spec = args.BuildEventStoreParams()
