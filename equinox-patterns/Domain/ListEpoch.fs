@@ -74,10 +74,10 @@ let private create shouldClose resolveStream =
 
 module MemoryStore =
 
-    let create capacity store =
+    let create shouldClose store =
         let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
         let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        create capacity resolveStream
+        create shouldClose resolveStream
 
 module Cosmos =
 
