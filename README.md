@@ -81,6 +81,12 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
     
     - It is necessary to reset the CFP checkpoint (delete the checkpoint documents, or use a new Consumer Group Name) to trigger a re-traversal if events have expired since the lsat time a traversal took place.
 
+- [`proCosmosReactor`](propulsion-cosmos-reactor/README.md) - Stripped down derivative of Propulsion Reactor template that is
+
+    - Specific only to Cosmos
+
+    - For reactions using the same container for listening and writing to (i.e.: same source and destination)
+
 <a name="eqxShipping"></a>
 - [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey). _Still targets Equinox V2 atm._
  
@@ -167,6 +173,10 @@ To use from the command line, the outline is:
     # ... to add a Shipping Domain example containing a Process Manager with a Watchdog Service
     md -p ../Shipping | Set-Location
     dotnet new eqxShipping
+
+    # ... to add a Reactor against a Cosmos container for both listening and writing
+    md -p ../CosmosReactor | Set-Location
+    dotnet new proCosmosReactor
 
 ## TESTING
 
