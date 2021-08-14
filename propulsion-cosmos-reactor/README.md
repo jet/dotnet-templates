@@ -27,11 +27,11 @@ This project was generated using:
         # default name is "($EQUINOX_COSMOS_CONTAINER)-aux"
         propulsion init -ru 400 cosmos
 
-3. To run an instance of the Projector from a CosmosDb ChangeFeed
+3. To run an instance of the Reactor from a CosmosDb ChangeFeed
 
-        # `-g default` defines the Projector Group identity - each id has separated state in the checkpoints store (`Sync-default` in the cited `cosmos` store)
-        # `-c $env:EQUINOX_COSMOS_CONTAINER ` specifies the source (if you have specified EQUINOX_COSMOS_* environment vars, no connection/database arguments are needed, but the monitored (source) container must be specified explicitly)
-        # `cosmos` specifies the target store for the reactions (if you have specified 3x EQUINOX_COSMOS_* environment vars, no arguments are needed)
-        dotnet run -- -g default cosmos -c $env:EQUINOX_COSMOS_CONTAINER  cosmos
-
-4. To create a Consumer, use `dotnet new proConsumer` (see README therein for details)
+        # `-g default` defines the `processorName` - each processor group name has separated state in the leases store
+        # `-c MyContainer` specifies the source Container to monitor (if you have specified EQUINOX_COSMOS_* environment
+        #   vars, no connection/database/container arguments are needed.)
+        # For this template, this same container is also used to wire up the Connection used for the Reactions processing.
+        # See the `proReactor` template for a more complex variant that lets you specify them separately.
+        dotnet run -- -g default cosmos -c MyContainer
