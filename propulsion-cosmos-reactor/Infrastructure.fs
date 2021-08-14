@@ -55,14 +55,38 @@ type LoggerConfigurationExtensions() =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose, ?changeFeedProcessorVerbose) =
+    static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-        |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
-        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
-                    c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member AsConsumer(configuration : LoggerConfiguration, appName, group) =
+        let customTags = ["app", appName]
+        configuration.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
+        |> fun c -> c.WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member AsChangeFeedProcessor(configuration : LoggerConfiguration, appName, group, ?changeFeedProcessorVerbose) =
+        let customTags = ["app", appName]
+        configuration.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
+        |> fun c -> c.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
+        |> fun c -> c.AsConsumer(appName, group)
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member AsHost(configuration : LoggerConfiguration, appName) =
+        let customTags = ["app",appName]
+        configuration.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member ToConsole(configuration : LoggerConfiguration) =
+        let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
+        configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Default(configuration : LoggerConfiguration) =
+        configuration.ToConsole().CreateLogger()
 
 module CosmosStoreContext =
 
@@ -94,5 +118,12 @@ module ConnectorExtensions =
             Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
 
         /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
-        member x.ConnectMonitored(databaseId, containerId) =
+        member x.ConnectMonitored(databaseId, containerId, ?connectionName) =
+            x.LogConfiguration(defaultArg connectionName "Source", databaseId, containerId)
             x.CreateUninitialized(databaseId, containerId)
+
+        /// Connects to a Store as both a ChangeFeedProcessor Monitored Container and a CosmosStoreClient
+        member x.ConnectStoreAndMonitored(databaseId, containerId) =
+            let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
+            let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
+            storeClient, monitored
