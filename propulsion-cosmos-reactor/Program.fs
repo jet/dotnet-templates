@@ -86,15 +86,12 @@ module Args =
         let database =                          a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let containerId =                       a.GetResult Container
 
-        let leaseContainerId =                  a.TryGetResult LeaseContainer
+        let leaseContainerId =                  a.GetResult(LeaseContainer, containerId + "-aux")
         let fromTail =                          a.Contains FromTail
         let maxDocuments =                      a.TryGetResult MaxDocuments
         let lagFrequency =                      a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member _.CfpVerbose =                   a.Contains CfpVerbose
-        member _.ConnectLeases containerId =    connector.CreateUninitialized(database, containerId)
-        member private x.ConnectLeases() =      match leaseContainerId with
-                                                | None ->    x.ConnectLeases(containerId + "-aux")
-                                                | Some sc -> x.ConnectLeases(sc)
+        member private _.ConnectLeases() =      connector.CreateUninitialized(database, leaseContainerId)
         member x.MonitoringParams() =
             let leases : Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
             Log.Information("Monitoring Database {database} Container {container} with maximum document count limited to {maxDocuments}",
