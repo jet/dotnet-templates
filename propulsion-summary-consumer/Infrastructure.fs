@@ -23,7 +23,7 @@ module EventCodec =
 module Log =
 
     let forMetrics () =
-        Serilog.Log.ForContext("isMetric", true)
+        Log.ForContext("isMetric", true)
 
 module Equinox =
 

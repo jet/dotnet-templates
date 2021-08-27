@@ -64,9 +64,9 @@ module Storage =
         module CosmosStoreContext =
 
             /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-            let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-                let maxEvents = 256 // default is 0
-                Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+            let create (storeClient : CosmosStoreClient) =
+                let maxEvents = 256
+                CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
         let connect (mode, discovery, databaseId, containerId) (operationTimeout, maxRetryForThrottling, maxRetryWait) =
             let c = CosmosStoreConnector(discovery, operationTimeout, maxRetryForThrottling, maxRetryWait, mode)
@@ -82,13 +82,13 @@ module Storage =
 //#endif
 //#if eventStore
         | Config.ES (host, user, pass, cache) ->
-            let cache = Equinox.Cache("ES", sizeMb=10)
+            let cache = Equinox.Cache("ES", sizeMb=cache)
             let conn = ES.connect host user pass
             Instance.EventStore (conn, cache)
 //#endif
 //#if cosmos
         | Config.Cosmos (mode, connectionString, database, container, cache) ->
-            let cache = Equinox.Cache("Cosmos", sizeMb=10)
+            let cache = Equinox.Cache("Cosmos", sizeMb=cache)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
             let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (timeout, retriesOn429Throttling, timeout)

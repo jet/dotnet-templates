@@ -137,7 +137,7 @@ module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256 // default is 0
+        let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
 let build (args : Args.Arguments) =
@@ -148,7 +148,7 @@ let build (args : Args.Arguments) =
         let cache = Equinox.Cache(AppName, sizeMb=10)
         createProcessManager args.ProcessManagerMaxDop (context, cache)
     let watchdogSink =
-        let stats = Handler.Stats(Serilog.Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
+        let stats = Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
         startWatchdog Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Drive
     let pipeline =
         let log = Log.ForContext<CosmosStoreSource>()

@@ -1,6 +1,5 @@
 ﻿module FeedConsumerTemplate.Program
 
-open Equinox.CosmosStore
 open Serilog
 open System
 
@@ -23,7 +22,6 @@ type Configuration(tryGet) =
 module Args =
 
     open Argu
-    open Equinox.CosmosStore
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
@@ -99,7 +97,7 @@ module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256 // default is 0
+        let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
 let build (args : Args.Arguments) =

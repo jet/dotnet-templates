@@ -6,9 +6,9 @@ This repo hosts the source for Jet's [`dotnet new`](https://docs.microsoft.com/e
 
 These templates focus solely on Consistent Processing using Equinox Stores:
 
-- [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox). _Still targets Equinox V2 atm._
-- [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core 2 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_. _Still targets Equinox V2 atm._
-- [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox]. (https://github.com/jet/equinox), using different stores and/or store configuration parameters. _Still targets Equinox V2 atm._
+- [`eqxweb`](equinox-web/README.md) - Boilerplate for an ASP .NET Core 3 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox).
+- [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core 3 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
+- [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox]. (https://github.com/jet/equinox), using different stores and/or store configuration parameters.
 - [`eqxPatterns`](equinox-patterns/README.md) - Equinox Skeleton Deciders and Tests implementing various event sourcing patterns: 
   - Periods with Rolling Balance carried forward  
   - Epochs/Series/Ingester with deduplication
@@ -64,11 +64,11 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 - [`feedApi`](feed-source/) - Boilerplate for an ASP.NET Core Web Api serving a feed of items stashed in an `Equinox.CosmosStore`. See `dotnet new feedConsumer` for the associated consumption logic
 - [`feedConsumer`](feed-consumer/) - Boilerplate for a service consuming a feed of items served by `dotnet new feedApi` using [`Propulsion.Feed`](https://github.com/jet/propulsion)
   
-- [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new proReactor --kafka`. _Still targets Equinox V2 atm._
+- [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new proReactor --kafka`.
 
-- [`trackingConsumer`](propulsion-tracking-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest accumulating changes in an `Equinox.Cosmos` store idempotently. _Still targets Equinox V2 atm._
+- [`trackingConsumer`](propulsion-tracking-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest accumulating changes in an `Equinox.Cosmos` store idempotently.
 
-- [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary. _Still targets Equinox V2 atm._
+- [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
 - [`proArchiver`](propulsion-archiver/README.md) - Boilerplate for a console app that that syncs Events from relevant Categories from a Hot container and to an associated warm [`Equinox.Cosmos` stores](https://github.com/jet/equinox) archival container using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion).
     - An Archiver is intended to run continually as an integral part of a production system.
@@ -82,7 +82,7 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
     - It is necessary to reset the CFP checkpoint (delete the checkpoint documents, or use a new Consumer Group Name) to trigger a re-traversal if events have expired since the lsat time a traversal took place.
 
 <a name="eqxShipping"></a>
-- [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey). _Still targets Equinox V2 atm._
+- [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey).
  
    - processing is fully idempotent; retries, concurrent or overlapping transactions are intended to be handled thoroughly and correctly
    - if any `Shipment`s cannot be `Reserved`, those that have been get `Revoked`, and the failure is reported to the caller

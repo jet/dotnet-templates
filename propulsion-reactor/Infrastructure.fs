@@ -26,7 +26,7 @@ module EventCodec =
 module Log =
 
     let forMetrics () =
-        Serilog.Log.ForContext("isMetric", true)
+        Log.ForContext("isMetric", true)
 
 module Equinox =
 
@@ -80,7 +80,7 @@ module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256 // default is 0
+        let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
 [<AutoOpen>]

@@ -180,7 +180,8 @@ module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents, maxJsonBytes = 100_000, 100_000 // default is 0, 30000
+        // while the default maxJsonBytes is 30000 - we are prepared to incur significant extra write RU charges in order to maximize packing
+        let maxEvents, maxJsonBytes = 100_000, 100_000
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents, tipMaxJsonLength=maxJsonBytes)
 
 let build (args : Args.Arguments, log, storeLog : ILogger) =
