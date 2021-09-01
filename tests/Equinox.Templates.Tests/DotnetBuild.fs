@@ -58,6 +58,7 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] proConsumer ()                 = run "proConsumer" []
     let [<Fact>] trackingConsumer ()            = run "trackingConsumer" []
     let [<Fact>] summaryConsumer ()             = run "summaryConsumer" []
+    let [<Fact>] periodicIngester ()            = run "periodicIngester" []
     let [<Fact>] proSync ()                     = run "proSync" []
     let [<Fact>] proSyncK ()                    = run "proSync" ["--kafka"]
 #if !DEBUG
