@@ -150,6 +150,9 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Reactor", "propulsion-cosmos-reactor\Reactor.fsproj", "{3A22EA30-C741-41EA-9499-7C93E5EE29FA}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "periodicIngester", "periodicIngester", "{4738344F-839D-4B82-8417-1B2D298E76C2}"
+ProjectSection(SolutionItems) = preProject
+	periodic-ingester\.template.config\template.json = periodic-ingester\.template.config\template.json
+EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "PeriodicIngester", "periodic-ingester\PeriodicIngester.fsproj", "{AB0C8BC0-4C30-4177-9469-C06E97C9568E}"
 EndProject
