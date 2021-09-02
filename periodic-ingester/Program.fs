@@ -22,8 +22,8 @@ type Configuration(tryGet) =
 module Args =
 
     open Argu
-    [<NoEquality; NoComparison>]
-    type Parameters =
+    
+    type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
 
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
@@ -38,8 +38,8 @@ module Args =
                 | Feed _ ->                 "Feed parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
-        member val MaxReadAhead =           a.GetResult(MaxReadAhead,8)
-        member val TicketsDop =             a.TryGetResult TicketsDop   |> Option.defaultValue 4
+        member val MaxReadAhead =           a.GetResult(MaxReadAhead, 8)
+        member val TicketsDop =             a.GetResult(TicketsDop, 4)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val CheckpointInterval =     TimeSpan.FromHours 1.
@@ -47,8 +47,7 @@ module Args =
             match a.TryGetSubCommand() with
             | Some (Feed feed) -> FeedArguments(c, feed)
             | _ -> raise (MissingArg "Must specify feed")
-    and [<NoEquality; NoComparison>]
-        FeedParameters =
+    and [<NoEquality; NoComparison>] FeedParameters =
         | [<AltCommandLine "-g"; Unique>]   Group of string
         | [<AltCommandLine "-f"; Unique>]   BaseUri of string
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<CosmosParameters>
@@ -58,9 +57,9 @@ module Args =
                 | BaseUri _ ->              "specify Api endpoint. (optional if environment variable API_BASE_URI specified)"
                 | Cosmos _ ->               "Cosmos Store parameters."
     and FeedArguments(c : Configuration, a : ParseResults<FeedParameters>) =
-        member val SourceId =               a.TryGetResult Group        |> Option.defaultWith (fun () -> c.Group)   |> Propulsion.Feed.SourceId.parse
-        member val BaseUri =                a.TryGetResult BaseUri      |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
-        member val PollInterval =           TimeSpan.FromHours 1.
+        member val SourceId =               a.TryGetResult Group   |> Option.defaultWith (fun () -> c.Group)   |> Propulsion.Feed.SourceId.parse
+        member val BaseUri =                a.TryGetResult BaseUri |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
+        member val RefreshInterval =        TimeSpan.FromHours 1.
         member val Cosmos : CosmosArguments =
             match a.TryGetSubCommand() with
             | Some (Cosmos cosmos) -> CosmosArguments(c, cosmos)
@@ -89,8 +88,8 @@ module Args =
         let retries =                       a.GetResult(Retries, 9)
         let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
-        let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let database =                      a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     a.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -123,7 +122,7 @@ let build (args : Args.Arguments) =
             Propulsion.Feed.PeriodicSource(
                 Log.Logger, args.StatsInterval, feed.SourceId, 
                 checkpoints, args.CheckpointInterval,
-                client.Crawl, feed.PollInterval,
+                client.Crawl, feed.RefreshInterval,
                 sink)
         source.Pump()
     sink, pumpSource
