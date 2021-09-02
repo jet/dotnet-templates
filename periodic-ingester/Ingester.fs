@@ -1,3 +1,4 @@
+/// Handles the ingestion of events supplied by the projector into a store
 module PeriodicIngesterTemplate.Ingester
 
 open PeriodicIngesterTemplate.Domain
@@ -28,23 +29,27 @@ type TicketData = { lastUpdated : DateTimeOffset; body : string }
 
 module PipelineEvent =
 
+    (* Each item fed into the Sink has a StreamName associated with it, just as with a regular source based on a change feed *)
+    
     let [<Literal>] Category = "Ticket"
     let streamName = TicketId.toString >> FsCodec.StreamName.create Category
     let (|StreamName|_|) = function
         | FsCodec.StreamName.CategoryAndId (Category, TicketId.Parse id) -> Some id
         | _ -> None
-    let sourceItemOfTicketIdAndData (id : TicketId) (data : TicketData) : Propulsion.Feed.SourceItem =
-        {   streamName = streamName id
-            eventData = FsCodec.Core.EventData.Create("eventType", (* no body*) null) 
-            context = box data }
-    let (|TicketData|_|) = function
+
+    (* Each item per stream is represented as an event; if multiple events have been found for a given stream, they are delivered together *)
+            
+    let private dummyEventData = let dummyEventType, noBody = "eventType", null in FsCodec.Core.EventData.Create(dummyEventType, noBody) 
+    let sourceItemOfTicketIdAndData (id : TicketId, data : TicketData) : Propulsion.Feed.SourceItem =
+        { streamName = streamName id; eventData = dummyEventData; context = box data }
+    let (|TicketEvents|_|) = function
         | StreamName ticketId, (s : Propulsion.Streams.StreamSpan<_>) ->
             Some (ticketId, s.events |> Seq.map (fun e -> Unchecked.unbox<TicketData> e.Context))
         | _ -> None
 
 let handle (stream, span) = async {
     match stream, span with
-    | PipelineEvent.TicketData (ticketId, data) ->
+    | PipelineEvent.TicketEvents (ticketId, items) ->
         // TODO : Ingest the data
         return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok
     | x -> return failwithf "Unexpected stream %O" x

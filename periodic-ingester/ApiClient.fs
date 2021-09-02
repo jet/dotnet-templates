@@ -1,3 +1,5 @@
+/// Provides logic for crawling of the source dataset
+/// (Wrapped in a PeriodicSource to manage continual refreshing and checkpointing when a traverse has completed)
 module PeriodicIngesterTemplate.ApiClient
 
 open FSharp.Control
@@ -21,7 +23,7 @@ type TicketsClient(client : HttpClient) =
         yield
             [| for t in basePage.tickets ->
                 let data : Ingester.TicketData = { lastUpdated = t.lastUpdated; body = t.body }
-                Ingester.PipelineEvent.sourceItemOfTicketIdAndData t.id data |]
+                Ingester.PipelineEvent.sourceItemOfTicketIdAndData (t.id, data) |]
     }
     
 type TicketsFeed(baseUri) =
@@ -30,5 +32,5 @@ type TicketsFeed(baseUri) =
     let tickets = TicketsClient(client)
 
     // TODO add retries - consumer loop will abort if this throws
-    member _.Crawl: AsyncSeq<Propulsion.Feed.SourceItem[]> =
-        tickets.Crawl ()
+    member _.Crawl(): AsyncSeq<Propulsion.Feed.SourceItem[]> =
+        tickets.Crawl()
