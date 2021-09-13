@@ -137,7 +137,7 @@ module Services =
             Aggregate.create (resolver.Resolve(Aggregate.Events.codec, fold, initial, snapshot))
 //#endif
 //#if (!aggregate && !todos)
-        // TODO implement Service builders, e.g. 
+        // TODO implement Service builders, e.g.
         //member _.CreateThingService() =
         //   let codec = genCodec<Thing.Events.Event>()
         //   let fold, initial = Thing.Fold.fold, Thing.Fold.initial
@@ -149,7 +149,7 @@ module Services =
     type IServiceCollection with
         /// Register a Service as a Singleton, by supplying a function that can build an instance of the type in question
         member services.Register(factory : IServiceProvider -> 'T) = services.AddSingleton<'T>(fun (sp: IServiceProvider) -> factory sp) |> ignore
-    
+
     /// F# syntactic sugar to resolve a service dependency
     type IServiceProvider with member sp.Resolve<'t>() = sp.GetRequiredService<'t>()
 
@@ -174,8 +174,12 @@ type Startup() =
         services
             .AddMvc()
             .SetCompatibilityVersion(CompatibilityVersion.Latest)
-            .AddNewtonsoftJson() // until FsCodec.SystemTextJson is available
-            |> ignore
+            // While FsCodec.SystemTextJson is available and works well, until FsCodec.SystemTextJson has a UnionConverter https://github.com/jet/FsCodec/pull/59, use JSON.NET
+            .AddNewtonsoftJson(fun options ->
+                /// TODO When 2.2.2 released, use Settings.DefaultSettings
+                FsCodec.NewtonsoftJson.Settings.CreateDefault().Converters
+                |> Seq.iter options.SerializerSettings.Converters.Add
+            )|> ignore
 
 //#if (cosmos || eventStore)
         // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
@@ -203,13 +207,13 @@ type Startup() =
         // 2) Provision a container using the following command sequence:
         //     dotnet tool install -g Equinox.Tool
         //     eqx init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
-        let storeConfig = 
+        let storeConfig =
             let connectionVar, databaseVar, containerVar = "EQUINOX_COSMOS_CONNECTION", "EQUINOX_COSMOS_DATABASE", "EQUINOX_COSMOS_CONTAINER"
             let read key = Environment.GetEnvironmentVariable key |> Option.ofObj
             match read connectionVar, read databaseVar, read containerVar with
             | Some connection, Some database, Some container ->
                 let connMode = Microsoft.Azure.Cosmos.ConnectionMode.Direct // Best perf - select one of the others iff using .NETCore on linux or encounter firewall issues
-                Storage.Config.Cosmos (connMode, connection, database, container, cacheMb) 
+                Storage.Config.Cosmos (connMode, connection, database, container, cacheMb)
 //#if cosmosSimulator
             | None, Some database, Some container ->
                 // alternately, you can feed in this connection string in as a parameter externally and remove this special casing
@@ -242,7 +246,7 @@ type Startup() =
 #if todos
             // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
             .UseCors(fun x -> x.WithOrigins([|"https://www.todobackend.com"|]).AllowAnyHeader().AllowAnyMethod() |> ignore)
-#endif        
+#endif
             .UseEndpoints(fun endpoints ->
                 endpoints.MapMetrics() |> ignore // Host /metrics for Prometheus
                 endpoints.MapControllers() |> ignore)
