@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proCosmosReactor`: Template for simplified, same-container Cosmos-based reactions [#93](https://github.com/jet/dotnet-templates/pull/93)
+
 ### Changed
 
 - Added defaulting of 1 min for lag reporting frequency to all Cosmos consumers [#95](https://github.com/jet/dotnet-templates/pull/95)

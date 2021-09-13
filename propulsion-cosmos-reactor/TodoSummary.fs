@@ -1,4 +1,4 @@
-﻿module ReactorTemplate.TodoSummary
+module ReactorTemplate.TodoSummary
 
 let [<Literal>] Category = "TodoSummary"
 let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
@@ -23,15 +23,9 @@ module Fold =
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let snapshot state = Events.Ingested { version = state.version; value = state.value.Value }
 
-// TODO collapse this unless you actually end up with >1 kind of ingestion Command
-type Command =
-    | Consume of version : int64 * value : Events.SummaryData
-
-let decide command (state : Fold.State) =
-    match command with
-    | Consume (version, value) ->
-        if state.version >= version then false, [] else
-        true, [Events.Ingested { version = version; value = value }]
+let decide (version : int64, value : Events.SummaryData) (state : Fold.State) =
+    if state.version >= version then false, [] else
+    true, [Events.Ingested { version = version; value = value }]
 
 type Item = { id: int; order: int; title: string; completed: bool }
 let render : Fold.State -> Item[] = function
@@ -43,13 +37,13 @@ let render : Fold.State -> Item[] = function
                 completed = x.completed } |]
     | _ -> [||]
 
-/// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
+/// Defines the operations that the Read side of a Controller and/or the Reactor can perform on the 'aggregate'
 type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Returns false if the ingestion was rejected due to being an older version of the data than is presently being held
     member _.TryIngest(clientId, version, value) : Async<bool> =
         let decider = resolve clientId
-        decider.Transact(decide (Consume (version, value)))
+        decider.Transact(decide (version, value))
 
     member _.Read clientId: Async<Item[]> =
         let decider = resolve clientId
@@ -59,15 +53,6 @@ let private create resolveStream =
     let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 
-//#if multiSource
-module EventStore =
-
-    let create (context, cache) =
-        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
-        create resolver.Resolve
-
-//#endif
 module Cosmos =
 
     open Equinox.CosmosStore

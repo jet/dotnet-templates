@@ -63,15 +63,6 @@ let private create resolveStream =
     let resolve = streamName >> resolveStream >> Equinox.createDecider
     Service(resolve)
 
-//#if multiSource
-module EventStore =
-
-    let create (context, cache) =
-        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
-        create resolver.Resolve
-
-//#endif
 module Cosmos =
 
     open Equinox.CosmosStore

@@ -7,43 +7,21 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!--#if (!kafkaEventSpans) -->
         <None Include="README.md" />
-        <!--#endif-->
         <Compile Include="Infrastructure.fs" />
-        <!--#if (!blank) -->
         <Compile Include="Todo.fs" />
-        <!--#endif-->
-        <!--#if (kafka || !blank) -->
         <Compile Include="Contract.fs" />
-        <!--#endif-->
-        <!--#if (!kafka && !blank) -->
         <Compile Include="TodoSummary.fs" />
-        <!--#endif-->
-        <!--#if (!kafka) -->
-        <Compile Include="Ingester.fs" />
-        <!--#endif-->
-        <!--#if (multiSource || kafka)-->
-        <Compile Include="Handler.fs" />
-        <!--#endif-->
+        <Compile Include="Reactor.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
         <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00035" />
-        <!--#if (kafkaEventSpans) -->
-        <PackageReference Include="Equinox.CosmosStore" Version="3.0.1" />
-        <!--#else-->
         <PackageReference Include="Microsoft.Azure.Cosmos" Version="[3.20.0-preview]" />
+        <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="3.0.1" />
         <PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc2" />
-        <!--#endif-->
-        <!--#if (multiSource) -->
-        <PackageReference Include="Propulsion.EventStore" Version="2.11.0-rc2" />
-        <!--#endif-->
-        <!--#if (kafka || kafkaEventSpans) -->
-        <PackageReference Include="Propulsion.Kafka" Version="2.11.0-rc2" />
-        <!--#endif-->
         <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
     </ItemGroup>
 </Project>
