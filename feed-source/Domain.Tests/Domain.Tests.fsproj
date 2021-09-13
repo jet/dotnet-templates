@@ -8,9 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="PeriodsCarryingForward.fs" />
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="ExactlyOnceIngesterTests.fs" />
+    <Compile Include="IngesterTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

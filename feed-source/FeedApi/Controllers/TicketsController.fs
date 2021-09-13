@@ -1,29 +1,34 @@
-﻿namespace FeedApiTemplate.Controllers
+﻿namespace FeedSourceTemplate.Controllers
 
 open Microsoft.AspNetCore.Mvc
 
-open FeedApiTemplate.Domain
+open FeedSourceTemplate.Domain
 
 type TicketsTranchesDto = { activeEpochs : TrancheReferenceDto[] }
  and TrancheReferenceDto = { fc : FcId; epochId : TicketsEpochId }
 
-type SliceDto = { closed : bool; tickets : TicketId[]; position : TicketsCheckpoint; checkpoint : TicketsCheckpoint }
+type SliceDto = { closed : bool; tickets : ItemDto[]; position : TicketsCheckpoint; checkpoint : TicketsCheckpoint }
+ and ItemDto = { id : TicketId; payload : string }
+module ItemDto =
+    
+    let ofDto (x : TicketsEpoch.Events.Item) : ItemDto =
+        { id = x.id; payload = x.payload }
 
 module Checkpoint =
 
     let ofEpochAndOffset (epoch : TicketsEpochId) (offset : int) =
         TicketsCheckpoint.ofEpochAndOffset epoch offset
 
-    let ofState (epochId : TicketsEpochId) (s : TicketsEpoch.StateDto) =
+    let ofState (epochId : TicketsEpochId) (s : TicketsEpoch.Reader.StateDto) =
         TicketsCheckpoint.ofEpochContent epochId s.closed s.tickets.Length
 
 [<Route("api/[controller]")>]
-type TicketsController(tickets : Tickets.Service, series : TicketsSeries.Service, epochs : TicketsEpoch.ReadService) =
+type TicketsController(tickets : TicketsIngester.Service, series : TicketsSeries.Service, epochs : TicketsEpoch.Reader.Service) =
     inherit ControllerBase()
 
     [<HttpPost; Route "{fc}/{ticket}">]
-    member _.Post(fc : FcId, ticket : TicketId) = async {
-        let! _added = tickets.ForFc(fc).TryIngest(ticket)
+    member _.Post(fc : FcId, ticket : TicketId, [<FromBody>] payload) = async {
+        let! _added = tickets.ForFc(fc).TryIngest({ id = ticket; payload = payload})
         ()
     }
 
@@ -38,7 +43,7 @@ type TicketsController(tickets : Tickets.Service, series : TicketsSeries.Service
         let! state = epochs.Read(fcId, epoch)
         // TOCONSIDER closed should control cache header
         let pos, checkpoint = Checkpoint.ofEpochAndOffset epoch 0, Checkpoint.ofState epoch state
-        return { closed = state.closed; tickets = state.tickets; position = pos; checkpoint = checkpoint }
+        return { closed = state.closed; tickets = Array.map ItemDto.ofDto state.tickets; position = pos; checkpoint = checkpoint }
     }
 
     [<HttpGet; Route("{fcId}/slice/{token?}")>]
@@ -48,5 +53,5 @@ type TicketsController(tickets : Tickets.Service, series : TicketsSeries.Service
         let! state = epochs.Read(fcId, epochId)
         // TOCONSIDER closed should control cache header
         let pos, checkpoint = Checkpoint.ofEpochAndOffset epochId offset, Checkpoint.ofState epochId state
-        return { closed = state.closed; tickets = Array.skip offset state.tickets; position = pos; checkpoint = checkpoint }
+        return { closed = state.closed; tickets = Array.skip offset state.tickets |> Array.map ItemDto.ofDto; position = pos; checkpoint = checkpoint }
     }

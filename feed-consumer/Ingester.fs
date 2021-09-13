@@ -26,21 +26,22 @@ type Stats(log, statsInterval, stateInterval) =
 
 module PipelineEvent =
 
-    let ofIndexAndTicketId index (x : TicketId) =
+    type Item = { id : TicketId; payload : string }
+    let ofIndexAndItem index (item : Item) =
         FsCodec.Core.TimelineEvent.Create(
             index,
             "eventType",
             null,
-            context = x)
-    let (|TicketIdsForFc|_|) = function
+            context = item)
+    let (|ItemsForFc|_|) = function
         | FsCodec.StreamName.CategoryAndIds (_,[|_ ; FcId.Parse fc|]), (s : Propulsion.Streams.StreamSpan<_>) ->
-            Some (fc, s.events |> Seq.map (fun e -> Unchecked.unbox<TicketId> e.Context))
+            Some (fc, s.events |> Seq.map (fun e -> Unchecked.unbox<Item> e.Context))
         | _ -> None
 
 let handle maxDop (stream, span) = async {
     match stream, span with
-    | PipelineEvent.TicketIdsForFc (fc, ticketIds) ->
-        let ticketIds = ticketIds |> Seq.truncate 1000 |> Seq.toArray
+    | PipelineEvent.ItemsForFc (fc, items) ->
+        let ticketIds = seq { for x in items -> x.id } |> Seq.truncate 1000 |> Seq.toArray
         let maybeAccept = Seq.distinct ticketIds |> Seq.mapi (fun i _x -> async {
             do! Async.Sleep(TimeSpan.FromSeconds 1.)
             return if i % 3 = 1 then Some 42 else None

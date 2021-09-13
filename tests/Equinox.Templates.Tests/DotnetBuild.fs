@@ -50,7 +50,7 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []
     let [<Fact>] eqxTestbed ()                  = run "eqxTestbed" []
     let [<Fact>] eqxShipping ()                 = run "eqxShipping" []
-    let [<Fact>] feedApi ()                     = run "feedApi" []
+    let [<Fact>] feedSource ()                  = run "feedSource" []
     let [<Fact>] feedConsumer ()                = run "feedConsumer" []
     [<ClassData(typeof<ProProjector>)>]
     let [<Theory>] proProjector args            = run "proProjector" args

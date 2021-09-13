@@ -1,4 +1,4 @@
-module FeedApiTemplate.Program
+module FeedSourceTemplate.Program
 
 open Serilog
 open System
@@ -69,7 +69,7 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
-let [<Literal>] AppName = "FeedApiTemplate"
+let [<Literal>] AppName = "FeedSourceTemplate"
 
 open Microsoft.Extensions.DependencyInjection
 
@@ -83,8 +83,8 @@ type AppDependenciesExtensions() =
     static member AddTickets(services : IServiceCollection, context, cache) : unit = Async.RunSynchronously <| async {
 
         let ticketsSeries = Domain.TicketsSeries.Cosmos.create (context, cache)
-        let ticketsEpochs = Domain.TicketsEpoch.Cosmos.createReader (context, cache)
-        let tickets = Domain.Tickets.Cosmos.create (context, cache)
+        let ticketsEpochs = Domain.TicketsEpoch.Reader.Cosmos.create (context, cache)
+        let tickets = Domain.TicketsIngester.Cosmos.create (context, cache)
 
         ticketsSeries |> registerSingleton services
         ticketsEpochs |> registerSingleton services

@@ -10,11 +10,12 @@
     <Compile Include="Types.fs" />
     <Compile Include="TicketsEpoch.fs" />
     <Compile Include="TicketsSeries.fs" />
-    <Compile Include="Tickets.fs" />
+    <Compile Include="TicketsIngester.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Equinox.CosmosStore" Version="3.0.1" />
+    <PackageReference Include="Equinox.MemoryStore" Version="3.0.1" />
   </ItemGroup>
 
 </Project>

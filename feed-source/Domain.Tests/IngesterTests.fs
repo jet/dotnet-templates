@@ -1,7 +1,6 @@
-module Patterns.Domain.Tests.ItemIngesterTests
+module FeedSourceTemplate.Domain.Tests.IngesterTests
 
-open Patterns.Domain
-open Patterns.Domain.ItemIngester
+open FeedSourceTemplate.Domain
 open FsCheck.Xunit
 open FSharp.UMX
 open Swensen.Unquote
@@ -10,8 +9,8 @@ let linger, lookBackLimit, maxPickTicketsPerBatch = System.TimeSpan.FromMillisec
 
 let createSut store trancheId =
     // While we use ~ 200ms when hitting Cosmos, there's no value in doing so in the context of these property based tests
-    let service = MemoryStore.Create(store, linger=linger, maxItemsPerEpoch=maxPickTicketsPerBatch, lookBackLimit=lookBackLimit)
-    service.ForTranche trancheId
+    let service = TicketsIngester.MemoryStore.Create(store, linger=linger, maxItemsPerEpoch=maxPickTicketsPerBatch, lookBackLimit=lookBackLimit)
+    service.ForFc trancheId
 
 let [<Property>] properties shouldInitialize shouldUseSameSut (Id trancheId) initialItems items =
     let store = Equinox.MemoryStore.VolatileStore()
@@ -20,14 +19,14 @@ let [<Property>] properties shouldInitialize shouldUseSameSut (Id trancheId) ini
         let initialSut = createSut store trancheId
         if shouldInitialize then do! initialSut.Initialize()
         let! initialResult = initialSut.IngestMany(initialItems)
-        let initialExpected = initialItems |> Seq.map ItemEpoch.itemId |> Array.ofSeq
+        let initialExpected = initialItems |> Seq.map TicketsEpoch.itemId |> Array.ofSeq
         test <@ set initialExpected = set initialResult @>
 
         // Add some extra
         let sut = if shouldUseSameSut then initialSut else createSut store trancheId
         if shouldInitialize then do! sut.Initialize()
         let! result = sut.IngestMany items
-        let expected = items |> Seq.map ItemEpoch.itemId |> Seq.except initialExpected |> Seq.distinct
+        let expected = items |> Seq.map TicketsEpoch.itemId |> Seq.except initialExpected |> Seq.distinct
         test <@ set expected = set result @>
 
         // Add the same stuff for a different tranche; the data should be completely independent from an ingestion perspective

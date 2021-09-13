@@ -1,4 +1,4 @@
-namespace FeedApiTemplate
+namespace FeedSourceTemplate
 
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting

@@ -28,7 +28,8 @@ module TicketsCheckpoint =
     let toPosition (x : TicketsCheckpoint) : Propulsion.Feed.Position = %x
     let toStreamIndex (x : TicketsCheckpoint) : int64 = %x
 
-type SliceDto = { closed : bool; tickets : TicketId[]; position : TicketsCheckpoint; checkpoint : TicketsCheckpoint }
+type ItemDto = { id : TicketId; payload : string }
+type SliceDto = { closed : bool; tickets : ItemDto[]; position : TicketsCheckpoint; checkpoint : TicketsCheckpoint }
 
 type Session(client: HttpClient) =
 
@@ -72,7 +73,8 @@ type TicketsFeed(baseUri) =
         let checkpoint = TicketsCheckpoint.ofPosition pos
         let! pg = tickets.Poll(TrancheId.toFcId trancheId, checkpoint)
         let baseIndex = TicketsCheckpoint.toStreamIndex pg.position
-        let items = pg.tickets |> Array.mapi (fun i -> Ingester.PipelineEvent.ofIndexAndTicketId (baseIndex + int64 i))
+        let map (x : ItemDto) : Ingester.PipelineEvent.Item = { id = x.id; payload = x.payload }
+        let items = pg.tickets |> Array.mapi (fun i x -> Ingester.PipelineEvent.ofIndexAndItem (baseIndex + int64 i) (map x))
         return { checkpoint = TicketsCheckpoint.toPosition pg.checkpoint; items = items; isTail = not pg.closed }
     }
 

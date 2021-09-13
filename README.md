@@ -10,8 +10,8 @@ These templates focus solely on Consistent Processing using Equinox Stores:
 - [`eqxwebcs`](equinox-web-csharp/README.md) - Boilerplate for an ASP .NET Core 3 Web App, with an associated storage-independent Domain project using [Equinox](https://github.com/jet/equinox), _ported to C#_.
 - [`eqxtestbed`](equinox-testbed/README.md) - Host that allows running back-to-back benchmarks when prototyping models using [Equinox]. (https://github.com/jet/equinox), using different stores and/or store configuration parameters.
 - [`eqxPatterns`](equinox-patterns/README.md) - Equinox Skeleton Deciders and Tests implementing various event sourcing patterns: 
-  - Periods with Rolling Balance carried forward  
-  - Epochs/Series/Ingester with deduplication
+  - Managing a chain of Periods with a Rolling Balance carried forward (aka Closing the Books)
+  - Feeding items into a List managed as a Series of Epochs with exactly once ingestion logic
 
 ## [Propulsion](https://github.com/jet/propulsion) related
 
@@ -61,8 +61,8 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
   **NOTE At present, checkpoint storage when projecting from EventStore uses Azure CosmosDB - help wanted ;)**
   
-- [`feedApi`](feed-source/) - Boilerplate for an ASP.NET Core Web Api serving a feed of items stashed in an `Equinox.CosmosStore`. See `dotnet new feedConsumer` for the associated consumption logic
-- [`feedConsumer`](feed-consumer/) - Boilerplate for a service consuming a feed of items served by `dotnet new feedApi` using [`Propulsion.Feed`](https://github.com/jet/propulsion)
+- [`feedSource`](feed-source/) - Boilerplate for an ASP.NET Core Web Api serving a feed of items stashed in an `Equinox.CosmosStore`. See `dotnet new feedConsumer` for the associated consumption logic
+- [`feedConsumer`](feed-consumer/) - Boilerplate for a service consuming a feed of items served by `dotnet new feedSource` using [`Propulsion.Feed`](https://github.com/jet/propulsion)
   
 - [`summaryConsumer`](propulsion-summary-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest versioned summaries produced by a `dotnet new proReactor --kafka`.
 

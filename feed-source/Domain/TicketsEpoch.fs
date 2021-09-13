@@ -3,7 +3,7 @@
 /// - Limited to a certain reasonable count of items; snapshot of Tickets in an epoch needs to stay a sensible size
 /// The TicketsSeries holds a pointer to the current active epoch for each FC
 /// Each successive epoch is identified by an index, i.e. TicketsEpoch-FC001_0, then TicketsEpoch-FC001_1
-module FeedApiTemplate.Domain.TicketsEpoch
+module FeedSourceTemplate.Domain.TicketsEpoch
 
 let [<Literal>] Category = "TicketsEpoch"
 let streamName (fcId, epochId) = FsCodec.StreamName.compose Category [FcId.toString fcId; TicketsEpochId.toString epochId]
@@ -12,44 +12,60 @@ let streamName (fcId, epochId) = FsCodec.StreamName.compose Category [FcId.toStr
 [<RequireQualifiedAccess>]
 module Events =
 
+    type Ingested = { items : Item[] }
+     and Item = { id : TicketId; payload : string }
     type Event =
-        | Ingested    of {| ids : TicketId[] |}
+        | Ingested    of Ingested
         | Closed
         | Snapshotted of {| ids : TicketId[]; closed : bool |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+
+let itemId (x : Events.Item) : TicketId = x.id
+let (|ItemIds|) : Events.Item[] -> TicketId[] = Array.map itemId
 
 module Fold =
 
     type State = TicketId[] * bool
     let initial = [||], false
     let evolve (ids, closed) = function
-        | Events.Ingested e     -> Array.append e.ids ids, closed
-        | Events.Snapshotted e  -> e.ids, e.closed
-        | Events.Closed         -> ids, true
+        | Events.Ingested { items = ItemIds ingestedIds } -> (Array.append ids ingestedIds, closed)
+        | Events.Closed                                   -> (ids, true)
+        | Events.Snapshotted e                            -> (e.ids, e.closed)
 
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot (ids, closed) = Events.Snapshotted {| ids = ids; closed = closed |}
 
-type Result = { rejected : TicketId[]; added : TicketId[]; isClosed : bool; content : TicketId[] }
+let notAlreadyIn (ids : TicketId seq) =
+    let ids = System.Collections.Generic.HashSet ids
+    fun (x : Events.Item) -> (not << ids.Contains) x.id
 
-let decide capacity candidateIds = function
-    | currentIds, false as state ->
-        let added, events =
-            match candidateIds |> Array.except currentIds with
-            | [||] -> [||], []
-            | news ->
-                let closing = Array.length currentIds + Array.length news >= capacity
-                let ingestEvent = Events.Ingested {| ids = news |}
-                news, if closing then [ ingestEvent ; Events.Closed ] else [ ingestEvent ]
-        let state' = Fold.fold state events
-        { rejected = [||]; added = added; isClosed = snd state'; content = fst state' }, events
-    | currentIds, true ->
-        { rejected = candidateIds |> Array.except currentIds; added = [||]; isClosed = true; content = currentIds }, []
+type Result = { accepted : TicketId[]; residual : Events.Item[]; content : TicketId[]; closed : bool }
 
-type StateDto = { closed : bool; tickets : TicketId[] }
+/// NOTE See eqxPatterns template ItemEpoch for a simplified decide function which does not split ingestion requests with a rigid capacity rule
+/// NOTE does not deduplicate (distinct) candidates and/or the residuals on the basis that the caller should guarantee that
+let decide capacity candidates (currentIds, closed as state) =
+    match closed, candidates |> Array.filter (notAlreadyIn currentIds) with
+    | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, []
+    | false, [||] ->           { accepted = [||]; residual = [||];            content = currentIds; closed = closed }, []
+    | false, freshItems ->
+        // NOTE we in some cases end up triggering splitting of a request (or set of requests coalesced in the AsyncBatchingGate)
+        // In some cases it might be better to be a little tolerant and not be rigid about limiting things as
+        // - snapshots should compress well (no major incremental cost for a few more items)
+        // - its always good to avoid a second store roundtrip
+        // - splitting a batched write into multiple writes with multiple events misrepresents the facts i.e. we did
+        //   not have 10 items 2s ago and 3 just now - we had 13 2s ago
+        let capacityNow = capacity freshItems currentIds
+        let acceptingCount = min capacityNow freshItems.Length
+        let closing = acceptingCount = capacityNow
+        let ItemIds addedItemIds as itemsIngested, residualItems = Array.splitAt acceptingCount freshItems
+        let events =
+            [   if (not << Array.isEmpty) itemsIngested then yield Events.Ingested { items = itemsIngested }
+                if closing then yield Events.Closed ]
+        let currentIds, closed = Fold.fold state events
+        { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, events
 
 /// Service used for the write side; manages ingestion of items into the series of epochs
 type IngestionService internal (capacity, resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
@@ -71,27 +87,63 @@ type IngestionService internal (capacity, resolve : FcId * TicketsEpochId -> Equ
         let resolve = streamName >> resolveStream (Some Equinox.AllowStale) >> Equinox.createDecider
         IngestionService(capacity, resolve)
 
-/// Handles the rendering of items as a feed, covering the read side
-type ReadService internal (resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
+module MemoryStore =
 
-    /// Yields the current state of this epoch, including an indication of whether reading has completed
-    member _.Read(fcid, epochId) : Async<StateDto> =
-        let decider = resolve (fcid, epochId)
-        decider.Query(fun (tickets, closed) -> { closed = closed; tickets = tickets })
-
-    static member internal Create(resolveStream) =
-        let resolve = streamName >> resolveStream None >> Equinox.createDecider
-        ReadService(resolve)
+    let create capacity store =
+        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+        IngestionService.Create(capacity, resolveStream)
 
 module Cosmos =
 
     open Equinox.CosmosStore
 
     let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let private resolveStream (context, cache) =
+    let create capacity (context, cache) =
         let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        fun opt sn -> cat.Resolve(sn, ?option = opt)
+        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+        IngestionService.Create(capacity, resolveStream)
+        
+/// Custom Fold and caching logic compared to the IngesterService
+/// - When reading, we want the full Items
+/// - Caching only for one minute
+/// - There's no value in using the snapshot as it does not have the full state
+module Reader =
 
-    let createIngester capacity (context, cache) = IngestionService.Create(capacity, resolveStream (context, cache))
-    let createReader (context, cache) = ReadService.Create(resolveStream (context, cache))
+    type State = Events.Item[] * bool
+    let initial = [||], false
+    let evolve (es, closed as state) = function
+        | Events.Ingested e    -> Array.append es e.items, closed
+        | Events.Closed        -> (es, true)
+        | Events.Snapshotted _ -> state // there's nothing useful in the snapshot for us to take
+    let fold : State -> Events.Event seq -> State = Seq.fold evolve
+
+    type StateDto = { closed : bool; tickets : Events.Item[] }
+
+    type Service internal (resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, State>) =
+
+        /// Returns all the items currently held in the stream
+        member _.Read(fcid, epochId) : Async<StateDto> =
+            let decider = resolve (fcid, epochId)
+            decider.Query(fun (items, closed) -> { closed = closed; tickets = items })
+
+    let private create resolveStream =
+        let resolve = streamName >> resolveStream >> Equinox.createDecider
+        Service resolve
+
+    module MemoryStore =
+
+        let create store =
+            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, fold, initial)
+            create cat.Resolve
+
+    module Cosmos =
+
+        open Equinox.CosmosStore
+
+        let accessStrategy = AccessStrategy.Unoptimized
+        let create (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 1.)
+            let cat = CosmosStoreCategory(context, Events.codec, fold, initial, cacheStrategy, accessStrategy)
+            create cat.Resolve
