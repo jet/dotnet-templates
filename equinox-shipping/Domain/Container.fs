@@ -36,16 +36,18 @@ type Service internal (resolve : ContainerId -> Equinox.Decider<Events.Event, Fo
         let decider = resolve containerId
         decider.Transact(interpretFinalize shipmentIds)
 
-let create resolveStream =
-    let resolve = streamName >> resolveStream >> Equinox.createDecider
-    Service(resolve)
+module Config =
 
-module Cosmos =
+    let create resolveStream =
+        let resolve = streamName >> resolveStream >> Equinox.createDecider
+        Service(resolve)
 
-    open Equinox.CosmosStore
+    module Cosmos =
 
-    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let create (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        create resolver.Resolve
+        open Equinox.CosmosStore
+
+        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
+        let create (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let resolver = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+            create resolver.Resolve

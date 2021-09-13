@@ -51,24 +51,26 @@ type Service internal (resolve_ : Equinox.ResolveOption option -> unit -> Equino
         let decider = resolveStale ()
         decider.Transact(interpret epochId)
 
-let private create resolveStream =
-    let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
-    Service(resolve)
+module Config =
 
-module MemoryStore =
+    let private create resolveStream =
+        let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
+        Service(resolve)
 
-    let create store =
-        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        create resolveStream
+    module Memory =
 
-module Cosmos =
+        let create store =
+            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+            create resolveStream
 
-    open Equinox.CosmosStore
+    module Cosmos =
 
-    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let create (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        create resolveStream
+        open Equinox.CosmosStore
+
+        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
+        let create (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+            create resolveStream

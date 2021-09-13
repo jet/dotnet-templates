@@ -116,8 +116,8 @@ let build (args : Args.Arguments) =
         let handle =
             let context = client |> CosmosStoreContext.create
             let cache = Equinox.Cache(AppName, sizeMb=10)
-            let srcService = Todo.Cosmos.create (context, cache)
-            let dstService = TodoSummary.Cosmos.create (context, cache)
+            let srcService = Todo.Config.Cosmos.create (context, cache)
+            let dstService = TodoSummary.Config.Cosmos.create (context, cache)
             Reactor.handle srcService dstService
         let stats = Reactor.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, handle, stats, args.StatsInterval)

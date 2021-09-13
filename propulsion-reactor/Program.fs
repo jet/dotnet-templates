@@ -256,7 +256,7 @@ module Args =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         member val DatabaseId =             a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val ContainerId =            a.GetResult CosmosSourceParameters.Container
-        
+
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
         member val LagFrequency : TimeSpan = a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
@@ -380,7 +380,7 @@ module Args =
         member val Retries =                a.GetResult(EsSourceParameters.Retries, 3)
         member val Timeout =                a.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
         member val Heartbeat =              a.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
-        
+
         member x.ConnectProj(log: ILogger, storeLog: ILogger, appName, nodePreference) =
             let discovery = discovery (x.ProjHost, x.ProjPort, x.ProjTcp)
             log.ForContext("projHost", x.ProjHost).ForContext("projPort", x.ProjPort)
@@ -390,7 +390,7 @@ module Args =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(x.ProjUser, x.ProjPassword, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
                 .Connect(appName + "-Proj", discovery, nodePreference) |> Async.RunSynchronously
-        
+
         member x.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
             let discovery = discovery (x.Host, x.Port, x.Tcp)
             log.ForContext("host", x.Host).ForContext("port", x.Port)
@@ -518,7 +518,7 @@ let build (args : Args.Arguments) =
 #else
         let esConn = connectEs ()
         let srcCache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
+        let srcService = Todo.Config.EventStore.create (EventStoreContext.create esConn, srcCache)
         let handle = Handler.handle srcService produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
@@ -537,8 +537,8 @@ let build (args : Args.Arguments) =
 #else // blank
         let esConn = connectEs ()
         let srcCache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
-        let dstService = TodoSummary.Cosmos.create (context, cache)
+        let srcService = Todo.Config.EventStore.create (EventStoreContext.create esConn, srcCache)
+        let dstService = TodoSummary.Config.Cosmos.create (context, cache)
         let handle = Ingester.handle srcService dstService
 #endif // blank
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
@@ -571,8 +571,8 @@ let build (args : Args.Arguments) =
 #if (!blank) //!kafka && !blank -> wire up a cosmos context to an ingester
         let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let cache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Cosmos.create (context, cache)
-        let dstService = TodoSummary.Cosmos.create (context, cache)
+        let srcService = Todo.Config.Cosmos.create (context, cache)
+        let dstService = TodoSummary.Config.Cosmos.create (context, cache)
         let handle = Ingester.handle srcService dstService
 #else // !kafka && blank -> no specific Ingester source/destination wire-up
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
@@ -593,7 +593,7 @@ let build (args : Args.Arguments) =
         let handle = Handler.handle produceSummary
 #else
         let cache = Equinox.Cache(AppName, sizeMb=10)
-        let service = Todo.Cosmos.create (context, cache)
+        let service = Todo.Config.Cosmos.create (context, cache)
         let handle = Handler.handle service produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)

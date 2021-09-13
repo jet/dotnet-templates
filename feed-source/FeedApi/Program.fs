@@ -82,9 +82,9 @@ type AppDependenciesExtensions() =
     [<System.Runtime.CompilerServices.Extension>]
     static member AddTickets(services : IServiceCollection, context, cache) : unit = Async.RunSynchronously <| async {
 
-        let ticketsSeries = Domain.TicketsSeries.Cosmos.create (context, cache)
-        let ticketsEpochs = Domain.TicketsEpoch.Reader.Cosmos.create (context, cache)
-        let tickets = Domain.TicketsIngester.Cosmos.create (context, cache)
+        let ticketsSeries = Domain.TicketsSeries.Config.Cosmos.create (context, cache)
+        let ticketsEpochs = Domain.TicketsEpoch.Reader.Config.Cosmos.create (context, cache)
+        let tickets = Domain.TicketsIngester.Config.Cosmos.create (context, cache)
 
         ticketsSeries |> registerSingleton services
         ticketsEpochs |> registerSingleton services

@@ -55,25 +55,27 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         let decider = resolve clientId
         decider.Query render
 
-let private create resolveStream =
-    let resolve = streamName >> resolveStream >> Equinox.createDecider
-    Service(resolve)
+module Config =
+
+    let private create resolveStream =
+        let resolve = streamName >> resolveStream >> Equinox.createDecider
+        Service(resolve)
 
 //#if multiSource
-module EventStore =
+    module EventStore =
 
-    let create (context, cache) =
-        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
-        create resolver.Resolve
+        let create (context, cache) =
+            let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
+            create resolver.Resolve
 
 //#endif
-module Cosmos =
+    module Cosmos =
 
-    open Equinox.CosmosStore
+        open Equinox.CosmosStore
 
-    let accessStrategy = AccessStrategy.RollingState Fold.snapshot
-    let create (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        create cat.Resolve
+        let accessStrategy = AccessStrategy.RollingState Fold.snapshot
+        let create (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+            create cat.Resolve

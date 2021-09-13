@@ -10,7 +10,7 @@ open Xunit
 [<Fact>]
 let ``Happy path`` () =
     let store = Equinox.MemoryStore.VolatileStore()
-    let service = MemoryStore.create store
+    let service = Config.Memory.create store
     let decide items _state =
         let apply = Array.truncate 2 items
         let overflow = Array.skip apply.Length items

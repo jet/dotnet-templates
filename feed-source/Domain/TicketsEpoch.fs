@@ -87,24 +87,26 @@ type IngestionService internal (capacity, resolve : FcId * TicketsEpochId -> Equ
         let resolve = streamName >> resolveStream (Some Equinox.AllowStale) >> Equinox.createDecider
         IngestionService(capacity, resolve)
 
-module MemoryStore =
+module Config =
 
-    let create capacity store =
-        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        IngestionService.Create(capacity, resolveStream)
+    module Memory =
 
-module Cosmos =
+        let create capacity store =
+            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+            IngestionService.Create(capacity, resolveStream)
 
-    open Equinox.CosmosStore
+    module Cosmos =
 
-    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let create capacity (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        IngestionService.Create(capacity, resolveStream)
-        
+        open Equinox.CosmosStore
+
+        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
+        let create capacity (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+            IngestionService.Create(capacity, resolveStream)
+
 /// Custom Fold and caching logic compared to the IngesterService
 /// - When reading, we want the full Items
 /// - Caching only for one minute
@@ -128,22 +130,24 @@ module Reader =
             let decider = resolve (fcid, epochId)
             decider.Query(fun (items, closed) -> { closed = closed; tickets = items })
 
-    let private create resolveStream =
-        let resolve = streamName >> resolveStream >> Equinox.createDecider
-        Service resolve
+    module Config =
 
-    module MemoryStore =
+        let private create resolveStream =
+            let resolve = streamName >> resolveStream >> Equinox.createDecider
+            Service resolve
 
-        let create store =
-            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, fold, initial)
-            create cat.Resolve
+        module Memory =
 
-    module Cosmos =
+            let create store =
+                let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, fold, initial)
+                create cat.Resolve
 
-        open Equinox.CosmosStore
+        module Cosmos =
 
-        let accessStrategy = AccessStrategy.Unoptimized
-        let create (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 1.)
-            let cat = CosmosStoreCategory(context, Events.codec, fold, initial, cacheStrategy, accessStrategy)
-            create cat.Resolve
+            open Equinox.CosmosStore
+
+            let accessStrategy = AccessStrategy.Unoptimized
+            let create (context, cache) =
+                let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 1.)
+                let cat = CosmosStoreCategory(context, Events.codec, fold, initial, cacheStrategy, accessStrategy)
+                create cat.Resolve

@@ -128,9 +128,9 @@ let startWatchdog log (processingTimeout, stats : Handler.Stats) (maxReadAhead, 
 open Shipping.Domain
 
 let createProcessManager maxDop (context, cache) =
-    let transactions = FinalizationTransaction.Cosmos.create (context, cache)
-    let containers = Container.Cosmos.create (context, cache)
-    let shipments = Shipment.Cosmos.create (context, cache)
+    let transactions = FinalizationTransaction.Config.Cosmos.create (context, cache)
+    let containers = Container.Config.Cosmos.create (context, cache)
+    let shipments = Shipment.Config.Cosmos.create (context, cache)
     FinalizationProcessManager.Service(transactions, containers, shipments, maxDop=maxDop)
 
 module CosmosStoreContext =
