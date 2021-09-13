@@ -26,7 +26,6 @@ module Args =
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
         | [<AltCommandLine "-t"; Unique>]   TimeoutS of float
 
         | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosSourceParameters>
@@ -37,19 +36,17 @@ module Args =
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
                 | TimeoutS _ ->             "Timeout (in seconds) before Watchdog should step in to process transactions. Default: 10."
                 | Verbose ->                "request Verbose Logging. Default: off."
-                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off."
                 | Cosmos _ ->               "specify CosmosDB parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val ConsumerGroupName =      a.GetResult ConsumerGroupName
-        member val Verbose =                a.Contains Verbose
-        member val CfpVerbose =             a.Contains CfpVerbose
+        member val Verbose =                a.Contains Parameters.Verbose
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 16)
         member val MaxConcurrentStreams =   a.GetResult(MaxWriters, 8)
         member val ProcessManagerMaxDop =   4
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val ProcessingTimeout =      a.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
-        member val private Source : CosmosSourceArguments =
+        member val Source : CosmosSourceArguments =
             match a.TryGetSubCommand() with
             | Some (Parameters.Cosmos cosmos) -> CosmosSourceArguments (c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos")
@@ -65,6 +62,7 @@ module Args =
             (storeClient, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
 
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
+        | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
@@ -79,6 +77,7 @@ module Args =
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member a.Usage = a |> function
+                | Verbose ->                "request Verbose Change Feed Processor Logging. Default: off."
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
                 | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: 1"
@@ -100,8 +99,9 @@ module Args =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val ContainerId =            a.GetResult CosmosSourceParameters.Container
+        member val Verbose =                a.Contains Verbose
         member x.MonitoredContainer() =     connector.ConnectMonitored(database, x.ContainerId)
-        
+
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
         member val LagFrequency : TimeSpan = a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
@@ -165,7 +165,7 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.Source.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously
                 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2

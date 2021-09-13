@@ -27,7 +27,6 @@ module Args =
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
 
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
         | [<AltCommandLine "-p"; Unique>]   PrometheusPort of int
 
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
@@ -38,7 +37,6 @@ module Args =
                 | MaxWriters _ ->           "maximum number of concurrent writes to target. Default: 4."
 
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
                 | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off"
 
                 | SrcCosmos _ ->            "Cosmos Archive parameters."
@@ -46,8 +44,7 @@ module Args =
         member val ConsumerGroupName =      a.GetResult ConsumerGroupName
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 8)
         member val MaxWriters =             a.GetResult(MaxWriters, 4)
-        member val Verbose =                a.Contains Verbose
-        member val CfpVerbose =             a.Contains CfpVerbose
+        member val Verbose =                a.Contains Parameters.Verbose
         member val PrometheusPort =         a.TryGetResult PrometheusPort
         member val MetricsEnabled =         a.Contains PrometheusPort
         member val StatsInterval =          TimeSpan.FromMinutes 1.
@@ -74,6 +71,7 @@ module Args =
             let monitored = srcC.MonitoredContainer()
             (monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
+        | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
@@ -90,6 +88,7 @@ module Args =
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] DstCosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
+                | Verbose ->                "request Verbose Change Feed Processor Logging. Default: off"
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
                 | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: 1"
@@ -114,7 +113,8 @@ module Args =
         member val DatabaseId =             a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val ContainerId =            a.GetResult CosmosSourceParameters.Container
         member x.MonitoredContainer() =     connector.ConnectMonitored(x.DatabaseId, x.ContainerId)
-        
+
+        member val Verbose =                a.Contains Verbose
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
         member val LagFrequency : TimeSpan = a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
@@ -210,7 +210,7 @@ let run args = async {
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         let appName = sprintf "pruner:%s" args.ConsumerGroupName
-        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ConsumerGroupName, args.Verbose, args.CfpVerbose, args.MetricsEnabled).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ConsumerGroupName, args.Verbose, args.Source.Verbose, args.MetricsEnabled).CreateLogger()
             try run args |> Async.RunSynchronously
                 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2

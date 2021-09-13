@@ -36,14 +36,14 @@ module Args =
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         let maxReadAhead =                      a.GetResult(MaxReadAhead, 2)
         let maxConcurrentProcessors =           a.GetResult(MaxWriters, 8)
-        member val Verbose =                    a.Contains Verbose
+        member val Verbose =                    a.Contains Parameters.Verbose
         member val ConsumerGroupName =          a.GetResult ConsumerGroupName
         member x.ProcessorParams() =
             Log.Information("Projecting... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
                             x.ConsumerGroupName, maxReadAhead, maxConcurrentProcessors)
             (x.ConsumerGroupName, maxReadAhead, maxConcurrentProcessors)
         member val StatsInterval =              TimeSpan.FromMinutes 1.
-        member val StateInterval =              TimeSpan.FromMinutes 2.
+        member val StateInterval =              TimeSpan.FromMinutes 5.
         member val Cosmos =                     CosmosArguments (c, a.GetResult Cosmos)
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-m">]               ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
@@ -54,7 +54,7 @@ module Args =
         | [<AltCommandLine "-r">]               Retries of int
         | [<AltCommandLine "-rt">]              RetriesWaitTime of float
 
-        | [<AltCommandLine "-C"; Unique>]       CfpVerbose
+        | [<AltCommandLine "-V"; Unique>]       Verbose
         | [<AltCommandLine "-a"; Unique>]       LeaseContainer of string
         | [<AltCommandLine "-Z"; Unique>]       FromTail
         | [<AltCommandLine "-md"; Unique>]      MaxDocuments of int
@@ -69,7 +69,7 @@ module Args =
                 | Retries _ ->                  "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->          "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 
-                | CfpVerbose ->                 "request Verbose Logging from ChangeFeedProcessor. Default: off"
+                | Verbose ->                    "request Verbose Logging from ChangeFeedProcessor and Store. Default: off"
                 | LeaseContainer _ ->           "specify Container Name (in this [target] Database) for Leases container. Default: `SourceContainer` + `-aux`."
                 | FromTail _ ->                 "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->             "maximum document count to supply for the Change Feed query. Default: use response size limit"
@@ -90,7 +90,7 @@ module Args =
         let fromTail =                          a.Contains FromTail
         let maxDocuments =                      a.TryGetResult MaxDocuments
         let lagFrequency =                      a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member _.CfpVerbose =                   a.Contains CfpVerbose
+        member _.Verbose =                      a.Contains Verbose
         member private _.ConnectLeases() =      connector.CreateUninitialized(database, leaseContainerId)
         member x.MonitoringParams() =
             let leases : Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
@@ -138,7 +138,7 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose).AsChangeFeedProcessor(AppName, args.ConsumerGroupName, args.Cosmos.CfpVerbose).Default()
+        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose).AsChangeFeedProcessor(AppName, args.ConsumerGroupName, args.Cosmos.Verbose).Default()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
