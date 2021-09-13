@@ -14,8 +14,8 @@ type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series
 
     let uninitializedSentinel : int = %ListEpochId.unknown
     let mutable currentEpochId_ = uninitializedSentinel
-    let currentEpochId () = if currentEpochId_ = uninitializedSentinel then Some %currentEpochId_ else None
-    
+    let currentEpochId () = if currentEpochId_ <> uninitializedSentinel then Some %currentEpochId_ else None
+
     let tryIngest (items : (ListEpochId * ItemId)[][]) = async {
         let rec aux ingestedItems items = async {
             let epochId = items |> Array.minBy fst |> fst
