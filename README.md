@@ -81,9 +81,9 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
     
     - It is necessary to reset the CFP checkpoint (delete the checkpoint documents, or use a new Consumer Group Name) to trigger a re-traversal if events have expired since the lsat time a traversal took place.
 
-- [`proCosmosReactor`](propulsion-cosmos-reactor/README.md) - Stripped down derivative of Propulsion Reactor template that is
+- [`proCosmosReactor`](propulsion-cosmos-reactor/README.md) - Stripped down derivative of `proReactor` template. :pray: [@ragiano215](https://github.com/ragiano215)
 
-    - Specific only to Cosmos
+    - Specific to CosmosDb
 
     - For applications where the reactions using the same Container, credentials etc as the one being Monitored by the change feed processor (simpler config wiring and less argument processing)
 

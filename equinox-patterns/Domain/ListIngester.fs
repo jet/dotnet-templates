@@ -25,8 +25,8 @@ type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series
             let logLevel =
                 if res.residual.Length <> 0 || futureEpochItems.Length <> 0 || Array.isEmpty res.accepted then Serilog.Events.LogEventLevel.Information
                 else Serilog.Events.LogEventLevel.Debug
-            log.Write(logLevel, "Added {count}/{total} items to {poolId}/{epochId} Residual {residual} Future {future}",
-                      res.accepted.Length, epochItems.Length, poolId, epochId, res.residual.Length, futureEpochItems.Length)
+            log.Write(logLevel, "Added {count}/{total} items to {epochId} Residual {residual} Future {future}",
+                      res.accepted.Length, epochItems.Length, epochId, res.residual.Length, futureEpochItems.Length)
             let nextEpochId = ListEpochId.next epochId
             let pushedToNextEpoch = res.residual |> Array.map (fun x -> nextEpochId, x)
             match Array.append pushedToNextEpoch futureEpochItems with
