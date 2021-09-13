@@ -22,9 +22,11 @@ type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series
             let epochItems, futureEpochItems = items |> Array.partition (fun (e,_) -> e = epochId)
             let! res = epochs.Ingest(epochId, Array.map snd epochItems)
             let ingestedItemIds = Array.append ingestedItems res.accepted
-            if (not << Array.isEmpty) res.accepted then
-                log.Information("Added {count}/{total} items to {epochId} Residual {residual} Future {future}",
-                                res.accepted.Length, epochItems.Length, epochId, futureEpochItems.Length)
+            let logLevel =
+                if res.residual.Length <> 0 || futureEpochItems.Length <> 0 || Array.isEmpty res.accepted then Serilog.Events.LogEventLevel.Information
+                else Serilog.Events.LogEventLevel.Debug
+            log.Write(logLevel, "Added {count}/{total} items to {poolId}/{epochId} Residual {residual} Future {future}",
+                      res.accepted.Length, epochItems.Length, poolId, epochId, res.residual.Length, futureEpochItems.Length)
             let nextEpochId = ListEpochId.next epochId
             let pushedToNextEpoch = res.residual |> Array.map (fun x -> nextEpochId, x)
             match Array.append pushedToNextEpoch futureEpochItems with
@@ -57,7 +59,7 @@ type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series
     /// Returns the subset that actually got fed in this time around, exclusive of items that did not trigger events per idempotency rules.
     member _.IngestMany(originEpoch, items) : Async<ItemId seq> = async {
         if Array.isEmpty items then return Seq.empty else
-            
+
         let! results = batchedIngest.Execute [| for x in items -> originEpoch, x |]
         return System.Linq.Enumerable.Intersect(items, results)
     }
