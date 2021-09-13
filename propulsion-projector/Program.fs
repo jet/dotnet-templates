@@ -43,7 +43,7 @@ module Args =
     open Argu
 #if cosmos
     type [<NoEquality; NoComparison>] CosmosParameters =
-        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
+        | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
@@ -58,7 +58,7 @@ module Args =
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | CfpVerbose ->             "request Verbose Logging from ChangeFeedProcessor. Default: off"
+                | Verbose ->                "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
@@ -81,8 +81,8 @@ module Args =
         let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val ContainerId =            a.GetResult Container
         member x.MonitoredContainer() =     connector.ConnectMonitored(database, x.ContainerId)
-        
-        member val CfpVerbose =             a.Contains CfpVerbose
+
+        member val Verbose =                a.Contains Verbose
         member val FromTail =               a.Contains FromTail
         member val MaxDocuments =           a.TryGetResult MaxDocuments
         member val LagFrequency =           a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
@@ -296,7 +296,7 @@ module Args =
                 | SqlMs _ ->                "specify SqlStreamStore input parameters."
 //#endif
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        member val Verbose =                a.Contains Verbose
+        member val Verbose =                a.Contains Parameters.Verbose
         member val ConsumerGroupName =      a.GetResult ConsumerGroupName
         member val private MaxReadAhead =   a.GetResult(MaxReadAhead, 64)
         member val private MaxConcurrentProcessors =a.GetResult(MaxWriters, 1024)
@@ -450,7 +450,7 @@ let run args = async {
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
 #if cosmos
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.CfpVerbose).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.Verbose).CreateLogger()
 #else
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
 #endif
