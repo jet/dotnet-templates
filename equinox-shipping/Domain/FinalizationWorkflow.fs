@@ -1,4 +1,4 @@
-module Shipping.Domain.FinalizationProcessManager
+module Shipping.Domain.FinalizationWorkflow
 
 open FinalizationTransaction
 

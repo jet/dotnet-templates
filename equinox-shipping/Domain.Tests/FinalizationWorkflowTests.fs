@@ -1,4 +1,4 @@
-module Shipping.Domain.Tests.FinalizationProcessManagerTests
+module Shipping.Domain.Tests.FinalizationWorkflowTests
 
 open Shipping.Domain
 
@@ -6,7 +6,7 @@ open FsCheck.Xunit
 open Swensen.Unquote
 
 [<Property>]
-let ``FinalizationProcessManager properties`` (Id transId1, Id transId2, Id containerId1, Id containerId2, IdsAtLeastOne shipmentIds1, IdsAtLeastOne shipmentIds2, Id shipment3) =
+let ``FinalizationWorkflow properties`` (Id transId1, Id transId2, Id containerId1, Id containerId2, IdsAtLeastOne shipmentIds1, IdsAtLeastOne shipmentIds2, Id shipment3) =
     let store = Equinox.MemoryStore.VolatileStore()
     let buffer = EventAccumulator()
     use __ = store.Committed.Subscribe buffer.Record

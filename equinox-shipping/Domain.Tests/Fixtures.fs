@@ -29,7 +29,7 @@ let createProcessManager maxDop store =
     let transactions = FinalizationTransaction.Memory.create store
     let containers = Container.Memory.create store
     let shipments = Shipment.Memory.create store
-    FinalizationProcessManager.Service(transactions, containers, shipments, maxDop=maxDop)
+    FinalizationWorkflow.Service(transactions, containers, shipments, maxDop=maxDop)
 
 (* Generic FsCheck helpers *)
 

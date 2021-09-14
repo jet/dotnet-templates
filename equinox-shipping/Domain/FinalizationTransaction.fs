@@ -83,7 +83,7 @@ module Flow =
         | Fold.State.Assigning state   -> Action.AssignShipments   (state.shipments, state.container)
         | Fold.State.Assigned state    -> Action.FinalizeContainer (state.container, state.shipments)
         | Fold.State.Completed result  -> Action.Finish             result.success
-        // As all state transitions are driven by members on the FinalizationProcessManager, we can rule this out
+        // As all state transitions are driven by members on the FinalizationWorkflow, we can rule this out
         | Fold.State.Initial as s      -> failwith (sprintf "Cannot interpret state %A" s)
 
     // If there are no events to apply to the state, it pushes the transaction manager to
