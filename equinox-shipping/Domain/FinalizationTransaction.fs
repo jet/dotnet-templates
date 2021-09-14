@@ -2,7 +2,7 @@ module Shipping.Domain.FinalizationTransaction
 
 let [<Literal>] private Category = "FinalizationTransaction"
 let streamName (transactionId : TransactionId) = FsCodec.StreamName.create Category (TransactionId.toString transactionId)
-let (|Match|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> Some transId | _ -> None
+let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> Some transId | _ -> None
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -30,7 +30,9 @@ module Events =
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
-    /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
+/// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
+module Reactions =
+
     let isTerminalEvent (encoded : FsCodec.ITimelineEvent<_>) =
         encoded.EventType = "Completed" // TODO nameof(Completed)
 

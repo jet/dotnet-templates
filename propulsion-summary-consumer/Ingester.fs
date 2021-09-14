@@ -24,11 +24,11 @@ module Contract =
         FsCodec.NewtonsoftJson.Codec.Create<VersionAndMessage, Message, (*'Meta*)obj>(up, down)
     let (|DecodeNewest|_|) (stream, span : Propulsion.Streams.StreamSpan<_>) : VersionAndMessage option =
         span.events |> Seq.rev |> Seq.tryPick (EventCodec.tryDecode codec stream)
-    let (|MatchesCategory|_|) = function
+    let (|StreamName|_|) = function
         | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
         | _ -> None
     let (|MatchNewest|_|) = function
-        | (MatchesCategory clientId, _) & DecodeNewest (version, update) -> Some (clientId, version, update)
+        | (StreamName clientId, _) & DecodeNewest (version, update) -> Some (clientId, version, update)
         | _ -> None
 
 [<RequireQualifiedAccess>]
