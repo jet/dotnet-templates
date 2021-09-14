@@ -302,9 +302,9 @@ module Args =
         member val private MaxConcurrentProcessors =a.GetResult(MaxWriters, 1024)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 2.
-        member x.BuildProcessorParams() =
-            Log.Information("Projecting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentProcessors, x.MaxReadAhead)
-            (x.MaxReadAhead, x.MaxConcurrentProcessors)
+        member x.ProcessorParams() =        Log.Information("Projecting... {dop} writers, max {maxReadAhead} batches read ahead",
+                                                            x.MaxConcurrentProcessors, x.MaxReadAhead)
+                                            (x.MaxReadAhead, x.MaxConcurrentProcessors)
 #if cosmos
         member val Cosmos =                 CosmosArguments (c, a.GetResult Cosmos)
         member x.MonitoringParams() =
@@ -376,7 +376,7 @@ module Checkpoints =
 let [<Literal>] AppName = "ProjectorTemplate"
 
 let build (args : Args.Arguments) =
-    let maxReadAhead, maxConcurrentStreams = args.BuildProcessorParams()
+    let maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
 #if cosmos // cosmos
 #if     kafka // cosmos && kafka
     let broker, topic = args.Target.BuildTargetParams()

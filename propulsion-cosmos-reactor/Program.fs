@@ -41,10 +41,9 @@ module Args =
         member val Verbose =                a.Contains Parameters.Verbose
         member val PrometheusPort =         a.TryGetResult PrometheusPort
         member val ConsumerGroupName =      a.GetResult ConsumerGroupName
-        member x.ProcessorParams() =
-            Log.Information("Reacting... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
-                            x.ConsumerGroupName, maxReadAhead, maxConcurrentProcessors)
-            (x.ConsumerGroupName, maxReadAhead, maxConcurrentProcessors)
+        member x.ProcessorParams() =        Log.Information("Reacting... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
+                                                            x.ConsumerGroupName, maxReadAhead, maxConcurrentProcessors)
+                                            (x.ConsumerGroupName, maxReadAhead, maxConcurrentProcessors)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val Cosmos =                 CosmosArguments (c, a.GetResult Cosmos)
@@ -145,7 +144,8 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose).AsPropulsionCosmosConsumer(AppName, args.ConsumerGroupName, args.Cosmos.Verbose).Default(args.Cosmos.Verbose)
+        try let storeVerbose = args.Cosmos.Verbose
+            Log.Logger <- LoggerConfiguration().Configure(args.Verbose).AsPropulsionCosmosConsumer(AppName, args.ConsumerGroupName, storeVerbose).Default(storeVerbose)
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
