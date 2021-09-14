@@ -215,8 +215,7 @@ let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         let appName = sprintf "archiver:%s" args.ConsumerGroupName
         try Log.Logger <- LoggerConfiguration().Configure(appName, args.ConsumerGroupName, args.Verbose, args.SyncLogging, args.Source.Verbose, args.MetricsEnabled).CreateLogger()
-            try run args |> Async.RunSynchronously
-                0
+            try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with MissingArg msg -> eprintfn "%s" msg; 1
