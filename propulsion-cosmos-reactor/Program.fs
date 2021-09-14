@@ -22,6 +22,7 @@ module Args =
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]       Verbose
+        | [<AltCommandLine "-p"; Unique>]       PrometheusPort of int
         | [<AltCommandLine "-g"; Mandatory>]    ConsumerGroupName of string
         | [<AltCommandLine "-r"; Unique>]       MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]       MaxWriters of int
@@ -29,6 +30,7 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose ->                    "request Verbose Logging. Default: off."
+                | PrometheusPort _ ->           "port from which to expose a Prometheus /metrics endpoint. Default: off"
                 | ConsumerGroupName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->             "maximum number of batches to let processing get ahead of completion. Default: 2."
                 | MaxWriters _ ->               "maximum number of concurrent streams on which to process at any time. Default: 8."
@@ -37,6 +39,7 @@ module Args =
         let maxReadAhead =                      a.GetResult(MaxReadAhead, 2)
         let maxConcurrentProcessors =           a.GetResult(MaxWriters, 8)
         member val Verbose =                    a.Contains Parameters.Verbose
+        member val PrometheusPort =             a.TryGetResult PrometheusPort
         member val ConsumerGroupName =          a.GetResult ConsumerGroupName
         member x.ProcessorParams() =
             Log.Information("Projecting... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
@@ -129,9 +132,17 @@ let build (args : Args.Arguments) =
         Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, consumerGroupName, observer, startFromTail, ?maxDocuments=maxDocuments, lagReportFreq=lagFrequency)
     sink, pipeline
 
+// A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
+let startMetricsServer port : IDisposable =
+    let metricsServer = new Prometheus.KestrelMetricServer(port = port)
+    let ms = metricsServer.Start()
+    Log.Information("Prometheus /metrics endpoint on port {port}", port)
+    { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
+
 let run args = async {
     let sink, pipeline = build args
     pipeline |> Async.Start
+    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     return! sink.AwaitCompletion()
 }
 
