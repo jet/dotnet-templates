@@ -13,7 +13,7 @@ type Service
         let rec loop (update: Events.Event option) = async {
             let loop event = loop (Some event)
 
-            let! next = transactions.Record(transactionId, update)
+            let! next = transactions.Step(transactionId, update)
 
             match next with
             | Flow.ReserveShipments shipmentIds ->

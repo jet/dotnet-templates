@@ -30,9 +30,9 @@ module Events =
 
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
 
-/// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
 module Reactions =
 
+    /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded : FsCodec.ITimelineEvent<_>) =
         encoded.EventType = "Completed" // TODO nameof(Completed)
 
@@ -52,7 +52,7 @@ module Fold =
         | State.Assigned _,     Events.Completed            -> State.Completed {| success = true |}
         | _,                    Events.Snapshotted state    -> state.state
         // this shouldn't happen, but, if we did produce invalid events, we'll just ignore them
-        | state, _                                             -> state
+        | state, _                                          -> state
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
@@ -99,9 +99,9 @@ module Flow =
 
 type Service internal (resolve : TransactionId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    member _.Record(transactionId, update) : Async<Flow.Action> =
+    member _.Step(transactionId, maybeUpdate) : Async<Flow.Action> =
         let decider = resolve transactionId
-        decider.Transact(Flow.decide update)
+        decider.Transact(Flow.decide maybeUpdate)
 
 module Config =
 
