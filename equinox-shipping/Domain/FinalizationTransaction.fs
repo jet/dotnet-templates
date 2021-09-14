@@ -68,39 +68,40 @@ module Fold =
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot state = Events.Snapshotted {| state = state |}
 
-[<RequireQualifiedAccess>]
-type Action =
-    | ReserveShipments   of shipmentIds : ShipmentId[]
-    | RevertReservations of shipmentIds : ShipmentId[]
-    | AssignShipments    of shipmentIds : ShipmentId[] * containerId : ContainerId
-    | FinalizeContainer  of containerId : ContainerId * shipmentIds : ShipmentId[]
-    | Finish             of success : bool
+module Flow =
 
-let nextAction : Fold.State -> Action = function
-    | Fold.State.Reserving state      -> Action.ReserveShipments   state.shipments
-    | Fold.State.Reverting state      -> Action.RevertReservations state.shipments
-    | Fold.State.Assigning state      -> Action.AssignShipments   (state.shipments, state.container)
-    | Fold.State.Assigned state       -> Action.FinalizeContainer (state.container, state.shipments)
-    | Fold.State.Completed result     -> Action.Finish             result.success
-    // As all state transitions are driven by members on the FinalizationProcessManager, we can rule this out
-    | Fold.State.Initial as s         -> failwith (sprintf "Cannot interpret state %A" s)
+    type Action =
+        | ReserveShipments   of shipmentIds : ShipmentId[]
+        | RevertReservations of shipmentIds : ShipmentId[]
+        | AssignShipments    of shipmentIds : ShipmentId[] * containerId : ContainerId
+        | FinalizeContainer  of containerId : ContainerId * shipmentIds : ShipmentId[]
+        | Finish             of success : bool
 
-// If there are no events to apply to the state, it pushes the transaction manager to
-// follow up on the next action from where it was.
-let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
-    let events =
-        match update with
-        | Some e when Fold.isValidTransition e state -> [e]
-        | _ -> []
+    let nextAction : Fold.State -> Action = function
+        | Fold.State.Reserving state      -> Action.ReserveShipments   state.shipments
+        | Fold.State.Reverting state      -> Action.RevertReservations state.shipments
+        | Fold.State.Assigning state      -> Action.AssignShipments   (state.shipments, state.container)
+        | Fold.State.Assigned state       -> Action.FinalizeContainer (state.container, state.shipments)
+        | Fold.State.Completed result     -> Action.Finish             result.success
+        // As all state transitions are driven by members on the FinalizationProcessManager, we can rule this out
+        | Fold.State.Initial as s         -> failwith (sprintf "Cannot interpret state %A" s)
 
-    let state' = Fold.fold state events
-    nextAction state', events
+    // If there are no events to apply to the state, it pushes the transaction manager to
+    // follow up on the next action from where it was.
+    let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
+        let events =
+            match update with
+            | Some e when Fold.isValidTransition e state -> [e]
+            | _ -> []
+
+        let state' = Fold.fold state events
+        nextAction state', events
 
 type Service internal (resolve : TransactionId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    member _.Record(transactionId, update) : Async<Action> =
+    member _.Record(transactionId, update) : Async<Flow.Action> =
         let decider = resolve transactionId
-        decider.Transact(decide update)
+        decider.Transact(Flow.decide update)
 
 module Config =
 
