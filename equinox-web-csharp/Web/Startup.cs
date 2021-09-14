@@ -31,7 +31,7 @@ namespace TodoBackendTemplate.Web
                 .UseEndpoints(endpoints =>
                 {
                     endpoints.MapControllers();
-                    endpoints.MapMetrics();
+                    endpoints.MapMetrics(); // Host /metrics for Prometheus
                 });
         }
 
