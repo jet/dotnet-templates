@@ -55,5 +55,5 @@ type Service
         execute transactionId (Some initialRequest)
 
     /// Used by watchdog service to drive processing to a conclusion where a given request was orphaned
-    member _.Drive(transactionId : TransactionId) =
+    member _.Pump(transactionId : TransactionId) =
         execute transactionId None

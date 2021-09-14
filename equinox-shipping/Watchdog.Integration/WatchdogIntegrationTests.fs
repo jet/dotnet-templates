@@ -19,7 +19,7 @@ type WatchdogIntegrationTests(output) =
         let maxReadAhead, maxConcurrentStreams = Int32.MaxValue, 4
 
         let stats = Handler.Stats(log, TimeSpan.FromSeconds 10., TimeSpan.FromMinutes 1.)
-        let watchdog = Program.startWatchdog log (processingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Drive
+        let watchdog = Program.startWatchdog log (processingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Pump
         Async.RunSynchronously <| async {
             let projector = MemoryStoreProjector.Start(log, watchdog)
             use __ = projector.Subscribe(store.Committed |> Observable.filter (fun (s,_e) -> Handler.isRelevant s))

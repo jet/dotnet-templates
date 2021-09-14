@@ -12,7 +12,7 @@ The purpose of this template is to demonstrate the implementation of a [Process 
 Implementation notes: 
    - processing is fully idempotent; retries, concurrent or overlapping transactions are intended to be handled thoroughly and correctly
    - if any `Shipment`s cannot be `Reserved`, those that have been get `Revoked`, and the failure is reported to the caller
-   - includes a `Watchdog` console app (based on `dotnet new proReactor --source changeFeedOnly --blank`) responsible for `Drive`ing any abandoned / stuck transactions neglected by e.g. processing within a HTTP request that times out and is not retried by the client through to their conclusion.
+   - includes a `Watchdog` console app (based on `dotnet new proReactor --source changeFeedOnly --blank`) responsible for `Pump`ing any abandoned / stuck transactions neglected by e.g. processing within a HTTP request that times out and is not retried by the client through to their conclusion.
 
 ## Exercise / hole
 

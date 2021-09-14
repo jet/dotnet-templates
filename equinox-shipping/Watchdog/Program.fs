@@ -149,7 +149,7 @@ let build (args : Args.Arguments) =
         createProcessManager args.ProcessManagerMaxDop (context, cache)
     let watchdogSink =
         let stats = Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
-        startWatchdog Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Drive
+        startWatchdog Log.Logger (args.ProcessingTimeout, stats) (args.MaxReadAhead, args.MaxConcurrentStreams) processManager.Pump
     let pipeline =
         let log = Log.ForContext<CosmosStoreSource>()
         use observer = CosmosStoreSource.CreateObserver(log, watchdogSink.StartIngester, Seq.collect Handler.transformOrFilter)
