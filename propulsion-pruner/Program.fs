@@ -164,13 +164,6 @@ module Args =
 
 let [<Literal>] AppName = "PrunerTemplate"
 
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-
 let build (args : Args.Arguments, log : ILogger, storeLog : ILogger) =
     let archive = args.Source
     // NOTE - DANGEROUS - events submitted to this sink get DELETED from the supplied Context!

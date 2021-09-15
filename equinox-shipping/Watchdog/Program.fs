@@ -115,13 +115,6 @@ let startWatchdog log (processingTimeout, stats : Handler.Stats) (maxReadAhead, 
     let handle = Handler.handle processingTimeout driveTransaction
     Propulsion.Streams.StreamsProjector.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval)
 
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-
 let build (args : Args.Arguments) =
     let processorName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
     let storeClient, monitored = args.Cosmos.ConnectStoreAndMonitored()
@@ -155,4 +148,3 @@ let main argv =
     with MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1
-

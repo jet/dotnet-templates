@@ -69,14 +69,20 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
     member x.CreateUninitialized(databaseId, containerId) =
         x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
-    
+
     /// Connect a CosmosStoreClient, including warming up
     member x.ConnectStore(connectionName, databaseId, containerId) =
         x.LogConfiguration(connectionName, databaseId, containerId)
         Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-        
+
     /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
     member x.ConnectMonitored(databaseId, containerId) =
         x.LogConfiguration("Source", databaseId, containerId)
         x.CreateUninitialized(databaseId, containerId)
 
+module CosmosStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+        let maxEvents = 256
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)

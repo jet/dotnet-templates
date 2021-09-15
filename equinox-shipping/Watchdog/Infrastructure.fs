@@ -11,7 +11,6 @@ module EnvVar =
 [<System.Runtime.CompilerServices.Extension>]
 type LoggerConfigurationExtensions() =
 
-
     [<System.Runtime.CompilerServices.Extension>]
     static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
         let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
@@ -44,12 +43,12 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
     member x.CreateUninitialized(databaseId, containerId) =
         x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
-    
+
     /// Connect a CosmosStoreClient, including warming up
     member x.ConnectStore(connectionName, databaseId, containerId) =
         x.LogConfiguration(connectionName, databaseId, containerId)
         Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-        
+
     /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
     member x.ConnectMonitored(databaseId, containerId, ?connectionName) =
         x.LogConfiguration(defaultArg connectionName "Source", databaseId, containerId)
@@ -60,3 +59,10 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
         let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
         storeClient, monitored
+
+module CosmosStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+        let maxEvents = 256
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)

@@ -81,7 +81,7 @@ module Args =
         let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let containerId =                   a.GetResult Container
         let leaseContainerId =              a.GetResult(LeaseContainer, containerId + "-aux")
-        member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
+        member _.ConnectLeases() =          connector.CreateUninitialized(database, leaseContainerId)
         member x.MonitoredContainer() =     connector.ConnectMonitored(database, containerId)
 
         member val Verbose =                a.Contains Verbose

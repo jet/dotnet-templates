@@ -47,7 +47,14 @@ module ConnectorExtensions =
         member x.ConnectStore(connectionName, databaseId, containerId) =
             x.LogConfiguration(connectionName, databaseId, containerId)
             Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-        
+
+module CosmosStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+        let maxEvents = 256
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+
 module Guid =
 
     let inline toStringN (x : Guid) = x.ToString "N"
