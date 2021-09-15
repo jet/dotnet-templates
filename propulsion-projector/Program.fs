@@ -45,7 +45,7 @@ module Args =
     type [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
-        | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
+        | [<AltCommandLine "-mi"; Unique>]  MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
 
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
@@ -60,7 +60,7 @@ module Args =
             member a.Usage = a |> function
                 | Verbose ->                "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | MaxDocuments _ ->         "maximum document count to supply for the Change Feed query. Default: use response size limit"
+                | MaxItems _ ->             "maximum item count to request from the feed. Default: unlimited."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
 
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
@@ -79,19 +79,16 @@ module Args =
         let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val ContainerId =            a.GetResult Container
-        member x.MonitoredContainer() =     connector.ConnectMonitored(database, x.ContainerId)
+        let containerId =                   a.GetResult Container
+        let leaseContainerId =              a.GetResult(LeaseContainer, containerId + "-aux")
+        member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
+        member x.MonitoredContainer() =     connector.ConnectMonitored(database, containerId)
 
         member val Verbose =                a.Contains Verbose
         member val FromTail =               a.Contains FromTail
-        member val MaxDocuments =           a.TryGetResult MaxDocuments
+        member val MaxItems =               a.TryGetResult MaxItems
         member val LagFrequency =           a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member val LeaseContainerId =       a.TryGetResult LeaseContainer
-        member private x.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
-        member x.ConnectLeases() =          match x.LeaseContainerId with
-                                            | None ->    x.ConnectLeases(x.ContainerId + "-aux")
-                                            | Some sc -> x.ConnectLeases(sc)
-        member x.Connect() =                connector.ConnectStore("Main", database, x.ContainerId)
+        member _.Connect() =                connector.ConnectStore("Main", database, containerId)
 #endif
 #if esdb
     open Equinox.EventStore
@@ -259,7 +256,7 @@ module Args =
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
+        | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
 //#if kafka
@@ -279,7 +276,7 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose ->                "Request Verbose Logging. Default: off"
-                | ConsumerGroupName _ ->    "Projector consumer group name."
+                | ProcessorName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
 //#if kafka
@@ -297,7 +294,7 @@ module Args =
 //#endif
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
-        member val ConsumerGroupName =      a.GetResult ConsumerGroupName
+        member val ProcessorName =          a.GetResult ProcessorName
         member val private MaxReadAhead =   a.GetResult(MaxReadAhead, 64)
         member val private MaxConcurrentProcessors =a.GetResult(MaxWriters, 1024)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
@@ -310,12 +307,12 @@ module Args =
         member x.MonitoringParams() =
             let srcC = x.Cosmos
             let leases : Microsoft.Azure.Cosmos.Container = srcC.ConnectLeases()
-            Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                x.ConsumerGroupName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxDocuments)
+            Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxItems}",
+                x.ProcessorName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxItems)
             if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
             let monitored = srcC.MonitoredContainer()
-            (monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+            (monitored, leases, x.ProcessorName, srcC.FromTail, srcC.MaxItems, srcC.LagFrequency)
 #endif
 #if esdb
         member val Es =                     EsSourceArguments (c, a.GetResult Es)
@@ -324,10 +321,10 @@ module Args =
             let startPos = srcE.StartPos
             let context = srcE.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
             Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Container {container}",
-                x.ConsumerGroupName, startPos, srcE.ForceRestart)
+                x.ProcessorName, startPos, srcE.ForceRestart)
             Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}]", srcE.MinBatchSize, srcE.StartingBatchSize)
             srcE, context,
-                {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
+                {   groupName = x.ProcessorName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                     forceRestart = srcE.ForceRestart
                     batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = 0 }
 #endif
@@ -336,7 +333,7 @@ module Args =
         member x.BuildSqlStreamStoreParams() =
             let src = x.SqlStreamStore
             let spec : Propulsion.SqlStreamStore.ReaderSpec =
-                {    consumerGroup          = x.ConsumerGroupName
+                {    consumerGroup          = x.ProcessorName
                      maxBatchSize           = src.MaxBatchSize
                      tailSleepInterval      = src.TailInterval }
             src, spec
@@ -393,8 +390,8 @@ let build (args : Args.Arguments) =
 #endif // cosmos && !kafka
     let pipeline =
         use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
-        let monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.MonitoringParams()
-        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxDocuments, lagReportFreq=lagFrequency)
+        let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
+        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
 #endif // cosmos
 #if esdb
     let srcE, context, spec = args.BuildEventStoreParams()

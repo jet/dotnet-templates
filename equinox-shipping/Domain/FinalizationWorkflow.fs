@@ -57,3 +57,13 @@ type Service
     /// Used by watchdog service to drive processing to a conclusion where a given request was orphaned
     member _.Pump(transactionId : TransactionId) =
         execute transactionId None
+
+module Config =
+
+    module Cosmos =
+
+        let create maxDop (context, cache) =
+            let transactions = Config.Cosmos.create (context, cache)
+            let containers = Container.Config.Cosmos.create (context, cache)
+            let shipments = Shipment.Config.Cosmos.create (context, cache)
+            Service(transactions, containers, shipments, maxDop=maxDop)

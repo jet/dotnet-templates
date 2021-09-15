@@ -36,48 +36,43 @@ module Args =
     open Argu
     [<NoEquality; NoComparison>]
     type Parameters =
-        | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
+        | [<AltCommandLine "-V"; Unique>]   Verbose
+        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
+        | [<AltCommandLine "-S"; Unique>]   LocalSeq
+        | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-c"; Unique>]   MaxConnections of int
         | [<AltCommandLine "-s"; Unique>]   MaxSubmit of int
-
-        | [<AltCommandLine "-S"; Unique>]   LocalSeq
-        | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
-
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
-
         | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] SrcEs of ParseResults<EsSourceParameters>
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | ConsumerGroupName _ ->    "Projector consumer group name."
+                | Verbose ->                "request Verbose Logging. Default: off"
+                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
+                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
+                | ProcessorName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
                 | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 512."
                 | MaxConnections _ ->       "size of Sink connection pool to maintain. Default: 1."
                 | MaxSubmit _ ->            "maximum number of batches to submit concurrently. Default: 8."
-
-                | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
-                | Verbose ->                "request Verbose Logging. Default: off"
-                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
-
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
 
                 | SrcCosmos _ ->            "Cosmos input parameters."
                 | SrcEs _ ->                "EventStore input parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        member val ConsumerGroupName =      a.GetResult ConsumerGroupName
+        member val Verbose =                a.Contains Parameters.Verbose
+        member val CfpVerbose =             a.Contains CfpVerbose
+        member val MaybeSeqEndpoint =       if a.Contains LocalSeq then Some "http://localhost:5341" else None
+        member val ProcessorName =          a.GetResult ProcessorName
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 2048)
         member val MaxWriters =             a.GetResult(MaxWriters, 512)
         member val MaxConnections =         a.GetResult(MaxConnections, 1)
-        member val MaybeSeqEndpoint =       if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member val MaxSubmit =              a.GetResult(MaxSubmit, 8)
 
-        member val Verbose =                a.Contains Parameters.Verbose
-        member val CfpVerbose =             a.Contains CfpVerbose
         member val Source : Choice<CosmosSourceArguments, EsSourceArguments> =
             match a.TryGetSubCommand() with
             | Some (SrcCosmos cosmos) -> Choice1Of2 (CosmosSourceArguments (c, cosmos))
@@ -128,26 +123,26 @@ module Args =
                         | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
                     | Choice2Of2 _dstE ->   srcC.ConnectLeases()
                 Log.Information("Syncing... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
-                Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                    x.ConsumerGroupName, leases.Database.Id, leases.Id, srcC.MaxDocuments)
+                Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxItems}",
+                    x.ProcessorName, leases.Database.Id, leases.Id, srcC.MaxItems)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
                 let monitored = srcC.MonitoredContainer()
-                Choice1Of2 (monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+                Choice1Of2 (monitored, leases, x.ProcessorName, srcC.FromTail, srcC.MaxItems, srcC.LagFrequency)
             | Choice2Of2 srcE ->
                 let startPos = srcE.StartPos
                 let checkpointsContext = srcE.Sink.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
                 Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart})",
-                    x.ConsumerGroupName, startPos, srcE.ForceRestart)
+                    x.ProcessorName, startPos, srcE.ForceRestart)
                 Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxReadAhead} uncommitted batches ahead",
                     srcE.MinBatchSize, srcE.StartingBatchSize, x.MaxReadAhead)
                 Choice2Of2 (srcE, checkpointsContext,
-                    {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
+                    {   groupName = x.ProcessorName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                         forceRestart = srcE.ForceRestart
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = srcE.StreamReaders })
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
-        | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
+        | [<AltCommandLine "-mi"; Unique>]  MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
 
@@ -164,7 +159,7 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
+                | MaxItems _ ->             "maximum item count to request from feed. Default: unlimited"
                 | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: 1"
                 | LeaseContainer _ ->       "specify Container Name for Leases container. Default: `sourceContainer` + `-aux`."
 
@@ -190,7 +185,7 @@ module Args =
         member x.MonitoredContainer() =     connector.ConnectMonitored(database, x.ContainerId)
 
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
-        member val MaxDocuments =           a.TryGetResult MaxDocuments
+        member val MaxItems =               a.TryGetResult MaxItems
         member val LagFrequency : TimeSpan = a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val LeaseContainerId =       a.TryGetResult CosmosSourceParameters.LeaseContainer
         member private _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
@@ -528,7 +523,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
             let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
-    | Choice1Of2 (monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
+    | Choice1Of2 (monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->
 #if marveleqx
         use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformV0 streamFilter))
 #else
@@ -537,7 +532,7 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         let runPipeline =
             Propulsion.CosmosStore.CosmosStoreSource.Run(
                 Log.Logger, monitored, leases, processorName, observer, startFromTail,
-                ?maxDocuments=maxDocuments, lagReportFreq=lagFrequency)
+                ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
         sink, runPipeline
     | Choice2Of2 (srcE, checkpointsContext, spec) ->
         match maybeDstCosmos with
