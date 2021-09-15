@@ -142,7 +142,7 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FeedConsumer", "feed-consum
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "feed-source\Domain.Tests\Domain.Tests.fsproj", "{E0F63351-FADB-4972-BDE7-D5F5731B8EE4}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proCosmosReactor", "proCosmosReactor", "{3E4CC1AC-FFA2-457E-9103-ACB497BCB270}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proReactorCosmos", "proReactorCosmos", "{3E4CC1AC-FFA2-457E-9103-ACB497BCB270}"
 ProjectSection(SolutionItems) = preProject
 	propulsion-cosmos-reactor\.template.config\template.json = propulsion-cosmos-reactor\.template.config\template.json
 EndProjectSection

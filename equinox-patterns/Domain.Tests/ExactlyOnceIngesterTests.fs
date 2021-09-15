@@ -8,7 +8,7 @@ let linger, maxItemsPerEpoch = System.TimeSpan.FromMilliseconds 1., 5
 
 let createSut store =
     // While we use ~ 200ms when hitting Cosmos, there's no value in doing so in the context of these property based tests
-    ListIngester.MemoryStore.Create(store, linger=linger, maxItemsPerEpoch=maxItemsPerEpoch)
+    ListIngester.Config.Memory.Create(store, linger=linger, maxItemsPerEpoch=maxItemsPerEpoch)
 
 type Gap = Gap of int
 type GapGen =
@@ -17,10 +17,10 @@ type IngesterProperty() = inherit FsCheck.Xunit.PropertyAttribute(Arbitrary=[|ty
 
 let [<IngesterProperty>] properties shouldUseSameSut (Gap gap) (initialEpochId, Ids initialItems) (Ids items) =
     let store = Equinox.MemoryStore.VolatileStore()
-    
+
     let mutable nextEpochId = initialEpochId
     for x in 1 .. gap do nextEpochId <- ListEpochId.next nextEpochId
-        
+
     Async.RunSynchronously <| async {
         // Initialize with some items
         let initialSut = createSut store

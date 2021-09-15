@@ -22,7 +22,39 @@ type Configuration(tryGet) =
 module Args =
 
     open Argu
-    type [<NoEquality; NoComparison>] CosmosParameters =
+    type [<NoEquality; NoComparison>] Parameters =
+        | [<AltCommandLine "-b"; Unique>]   Broker of string
+        | [<AltCommandLine "-t"; Unique>]   Topic of string
+        | [<AltCommandLine "-g"; Unique>]   Group of string
+        | [<AltCommandLine "-m"; Unique>]   MaxInflightMb of float
+        | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
+
+        | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
+        | [<AltCommandLine "-V"; Unique>]   Verbose
+        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosParameters>
+
+        interface IArgParserTemplate with
+            member a.Usage = a |> function
+                | Verbose _ ->              "request verbose logging."
+                | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
+                | Topic _ ->                "specify Kafka Topic name. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
+                | Group _ ->                "specify Kafka Consumer Group Id. (optional if environment variable PROPULSION_KAFKA_GROUP specified)"
+                | MaxInflightMb _ ->        "maximum MiB of data to read ahead. Default: 10."
+                | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
+                | MaxWriters _ ->           "maximum number of items to process in parallel. Default: 8"
+                | Cosmos _ ->               "specify CosmosDb input parameters"
+    and Arguments(c : Configuration, a : ParseResults<Parameters>) =
+        member val Verbose =                a.Contains Verbose
+        member val Broker =                 a.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
+        member val Topic =                  a.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
+        member val Group =                  a.TryGetResult Group  |> Option.defaultWith (fun () -> c.Group)
+        member val MaxInFlightBytes =       a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
+        member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+        member val MaxConcurrentStreams =   a.GetResult(MaxWriters, 8)
+        member val StatsInterval =          TimeSpan.FromMinutes 1.
+        member val StateInterval =          TimeSpan.FromMinutes 5.
+        member val Cosmos =                 CosmosArguments(c, a.GetResult Cosmos)
+    and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
@@ -39,7 +71,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-    type CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
+    and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
         let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          a.TryGetResult ConnectionMode
         let timeout =                       a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -49,43 +81,6 @@ module Args =
         let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     a.GetResult Container
         member _.Connect() =                connector.ConnectStore("Main", database, container)
-    [<NoEquality; NoComparison>]
-    type Parameters =
-        | [<AltCommandLine "-b"; Unique>]   Broker of string
-        | [<AltCommandLine "-t"; Unique>]   Topic of string
-        | [<AltCommandLine "-g"; Unique>]   Group of string
-        | [<AltCommandLine "-m"; Unique>]   MaxInflightMb of float
-        | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
-
-        | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
-        | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosParameters>
-
-        interface IArgParserTemplate with
-            member a.Usage = a |> function
-                | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
-                | Topic _ ->                "specify Kafka Topic name. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
-                | Group _ ->                "specify Kafka Consumer Group Id. (optional if environment variable PROPULSION_KAFKA_GROUP specified)"
-                | MaxInflightMb _ ->        "maximum MiB of data to read ahead. Default: 10."
-                | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
-
-                | MaxWriters _ ->           "maximum number of items to process in parallel. Default: 8"
-                | Verbose _ ->              "request verbose logging."
-                | Cosmos _ ->               "specify CosmosDb input parameters"
-
-    type Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        member val Cosmos =                 CosmosArguments(c, a.GetResult Cosmos)
-        member val Broker =                 a.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
-        member val Topic =                  a.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
-        member val Group =                  a.TryGetResult Group  |> Option.defaultWith (fun () -> c.Group)
-        member val MaxInFlightBytes =       a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
-        member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
-
-        member val MaxConcurrentStreams =   a.GetResult(MaxWriters, 8)
-
-        member val Verbose =                a.Contains Verbose
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 5.
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv =
@@ -93,19 +88,12 @@ module Args =
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-
 let [<Literal>] AppName = "ConsumerTemplate"
 
 let start (args : Args.Arguments) =
     let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
     let cache = Equinox.Cache (AppName, sizeMb = 10)
-    let service = SkuSummary.Cosmos.create (context, cache)
+    let service = SkuSummary.Config.Cosmos.create (context, cache)
     let config =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,
@@ -130,8 +118,7 @@ let run args = async {
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
-            try run args |> Async.RunSynchronously
-                0
+            try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with MissingArg msg -> eprintfn "%s" msg; 1

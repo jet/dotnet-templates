@@ -2,6 +2,7 @@ module ReactorTemplate.Todo
 
 let [<Literal>] Category = "Todos"
 let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
+let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId | _ -> None
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -18,14 +19,17 @@ module Events =
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
     let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+
+module Reactions =
+
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
-        span.events |> Array.choose (EventCodec.tryDecode codec stream)
-    let (|MatchesCategory|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
+        span.events |> Array.choose (EventCodec.tryDecode Events.codec stream)
+    let (|Parse|_|) = function
+        | (StreamName clientId, _) & Decode events -> Some (clientId, events)
         | _ -> None
-    let (|Match|_|) = function
-        | (MatchesCategory clientId, _) & (Decode events) -> Some (clientId, events)
-        | _ -> None
+
+    /// Allows us to skip producing summaries for events that we know won't result in an externally discernable change to the summary output
+    let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Fold =
@@ -47,8 +51,6 @@ module Fold =
     let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
     let snapshot state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
-    /// Allows us to skip producing summaries for events that we know won't result in an externally discernable change to the summary output
-    let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
 type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
@@ -59,25 +61,27 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
         decider.QueryEx(fun c -> c.Version, render c.State)
 
-let private create resolveStream =
-    let resolve = streamName >> resolveStream >> Equinox.createDecider
-    Service(resolve)
+module Config =
+
+    let private create resolveStream =
+        let resolve = streamName >> resolveStream >> Equinox.createDecider
+        Service(resolve)
 
 //#if multiSource
-module EventStore =
+    module EventStore =
 
-    let create (context, cache) =
-        let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
-        create resolver.Resolve
+        let create (context, cache) =
+            let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
+            create resolver.Resolve
 
 //#endif
-module Cosmos =
+    module Cosmos =
 
-    open Equinox.CosmosStore
+        open Equinox.CosmosStore
 
-    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-    let create (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        create cat.Resolve
+        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
+        let create (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+            create cat.Resolve

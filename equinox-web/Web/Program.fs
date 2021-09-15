@@ -30,8 +30,7 @@ let [<Literal>] AppName = "TodoBackendTemplate"
 [<EntryPoint>]
 let main argv =
     try Log.Logger <- LoggerConfiguration().Configure(AppName).CreateLogger()
-        try createWebHostBuilder(argv).Build().Run()
-            0
+        try createWebHostBuilder(argv).Build().Run(); 0
         with e ->
             Log.Fatal(e, "Application Startup failed")
             1

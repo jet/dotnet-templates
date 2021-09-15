@@ -9,7 +9,7 @@ let linger, lookBackLimit, maxPickTicketsPerBatch = System.TimeSpan.FromMillisec
 
 let createSut store trancheId =
     // While we use ~ 200ms when hitting Cosmos, there's no value in doing so in the context of these property based tests
-    let service = TicketsIngester.MemoryStore.Create(store, linger=linger, maxItemsPerEpoch=maxPickTicketsPerBatch, lookBackLimit=lookBackLimit)
+    let service = TicketsIngester.Config.Memory.Create(store, linger=linger, maxItemsPerEpoch=maxPickTicketsPerBatch, lookBackLimit=lookBackLimit)
     service.ForFc trancheId
 
 let [<Property>] properties shouldInitialize shouldUseSameSut (Id trancheId) initialItems items =

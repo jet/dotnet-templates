@@ -42,13 +42,13 @@ module Args =
 //#endif
     [<NoEquality; NoComparison>]
     type Parameters =
-        | [<AltCommandLine "-g"; Mandatory>] ConsumerGroupName of string
-        | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
-        | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
 //#if (!kafkaEventSpans)
         | [<AltCommandLine "-C"; Unique>]   CfpVerbose
 //#endif
+        | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
+        | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
+        | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
 //#if filter
 
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
@@ -64,13 +64,13 @@ module Args =
 #endif
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | ConsumerGroupName _ ->    "Projector consumer group name."
-                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
-                | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
                 | Verbose ->                "request Verbose Logging. Default: off."
 //#if (!kafkaEventSpans)
                 | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off."
 //#endif
+                | ProcessorName _ ->        "Projector consumer group name."
+                | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
+                | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
 //#if filter
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
@@ -84,13 +84,13 @@ module Args =
                 | Kafka _ ->                "specify Kafka input parameters."
 #endif
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        member val ConsumerGroupName =      a.GetResult ConsumerGroupName
+        member val Verbose =                a.Contains Parameters.Verbose
 //#if (!kafkaEventSpans)
         member val CfpVerbose =             a.Contains CfpVerbose
 //#endif
+        member val ProcessorName =          a.GetResult ProcessorName
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 16)
         member val MaxConcurrentStreams =   a.GetResult(MaxWriters, 8)
-        member val Verbose =                a.Contains Parameters.Verbose
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
 //#if filter
@@ -140,28 +140,28 @@ module Args =
             | Choice1Of2 srcE ->
                 let startPos, cosmos = srcE.StartPos, srcE.Cosmos
                 Log.Information("Processing Consumer Group {groupName} from {startPos} (force: {forceRestart}) in Database {db} Container {container}",
-                    x.ConsumerGroupName, startPos, srcE.ForceRestart, cosmos.DatabaseId, cosmos.ContainerId)
+                    x.ProcessorName, startPos, srcE.ForceRestart, cosmos.DatabaseId, cosmos.ContainerId)
                 Log.Information("Ingesting in batches of [{minBatchSize}..{batchSize}], reading up to {maxReadAhead} uncommitted batches ahead",
                     srcE.MinBatchSize, srcE.StartingBatchSize, x.MaxReadAhead)
                 let context = cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
                 Choice1Of2 (srcE, context,
-                    {   groupName = x.ConsumerGroupName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
+                    {   groupName = x.ProcessorName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                         forceRestart = srcE.ForceRestart
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = 0 })
             | Choice2Of2 srcC ->
 //#endif // !changeFeedOnly
                 let leases = srcC.ConnectLeases()
                 Log.Information("Reacting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentStreams, x.MaxReadAhead)
-                Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxDocuments}",
-                    x.ConsumerGroupName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxDocuments)
+                Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxItems}",
+                    x.ProcessorName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxItems)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
                 let storeClient, monitored = srcC.ConnectStoreAndMonitored()
                 let context = CosmosStoreContext.create storeClient
 #if changeFeedOnly
-                (srcC, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+                (srcC, context, monitored, leases, x.ProcessorName, srcC.FromTail, srcC.MaxItems, srcC.LagFrequency)
 #else
-                Choice2Of2 (srcC, context, monitored, leases, x.ConsumerGroupName, srcC.FromTail, srcC.MaxDocuments, srcC.LagFrequency)
+                Choice2Of2 (srcC, context, monitored, leases, x.ProcessorName, srcC.FromTail, srcC.MaxItems, srcC.LagFrequency)
 #endif
 //#endif // kafkaEventSpans
 #if kafkaEventSpans
@@ -210,7 +210,7 @@ module Args =
 #else
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
-        | [<AltCommandLine "-md"; Unique>]  MaxDocuments of int
+        | [<AltCommandLine "-mi"; Unique>]  MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
 
@@ -230,7 +230,7 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | MaxDocuments _ ->         "maximum item count to request from feed. Default: unlimited"
+                | MaxItems _ ->             "maximum item count to request from feed. Default: unlimited"
                 | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: 1"
                 | LeaseContainer _ ->       "specify Container Name for Leases container. Default: `sourceContainer` + `-aux`."
 
@@ -256,9 +256,9 @@ module Args =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         member val DatabaseId =             a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         member val ContainerId =            a.GetResult CosmosSourceParameters.Container
-        
+
         member val FromTail =               a.Contains CosmosSourceParameters.FromTail
-        member val MaxDocuments =           a.TryGetResult MaxDocuments
+        member val MaxItems =               a.TryGetResult MaxItems
         member val LagFrequency : TimeSpan = a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val private LeaseContainerId = a.TryGetResult CosmosSourceParameters.LeaseContainer
         member private x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
@@ -380,7 +380,7 @@ module Args =
         member val Retries =                a.GetResult(EsSourceParameters.Retries, 3)
         member val Timeout =                a.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
         member val Heartbeat =              a.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
-        
+
         member x.ConnectProj(log: ILogger, storeLog: ILogger, appName, nodePreference) =
             let discovery = discovery (x.ProjHost, x.ProjPort, x.ProjTcp)
             log.ForContext("projHost", x.ProjHost).ForContext("projPort", x.ProjPort)
@@ -390,7 +390,7 @@ module Args =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Connector(x.ProjUser, x.ProjPassword, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
                 .Connect(appName + "-Proj", discovery, nodePreference) |> Async.RunSynchronously
-        
+
         member x.Connect(log: ILogger, storeLog: ILogger, appName, connectionStrategy) =
             let discovery = discovery (x.Host, x.Port, x.Tcp)
             log.ForContext("host", x.Host).ForContext("port", x.Port)
@@ -518,7 +518,7 @@ let build (args : Args.Arguments) =
 #else
         let esConn = connectEs ()
         let srcCache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
+        let srcService = Todo.Config.EventStore.create (EventStoreContext.create esConn, srcCache)
         let handle = Handler.handle srcService produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
@@ -537,8 +537,8 @@ let build (args : Args.Arguments) =
 #else // blank
         let esConn = connectEs ()
         let srcCache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.EventStore.create (EventStoreContext.create esConn, srcCache)
-        let dstService = TodoSummary.Cosmos.create (context, cache)
+        let srcService = Todo.Config.EventStore.create (EventStoreContext.create esConn, srcCache)
+        let dstService = TodoSummary.Config.Cosmos.create (context, cache)
         let handle = Ingester.handle srcService dstService
 #endif // blank
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
@@ -554,16 +554,16 @@ let build (args : Args.Arguments) =
                 Log.Logger, sink, checkpoints, connectProjEs, spec, Handler.tryMapEvent filterByStreamName,
                 args.MaxReadAhead, args.StatsInterval)
         sink, runPipeline
-    | Choice2Of2 (source, context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency) ->
+    | Choice2Of2 (source, context, monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->
 //#endif // !changeFeedOnly
 #if changeFeedOnly
-        let source, context, monitored, leases, processorName, startFromTail, maxDocuments, lagFrequency = args.SourceParams()
+        let source, context, monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.SourceParams()
 #endif
 #else // kafkaEventSpans -> wire up consumption from Kafka, with auxiliary `cosmos` store
         let source = args.Source
         let consumerConfig =
             FsKafka.KafkaConsumerConfig.Create(
-                AppName, source.Broker, [source.Topic], args.ConsumerGroupName, Confluent.Kafka.AutoOffsetReset.Earliest,
+                AppName, source.Broker, [source.Topic], args.ProcessorName, Confluent.Kafka.AutoOffsetReset.Earliest,
                 maxInFlightBytes = source.MaxInFlightBytes, ?statisticsInterval = source.LagFrequency)
 #endif // kafkaEventSpans
 
@@ -571,8 +571,8 @@ let build (args : Args.Arguments) =
 #if (!blank) //!kafka && !blank -> wire up a cosmos context to an ingester
         let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let cache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Cosmos.create (context, cache)
-        let dstService = TodoSummary.Cosmos.create (context, cache)
+        let srcService = Todo.Config.Cosmos.create (context, cache)
+        let dstService = TodoSummary.Config.Cosmos.create (context, cache)
         let handle = Ingester.handle srcService dstService
 #else // !kafka && blank -> no specific Ingester source/destination wire-up
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
@@ -593,7 +593,7 @@ let build (args : Args.Arguments) =
         let handle = Handler.handle produceSummary
 #else
         let cache = Equinox.Cache(AppName, sizeMb=10)
-        let service = Todo.Cosmos.create (context, cache)
+        let service = Todo.Config.Cosmos.create (context, cache)
         let handle = Handler.handle service produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
@@ -630,7 +630,7 @@ let build (args : Args.Arguments) =
 #endif
         let pipeline =
             use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
-            Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxDocuments, lagReportFreq=lagFrequency)
+            Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
         sink, pipeline
 #endif // !kafkaEventSpans
 
@@ -652,8 +652,7 @@ let main argv =
 #else
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
 #endif
-            try run args |> Async.RunSynchronously
-                0
+            try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with MissingArg msg -> eprintfn "%s" msg; 1

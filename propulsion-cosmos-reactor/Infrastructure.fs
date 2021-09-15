@@ -22,13 +22,13 @@ module EventCodec =
 
 module Log =
 
-    let forMetrics () =
-        Serilog.Log.ForContext("isMetric", true)
+    let defaultForMetrics = Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
+    let isForMetrics = Filters.Matching.FromSource<Equinox.CosmosStore.CosmosStoreContext>().Invoke
 
 module Equinox =
 
     let createDecider stream =
-        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+        Equinox.Decider(Log.defaultForMetrics, stream, maxAttempts = 3)
 
 module Guid =
 
@@ -62,22 +62,22 @@ type Logging() =
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member AsConsumer(configuration : LoggerConfiguration, appName, group) =
-        let customTags = ["app", appName]
-        configuration.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
-        |> fun c -> c.WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member AsChangeFeedProcessor(configuration : LoggerConfiguration, appName, group, ?changeFeedProcessorVerbose) =
-        let customTags = ["app", appName]
-        configuration.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
-        |> fun c -> c.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
-        |> fun c -> c.AsConsumer(appName, group)
-
-    [<System.Runtime.CompilerServices.Extension>]
     static member AsHost(configuration : LoggerConfiguration, appName) =
         let customTags = ["app",appName]
         configuration.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member AsPropulsionConsumer(configuration : LoggerConfiguration, appName, group) =
+        let customTags = ["app", appName]
+        configuration.AsHost(appName)
+        |> fun c -> c.WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member AsPropulsionCosmosConsumer(configuration : LoggerConfiguration, appName, group, ?changeFeedProcessorVerbose) =
+        let customTags = ["app", appName]
+        configuration.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
+        |> fun c -> c.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
+        |> fun c -> c.AsPropulsionConsumer(appName, group)
 
     [<System.Runtime.CompilerServices.Extension>]
     static member ToConsole(configuration : LoggerConfiguration) =
@@ -85,14 +85,15 @@ type Logging() =
         configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Default(configuration : LoggerConfiguration) =
-        configuration.ToConsole().CreateLogger()
+    static member Default(configuration : LoggerConfiguration, storeVerbose) =
+        if storeVerbose then configuration else configuration.Filter.ByExcluding(fun x -> Log.isForMetrics x)
+        |> fun c -> c.ToConsole().CreateLogger()
 
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256 // default is 0
+        let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
 [<AutoOpen>]

@@ -1,4 +1,4 @@
-module Shipping.Domain.FinalizationProcessManager
+module Shipping.Domain.FinalizationWorkflow
 
 open FinalizationTransaction
 
@@ -13,10 +13,10 @@ type Service
         let rec loop (update: Events.Event option) = async {
             let loop event = loop (Some event)
 
-            let! next = transactions.Record(transactionId, update)
+            let! next = transactions.Step(transactionId, update)
 
             match next with
-            | Action.ReserveShipments shipmentIds ->
+            | Flow.ReserveShipments shipmentIds ->
                 let tryReserve sId = async {
                     let! res = shipments.TryReserve(sId, transactionId)
                     return if res then None else Some sId
@@ -31,19 +31,19 @@ type Service
                     let inDoubt = shipmentIds |> Array.except failedReservations
                     return! loop (Events.RevertCommenced {| shipments = inDoubt |})
 
-            | Action.RevertReservations shipmentIds ->
+            | Flow.RevertReservations shipmentIds ->
                 let! _ = Async.Parallel(seq { for sId in shipmentIds -> shipments.Revoke(sId, transactionId) }, maxDop)
                 return! loop Events.Completed
 
-            | Action.AssignShipments (shipmentIds, containerId) ->
+            | Flow.AssignShipments (shipmentIds, containerId) ->
                 let! _ = Async.Parallel(seq { for sId in shipmentIds -> shipments.Assign(sId, containerId, transactionId) }, maxDop)
                 return! loop Events.AssignmentCompleted
 
-            | Action.FinalizeContainer (containerId, shipmentIds) ->
+            | Flow.FinalizeContainer (containerId, shipmentIds) ->
                 do! containers.Finalize(containerId, shipmentIds)
                 return! loop Events.Completed
 
-            | Action.Finish result ->
+            | Flow.Finish result ->
                 return result
         }
         loop
@@ -55,5 +55,15 @@ type Service
         execute transactionId (Some initialRequest)
 
     /// Used by watchdog service to drive processing to a conclusion where a given request was orphaned
-    member _.Drive(transactionId : TransactionId) =
+    member _.Pump(transactionId : TransactionId) =
         execute transactionId None
+
+module Config =
+
+    module Cosmos =
+
+        let create maxDop (context, cache) =
+            let transactions = Config.Cosmos.create (context, cache)
+            let containers = Container.Config.Cosmos.create (context, cache)
+            let shipments = Shipment.Config.Cosmos.create (context, cache)
+            Service(transactions, containers, shipments, maxDop=maxDop)

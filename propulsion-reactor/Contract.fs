@@ -33,11 +33,9 @@ module Input =
 
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
         span.events |> Array.choose (EventCodec.tryDecode codec stream)
-    let (|MatchesCategory|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
-        | _ -> None
-    let (|Match|_|) = function
-        | (MatchesCategory clientId, _) & (Decode events) -> Some (clientId, events)
+    let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId | _ -> None
+    let (|Parse|_|) = function
+        | (StreamName clientId, _) & (Decode events) -> Some (clientId, events)
         | _ -> None
 
 type Data = { value : int }

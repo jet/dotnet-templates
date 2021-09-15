@@ -80,25 +80,27 @@ type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series
         | Some currentEpochId -> async { return currentEpochId }
         | None -> series.ReadIngestionEpochId()
 
-let private create epochs series linger =
-    let log = Serilog.Log.ForContext<Service>()
-    Service(log, epochs, series, linger=linger)
+module Config =
 
-type MemoryStore =
+    let private create epochs series linger =
+        let log = Serilog.Log.ForContext<Service>()
+        Service(log, epochs, series, linger=linger)
 
-    static member Create(store, linger, maxItemsPerEpoch) =
-        let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-        let epochs = ListEpoch.MemoryStore.create shouldClose store
-        let series = ListSeries.MemoryStore.create store
-        create epochs series linger
+    type Memory =
 
-let private linger = System.TimeSpan.FromMilliseconds 200.
-let private maxItemsPerEpoch = 10_000
+        static member Create(store, linger, maxItemsPerEpoch) =
+            let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
+            let epochs = ListEpoch.Config.Memory.create shouldClose store
+            let series = ListSeries.Config.Memory.create store
+            create epochs series linger
 
-module Cosmos =
+    let private linger = System.TimeSpan.FromMilliseconds 200.
+    let private maxItemsPerEpoch = 10_000
 
-    let create (context, cache) =
-        let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-        let epochs = ListEpoch.Cosmos.create shouldClose (context, cache)
-        let series = ListSeries.Cosmos.create (context, cache)
-        create epochs series linger
+    module Cosmos =
+
+        let create (context, cache) =
+            let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
+            let epochs = ListEpoch.Config.Cosmos.create shouldClose (context, cache)
+            let series = ListSeries.Config.Cosmos.create (context, cache)
+            create epochs series linger

@@ -41,7 +41,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
         | Outcome.NotApplicable count -> na <- na + count
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
-        
+
     override _.DumpStats() =
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
@@ -57,7 +57,7 @@ let handle
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
-    | Contract.Input.Match (clientId, events) ->
+    | Contract.Input.Parse (clientId, events) ->
         for version, event in events do
             let summary =
                 match event with
@@ -73,8 +73,8 @@ let handle
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
-    | Todo.Events.Match (clientId, events) ->
-        if events |> Seq.exists Todo.Fold.impliesStateChange then
+    | Todo.Reactions.Parse (clientId, events) ->
+        if events |> Seq.exists Todo.Reactions.impliesStateChange then
             let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
             let wrapped = generate stream version' (Contract.Summary summary)
             let! _ = produceSummary wrapped

@@ -27,7 +27,7 @@ type Stats(log, statsInterval, stateInterval) =
 open Shipping.Domain
 
 let isRelevant = function
-    | FinalizationTransaction.Match _ -> true
+    | FinalizationTransaction.StreamName _ -> true
     | _ -> false
 
 let transformOrFilter changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {

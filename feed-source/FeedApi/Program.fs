@@ -82,9 +82,9 @@ type AppDependenciesExtensions() =
     [<System.Runtime.CompilerServices.Extension>]
     static member AddTickets(services : IServiceCollection, context, cache) : unit = Async.RunSynchronously <| async {
 
-        let ticketsSeries = Domain.TicketsSeries.Cosmos.create (context, cache)
-        let ticketsEpochs = Domain.TicketsEpoch.Reader.Cosmos.create (context, cache)
-        let tickets = Domain.TicketsIngester.Cosmos.create (context, cache)
+        let ticketsSeries = Domain.TicketsSeries.Config.Cosmos.create (context, cache)
+        let ticketsEpochs = Domain.TicketsEpoch.Reader.Config.Cosmos.create (context, cache)
+        let tickets = Domain.TicketsIngester.Config.Cosmos.create (context, cache)
 
         ticketsSeries |> registerSingleton services
         ticketsEpochs |> registerSingleton services
@@ -115,8 +115,7 @@ let run (args : Args.Arguments) =
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
-            try run args
-                0
+            try run args; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with MissingArg msg -> eprintfn "%s" msg; 1

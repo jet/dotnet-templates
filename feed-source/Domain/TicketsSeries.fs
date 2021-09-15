@@ -66,25 +66,26 @@ type Service internal (resolve : TicketsSeriesId -> Equinox.Decider<Events.Event
         let decider = resolve seriesId
         decider.Transact(interpret (fcid, epochId))
 
-let private create seriesOverride resolveStream =
-    let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
-    Service(resolve, ?seriesId=seriesOverride)
+module Config =
 
-module Cosmos =
+    let private create seriesOverride resolveStream =
+        let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
+        Service(resolve, ?seriesId=seriesOverride)
 
-    open Equinox.CosmosStore
+    module Memory =
 
-    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let  create (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        let resolveStream opt sn = cat.Resolve(sn, opt)
-        create None resolveStream
+        let create store =
+            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+            let resolveStream opt sn = cat.Resolve(sn, opt)
+            create None resolveStream
 
-module MemoryStore =
+    module Cosmos =
 
-    let create store =
-        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-        let resolveStream opt sn = cat.Resolve(sn, opt)
-        create None resolveStream
+        open Equinox.CosmosStore
 
+        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
+        let  create (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+            let resolveStream opt sn = cat.Resolve(sn, opt)
+            create None resolveStream

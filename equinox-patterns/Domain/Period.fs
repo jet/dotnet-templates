@@ -135,26 +135,28 @@ type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equ
         let decider = resolve None periodId
         decider.Query id
 
-let private create resolveStream =
-    let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
-    Service resolve
+module Config =
 
-module MemoryStore =
+    let private create resolveStream =
+        let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
+        Service resolve
 
-    let create store =
-        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        create resolveStream
+    module Memory=
 
-module Cosmos =
+        let create store =
+            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+            create resolveStream
 
-    open Equinox.CosmosStore
+    module Cosmos =
 
-    // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
-    // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
-    let accessStrategy = AccessStrategy.Unoptimized
-    let create (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        create resolveStream
+        open Equinox.CosmosStore
+
+        // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
+        // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
+        let accessStrategy = AccessStrategy.Unoptimized
+        let create (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+            create resolveStream

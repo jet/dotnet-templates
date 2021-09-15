@@ -31,11 +31,11 @@ type Result = { accepted : ItemId[]; closed : bool; residual : ItemId[] }
 
 /// Manages ingestion of only items not already in the list
 /// Yields residual net of items already present in this epoch
-// NOTE See feedSource template for more advanced version handling splitting large input requests where epoch limit is strict 
+// NOTE See feedSource template for more advanced version handling splitting large input requests where epoch limit is strict
 let decide shouldClose candidateIds = function
     | currentIds, false as state ->
         let added, events =
-            // TOCONSIDER in general, one would expect the inputs to naturally be distinct 
+            // TOCONSIDER in general, one would expect the inputs to naturally be distinct
             match candidateIds |> Array.except currentIds (*|> Array.distinct*) with
             | [||] -> [||], []
             | news ->
@@ -53,7 +53,7 @@ type Service internal
         resolve_ : Equinox.ResolveOption option -> ListEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
     let resolve = resolve_ None
     let resolveStale = resolve_ (Some Equinox.AllowStale)
-    
+
     /// Ingest the supplied items. Yields relevant elements of the post-state to enable generation of stats
     /// and facilitate deduplication of incoming items in order to avoid null store round-trips where possible
     member _.Ingest(epochId, items) : Async<Result> =
@@ -67,25 +67,27 @@ type Service internal
     member _.Read epochId : Async<Fold.State> =
         let decider = resolve epochId
         decider.Query id
-            
-let private create shouldClose resolveStream =
-    let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
-    Service(shouldClose, resolve)
 
-module MemoryStore =
+module Config =
 
-    let create shouldClose store =
-        let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        create shouldClose resolveStream
+    let private create shouldClose resolveStream =
+        let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
+        Service(shouldClose, resolve)
 
-module Cosmos =
+    module Memory =
 
-    open Equinox.CosmosStore
+        let create shouldClose store =
+            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
+            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+            create shouldClose resolveStream
 
-    let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-    let create shouldClose (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-        let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-        create shouldClose resolveStream
+    module Cosmos =
+
+        open Equinox.CosmosStore
+
+        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
+        let create shouldClose (context, cache) =
+            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
+            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
+            create shouldClose resolveStream
