@@ -46,7 +46,6 @@ module Args =
         member val Verbose =                a.Contains Parameters.Verbose
         member val SyncLogging =            a.Contains SyncVerbose, a.TryGetResult RuThreshold
         member val PrometheusPort =         a.TryGetResult PrometheusPort
-        member val MetricsEnabled =         a.Contains PrometheusPort
         member val ProcessorName =          a.GetResult ProcessorName
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 32)
         member val MaxWriters =             a.GetResult(MaxWriters, 4)
@@ -210,7 +209,7 @@ let run args = async {
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         let appName = sprintf "archiver:%s" args.ProcessorName
-        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ProcessorName, args.Verbose, args.SyncLogging, args.Source.Verbose, args.MetricsEnabled).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ProcessorName, args.Verbose, args.SyncLogging).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

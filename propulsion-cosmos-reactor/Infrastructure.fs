@@ -42,14 +42,28 @@ module ClientId =
     let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
 
-[<System.Runtime.CompilerServices.Extension>]
-type LoggerConfigurationExtensions() =
+/// Equinox and Propulsion provide metrics as properties in log emissions
+/// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
+module Sinks =
 
-    [<System.Runtime.CompilerServices.Extension>]
-    static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
-        let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
-        // TODO figure out what CFP v3 requires
-        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
+    let equinoxMetricsOnly appName (l : LoggerConfiguration) =
+        let customTags = ["app",appName]
+        l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
+         .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
+
+    let equinoxAndPropulsionConsumerMetrics appName group (l : LoggerConfiguration) =
+        let customTags = ["app", appName]
+        l |> equinoxMetricsOnly appName
+          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
+
+    let equinoxAndPropulsionCosmosConsumerMetrics appName group (l : LoggerConfiguration) =
+        let customTags = ["app", appName]
+        l |> equinoxAndPropulsionConsumerMetrics appName group
+          |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
+
+    let console (configuration : LoggerConfiguration) =
+        let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
+        configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
@@ -62,32 +76,18 @@ type Logging() =
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member AsHost(configuration : LoggerConfiguration, appName) =
-        let customTags = ["app",appName]
-        configuration.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
+    static member private Sinks(configuration : LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
+        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+            a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
+            a.Logger(fun l -> // but filter what gets emitted to the console sink
+                let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
+                configureConsoleSink l |> ignore)
+            |> ignore
+        configuration.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member AsPropulsionConsumer(configuration : LoggerConfiguration, appName, group) =
-        let customTags = ["app", appName]
-        configuration.AsHost(appName)
-        |> fun c -> c.WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member AsPropulsionCosmosConsumer(configuration : LoggerConfiguration, appName, group, ?changeFeedProcessorVerbose) =
-        let customTags = ["app", appName]
-        configuration.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
-        |> fun c -> c.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
-        |> fun c -> c.AsPropulsionConsumer(appName, group)
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member ToConsole(configuration : LoggerConfiguration) =
-        let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
-        configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member Default(configuration : LoggerConfiguration, storeVerbose) =
-        if storeVerbose then configuration else configuration.Filter.ByExcluding(fun x -> Log.isForMetrics x)
-        |> fun c -> c.ToConsole().CreateLogger()
+    static member Sinks(configuration : LoggerConfiguration, configureMetricsSinks, verboseStore) =
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isForMetrics)
 
 module CosmosStoreContext =
 

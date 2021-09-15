@@ -39,7 +39,6 @@ module Args =
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
         member val PrometheusPort =         a.TryGetResult PrometheusPort
-        member val MetricsEnabled =         a.Contains PrometheusPort
         member val ProcessorName =          a.GetResult ProcessorName
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 8)
         member val MaxWriters =             a.GetResult(MaxWriters, 4)
@@ -199,7 +198,7 @@ let run args = async {
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         let appName = sprintf "pruner:%s" args.ProcessorName
-        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ProcessorName, args.Verbose, args.Source.Verbose, args.MetricsEnabled).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ProcessorName, args.Verbose, args.Source.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
