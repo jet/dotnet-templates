@@ -20,15 +20,10 @@ module EventCodec =
             None
         | x -> x
 
-module Log =
-
-    let forMetrics () =
-        Log.ForContext("isMetric", true)
-
 module Equinox =
 
-    let createDecider stream =
-        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+    let log = Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
+    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
 
 [<AutoOpen>]
 module ConnectorExtensions =

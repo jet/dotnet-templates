@@ -4,15 +4,10 @@ module EnvVar =
 
     let tryGet varName : string option = System.Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module Log =
-
-    let forMetrics () =
-        Serilog.Log.ForContext("isMetric", true)
-
 module Equinox =
 
-    let createDecider stream =
-        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+    let log = Serilog.Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
+    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
 
 [<AutoOpen>]
 module ConnectorExtensions =
@@ -33,4 +28,3 @@ module ConnectorExtensions =
         member x.ConnectStore(connectionName, databaseId, containerId) =
             x.LogConfiguration(connectionName, databaseId, containerId)
             Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-            

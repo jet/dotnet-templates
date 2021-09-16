@@ -23,15 +23,10 @@ module EventCodec =
             None
         | x -> x
 
-module Log =
-
-    let forMetrics () =
-        Log.ForContext("isMetric", true)
-
 module Equinox =
 
-    let createDecider stream =
-        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+    let log = Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
+    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
 
 module Guid =
 
@@ -99,12 +94,12 @@ module ConnectorExtensions =
         /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
         member x.CreateUninitialized(databaseId, containerId) =
             x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
-        
+
         /// Connect a CosmosStoreClient, including warming up
         member x.ConnectStore(connectionName, databaseId, containerId) =
             x.LogConfiguration(connectionName, databaseId, containerId)
             Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-            
+
         /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
         member x.ConnectMonitored(databaseId, containerId, ?connectionName) =
             x.LogConfiguration(defaultArg connectionName "Source", databaseId, containerId)
