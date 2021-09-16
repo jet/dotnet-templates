@@ -110,7 +110,7 @@ let build (args : Args.Arguments) =
         Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
     let pumpSource =
         let sourceId, tailSleepInterval = Propulsion.Feed.SourceId.parse args.Group, TimeSpan.FromSeconds 1.
-        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (context, cache)
+        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.forMetrics (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri
         let source =
             Propulsion.Feed.FeedSource(

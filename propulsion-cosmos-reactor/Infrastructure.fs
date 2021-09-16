@@ -22,13 +22,13 @@ module EventCodec =
 
 module Log =
 
-    let defaultForMetrics = Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
+    let forMetrics = Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
     let isForMetrics = Filters.Matching.FromSource<Equinox.CosmosStore.CosmosStoreContext>().Invoke
 
 module Equinox =
 
     let createDecider stream =
-        Equinox.Decider(Log.defaultForMetrics, stream, maxAttempts = 3)
+        Equinox.Decider(Log.forMetrics, stream, maxAttempts = 3)
 
 module Guid =
 

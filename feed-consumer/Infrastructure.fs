@@ -8,6 +8,10 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
+module Log =
+
+    let forMetrics = Serilog.Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
+
 type Async with
     static member Sleep(t : TimeSpan) : Async<unit> = Async.Sleep(int t.TotalMilliseconds)
     /// Re-raise an exception so that the current stacktrace is preserved
@@ -201,4 +205,4 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     member x.ConnectStore(connectionName, databaseId, containerId) =
         x.LogConfiguration(connectionName, databaseId, containerId)
         Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-        
+
