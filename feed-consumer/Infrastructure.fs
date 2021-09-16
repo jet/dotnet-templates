@@ -8,9 +8,9 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module Log =
+module Equinox =
 
-    let forMetrics = Serilog.Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
+    let log = Serilog.Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
 
 type Async with
     static member Sleep(t : TimeSpan) : Async<unit> = Async.Sleep(int t.TotalMilliseconds)
@@ -205,4 +205,3 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     member x.ConnectStore(connectionName, databaseId, containerId) =
         x.LogConfiguration(connectionName, databaseId, containerId)
         Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-

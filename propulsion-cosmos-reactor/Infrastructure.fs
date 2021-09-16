@@ -20,15 +20,16 @@ module EventCodec =
             None
         | x -> x
 
-module Log =
-
-    let forMetrics = Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
-    let isForMetrics = Filters.Matching.FromSource<Equinox.CosmosStore.CosmosStoreContext>().Invoke
-
 module Equinox =
 
+    let log = Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
     let createDecider stream =
-        Equinox.Decider(Log.forMetrics, stream, maxAttempts = 3)
+        Equinox.Decider(log, stream, maxAttempts = 3)
+
+module Log =
+
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let isForMetrics = Filters.Matching.FromSource<Equinox.CosmosStore.CosmosStoreContext>().Invoke
 
 module Guid =
 
