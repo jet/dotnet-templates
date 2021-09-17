@@ -179,10 +179,10 @@ module CosmosStoreContext =
         let maxEvents, maxJsonBytes = 100_000, 100_000
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents, tipMaxJsonLength=maxJsonBytes)
 
-let build (args : Args.Arguments, log, storeLog : ILogger) =
+let build (args : Args.Arguments, log) =
     let archiverSink =
         let context = args.DestinationArchive.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, storeLog)
+        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Equinox.log)
         CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, (*purgeInterval=TimeSpan.FromMinutes 10.,*) maxBytes = args.MaxBytes)
     let pipeline =
         use observer = CosmosStoreSource.CreateObserver(log, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
@@ -198,8 +198,8 @@ let startMetricsServer port : IDisposable =
     { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
 
 let run args = async {
-    let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.CosmosStore.Core.EventsContext>()
-    let sink, pipeline = build (args, log, storeLog)
+    let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
+    let sink, pipeline = build (args, log)
     pipeline |> Async.Start
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     do! sink.AwaitCompletion()

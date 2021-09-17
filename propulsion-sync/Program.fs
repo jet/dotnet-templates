@@ -485,7 +485,7 @@ type Stats(log, statsInterval, stateInterval) =
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
-let build (args : Args.Arguments, log, storeLog : ILogger) =
+let build (args : Args.Arguments, log) =
     let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
         | Choice1Of2 cosmos ->
@@ -510,17 +510,17 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
                 | None ->
 #endif
                 let context = CosmosStoreContext.create target
-                let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, storeLog)
+                let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Equinox.log)
                 Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
                 args.CategoryFilterFunction(excludeLong=true)
             Some target, sink, streamFilter
         | Choice2Of2 es ->
             let connect connIndex = async {
-                let lfc = storeLog.ForContext("ConnId", connIndex)
+                let lfc = Equinox.log.ForContext("ConnId", connIndex)
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, AppName, connIndex)
                 return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            let sink = EventStoreSink.Start(log, storeLog, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+            let sink = EventStoreSink.Start(log, Equinox.log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->
@@ -564,8 +564,8 @@ let build (args : Args.Arguments, log, storeLog : ILogger) =
         sink, runPipeline
 
 let run args = async {
-    let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
-    let sink, pipeline = build (args, log, storeLog)
+    let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
+    let sink, pipeline = build (args, log)
     pipeline |> Async.Start
     return! sink.AwaitCompletion()
 }

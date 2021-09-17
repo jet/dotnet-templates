@@ -8,6 +8,16 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
+module Equinox =
+
+    /// Tag log entries so we can filter them out if logging to the console
+    let log = Log.ForContext("isMetric", true)
+
+module Log =
+
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
+
 /// Equinox and Propulsion provide metrics as properties in log emissions
 /// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
 module Sinks =
@@ -59,8 +69,7 @@ type Logging() =
                     c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
         |> fun c -> let generalLevel = if verbose then Events.LogEventLevel.Information else Events.LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
-        |> fun c -> let isEqx = Filters.Matching.FromSource<Equinox.CosmosStore.CosmosStoreContext>().Invoke
-                    let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
+        |> fun c -> let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
                     let isCheaperThan minRu = function
                         | Equinox.CosmosStore.Core.Log.MetricEvent
                             (Equinox.CosmosStore.Core.Log.Metric.SyncSuccess m
@@ -68,8 +77,8 @@ type Logging() =
                                 | Equinox.CosmosStore.Core.Log.Metric.SyncResync m) ->
                             m.ru < minRu
                         | _ -> false
-                    let isTooCheapToShow = match minRu with Some mru -> isCheaperThan mru | None -> fun x -> false
-                    let metricFilter = if logSyncToConsole then None else Some (fun x -> isEqx x || isWriterB x || isTooCheapToShow x)
+                    let isTooCheapToShow = match minRu with Some mru -> isCheaperThan mru | None -> fun _ -> false
+                    let metricFilter = if logSyncToConsole then None else Some (fun x -> Log.isStoreMetrics x || isWriterB x || isTooCheapToShow x)
                     c.Sinks(Sinks.equinoxAndPropulsionCosmosConsumerMetrics appName group, Sinks.console verbose, ?isMetric = metricFilter)
 
 type Equinox.CosmosStore.CosmosStoreConnector with

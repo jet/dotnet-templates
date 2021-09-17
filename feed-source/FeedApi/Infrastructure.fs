@@ -1,27 +1,11 @@
-﻿[<AutoOpen>]
-module TestbedTemplate.Infrastructure
+[<AutoOpen>]
+module FeedSourceTemplate.Infrastructure
 
-open FSharp.UMX
 open Serilog
-open System
-
-module Guid =
-    let inline toStringN (x : Guid) = x.ToString "N"
-
-/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
-type ClientId = Guid<clientId>
-and [<Measure>] clientId
-module ClientId = let toString (value : ClientId) : string = Guid.toStringN %value
-
-/// SkuId strongly typed id; represented internally as a Guid
-// NB Perf is suboptimal as a key, see Equinox's samples/Store for expanded version
-type SkuId = Guid<skuId>
-and [<Measure>] skuId
-module SkuId = let toString (value : SkuId) : string = Guid.toStringN %value
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName : string option = System.Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 
@@ -37,9 +21,3 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     member x.ConnectStore(connectionName, databaseId, containerId) =
         x.LogConfiguration(connectionName, databaseId, containerId)
         Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-
-type Exception with
-    // https://github.com/fsharp/fslang-suggestions/issues/660
-    member this.Reraise () =
-        (System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture this).Throw ()
-        Unchecked.defaultof<_>

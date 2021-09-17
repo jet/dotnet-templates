@@ -93,13 +93,6 @@ module Args =
 
 let [<Literal>] AppName = "FeedConsumerTemplate"
 
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-
 let build (args : Args.Arguments) =
     let cache = Equinox.Cache (AppName, sizeMb = 10)
     let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create

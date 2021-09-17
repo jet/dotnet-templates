@@ -1,6 +1,7 @@
 [<AutoOpen>]
 module FeedConsumerTemplate.Infrastructure
 
+open Serilog
 open System
 open System.Text
 
@@ -10,7 +11,30 @@ module EnvVar =
 
 module Equinox =
 
-    let log = Serilog.Log.ForContext<Equinox.CosmosStore.CosmosStoreContext>()
+    /// Tag log entries so we can filter them out if logging to the console
+    let log = Log.ForContext("isMetric", true)
+
+type Equinox.CosmosStore.CosmosStoreConnector with
+
+    member private x.LogConfiguration(connectionName, databaseId, containerId) =
+        let o = x.Options
+        let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
+        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+        Log.Information("CosmosDb {name} Database {database} Container {container}",
+                        connectionName, databaseId, containerId)
+
+    /// Connect a CosmosStoreClient, including warming up
+    member x.ConnectStore(connectionName, databaseId, containerId) =
+        x.LogConfiguration(connectionName, databaseId, containerId)
+        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
+
+module CosmosStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+        let maxEvents = 256
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
 type Async with
     static member Sleep(t : TimeSpan) : Async<unit> = Async.Sleep(int t.TotalMilliseconds)
@@ -188,20 +212,3 @@ module HttpRes =
     /// Deserialize body using default Json.Net profile - throw with content details if StatusCode is not OK or decoding fails
     let deserializeOkJsonNet<'t> =
         deserializeExpectedJsonNet<'t> HttpStatusCode.OK
-
-open Serilog
-
-type Equinox.CosmosStore.CosmosStoreConnector with
-
-    member private x.LogConfiguration(connectionName, databaseId, containerId) =
-        let o = x.Options
-        let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
-        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
-        Log.Information("CosmosDb {name} Database {database} Container {container}",
-                        connectionName, databaseId, containerId)
-
-    /// Connect a CosmosStoreClient, including warming up
-    member x.ConnectStore(connectionName, databaseId, containerId) =
-        x.LogConfiguration(connectionName, databaseId, containerId)
-        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)

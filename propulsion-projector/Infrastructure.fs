@@ -43,22 +43,16 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
     member x.CreateUninitialized(databaseId, containerId) =
         x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
-    
+
     /// Connect a CosmosStoreClient, including warming up
     member x.ConnectStore(connectionName, databaseId, containerId) =
         x.LogConfiguration(connectionName, databaseId, containerId)
         Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-        
+
     /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
     member x.ConnectMonitored(databaseId, containerId, ?connectionName) =
         x.LogConfiguration(defaultArg connectionName "Source", databaseId, containerId)
         x.CreateUninitialized(databaseId, containerId)
-
-    /// Connects to a Store as both a ChangeFeedProcessor Monitored Container and a CosmosStoreClient
-    member x.ConnectStoreAndMonitored(databaseId, containerId) =
-        let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
-        let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
-        storeClient, monitored
 
 //#endif
 [<System.Runtime.CompilerServices.Extension>]
