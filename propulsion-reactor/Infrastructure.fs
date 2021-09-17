@@ -44,6 +44,7 @@ module Equinox =
     let log = Log.ForContext("isMetric", true)
     let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
 
+#endif
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =
@@ -81,7 +82,6 @@ module CosmosStoreContext =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
-#endif
 #if (!kafkaEventSpans)
 [<System.Runtime.CompilerServices.Extension>]
 type LoggerConfigurationExtensions() =
