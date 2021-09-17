@@ -22,7 +22,7 @@ type Configuration(tryGet) =
 module Args =
 
     open Argu
-    
+
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
 
@@ -100,13 +100,6 @@ module Args =
 
 let [<Literal>] AppName = "PeriodicIngesterTemplate"
 
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-
 let build (args : Args.Arguments) =
     let cache = Equinox.Cache (AppName, sizeMb = 10)
     let feed = args.Feed
@@ -120,7 +113,7 @@ let build (args : Args.Arguments) =
         let client = ApiClient.TicketsFeed feed.BaseUri
         let source =
             Propulsion.Feed.PeriodicSource(
-                Log.Logger, args.StatsInterval, feed.SourceId, 
+                Log.Logger, args.StatsInterval, feed.SourceId,
                 checkpoints, args.CheckpointInterval,
                 client.Crawl, feed.RefreshInterval,
                 sink)
@@ -141,18 +134,6 @@ let run args = async {
     do! Async.Parallel [ pumpSource; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
     return if sink.RanToCompletion then 0 else 3
 }
-
-[<System.Runtime.CompilerServices.Extension>]
-type Logging() =
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
-        configuration
-            .Destructure.FSharpTypes()
-            .Enrich.FromLogContext()
-        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
-                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
 
 [<EntryPoint>]
 let main argv =

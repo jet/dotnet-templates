@@ -1,12 +1,47 @@
 [<AutoOpen>]
 module PeriodicIngesterTemplate.Infrastructure
 
+open Serilog
 open System
 open System.Text
 
 module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+
+type Equinox.CosmosStore.CosmosStoreConnector with
+
+    member private x.LogConfiguration(connectionName, databaseId, containerId) =
+        let o = x.Options
+        let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
+        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+        Log.Information("CosmosDb {name} Database {database} Container {container}",
+                        connectionName, databaseId, containerId)
+
+    /// Connect a CosmosStoreClient, including warming up
+    member x.ConnectStore(connectionName, databaseId, containerId) =
+        x.LogConfiguration(connectionName, databaseId, containerId)
+        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
+
+module CosmosStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
+    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+        let maxEvents = 256
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+
+[<System.Runtime.CompilerServices.Extension>]
+type Logging() =
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+        configuration
+            .Destructure.FSharpTypes()
+            .Enrich.FromLogContext()
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
+                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
 
 type Async with
     static member Sleep(t : TimeSpan) : Async<unit> = Async.Sleep(int t.TotalMilliseconds)
@@ -184,21 +219,3 @@ module HttpRes =
     /// Deserialize body using default Json.Net profile - throw with content details if StatusCode is not OK or decoding fails
     let deserializeOkJsonNet<'t> =
         deserializeExpectedJsonNet<'t> HttpStatusCode.OK
-
-open Serilog
-
-type Equinox.CosmosStore.CosmosStoreConnector with
-
-    member private x.LogConfiguration(connectionName, databaseId, containerId) =
-        let o = x.Options
-        let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
-        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
-        Log.Information("CosmosDb {name} Database {database} Container {container}",
-                        connectionName, databaseId, containerId)
-
-    /// Connect a CosmosStoreClient, including warming up
-    member x.ConnectStore(connectionName, databaseId, containerId) =
-        x.LogConfiguration(connectionName, databaseId, containerId)
-        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-        
