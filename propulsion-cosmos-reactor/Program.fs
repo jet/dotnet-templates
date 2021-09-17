@@ -144,8 +144,8 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try let storeVerbose = args.Cosmos.Verbose
-            Log.Logger <- LoggerConfiguration().Configure(args.Verbose).AsPropulsionCosmosConsumer(AppName, args.ProcessorName, storeVerbose).Default(storeVerbose)
+        try let metrics = Sinks.equinoxAndPropulsionCosmosConsumerMetrics AppName args.ProcessorName
+            Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Cosmos.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

@@ -93,13 +93,6 @@ module Args =
 
 let [<Literal>] AppName = "FeedConsumerTemplate"
 
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-
 let build (args : Args.Arguments) =
     let cache = Equinox.Cache (AppName, sizeMb = 10)
     let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
@@ -110,7 +103,7 @@ let build (args : Args.Arguments) =
         Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
     let pumpSource =
         let sourceId, tailSleepInterval = Propulsion.Feed.SourceId.parse args.Group, TimeSpan.FromSeconds 1.
-        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (context, cache)
+        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Equinox.log (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri
         let source =
             Propulsion.Feed.FeedSource(

@@ -126,10 +126,9 @@ let build (args : Args.Arguments) =
         let stats = Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
         startWatchdog Log.Logger (args.ProcessingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Pump
     let pipeline =
-        let log = Log.ForContext<CosmosStoreSource>()
-        use observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect Handler.transformOrFilter)
+        use observer = CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect Handler.transformOrFilter)
         let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
-        CosmosStoreSource.Run(log, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
+        CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
     sink, pipeline
 
 let run args = async {

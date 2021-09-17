@@ -39,7 +39,6 @@ module Args =
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
         member val PrometheusPort =         a.TryGetResult PrometheusPort
-        member val MetricsEnabled =         a.Contains PrometheusPort
         member val ProcessorName =          a.GetResult ProcessorName
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 8)
         member val MaxWriters =             a.GetResult(MaxWriters, 4)
@@ -164,7 +163,7 @@ module Args =
 
 let [<Literal>] AppName = "PrunerTemplate"
 
-let build (args : Args.Arguments, log : ILogger, storeLog : ILogger) =
+let build (args : Args.Arguments, log : ILogger) =
     let archive = args.Source
     // NOTE - DANGEROUS - events submitted to this sink get DELETED from the supplied Context!
     let deletingEventsSink =
@@ -172,7 +171,7 @@ let build (args : Args.Arguments, log : ILogger, storeLog : ILogger) =
         if (target.DatabaseId, target.ContainerId) = (archive.DatabaseId, archive.ContainerId) then
             raise (MissingArg "Danger! Can not prune a target based on itself")
         let context = target.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, storeLog)
+        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Equinox.log)
         CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
     let pipeline =
         use observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
@@ -188,8 +187,8 @@ let startMetricsServer port : IDisposable =
     { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
 
 let run args = async {
-    let log, storeLog = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>(), Log.ForContext<Equinox.CosmosStore.Core.EventsContext>()
-    let sink, pipeline = build (args, log, storeLog)
+    let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
+    let sink, pipeline = build (args, log)
     pipeline |> Async.Start
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     do! sink.AwaitCompletion()
@@ -199,7 +198,7 @@ let run args = async {
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         let appName = sprintf "pruner:%s" args.ProcessorName
-        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ProcessorName, args.Verbose, args.Source.Verbose, args.MetricsEnabled).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ProcessorName, args.Verbose, args.Source.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

@@ -8,49 +8,68 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-[<System.Runtime.CompilerServices.Extension>]
-type LoggerConfigurationExtensions() =
+module Equinox =
 
-    [<System.Runtime.CompilerServices.Extension>]
-    static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
-        let cfpl = if verbose then Events.LogEventLevel.Debug else Events.LogEventLevel.Warning
-        // TODO figure out what CFP v3 requires
-        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
+    /// Tag log entries so we can filter them out if logging to the console
+    let log = Log.ForContext("isMetric", true)
 
-    [<System.Runtime.CompilerServices.Extension>]
-    static member inline ForwardMetricsFromEquinoxAndPropulsionToPrometheus(a : Configuration.LoggerSinkConfiguration, appName, group, metrics) =
+module Log =
+
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
+
+/// Equinox and Propulsion provide metrics as properties in log emissions
+/// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
+module Sinks =
+
+    let equinoxMetricsOnly appName (l : LoggerConfiguration) =
+        let customTags = ["app",appName]
+        l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
+         .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
+
+    let equinoxAndPropulsionConsumerMetrics appName group (l : LoggerConfiguration) =
         let customTags = ["app", appName]
-        a.Logger(fun l ->
-            l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
-              |> fun l -> if not metrics then l else
-                            l.WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
-                             .WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
-                             .WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
-              |> ignore) |> ignore
+        l |> equinoxMetricsOnly appName
+          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
+
+    let equinoxAndPropulsionCosmosConsumerMetrics appName group (l : LoggerConfiguration) =
+        let customTags = ["app", appName]
+        l |> equinoxAndPropulsionConsumerMetrics appName group
+          |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
+
+    let console verbose (configuration : LoggerConfiguration) =
+        let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}"
+        let t = if verbose then t else t.Replace("{Properties}", "")
+        configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, appName, group, verbose, (logSyncToConsole, minRu), cfpVerbose, metrics) =
+    static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
-        |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-        |> fun c -> c.ConfigureChangeFeedProcessorLogging(cfpVerbose)
+        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member private Sinks(configuration : LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
+        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+            a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
+            a.Logger(fun l -> // but filter what gets emitted to the console sink
+                let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
+                configureConsoleSink l |> ignore)
+            |> ignore
+        configuration.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Configure(configuration : LoggerConfiguration, appName, group, verbose, (logSyncToConsole, minRu)) =
+        configuration.Configure(verbose)
         |> fun c -> let ingesterLevel = if logSyncToConsole then Events.LogEventLevel.Debug else Events.LogEventLevel.Information
                     c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
         |> fun c -> let generalLevel = if verbose then Events.LogEventLevel.Information else Events.LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
-        |> fun c ->
-            let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}"
-            let t = if verbose then t else t.Replace("{Properties}", "")
-            let configure (a : Configuration.LoggerSinkConfiguration) : unit =
-                a.ForwardMetricsFromEquinoxAndPropulsionToPrometheus(appName, group, metrics)
-                a.Logger(fun l ->
-                    let isEqx = Filters.Matching.FromSource<Equinox.CosmosStore.CosmosStoreContext>().Invoke
-                    let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
-                    let l = if logSyncToConsole then l else l.Filter.ByExcluding(fun x -> isEqx x || isWriterB x)
+        |> fun c -> let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
                     let isCheaperThan minRu = function
                         | Equinox.CosmosStore.Core.Log.MetricEvent
                             (Equinox.CosmosStore.Core.Log.Metric.SyncSuccess m
@@ -58,10 +77,9 @@ type Logging() =
                                 | Equinox.CosmosStore.Core.Log.Metric.SyncResync m) ->
                             m.ru < minRu
                         | _ -> false
-                    let l = match minRu with Some mru -> l.Filter.ByExcluding(fun x -> isCheaperThan mru x) | None -> l
-                    l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t) |> ignore)
-                |> ignore
-            c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
+                    let isTooCheapToShow = match minRu with Some mru -> isCheaperThan mru | None -> fun _ -> false
+                    let metricFilter = if logSyncToConsole then None else Some (fun x -> Log.isStoreMetrics x || isWriterB x || isTooCheapToShow x)
+                    c.Sinks(Sinks.equinoxAndPropulsionCosmosConsumerMetrics appName group, Sinks.console verbose, ?isMetric = metricFilter)
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 
@@ -76,14 +94,13 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
     member x.CreateUninitialized(databaseId, containerId) =
         x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
-    
+
     /// Connect a CosmosStoreClient, including warming up
     member x.ConnectStore(connectionName, databaseId, containerId) =
         x.LogConfiguration(connectionName, databaseId, containerId)
         Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-        
+
     /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
     member x.ConnectMonitored(databaseId, containerId) =
         x.LogConfiguration("Source", databaseId, containerId)
         x.CreateUninitialized(databaseId, containerId)
-

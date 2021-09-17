@@ -3,15 +3,11 @@
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
 open System
 
-module Log =
-
-    let forMetrics () =
-        Serilog.Log.ForContext("isMetric", true)
-
 module Equinox =
 
-    let createDecider stream =
-        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+    /// Tag log entries so we can filter them out if logging to the console
+    let log = Serilog.Log.ForContext("isMetric", true)
+    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
 
 module Guid =
     let inline toStringN (x : Guid) = x.ToString "N"

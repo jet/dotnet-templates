@@ -3,8 +3,7 @@ module Patterns.Domain.Infrastructure
 
 module Equinox =
 
-    let createDecider stream =
-        Equinox.Decider(Serilog.Log.Logger, stream, maxAttempts = 3)
+    let createDecider stream = Equinox.Decider(Serilog.Log.Logger, stream, maxAttempts = 3)
 
 /// Buffers events accumulated from a series of decisions while evolving the presented `state` to reflect said proposed `Events`
 type Accumulator<'event, 'state>(originState, fold : 'state -> 'event seq -> 'state) =

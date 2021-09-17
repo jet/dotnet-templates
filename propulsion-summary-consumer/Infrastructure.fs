@@ -1,8 +1,21 @@
-﻿namespace ConsumerTemplate
+﻿[<AutoOpen>]
+module ConsumerTemplate.Infrastructure
 
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
 open Serilog
 open System
+
+module Guid =
+
+    let inline toStringN (x : Guid) = x.ToString "N"
+
+/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
+type ClientId = Guid<clientId>
+and [<Measure>] clientId
+module ClientId =
+    let toString (value : ClientId) : string = Guid.toStringN %value
+    let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
+    let (|Parse|) = parse
 
 module EnvVar =
 
@@ -20,33 +33,26 @@ module EventCodec =
             None
         | x -> x
 
-module Log =
-
-    let forMetrics () =
-        Log.ForContext("isMetric", true)
-
 module Equinox =
 
-    let createDecider stream =
-        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
+    /// Tag log entries so we can filter them out if logging to the console
+    let log = Log.ForContext("isMetric", true)
+    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
 
-[<AutoOpen>]
-module ConnectorExtensions =
+type Equinox.CosmosStore.CosmosStoreConnector with
 
-    type Equinox.CosmosStore.CosmosStoreConnector with
+    member private x.LogConfiguration(connectionName, databaseId, containerId) =
+        let o = x.Options
+        let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
+        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+        Log.Information("CosmosDb {name} Database {database} Container {container}",
+                        connectionName, databaseId, containerId)
 
-        member private x.LogConfiguration(connectionName, databaseId, containerId) =
-            let o = x.Options
-            let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
-            Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                            connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
-            Log.Information("CosmosDb {name} Database {database} Container {container}",
-                            connectionName, databaseId, containerId)
-
-        /// Connect a CosmosStoreClient, including warming up
-        member x.ConnectStore(connectionName, databaseId, containerId) =
-            x.LogConfiguration(connectionName, databaseId, containerId)
-            Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
+    /// Connect a CosmosStoreClient, including warming up
+    member x.ConnectStore(connectionName, databaseId, containerId) =
+        x.LogConfiguration(connectionName, databaseId, containerId)
+        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
 
 module CosmosStoreContext =
 
@@ -54,18 +60,6 @@ module CosmosStoreContext =
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-
-module Guid =
-
-    let inline toStringN (x : Guid) = x.ToString "N"
-
-/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
-type ClientId = Guid<clientId>
-and [<Measure>] clientId
-module ClientId =
-    let toString (value : ClientId) : string = Guid.toStringN %value
-    let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
-    let (|Parse|) = parse
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =

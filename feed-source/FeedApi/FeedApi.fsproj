@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="Controllers\TicketsController.fs" />
+    <Compile Include="Infrastructure.fs" />
     <Compile Include="Startup.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

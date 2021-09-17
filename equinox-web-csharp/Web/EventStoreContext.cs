@@ -42,7 +42,6 @@ namespace TodoBackendTemplate
 
         static async Task<Equinox.EventStore.EventStoreContext> Connect(EventStoreConfig config)
         {
-            var log = Logger.NewSerilogNormal(Serilog.Log.ForContext<EventStoreContext>());
             var c = new Connector(config.Username, config.Password, reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
 
             var conn = await FSharpAsync.StartAsTask(

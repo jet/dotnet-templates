@@ -21,13 +21,8 @@ module TransactionId =
 
 namespace global
 
-module Log =
-
-    let forMetrics () =
-        Serilog.Log.ForContext("isMetric", true)
-
 module Equinox =
 
-    let createDecider stream =
-        Equinox.Decider(Log.forMetrics (), stream, maxAttempts = 3)
-
+    /// Tag log entries so we can filter them out if logging to the console
+    let log = Serilog.Log.ForContext("isMetric", true)
+    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
