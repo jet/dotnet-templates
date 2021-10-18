@@ -1,4 +1,4 @@
-﻿module PeriodicIngesterTemplate.Program
+﻿module PeriodicIngesterTemplate.Ingester.Program
 
 open Serilog
 open System

@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module PeriodicIngesterTemplate.Infrastructure
+module PeriodicIngesterTemplate.Ingester.Infrastructure
 
 open Serilog
 open System

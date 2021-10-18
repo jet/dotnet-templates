@@ -1,29 +1,28 @@
 /// Handles the ingestion of events supplied by the projector into a store
-module PeriodicIngesterTemplate.Ingester
+module PeriodicIngesterTemplate.Ingester.Ingester
 
 open PeriodicIngesterTemplate.Domain
 open System
 
-[<RequireQualifiedAccess>]
-type Outcome = Stale | Unchanged | Ok
-
 /// Gathers stats based on the outcome of each Span processed for periodic emission
 type Stats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Streams.Stats<IngestionOutcome>(log, statsInterval, stateInterval)
 
-    let mutable stale, unchanged, ok = 0, 0, 0
+    let mutable stale, unchanged, changed = 0, 0, 0
 
-    override _.HandleOk outcome = outcome |> function
-        | Outcome.Stale ->      stale <- stale + 1
-        | Outcome.Unchanged ->  unchanged <- unchanged + 1
-        | Outcome.Ok ->         ok <- ok + 1
+    override _.HandleOk outcome =
+        Prometheus.Stats.observeIngestionOutcome outcome
+        match outcome with
+        | IngestionOutcome.Stale ->      stale <- stale + 1
+        | IngestionOutcome.Unchanged ->  unchanged <- unchanged + 1
+        | IngestionOutcome.Changed ->         changed <- changed + 1
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
     override _.DumpStats () =
-        if stale <> 0 || unchanged <> 0 || ok <> 0 then
-            log.Information(" Ingested {ok} Unchanged {unchanged} Stale {stale}", ok, unchanged, stale)
-            stale <- 0; unchanged <- 0; ok <- 0
+        if stale <> 0 || unchanged <> 0 || changed <> 0 then
+            log.Information(" Changed {changed} Unchanged {skipped} Stale {stale}", changed, unchanged, stale)
+            stale <- 0; unchanged <- 0; changed <- 0
 
 type TicketData = { lastUpdated : DateTimeOffset; body : string }
 
@@ -51,6 +50,6 @@ let handle (stream, span) = async {
     match stream, span with
     | PipelineEvent.TicketEvents (ticketId, items) ->
         // TODO : Ingest the data
-        return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok
+        return Propulsion.Streams.SpanResult.AllProcessed, IngestionOutcome.Unchanged
     | x -> return failwithf "Unexpected stream %O" x
 }

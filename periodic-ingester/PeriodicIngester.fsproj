@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
     <Compile Include="Types.fs" />
+    <Compile Include="IngesterPrometheus.fs" />
     <Compile Include="Ingester.fs" />
     <Compile Include="ApiClient.fs" />
     <Compile Include="Program.fs" />

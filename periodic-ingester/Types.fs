@@ -8,3 +8,6 @@ module TicketId =
     let toString (value : TicketId) : string = %value
     let parse (value : string) : TicketId = let raw = value in % raw
     let (|Parse|) = parse
+
+[<RequireQualifiedAccess>]
+type IngestionOutcome = Changed | Unchanged | Stale

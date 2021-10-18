@@ -1,6 +1,6 @@
 /// Provides logic for crawling of the source dataset
 /// (Wrapped in a PeriodicSource to manage continual refreshing and checkpointing when a traverse has completed)
-module PeriodicIngesterTemplate.ApiClient
+module PeriodicIngesterTemplate.Ingester.ApiClient
 
 open FSharp.Control
 open System
@@ -25,7 +25,7 @@ type TicketsClient(client : HttpClient) =
                 let data : Ingester.TicketData = { lastUpdated = t.lastUpdated; body = t.body }
                 Ingester.PipelineEvent.sourceItemOfTicketIdAndData (t.id, data) |]
     }
-    
+
 type TicketsFeed(baseUri) =
 
     let client = new HttpClient(BaseAddress = baseUri)
