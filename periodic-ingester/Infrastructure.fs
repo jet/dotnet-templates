@@ -9,6 +9,11 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
+module Log =
+
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
+
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =
@@ -31,6 +36,28 @@ module CosmosStoreContext =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
+/// Equinox and Propulsion provide metrics as properties in log emissions
+/// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
+module Sinks =
+
+    let tags appName = ["app", appName]
+
+    let equinoxMetricsOnly tags (l : LoggerConfiguration) =
+        l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
+         .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(tags))
+
+    let equinoxAndPropulsionConsumerMetrics tags group (l : LoggerConfiguration) =
+        l |> equinoxMetricsOnly tags
+          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+
+    let equinoxAndPropulsionFeedConsumerMetrics tags source (l : LoggerConfiguration) =
+        l |> equinoxAndPropulsionConsumerMetrics tags (Propulsion.Feed.SourceId.toString source)
+          |> fun l -> l.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
+
+    let console (configuration : LoggerConfiguration) =
+        let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
+        configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
@@ -42,6 +69,20 @@ type Logging() =
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
                     c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member private Sinks(configuration : LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
+        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+            a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
+            a.Logger(fun l -> // but filter what gets emitted to the console sink
+                let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
+                configureConsoleSink l |> ignore)
+            |> ignore
+        configuration.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Sinks(configuration : LoggerConfiguration, configureMetricsSinks, verboseStore) =
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)
 
 type Async with
     static member Sleep(t : TimeSpan) : Async<unit> = Async.Sleep(int t.TotalMilliseconds)
@@ -174,7 +215,7 @@ type InvalidHttpResponseException =
         let! requestBody = request.Content.ReadAsStringDiapered()
         let! responseBody = responseBodyC
         return
-            new InvalidHttpResponseException(
+            InvalidHttpResponseException(
                 userMessage, request.Method, request.RequestUri, requestBody,
                 response.StatusCode, response.ReasonPhrase, responseBody,
                 ?innerException = innerException)

@@ -16,6 +16,8 @@ type Configuration(tryGet) =
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
     member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
 
+    member _.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
+
     member _.BaseUri =                      get "API_BASE_URI"
     member _.Group =                        get "API_CONSUMER_GROUP"
 
@@ -25,6 +27,7 @@ module Args =
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
+        | [<AltCommandLine "-p"; Unique>]   PrometheusPort of int
 
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-t"; Unique>]   TicketsDop of int
@@ -33,11 +36,13 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose _ ->              "request verbose logging."
+                | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off (optional if environment variable PROMETHEUS_PORT specified)"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 8."
                 | TicketsDop _ ->           "maximum number of Tickets to process in parallel. Default: 4"
                 | Feed _ ->                 "Feed parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
+        member val PrometheusPort =         a.TryGetResult PrometheusPort |> Option.orElseWith (fun () -> c.PrometheusPort)
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 8)
         member val TicketsDop =             a.GetResult(TicketsDop, 4)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
@@ -65,7 +70,8 @@ module Args =
             | Some (Cosmos cosmos) -> CosmosArguments(c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos")
     and [<NoEquality; NoComparison>] CosmosParameters =
-        | [<AltCommandLine "-cm">]          ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
+        | [<AltCommandLine "-V"; Unique>]   Verbose
+        | [<AltCommandLine "-m">]          ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
@@ -74,6 +80,7 @@ module Args =
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member a.Usage = a |> function
+                | Verbose _ ->              "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
@@ -90,6 +97,7 @@ module Args =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
         let database =                      a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     a.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Verbose =                a.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -120,8 +128,16 @@ let build (args : Args.Arguments) =
         source.Pump()
     sink, pumpSource
 
+// A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
+let startMetricsServer port : IDisposable =
+    let metricsServer = new Prometheus.KestrelMetricServer(port = port)
+    let ms = metricsServer.Start()
+    Log.Information("Prometheus /metrics endpoint on port {port}", port)
+    { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
+
 let run args = async {
     let sink, pumpSource = build args
+    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     do! Async.Parallel [ pumpSource; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
     return if sink.RanToCompletion then 0 else 3
 }
@@ -129,7 +145,8 @@ let run args = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
+        try let metrics = Sinks.equinoxAndPropulsionFeedConsumerMetrics (Sinks.tags AppName) args.Feed.SourceId
+            Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Feed.Cosmos.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
