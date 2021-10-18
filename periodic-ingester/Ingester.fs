@@ -30,7 +30,7 @@ type TicketData = { lastUpdated : DateTimeOffset; body : string }
 module PipelineEvent =
 
     (* Each item fed into the Sink has a StreamName associated with it, just as with a regular source based on a change feed *)
-    
+
     let [<Literal>] Category = "Ticket"
     let streamName = TicketId.toString >> FsCodec.StreamName.create Category
     let (|StreamName|_|) = function
@@ -38,8 +38,8 @@ module PipelineEvent =
         | _ -> None
 
     (* Each item per stream is represented as an event; if multiple events have been found for a given stream, they are delivered together *)
-            
-    let private dummyEventData = let dummyEventType, noBody = "eventType", null in FsCodec.Core.EventData.Create(dummyEventType, noBody) 
+
+    let private dummyEventData = let dummyEventType, noBody = "eventType", null in FsCodec.Core.EventData.Create(dummyEventType, noBody)
     let sourceItemOfTicketIdAndData (id : TicketId, data : TicketData) : Propulsion.Feed.SourceItem =
         { streamName = streamName id; eventData = dummyEventData; context = box data }
     let (|TicketEvents|_|) = function

@@ -8,9 +8,6 @@
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="Temp\FeedReaderTemp.fs" />
-    <Compile Include="Temp\FeedSourceTemp.fs" />
-    <Compile Include="Temp\PeriodicSourceTemp.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Ingester.fs" />
     <Compile Include="ApiClient.fs" />
@@ -19,12 +16,10 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
-    <PackageReference Include="Destructurama.FSharp" Version="1.1.1-dev-00035" />
-    <PackageReference Include="FSharp.Control.AsyncSeq" Version="2.0.23" />
-    <PackageReference Include="Propulsion" Version="2.11.0-rc2" />
-    <PackageReference Include="Equinox.CosmosStore" Version="3.0.1" />
-    <PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc2" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="3.1.1" />
+    <PackageReference Include="Destructurama.FSharp" Version="1.2.0" />
+    <PackageReference Include="Propulsion.CosmosStore" Version="2.11.0-rc3" />
+    <PackageReference Include="Propulsion.Feed" Version="2.11.0-rc3" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="4.0.0" />
   </ItemGroup>
 
 </Project>
