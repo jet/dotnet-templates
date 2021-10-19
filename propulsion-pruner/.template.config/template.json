@@ -15,5 +15,5 @@
   "name": "Propulsion Pruner service",
   "shortName": "proPruner",
   "sourceName": "PrunerTemplate",
-  "preferNameDirectory": true,
+  "preferNameDirectory": true
 }

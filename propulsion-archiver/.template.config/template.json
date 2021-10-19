@@ -15,5 +15,5 @@
   "name": "Propulsion Archiver service",
   "shortName": "proArchiver",
   "sourceName": "ArchiverTemplate",
-  "preferNameDirectory": true,
+  "preferNameDirectory": true
 }

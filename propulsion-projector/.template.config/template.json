@@ -18,7 +18,7 @@
   "name": "Propulsion Projector",
   "shortName": "proProjector",
   "sourceName": "ProjectorTemplate",
-  "preferNameDirectory": true,
+  "preferNameDirectory": true
 
   "symbols": {
     "source": {
