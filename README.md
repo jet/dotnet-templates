@@ -36,7 +36,7 @@ The following templates focus specifically on the usage of `Propulsion` componen
 - [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (typically consuming from an app produced with `dotnet new proProjector -k`).
 
 - [`periodicIngester`](periodic-ingester/) - Boilerplate for a service that regularly walks the content of a source, feeding it into a propulsion projector in order to manage the ingestion process using [`Propulsion.Feed.PeriodicSource`](https://github.com/jet/propulsion)
-- 
+ 
 ## Producer/Reactor Templates combining usage of Equinox and Propulsion
 
 The bulk of the remaining templates have a consumer aspect, and hence involve usage of `Propulsion`.
