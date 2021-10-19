@@ -15,7 +15,7 @@ type Stats(log, statsInterval, stateInterval) =
         match outcome with
         | IngestionOutcome.Stale ->      stale <- stale + 1
         | IngestionOutcome.Unchanged ->  unchanged <- unchanged + 1
-        | IngestionOutcome.Changed ->         changed <- changed + 1
+        | IngestionOutcome.Changed ->    changed <- changed + 1
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
