@@ -11,6 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - `proCosmosReactor`: Template for simplified, same-container Cosmos-based reactions [#93](https://github.com/jet/dotnet-templates/pull/93) :pray: [@ragiano215](https://github.com/ragiano215)
+- `periodicIngester`: Template illustrating usage of `Propulsion.Feed.PeriodicSource` [#96](https://github.com/jet/dotnet-templates/pull/96)
 
 ### Changed
 

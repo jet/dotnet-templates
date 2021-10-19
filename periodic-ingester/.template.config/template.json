@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@moneylion @bartelink",
+  "classifications": [
+    "Equinox",
+    "Propulsion"
+  ],
+  "tags": {
+    "language": "F#",
+    "type": "project"
+  },
+  "identity": "PeriodicIngester",
+  "name": "Propulsion PeriodicIngester",
+  "shortName": "periodicIngester",
+  "sourceName": "PeriodicIngesterTemplate",
+  "preferNameDirectory": true
+}

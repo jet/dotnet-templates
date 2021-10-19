@@ -22,20 +22,19 @@ module Log =
 /// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
 module Sinks =
 
-    let equinoxMetricsOnly appName (l : LoggerConfiguration) =
-        let customTags = ["app",appName]
+    let tags appName = ["app", appName]
+
+    let equinoxMetricsOnly tags (l : LoggerConfiguration) =
         l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
-         .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
+         .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(tags))
 
-    let equinoxAndPropulsionConsumerMetrics appName group (l : LoggerConfiguration) =
-        let customTags = ["app", appName]
-        l |> equinoxMetricsOnly appName
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(customTags, group))
+    let equinoxAndPropulsionConsumerMetrics tags group (l : LoggerConfiguration) =
+        l |> equinoxMetricsOnly tags
+          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
 
-    let equinoxAndPropulsionCosmosConsumerMetrics appName group (l : LoggerConfiguration) =
-        let customTags = ["app", appName]
-        l |> equinoxAndPropulsionConsumerMetrics appName group
-          |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(customTags))
+    let equinoxAndPropulsionCosmosConsumerMetrics tags group (l : LoggerConfiguration) =
+        l |> equinoxAndPropulsionConsumerMetrics tags group
+          |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
 
     let console verbose (configuration : LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}"
@@ -79,7 +78,7 @@ type Logging() =
                         | _ -> false
                     let isTooCheapToShow = match minRu with Some mru -> isCheaperThan mru | None -> fun _ -> false
                     let metricFilter = if logSyncToConsole then None else Some (fun x -> Log.isStoreMetrics x || isWriterB x || isTooCheapToShow x)
-                    c.Sinks(Sinks.equinoxAndPropulsionCosmosConsumerMetrics appName group, Sinks.console verbose, ?isMetric = metricFilter)
+                    c.Sinks(Sinks.equinoxAndPropulsionCosmosConsumerMetrics (Sinks.tags appName) group, Sinks.console verbose, ?isMetric = metricFilter)
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 
