@@ -29,7 +29,6 @@ module ListEpochId =
 
 /// Identifies an Item stored within an Epoch
 /// TODO replace `Item` with a Domain term referencing the specific element being managed
-
 type ItemId = string<itemId>
 and [<Measure>] itemId
 module ItemId =

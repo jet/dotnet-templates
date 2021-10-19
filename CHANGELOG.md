@@ -17,6 +17,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - Added defaulting of 1 min for lag reporting frequency to all Cosmos consumers [#95](https://github.com/jet/dotnet-templates/pull/95)
 - `eqxPatterns`: replace best effort deduplication pattern with exactly-once ingestion [#94](https://github.com/jet/dotnet-templates/pull/94)
+- Target `Propulsion` v `2.11.0`, `Equinox` v `3.0.4` [#97](https://github.com/jet/dotnet-templates/pull/97)
+- Target `Destructurama.FSharp` v `1.2.0`
 
 ### Removed
 ### Fixed

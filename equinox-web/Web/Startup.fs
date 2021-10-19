@@ -176,8 +176,7 @@ type Startup() =
             .SetCompatibilityVersion(CompatibilityVersion.Latest)
             // While FsCodec.SystemTextJson is available and works well, until FsCodec.SystemTextJson has a UnionConverter https://github.com/jet/FsCodec/pull/59, use JSON.NET
             .AddNewtonsoftJson(fun options ->
-                /// TODO When 2.2.2 released, use Settings.DefaultSettings
-                FsCodec.NewtonsoftJson.Settings.CreateDefault().Converters
+                FsCodec.NewtonsoftJson.Serdes.DefaultSettings.Converters
                 |> Seq.iter options.SerializerSettings.Converters.Add
             )|> ignore
 

@@ -52,25 +52,15 @@ module CosmosStoreContext =
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
 [<System.Runtime.CompilerServices.Extension>]
-type LoggerConfigurationExtensions() =
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
-        let cfpl = if verbose then LogEventLevel.Debug else LogEventLevel.Warning
-        // TODO figure out what CFP v3 requires
-        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-
-[<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, verbose, changeFeedProcessorVerbose, ?maybeSeqEndpoint) =
+    static member Configure(configuration : LoggerConfiguration, verbose, storeVerbose, ?maybeSeqEndpoint) =
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-        |> fun c -> c.ConfigureChangeFeedProcessorLogging(changeFeedProcessorVerbose)
-        |> fun c -> let ingesterLevel = if changeFeedProcessorVerbose then LogEventLevel.Debug else LogEventLevel.Information
+        |> fun c -> let ingesterLevel = if storeVerbose then LogEventLevel.Debug else LogEventLevel.Information
                     c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
         |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
@@ -84,7 +74,7 @@ type Logging() =
                             let isWriterA = Filters.Matching.FromSource<Propulsion.EventStore.Internal.Writer.Result>().Invoke
                             let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
                             let l =
-                                if changeFeedProcessorVerbose then l
+                                if storeVerbose then l
                                 else l.Filter.ByExcluding(fun x -> Log.isStoreMetrics x || isWriterA x || isWriterB x)
                             l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                             |> ignore) |> ignore

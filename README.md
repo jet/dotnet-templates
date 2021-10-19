@@ -326,7 +326,7 @@ The `run` function formalizes the overall pattern. It is responsible for:
 ```
 let run args = async {
     use consumer = start args
-    return! consumer.AwaitCompletion()
+    return! consumer.AwaitWithStopOnCancellation()
 }
 
 [<EntryPoint>]

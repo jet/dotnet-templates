@@ -37,7 +37,7 @@ module Args =
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
+        | [<AltCommandLine "-I"; Unique>]   StoreVerbose
         | [<AltCommandLine "-S"; Unique>]   LocalSeq
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
@@ -51,7 +51,7 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose ->                "request Verbose Logging. Default: off"
-                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off"
+                | StoreVerbose ->           "request Verbose Ingester Logging. Default: off"
                 | LocalSeq ->               "configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | ProcessorName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
@@ -65,7 +65,7 @@ module Args =
                 | SrcEs _ ->                "EventStore input parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
-        member val CfpVerbose =             a.Contains CfpVerbose
+        member val StoreVerbose =           a.Contains StoreVerbose
         member val MaybeSeqEndpoint =       if a.Contains LocalSeq then Some "http://localhost:5341" else None
         member val ProcessorName =          a.GetResult ProcessorName
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 2048)
@@ -532,7 +532,7 @@ let build (args : Args.Arguments, log) =
         let runPipeline =
             Propulsion.CosmosStore.CosmosStoreSource.Run(
                 Log.Logger, monitored, leases, processorName, observer, startFromTail,
-                ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
+                ?maxItems=maxItems, lagReportFreq=lagFrequency)
         sink, runPipeline
     | Choice2Of2 (srcE, checkpointsContext, spec) ->
         match maybeDstCosmos with
@@ -567,13 +567,13 @@ let run args = async {
     let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
     let sink, pipeline = build (args, log)
     pipeline |> Async.Start
-    return! sink.AwaitCompletion()
+    return! sink.AwaitWithStopOnCancellation()
 }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose, args.CfpVerbose, ?maybeSeqEndpoint = args.MaybeSeqEndpoint).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(args.Verbose, args.StoreVerbose, ?maybeSeqEndpoint = args.MaybeSeqEndpoint).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

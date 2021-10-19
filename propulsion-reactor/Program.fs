@@ -43,9 +43,6 @@ module Args =
     [<NoEquality; NoComparison>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
-//#if (!kafkaEventSpans)
-        | [<AltCommandLine "-C"; Unique>]   CfpVerbose
-//#endif
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
@@ -65,9 +62,6 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose ->                "request Verbose Logging. Default: off."
-//#if (!kafkaEventSpans)
-                | CfpVerbose ->             "request Verbose Change Feed Processor Logging. Default: off."
-//#endif
                 | ProcessorName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
@@ -85,9 +79,6 @@ module Args =
 #endif
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
-//#if (!kafkaEventSpans)
-        member val CfpVerbose =             a.Contains CfpVerbose
-//#endif
         member val ProcessorName =          a.GetResult ProcessorName
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 16)
         member val MaxConcurrentStreams =   a.GetResult(MaxWriters, 8)
@@ -630,7 +621,7 @@ let build (args : Args.Arguments) =
 #endif
         let pipeline =
             use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
-            Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
+            Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
         sink, pipeline
 #endif // !kafkaEventSpans
 
@@ -641,17 +632,13 @@ let run args = async {
 #else
     let sink = build args
 #endif
-    return! sink.AwaitCompletion()
+    return! sink.AwaitWithStopOnCancellation()
 }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-#if (!kafkaEventSpans)
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.CfpVerbose).CreateLogger()
-#else
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
-#endif
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

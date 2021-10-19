@@ -43,7 +43,6 @@ module Args =
     open Argu
 #if cosmos
     type [<NoEquality; NoComparison>] CosmosParameters =
-        | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-mi"; Unique>]  MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
@@ -58,7 +57,6 @@ module Args =
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Verbose ->                "request Verbose Logging from ChangeFeedProcessor. Default: off"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to request from the feed. Default: unlimited."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
@@ -84,7 +82,6 @@ module Args =
         member _.ConnectLeases() =          connector.CreateUninitialized(database, leaseContainerId)
         member x.MonitoredContainer() =     connector.ConnectMonitored(database, containerId)
 
-        member val Verbose =                a.Contains Verbose
         member val FromTail =               a.Contains FromTail
         member val MaxItems =               a.TryGetResult MaxItems
         member val LagFrequency =           a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
@@ -391,7 +388,7 @@ let build (args : Args.Arguments) =
     let pipeline =
         use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
-        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
+        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
 #endif // cosmos
 #if esdb
     let srcE, context, spec = args.BuildEventStoreParams()
@@ -440,17 +437,13 @@ let build (args : Args.Arguments) =
 let run args = async {
     let sink, pipeline = build args
     pipeline |> Async.Start
-    do! sink.AwaitCompletion()
+    do! sink.AwaitWithStopOnCancellation()
 }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-#if cosmos
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.Verbose).CreateLogger()
-#else
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
-#endif
             try run args  |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

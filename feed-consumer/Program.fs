@@ -118,7 +118,7 @@ module ConsumerExt =
         member sink.AwaitWithStopOnCancellation() = async {
             let! ct = Async.CancellationToken
             use _ = ct.Register(fun () -> sink.Stop())
-            return! sink.AwaitCompletion()
+            return! sink.AwaitWithStopOnCancellation()
         }
 
 let run args = async {

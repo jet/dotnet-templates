@@ -8,17 +8,6 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-#if cosmos
-[<System.Runtime.CompilerServices.Extension>]
-type LoggerConfigurationExtensions() =
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
-        let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
-        // TODO figure out what CFP v3 requires
-        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-
-#else
 #if esdb
 module CosmosStoreContext =
 
@@ -26,7 +15,6 @@ module CosmosStoreContext =
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-#endif
 
 #endif
 //#if (cosmos || esdb)
@@ -59,17 +47,10 @@ type Equinox.CosmosStore.CosmosStoreConnector with
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-#if cosmos
-    static member Configure(configuration : LoggerConfiguration, ?verbose, ?changeFeedProcessorVerbose) =
-#else
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
-#endif
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-#if cosmos
-        |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
-#endif
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
                     c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)

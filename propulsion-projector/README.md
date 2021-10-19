@@ -82,7 +82,7 @@ This project was generated using:
 
         # (either add environment variables as per step 0 or use -s/-d/-c to specify them)
         # `-t saveforlater` SaveForLater test produces uniform size events to project
-        # `-C -f 200` constrains current writers to 100 and applies caching so RU consumption is constrained such that an allocation of 1000 is sufficient
+        # `-C -f 200` applies caching and constrains current writers to 100 so RU consumption is constrained such that an allocation of 1000 is sufficient
         eqx run -t saveforlater -C -f 100 cosmos
 
 1b. We'll be operating a ChangeFeedProcessor, so use `propulsion init` to make a `-aux` container (unless there already is one)
