@@ -46,7 +46,7 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
         Observable.subscribe this.Submit source
 
     /// Waits until all <c>Submit</c>ted batches have been fed into the <c>inner</c> Projector
-    member _.AwaitCompletion
+    member _.AwaitWithStopOnCancellation
         (   /// sleep time while awaiting completion
             ?delay,
             /// interval at which to log progress of Projector loop
@@ -72,7 +72,7 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
         inner.Stop()
         // trigger termination of GetConsumingEnumerable()-driven pumping loop
         queue.CompleteAdding()
-        return! inner.AwaitCompletion()
+        return! inner.AwaitWithStopOnCancellation()
     }
 
 type TestOutputAdapter(testOutput : Xunit.Abstractions.ITestOutputHelper) =

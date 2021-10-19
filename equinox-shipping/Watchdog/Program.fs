@@ -51,7 +51,6 @@ module Args =
         member val ProcessingTimeout =      a.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
         member val Cosmos =                 CosmosArguments(c, a.GetResult Cosmos)
     and [<NoEquality; NoComparison>] CosmosParameters =
-        | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-mi"; Unique>]  MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
@@ -66,7 +65,6 @@ module Args =
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | Verbose ->                "request Verbose Change Feed Processor Logging. Default: off."
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to request from feed. Default: unlimited"
                 | LagFreqM _ ->             "frequency (in minutes) to dump lag stats. Default: 1"
@@ -92,7 +90,6 @@ module Args =
         let fromTail =                      a.Contains FromTail
         let maxItems =                      a.TryGetResult MaxItems
         let lagFrequency =                  a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member val Verbose =                a.Contains Verbose
         member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
         member x.MonitoringParams() =
             let leases : Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
@@ -128,19 +125,19 @@ let build (args : Args.Arguments) =
     let pipeline =
         use observer = CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect Handler.transformOrFilter)
         let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
-        CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
+        CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
     sink, pipeline
 
 let run args = async {
     let sink, pipeline = build args
     pipeline |> Async.Start
-    return! sink.AwaitCompletion()
+    return! sink.AwaitWithStopOnCancellation()
 }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose, changeFeedProcessorVerbose=args.Cosmos.Verbose).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

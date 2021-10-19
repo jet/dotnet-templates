@@ -82,32 +82,14 @@ module CosmosStoreContext =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
-#if (!kafkaEventSpans)
-[<System.Runtime.CompilerServices.Extension>]
-type LoggerConfigurationExtensions() =
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member inline ConfigureChangeFeedProcessorLogging(c : LoggerConfiguration, verbose : bool) =
-        let cfpl = if verbose then Serilog.Events.LogEventLevel.Debug else Serilog.Events.LogEventLevel.Warning
-        // TODO figure out what CFP v3 requires
-        c.MinimumLevel.Override("Microsoft.Azure.Documents.ChangeFeedProcessor", cfpl)
-
-#endif
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-#if (!kafkaEventSpans)
-    static member Configure(configuration : LoggerConfiguration, ?verbose, ?changeFeedProcessorVerbose) =
-#else
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
-#endif
         configuration
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-#if (!kafkaEventSpans)
-        |> fun c -> c.ConfigureChangeFeedProcessorLogging((changeFeedProcessorVerbose = Some true))
-#endif
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
                     c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)

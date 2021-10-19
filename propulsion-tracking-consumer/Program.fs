@@ -111,7 +111,7 @@ let start (args : Args.Arguments) =
 
 let run args = async {
     use consumer = start args
-    return! consumer.AwaitCompletion()
+    return! consumer.AwaitWithStopOnCancellation()
 }
 
 [<EntryPoint>]

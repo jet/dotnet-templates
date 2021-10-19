@@ -124,7 +124,7 @@ let build (args : Args.Arguments) =
         let parseFeedDoc : _ -> Propulsion.Streams.StreamEvent<_> seq = Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents
         use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, parseFeedDoc)
         let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
-        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
+        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
     sink, pipeline
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
@@ -138,7 +138,7 @@ let run args = async {
     let sink, pipeline = build args
     pipeline |> Async.Start
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    return! sink.AwaitCompletion()
+    return! sink.AwaitWithStopOnCancellation()
 }
 
 [<EntryPoint>]

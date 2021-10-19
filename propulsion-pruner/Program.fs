@@ -176,7 +176,7 @@ let build (args : Args.Arguments, log : ILogger) =
     let pipeline =
         use observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
-        CosmosStoreSource.Run(log, monitored, leases, processorName, observer, startFromTail, ?maxDocuments=maxItems, lagReportFreq=lagFrequency)
+        CosmosStoreSource.Run(log, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
     deletingEventsSink, pipeline
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
@@ -191,7 +191,7 @@ let run args = async {
     let sink, pipeline = build (args, log)
     pipeline |> Async.Start
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    do! sink.AwaitCompletion()
+    do! sink.AwaitWithStopOnCancellation()
 }
 
 [<EntryPoint>]
