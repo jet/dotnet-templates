@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="5.1.0"></a>
+## [5.1.0] - 2021-10-19
+
+### Added
 
 - `proCosmosReactor`: Template for simplified, same-container Cosmos-based reactions [#93](https://github.com/jet/dotnet-templates/pull/93) :pray: [@ragiano215](https://github.com/ragiano215)
 - `periodicIngester`: Template illustrating usage of `Propulsion.Feed.PeriodicSource` [#96](https://github.com/jet/dotnet-templates/pull/96)
@@ -20,7 +28,6 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - Target `Propulsion` v `2.11.0`, `Equinox` v `3.0.4` [#101](https://github.com/jet/dotnet-templates/pull/101)
 - Target `Destructurama.FSharp` v `1.2.0`, `Serilog.Sinks.Async` v `1.5.0`, `Serilog.Sinks.Console` v `4.0.0` [#101](https://github.com/jet/dotnet-templates/pull/101)
 
-### Removed
 ### Fixed
 
 - Fix CI to stop emitting builds with incorrect `AssemblyVersion 1.0.0.0` (updated MinVer to `2.5.0`)
@@ -519,7 +526,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.0.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.1.0...HEAD
+[5.1.0]: https://github.com/jet/dotnet-templates/compare/5.0.0...5.1.0
 [5.0.0]: https://github.com/jet/dotnet-templates/compare/4.12.0...5.0.0
 [4.12.0]: https://github.com/jet/dotnet-templates/compare/4.11.0...4.12.0
 [4.11.0]: https://github.com/jet/dotnet-templates/compare/4.10.0...4.11.0
