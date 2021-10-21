@@ -18,9 +18,9 @@ let [<Property>] ``FinalizationWorkflow properties`` (Id transId1, Id transId2, 
         let requestedShipmentIds = Array.append shipmentIds1 shipmentIds2
         let! res1 = processManager.TryFinalizeContainer(transId1, containerId1, requestedShipmentIds)
         let expectedEvents =
-            [   "FinalizationRequested"; "ReservationCompleted"; "AssignmentCompleted"; "Completed" // Transaction
-                "Reserved"; "Assigned" // Shipment
-                "Finalized"] // Container
+            [   nameof FE.FinalizationRequested; nameof FE.ReservationCompleted; nameof FE.AssignmentCompleted; nameof FE.Completed
+                nameof Shipment.Events.Reserved; nameof Shipment.Events.Assigned
+                nameof Container.Events.Finalized] // Container
         test <@ res1 && set eventTypes = set expectedEvents @>
         let containerEvents =
             buffer.Queue(Container.streamName containerId1)
@@ -35,7 +35,7 @@ let [<Property>] ``FinalizationWorkflow properties`` (Id transId1, Id transId2, 
         buffer.Clear()
         let! res2 = processManager.TryFinalizeContainer(transId2, containerId2, Array.append shipmentIds2 [|shipment3|])
         let expectedEvents =
-            [   "FinalizationRequested"; "RevertCommenced"; "Completed" // Transaction
-                "Reserved"; "Revoked" ] // Shipment
+            [   nameof FE.FinalizationRequested; nameof FE.RevertCommenced; nameof FE.Completed
+                nameof Shipment.Events.Reserved; nameof Shipment.Events.Revoked ]
         test <@ not res2
                 && set eventTypes = set expectedEvents @> }
