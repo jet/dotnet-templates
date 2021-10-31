@@ -112,15 +112,6 @@ let build (args : Args.Arguments) =
         source.Pump feed.ReadTranches
     sink, pumpSource
 
-[<AutoOpen>]
-module ConsumerExt =
-    type Propulsion.Pipeline with
-        member sink.AwaitWithStopOnCancellation() = async {
-            let! ct = Async.CancellationToken
-            use _ = ct.Register(fun () -> sink.Stop())
-            return! sink.AwaitWithStopOnCancellation()
-        }
-
 let run args = async {
     let sink, pumpSource = build args
     do! Async.Parallel [ pumpSource; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>

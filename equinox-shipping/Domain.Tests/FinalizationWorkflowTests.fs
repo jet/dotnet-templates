@@ -39,5 +39,3 @@ let ``FinalizationWorkflow properties`` (Id transId1, Id transId2, Id containerI
         test <@ not res2
                 && set eventTypes = set expectedEvents @>
     }
-
-module Dummy = let [<EntryPoint>] main _argv = 0

@@ -34,7 +34,7 @@ module Reactions =
 
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded : FsCodec.ITimelineEvent<_>) =
-        encoded.EventType = "Completed" // TODO nameof(Completed)
+        encoded.EventType = nameof(Events.Completed)
 
 module Fold =
 
@@ -44,7 +44,7 @@ module Fold =
     // The implementation trusts (does not spend time double checking) that events have passed an isValidTransition check
     let evolve (state : State) (event : Events.Event) : State =
         match state, event with
-        | _, Events.FinalizationRequested event             -> State.Reserving {| container = event.container; shipments = event.shipments |}
+        | _,                    Events.FinalizationRequested e -> State.Reserving {| container = e.container; shipments = e.shipments |}
         | State.Reserving s,    Events.ReservationCompleted -> State.Assigning {| container = s.container; shipments = s.shipments |}
         | State.Reserving _s,   Events.RevertCommenced e    -> State.Reverting {| shipments = e.shipments |}
         | State.Reverting _s,   Events.Completed            -> State.Completed {| success = false |}
@@ -58,40 +58,40 @@ module Fold =
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot state = Events.Snapshotted {| state = state |}
 
-    let isValidTransition (event : Events.Event) (state : State) =
-        match state, event with
-        | State.Initial,        Events.FinalizationRequested _
-        | State.Reserving _,    Events.RevertCommenced _
-        | State.Reserving _,    Events.ReservationCompleted _
-        | State.Reverting _,    Events.Completed
-        | State.Assigning _,    Events.AssignmentCompleted _
-        | State.Assigned _,     Events.Completed -> true
-        | _ -> false
-
 module Flow =
 
     type Action =
-        | ReserveShipments   of shipmentIds : ShipmentId[]
-        | RevertReservations of shipmentIds : ShipmentId[]
-        | AssignShipments    of shipmentIds : ShipmentId[] * containerId : ContainerId
-        | FinalizeContainer  of containerId : ContainerId * shipmentIds : ShipmentId[]
-        | Finish             of success : bool
+        | ReserveShipments      of shipmentIds : ShipmentId[]
+        | RevertReservations    of shipmentIds : ShipmentId[]
+        | AssignShipments       of shipmentIds : ShipmentId[] * containerId : ContainerId
+        | FinalizeContainer     of containerId : ContainerId * shipmentIds : ShipmentId[]
+        | Finish                of success : bool
 
     let nextAction : Fold.State -> Action = function
-        | Fold.State.Reserving state   -> Action.ReserveShipments   state.shipments
-        | Fold.State.Reverting state   -> Action.RevertReservations state.shipments
-        | Fold.State.Assigning state   -> Action.AssignShipments   (state.shipments, state.container)
-        | Fold.State.Assigned state    -> Action.FinalizeContainer (state.container, state.shipments)
-        | Fold.State.Completed result  -> Action.Finish             result.success
+        | Fold.State.Reserving s -> Action.ReserveShipments   s.shipments
+        | Fold.State.Reverting s -> Action.RevertReservations s.shipments
+        | Fold.State.Assigning s -> Action.AssignShipments   (s.shipments, s.container)
+        | Fold.State.Assigned s ->  Action.FinalizeContainer (s.container, s.shipments)
+        | Fold.State.Completed r -> Action.Finish             r.success
         // As all state transitions are driven by members on the FinalizationWorkflow, we can rule this out
         | Fold.State.Initial as s      -> failwith (sprintf "Cannot interpret state %A" s)
+
+    let isValidTransition (event : Events.Event) (state : Fold.State) =
+        match state, event with
+        | Fold.State.Initial,       Events.FinalizationRequested _
+        | Fold.State.Reserving _,   Events.RevertCommenced _
+        | Fold.State.Reserving _,   Events.ReservationCompleted _
+        | Fold.State.Reverting _,   Events.Completed
+        | Fold.State.Assigning _,   Events.AssignmentCompleted _
+        | Fold.State.Assigned _,    Events.Completed -> true
+        | _ -> false
 
     // If there are no events to apply to the state, it pushes the transaction manager to
     // follow up on the next action from where it was.
     let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
         let events =
             match update with
-            | Some e when Fold.isValidTransition e state -> [e]
+            | Some e when isValidTransition e state -> [e]
             | _ -> []
 
         let state' = Fold.fold state events

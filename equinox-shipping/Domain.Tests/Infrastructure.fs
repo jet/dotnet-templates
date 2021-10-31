@@ -11,7 +11,7 @@ type EventAccumulator<'E>() =
         let appendToQueue _ (queue : ConcurrentQueue<'E>) = events |> Seq.iter queue.Enqueue; queue
         messages.AddOrUpdate(stream, initStreamQueue, appendToQueue) |> ignore
 
-    member _.Queue stream =
+    member _.Queue(stream) =
         match messages.TryGetValue stream with
         | false, _ -> Seq.empty<'E>
         | true, xs -> xs :> _

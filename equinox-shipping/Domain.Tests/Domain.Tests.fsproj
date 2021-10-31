@@ -4,7 +4,7 @@
         <TargetFramework>netcoreapp3.1</TargetFramework>
         <WarningLevel>5</WarningLevel>
         <IsPackable>false</IsPackable>
-        <GenerateProgramFile>false</GenerateProgramFile>
+        <OutputType>Library</OutputType>
     </PropertyGroup>
 
     <ItemGroup>

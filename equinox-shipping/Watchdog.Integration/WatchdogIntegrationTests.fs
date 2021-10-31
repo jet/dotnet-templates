@@ -37,5 +37,3 @@ type WatchdogIntegrationTests(output) =
             do! projector.AwaitWithStopOnCancellation()
             stats.DumpStats()
         }
-
-module Dummy = let [<EntryPoint>] main _argv = 0
