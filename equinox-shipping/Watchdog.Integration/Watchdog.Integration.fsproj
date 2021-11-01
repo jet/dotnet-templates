@@ -13,6 +13,7 @@
         <Compile Include="SerilogLogFixture.fs" />
         <Compile Include="MemoryStoreFixture.fs" />
         <Compile Include="MemoryStoreProjector.fs" />
+        <Compile Include="CosmosStoreConnector.fs" />
         <Compile Include="ReactorFixture.fs" />
         <Compile Include="WatchdogIntegrationTests.fs" />
     </ItemGroup>

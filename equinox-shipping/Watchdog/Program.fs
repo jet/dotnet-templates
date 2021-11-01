@@ -115,12 +115,12 @@ let startWatchdog log (processingTimeout, stats : Handler.Stats) (maxReadAhead, 
 let build (args : Args.Arguments) =
     let processorName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
     let storeClient, monitored = args.Cosmos.ConnectStoreAndMonitored()
+    let storeCfg =
+        let context = storeClient |> CosmosStoreContext.create
+        let cache = Equinox.Cache (AppName, sizeMb = 10)
+        Config.Store.Cosmos (context, cache)
     let sink =
-        let processManager =
-            let context = CosmosStoreContext.create storeClient
-            let cache = Equinox.Cache(AppName, sizeMb=10)
-            let store = Config.Store.Cosmos (context, cache)
-            Shipping.Domain.FinalizationWorkflow.Config.create args.ProcessManagerMaxDop store
+        let processManager = Shipping.Domain.FinalizationWorkflow.Config.create args.ProcessManagerMaxDop storeCfg
         let stats = Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
         startWatchdog Log.Logger (args.ProcessingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Pump
     let pipeline =
