@@ -11,6 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - Use `module Config` pattern [#104](https://github.com/jet/dotnet-templates/pull/104)
+- `eqxShipping`: Add CFP integration test using `Propulsion.CosmosStore` [#102](https://github.com/jet/dotnet-templates/pull/102)
 
 ### Changed
 ### Removed
