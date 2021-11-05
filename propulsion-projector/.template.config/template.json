@@ -12,13 +12,14 @@
     "Kafka"
   ],
   "tags": {
-    "language": "F#"
+    "language": "F#",
+    "type": "project"
   },
   "identity": "Propulsion.Template.Projector",
   "name": "Propulsion Projector",
   "shortName": "proProjector",
   "sourceName": "ProjectorTemplate",
-  "preferNameDirectory": true
+  "preferNameDirectory": true,
 
   "symbols": {
     "source": {
