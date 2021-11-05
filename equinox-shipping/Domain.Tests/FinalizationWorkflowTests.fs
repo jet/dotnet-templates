@@ -10,7 +10,7 @@ module FE = FinalizationTransaction.Events
 let [<Property>] ``FinalizationWorkflow properties`` (Id transId1, Id transId2, Id containerId1, Id containerId2, IdsAtLeastOne shipmentIds1, IdsAtLeastOne shipmentIds2, Id shipment3) = async {
     let store = Equinox.MemoryStore.VolatileStore()
     let buffer = EventAccumulator()
-    use __ = store.Committed.Subscribe buffer.Record
+    use _ = store.Committed.Subscribe buffer.Record
     let eventTypes = seq { for e in buffer.All() -> e.EventType }
     let processManager = FinalizationWorkflow.Config.create 16 (Config.Store.Memory store)
 

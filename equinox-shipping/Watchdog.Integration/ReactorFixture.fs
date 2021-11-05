@@ -61,12 +61,12 @@ type CosmosReactorFixture(messageSink) =
 
     member val Log = Serilog.Log.Logger
     member val ProcessManager = processManager
-    member val StoreConfig = storeCfg
     member val RunTimeout = TimeSpan.FromSeconds 2.
 
     /// As this is a Collection Fixture, it will outlive an individual instantiation of a Test Class
     /// This enables us to tee the output that normally goes to the Test Runner Diagnostic Sink to the test output of the (by definition, single) current test
     member _.CaptureSerilogLog(testOutput) = serilogLog.CaptureSerilogLog testOutput
+    member _.DumpStats() = stats.DumpStats()
 
     /// Stops the projector, emitting the final stats to the log
     interface IDisposable with

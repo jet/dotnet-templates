@@ -16,6 +16,9 @@
         <Compile Include="CosmosStoreConnector.fs" />
         <Compile Include="ReactorFixture.fs" />
         <Compile Include="WatchdogIntegrationTests.fs" />
+        <Content Include="xunit.runner.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
     </ItemGroup>
 
     <ItemGroup>

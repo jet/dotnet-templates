@@ -24,7 +24,7 @@ type MemoryProperties(testOutput) =
 
 [<Xunit.Collection "CosmosReactor">]
 type CosmosProperties(reactor : CosmosReactorFixture, testOutput) =
-    let logReg = reactor.CaptureSerilogLog testOutput
+    let logSub = reactor.CaptureSerilogLog testOutput
 
     [<Property(StartSize=1000, MaxTest=1)>]
     let run (AtLeastOne batches) = async {
@@ -36,8 +36,7 @@ type CosmosProperties(reactor : CosmosReactorFixture, testOutput) =
                          |> Async.timeoutAfter reactor.RunTimeout
                 ()
             with :? TimeoutException -> timeouts <- timeouts + 1
-        reactor.Log.Information("Awaiting batches: {counts} ({timeouts}/{total} timeouts)", counts, timeouts, counts.Count)
+        reactor.Log.Information("Awaiting batches: {counts} ({timeouts}/{total} timeouts)", counts, timeouts, counts.Count) }
         // TODO figure out how to best validate that all requests got completed either directly or with help of the watchdog
-    }
 
-    interface IDisposable with member _.Dispose() = logReg.Dispose()
+    interface IDisposable with member _.Dispose() = logSub.Dispose()

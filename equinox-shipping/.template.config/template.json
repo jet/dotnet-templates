@@ -9,7 +9,8 @@
     "Watchdog"
   ],
   "tags": {
-    "language": "F#"
+    "language": "F#",
+    "type": "project"
   },
   "identity": "Equinox.Shipping",
   "name": "Equinox Shipping Sample",
