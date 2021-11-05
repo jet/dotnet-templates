@@ -5,13 +5,14 @@ open Shipping.Domain
 open FsCheck.Xunit
 open Swensen.Unquote
 
-[<Property>]
-let ``FinalizationWorkflow properties`` (Id transId1, Id transId2, Id containerId1, Id containerId2, IdsAtLeastOne shipmentIds1, IdsAtLeastOne shipmentIds2, Id shipment3) =
+module FE = FinalizationTransaction.Events
+
+let [<Property>] ``FinalizationWorkflow properties`` (Id transId1, Id transId2, Id containerId1, Id containerId2, IdsAtLeastOne shipmentIds1, IdsAtLeastOne shipmentIds2, Id shipment3) =
     let store = Equinox.MemoryStore.VolatileStore()
     let buffer = EventAccumulator()
     use __ = store.Committed.Subscribe buffer.Record
     let eventTypes = seq { for e in buffer.All() -> e.EventType }
-    let processManager = createProcessManager 16 store
+    let processManager = FinalizationWorkflow.Config.create 16 (Config.Store.Memory store)
     Async.RunSynchronously <| async {
         (* First, run the happy path - should pass through all stages of the lifecycle *)
         let requestedShipmentIds = Array.append shipmentIds1 shipmentIds2
@@ -37,5 +38,4 @@ let ``FinalizationWorkflow properties`` (Id transId1, Id transId2, Id containerI
             [   "FinalizationRequested"; "RevertCommenced"; "Completed" // Transaction
                 "Reserved"; "Revoked" ] // Shipment
         test <@ not res2
-                && set eventTypes = set expectedEvents @>
-    }
+                && set eventTypes = set expectedEvents @> }

@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Use `module Config` pattern [#104](https://github.com/jet/dotnet-templates/pull/104)
+
 ### Changed
 ### Removed
 ### Fixed
