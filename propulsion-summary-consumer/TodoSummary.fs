@@ -23,15 +23,9 @@ module Fold =
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let snapshot state = Events.Ingested { version = state.version; value = state.value.Value }
 
-// TODO collapse this unless you actually end up with >1 kind of ingestion Command
-type Command =
-    | Consume of version : int64 * value : Events.SummaryData
-
-let decide command (state : Fold.State) =
-    match command with
-    | Consume (version, value) ->
-        if state.version >= version then false, [] else
-        true, [Events.Ingested { version = version; value = value }]
+let ingest version value (state : Fold.State) =
+    if state.version >= version then false, [] else
+    true, [Events.Ingested { version = version; value = value }]
 
 type Item = { id: int; order: int; title: string; completed: bool }
 let render : Fold.State -> Item[] = function
@@ -48,7 +42,7 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
 
     member _.TryIngest(clientId, version, value) : Async<bool> =
         let decider = resolve clientId
-        decider.Transact(decide (Consume (version, value)))
+        decider.Transact(ingest version value)
 
     member _.Read clientId: Async<Item[]> =
         let decider = resolve clientId

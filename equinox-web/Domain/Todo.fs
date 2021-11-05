@@ -48,29 +48,22 @@ module Fold =
 /// Properties that can be edited on a Todo List item
 type Props = { order: int; title: string; completed: bool }
 
-/// Defines the operations a caller can perform on a Todo List
-type Command =
-    /// Create a single item
-    | Add of Props
-    /// Update a single item
-    | Update of id: int * Props
-    /// Delete a single item from the list
-    | Delete of id: int
-    /// Complete clear the Todo list
-    | Clear
+let mkItem id (value : Props) : Events.ItemData = { id = id; order = value.order; title = value.title; completed = value.completed }
 
-/// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream
-let interpret c (state : Fold.State) =
-    let mkItem id (value : Props) : Events.ItemData = { id = id; order = value.order; title = value.title; completed = value.completed }
-    match c with
-    | Add value -> [Events.Added (mkItem state.nextId value)]
-    | Update (itemId, value) ->
-        let proposed = mkItem itemId value
-        match state.items |> List.tryFind (function { id = id } -> id = itemId) with
-        | Some current when current <> proposed -> [Events.Updated proposed]
-        | _ -> []
-    | Delete id -> if state.items |> List.exists (fun x -> x.id = id) then [Events.Deleted { id=id }] else []
-    | Clear -> if state.items |> List.isEmpty then [] else [Events.Cleared { nextId = state.nextId }]
+let decideAdd value (state : Fold.State) =
+    [ Events.Added (mkItem state.nextId value) ]
+
+let decideUpdate itemId value (state : Fold.State) =
+    let proposed = mkItem itemId value
+    match state.items |> List.tryFind (function { id = id } -> id = itemId) with
+    | Some current when current <> proposed -> [ Events.Updated proposed ]
+    | _ -> []
+
+let decideDelete id (state : Fold.State) =
+    if state.items |> List.exists (fun x -> x.id = id) then [ Events.Deleted { id=id } ] else []
+
+let decideClear (state : Fold.State) =
+    if state.items |> List.isEmpty then [] else [ Events.Cleared { nextId = state.nextId } ]
 
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }
@@ -78,16 +71,10 @@ type View = { id: int; order: int; title: string; completed: bool }
 /// Defines operations that a Controller can perform on a Todo List
 type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    let execute clientId command =
-        let decider = resolve clientId
-        decider.Transact(interpret command)
-    let query clientId projection =
-        let decider = resolve clientId
-        decider.Query projection
-    let handle clientId command =
+    let handle clientId decide =
         let decider = resolve clientId
         decider.Transact(fun state ->
-            let events = interpret command state
+            let events = decide state
             let state' = Fold.fold state events
             state'.items, events)
 
@@ -101,28 +88,51 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
 
     /// List all open items
     member _.List clientId  : Async<View seq> =
-        query clientId (fun x -> seq { for x in x.items -> render x })
+        let decider = resolve clientId
+        decider.Query(fun x -> seq { for x in x.items -> render x })
 
     /// Load details for a single specific item
     member _.TryGet(clientId, id) : Async<View option> =
-        query clientId (fun x -> x.items |> List.tryFind (fun x -> x.id = id) |> Option.map render)
+        let decider = resolve clientId
+        decider.Query(fun x -> x.items |> List.tryFind (fun x -> x.id = id) |> Option.map render)
 
     (* WRITE *)
 
-    /// Execute the specified (blind write) command 
+    /// Execute the specified (blind write) command
     member _.Execute(clientId , command) : Async<unit> =
-        execute clientId command
+        let decider = resolve clientId
+        decider.Transact command
+
+    /// Create a single item
+    member _.Add(clientId, props) =
+        let decider = resolve clientId
+        decider.Transact(decideAdd props)
+
+    /// Update a single item
+    member _.Update(clientId, id, props) =
+        let decider = resolve clientId
+        decider.Transact(decideUpdate id props)
+
+    /// Delete a single item from the list
+    member _.Delete(clientId, id) =
+        let decider = resolve clientId
+        decider.Transact(decideDelete id)
+
+    /// Completely clear the Todo list
+    member _.Clear(clientId) : Async<unit> =
+        let decider = resolve clientId
+        decider.Transact decideClear
 
     (* WRITE-READ *)
 
     /// Create a new ToDo List item; response contains the generated `id`
     member _.Create(clientId, template: Props) : Async<View> = async {
-        let! state' = handle clientId (Add template)
+        let! state' = handle clientId (decideAdd template)
         return List.head state' |> render }
 
     /// Update the specified item as referenced by the `item.id`
     member _.Patch(clientId, id: int, value: Props) : Async<View> = async {
-        let! state' = handle clientId (Update (id, value))
+        let! state' = handle clientId (decideUpdate id value)
         return state' |> List.find (fun x -> x.id = id) |> render}
 
 let create resolveStream =

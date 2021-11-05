@@ -42,25 +42,18 @@ module Fold =
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let snapshot (x : State) : Events.Event = Events.Snapshotted (Array.ofList x)
 
-type Command =
-    | Consume of Events.ItemData list
-
-let interpret command (state : Fold.State) =
-    match command with
-    | Consume updates ->
-        [for x in updates do if x |> Fold.State.isNewOrUpdated state then yield Events.Ingested x]
+let ingest (updates : Events.ItemData list) (state : Fold.State) =
+    [for x in updates do if x |> Fold.State.isNewOrUpdated state then yield Events.Ingested x]
 
 type Service internal (resolve : SkuId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// <returns>count of items</returns>
     member _.Ingest(skuId, items) : Async<int> =
         let decider = resolve skuId
-        let executeWithCount command : Async<int> =
-            let decide state =
-                let events = interpret command state
-                List.length events, events
-            decider.Transact(decide)
-        executeWithCount <| Consume items
+        let decide state =
+            let events = ingest items state
+            List.length events, events
+        decider.Transact(decide)
 
     member _.Read skuId: Async<Events.ItemData list> =
         let decider = resolve skuId

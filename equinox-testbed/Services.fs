@@ -48,34 +48,28 @@ module Domain =
             let isOrigin = function Events.Snapshotted _ -> true | _ -> false
             let snapshot state = Events.Snapshotted { net = state }
 
-        type Command =
-            | Favorite      of date : System.DateTimeOffset * skuIds : SkuId list
-            | Unfavorite    of skuId : SkuId
+        let private doesntHave skuId (state : Fold.State) = state |> Array.exists (fun x -> x.skuId = skuId) |> not
 
-        let interpret command (state : Fold.State) =
-            let doesntHave skuId = state |> Array.exists (fun x -> x.skuId = skuId) |> not
-            match command with
-            | Favorite (date = date; skuIds = skuIds) ->
-                [ for skuId in Seq.distinct skuIds do
-                    if doesntHave skuId then
-                        yield Events.Favorited { date = date; skuId = skuId } ]
-            | Unfavorite skuId ->
-                if doesntHave skuId then [] else
-                [ Events.Unfavorited { skuId = skuId } ]
+        let favorite date skuIds (state : Fold.State) =
+            [ for skuId in Seq.distinct skuIds do
+                if state |> doesntHave skuId then
+                    yield Events.Favorited { date = date; skuId = skuId } ]
+
+        let unfavorite skuId (state : Fold.State) =
+            if state |> doesntHave skuId then [] else
+            [ Events.Unfavorited { skuId = skuId } ]
 
         type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-            member _.Execute(clientId, command) =
-                let decider = resolve clientId
-                decider.Transact(interpret command)
-
             member x.Favorite(clientId, skus) =
-                x.Execute(clientId, Command.Favorite (DateTimeOffset.Now, skus))
+                let decider = resolve clientId
+                decider.Transact(favorite DateTimeOffset.Now skus)
 
-            member x.Unfavorite(clientId, skus) =
-                x.Execute(clientId, Command.Unfavorite skus)
+            member x.Unfavorite(clientId, sku) =
+                let decider = resolve clientId
+                decider.Transact(unfavorite sku)
 
-            member _.List clientId : Async<Events.Favorited []> =
+            member _.List(clientId) : Async<Events.Favorited []> =
                 let decider = resolve clientId
                 decider.Query id
 
