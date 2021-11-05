@@ -8,17 +8,19 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="../Domain.Tests/Infrastructure.fs" Link="Infrastructure.fs" />
+        <Compile Include="Infrastructure.fs" />
         <Compile Include="../Domain.Tests/Fixtures.fs" Link="Fixtures.fs" />
-        <Compile Include="PropulsionInfrastructure.fs" />
+        <Compile Include="SerilogLogFixture.fs" />
+        <Compile Include="MemoryStoreFixture.fs" />
+        <Compile Include="MemoryStoreProjector.fs" />
+        <Compile Include="ReactorFixture.fs" />
         <Compile Include="WatchdogIntegrationTests.fs" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.2.0" />
 
-        <PackageReference Include="Equinox.MemoryStore" Version="3.0.4" />
-        <PackageReference Include="FsCheck.Xunit" Version="2.14.2" />
+        <PackageReference Include="FsCheck.Xunit" Version="3.0.0-beta1" />
         <PackageReference Include="unquote" Version="5.0.0" />
         <PackageReference Include="xunit" Version="2.4.1" />
         <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1" />
