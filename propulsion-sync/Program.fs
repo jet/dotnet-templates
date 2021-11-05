@@ -123,7 +123,7 @@ module Args =
                         | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
                     | Choice2Of2 _dstE ->   srcC.ConnectLeases()
                 Log.Information("Syncing... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
-                Log.Information("Monitoring Group {leaseId} in Database {db} Container {container} with maximum document count limited to {maxItems}",
+                Log.Information("ChangeFeed {processorName} Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
                     x.ProcessorName, leases.Database.Id, leases.Id, srcC.MaxItems)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)

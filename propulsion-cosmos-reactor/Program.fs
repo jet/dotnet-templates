@@ -94,7 +94,7 @@ module Args =
         member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
         member x.MonitoringParams() =
             let leases : Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
-            Log.Information("Monitoring Database {database} Container {container} with maximum document count limited to {maxItems}",
+            Log.Information("ChangeFeed Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
                 leases.Database.Id, leases.Id, Option.toNullable maxItems)
             if fromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
             (leases, fromTail, maxItems, lagFrequency)

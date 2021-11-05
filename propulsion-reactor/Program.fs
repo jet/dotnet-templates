@@ -143,7 +143,7 @@ module Args =
 //#endif // !changeFeedOnly
                 let leases = srcC.ConnectLeases()
                 Log.Information("Reacting... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxConcurrentStreams, x.MaxReadAhead)
-                Log.Information("Monitoring Group {processorName} in Database {db} Container {container} with maximum document count limited to {maxItems}",
+                Log.Information("ChangeFeed {processorName} Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
                     x.ProcessorName, srcC.DatabaseId, srcC.ContainerId, Option.toNullable srcC.MaxItems)
                 if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
                 Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
