@@ -19,7 +19,8 @@ type Stats(log, statsInterval, stateInterval) =
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
-    override _.DumpStats () =
+    override _.DumpStats() =
+        base.DumpStats()
         if stale <> 0 || unchanged <> 0 || changed <> 0 then
             log.Information(" Changed {changed} Unchanged {skipped} Stale {stale}", changed, unchanged, stale)
             stale <- 0; unchanged <- 0; changed <- 0

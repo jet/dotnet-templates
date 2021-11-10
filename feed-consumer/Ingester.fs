@@ -19,7 +19,8 @@ type Stats(log, statsInterval, stateInterval) =
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
-    override _.DumpStats () =
+    override _.DumpStats() =
+        base.DumpStats()
         if added <> 0 || notReady <> 0 || dups <> 0 then
             log.Information(" Added {added} Not Yet Shipped {notReady} Duplicates {dups}", added, notReady, dups)
             added <- 0; notReady <- 0; dups <- 0

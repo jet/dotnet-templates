@@ -99,6 +99,7 @@ type Stats(log, statsInterval, stateInterval) =
         log.Information(exn, "Unhandled")
 
     override _.DumpStats() =
+        base.DumpStats()
         log.Information(" Total events processed {total}", totalCount)
         totalCount <- 0
 

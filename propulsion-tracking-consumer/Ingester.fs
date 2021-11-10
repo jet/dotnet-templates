@@ -31,6 +31,7 @@ type Stats(log, statsInterval, stateInterval) =
         log.Information(exn, "Unhandled")
 
     override _.DumpStats() =
+        base.DumpStats()
         if ok <> 0 || skipped <> 0 then
             log.Information(" Used {ok} Skipped {skipped}", ok, skipped)
             ok <- 0; skipped <- 0

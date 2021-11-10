@@ -25,7 +25,7 @@ module EventCodec =
 module MultiStreams =
 
     open FSharp.UMX // See https://github.com/fsprojects/FSharp.UMX
-    [<Measure>] type skuId 
+    [<Measure>] type skuId
     type SkuId = string<skuId> // Only significant at compile time - serializers etc. just see a string
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
@@ -134,6 +134,7 @@ module MultiStreams =
 
         // Dump stats relating to the nature of the message processing throughput
         override _.DumpStats() =
+            base.DumpStats()
             if faves <> 0 || saves <> 0 then
                 log.Information(" Processed Faves {faves} Saves {s}", faves, saves)
                 faves <- 0; saves <- 0
@@ -154,7 +155,7 @@ module MultiStreams =
 
 /// When using parallel or batch processing, items are not grouped by stream but there are no constraints on the concurrency
 module MultiMessages =
-    
+
     // We'll use the same event parsing logic, though it works a little differently
     open MultiStreams
     open Propulsion.Codec.NewtonsoftJson
@@ -219,7 +220,7 @@ module MultiMessages =
                     processor.Handle(StreamName.parse m.Message.Key, m.Message.Value)
                 processor.DumpStats log }
             FsKafka.BatchedConsumer.Start(log, config, handleBatch)
-    
+
     type BatchesAsync =
         /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`
         /// Processing fans out as parallel Async computations (limited to max `degreeOfParallelism` concurrent tasks

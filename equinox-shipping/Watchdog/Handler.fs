@@ -20,6 +20,7 @@ type Stats(log, statsInterval, stateInterval) =
         log.Information(exn, "Unhandled")
 
     override _.DumpStats() =
+        base.DumpStats()
         if completed <> 0 || deferred <> 0 || failed <> 0 || succeeded <> 0 then
             log.Information(" Completed {completed} Deferred {deferred} Failed {failed} Succeeded {succeeded}", completed, deferred, failed, succeeded)
             completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0
