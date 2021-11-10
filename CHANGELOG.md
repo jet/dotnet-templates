@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Remove usage of `type Command` DUs [#103](https://github.com/jet/dotnet-templates/pull/103)
+
 ### Removed
 ### Fixed
 

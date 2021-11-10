@@ -56,8 +56,8 @@ type TodosController(service: Todo.Service) =
 
     [<HttpDelete "{id}">]
     member _.Delete([<FromClientIdHeader>]clientId : ClientId, id): Async<unit> =
-        service.Execute(clientId, Todo.Delete id)
+        service.Delete(clientId, id)
 
     [<HttpDelete>]
     member _.DeleteAll([<FromClientIdHeader>]clientId : ClientId): Async<unit> =
-        service.Execute(clientId, Todo.Clear)
+        service.Clear(clientId)

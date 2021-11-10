@@ -25,12 +25,8 @@ module Fold =
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let snapshot state = Events.Snapshotted { happened = state.happened }
 
-type Command =
-    | MakeItSo
-
-let interpret c (state : Fold.State) =
-    match c with
-    | MakeItSo -> if state.happened then [] else [Events.Happened]
+let interpretMarkDone (state : Fold.State) =
+    if state.happened then [] else [Events.Happened]
 
 type View = { sorted : bool }
 
@@ -42,10 +38,10 @@ type Service internal (resolve : string -> Equinox.Decider<Events.Event, Fold.St
         let decider = resolve clientId
         decider.Query(fun s -> { sorted = s.happened })
 
-    /// Execute the specified command 
-    member _.Execute(clientId, command) : Async<unit> =
+    /// Execute the specified command
+    member _.MarkDone(clientId, command) : Async<unit> =
         let decider = resolve clientId
-        decider.Transact(interpret command)
+        decider.Transact(interpretMarkDone)
 
 let create resolveStream =
     let resolve = streamName >> resolveStream >> Equinox.createDecider
