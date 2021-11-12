@@ -70,24 +70,13 @@ type Service internal
 
 module Config =
 
-    let private create shouldClose resolveStream =
-        let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
-        Service(shouldClose, resolve)
-
-    module Memory =
-
-        let create shouldClose store =
-            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-            create shouldClose resolveStream
-
-    module Cosmos =
-
-        open Equinox.CosmosStore
-
-        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-        let create shouldClose (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-            create shouldClose resolveStream
+    let private create_ shouldClose resolve = Service(shouldClose, resolve)
+    let private resolveStream opt = function
+        | Config.Store.Memory store ->
+            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            fun sn -> cat.Resolve(sn, ?option = opt)
+        | Config.Store.Cosmos (context, cache) ->
+            let cat = Config.Category.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            fun sn -> cat.Resolve(sn, ?option = opt)
+    let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
+    let create shouldClose = resolveDecider >> create_ shouldClose

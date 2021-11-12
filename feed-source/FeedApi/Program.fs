@@ -80,11 +80,11 @@ let registerSingleton<'t when 't : not struct> (services : IServiceCollection) (
 type AppDependenciesExtensions() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member AddTickets(services : IServiceCollection, context, cache) : unit = Async.RunSynchronously <| async {
+    static member AddTickets(services : IServiceCollection, store) : unit = Async.RunSynchronously <| async {
 
-        let ticketsSeries = Domain.TicketsSeries.Config.Cosmos.create (context, cache)
-        let ticketsEpochs = Domain.TicketsEpoch.Reader.Config.Cosmos.create (context, cache)
-        let tickets = Domain.TicketsIngester.Config.Cosmos.create (context, cache)
+        let ticketsSeries = Domain.TicketsSeries.Config.create None store
+        let ticketsEpochs = Domain.TicketsEpoch.Reader.Config.create store
+        let tickets = Domain.TicketsIngester.Config.Create store
 
         ticketsSeries |> registerSingleton services
         ticketsEpochs |> registerSingleton services
@@ -104,10 +104,11 @@ let run (args : Args.Arguments) =
     let cosmos = args.Cosmos
     let context = cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
     let cache = Equinox.Cache(AppName, sizeMb=2)
+    let store = FeedSourceTemplate.Domain.Config.Store.Cosmos (context, cache)
 
     Hosting.createHostBuilder()
         .ConfigureServices(fun s ->
-            s.AddTickets(context, cache))
+            s.AddTickets(store))
         .Build()
         .Run()
 

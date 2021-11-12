@@ -82,25 +82,13 @@ type Service internal (log : Serilog.ILogger, epochs : ListEpoch.Service, series
 
 module Config =
 
-    let private create epochs series linger =
+    let create_ linger maxItemsPerEpoch store =
+        let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
+        let epochs = ListEpoch.Config.create shouldClose store
+        let series = ListSeries.Config.create store
         let log = Serilog.Log.ForContext<Service>()
-        Service(log, epochs, series, linger=linger)
-
-    type Memory =
-
-        static member Create(store, linger, maxItemsPerEpoch) =
-            let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-            let epochs = ListEpoch.Config.Memory.create shouldClose store
-            let series = ListSeries.Config.Memory.create store
-            create epochs series linger
-
-    let private linger = System.TimeSpan.FromMilliseconds 200.
-    let private maxItemsPerEpoch = 10_000
-
-    module Cosmos =
-
-        let create (context, cache) =
-            let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-            let epochs = ListEpoch.Config.Cosmos.create shouldClose (context, cache)
-            let series = ListSeries.Config.Cosmos.create (context, cache)
-            create epochs series linger
+        Service(log, epochs, series, linger = linger)
+    let create =
+        let defaultLinger = System.TimeSpan.FromMilliseconds 200.
+        let maxItemsPerEpoch = 10_000
+        create_ defaultLinger maxItemsPerEpoch

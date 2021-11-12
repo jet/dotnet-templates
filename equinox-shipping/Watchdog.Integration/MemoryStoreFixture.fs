@@ -29,7 +29,7 @@ module MemoryStoreLogger =
 type MemoryStoreFixture() =
     let store = Equinox.MemoryStore.VolatileStore<byte[]>()
     let mutable disconnectLog : (unit -> unit) option = None
-    member val Config = Config.Store.Memory store
+    member val Config = Shipping.Domain.Config.Store.Memory store
     member _.TestOutput with set testOutput =
         if Option.isSome disconnectLog then invalidOp "Cannot connect more than one test output"
         let log = XunitLogger.forTest testOutput

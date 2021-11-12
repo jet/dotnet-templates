@@ -6,7 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Infrastructure.fs" />
+    <Compile Include="Config.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="TicketsEpoch.fs" />
     <Compile Include="TicketsSeries.fs" />

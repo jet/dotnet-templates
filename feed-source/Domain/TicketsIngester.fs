@@ -6,6 +6,9 @@
 ///   - Re-ingestion of items prior to this window is possible (implying the feed can potentially serve duplicates,
 ///     which the feedConsumer is expected to handle idempotently).
 ///   - Note also that the IdsCache is presently unbounded
+/// TODO please consider using the ListIngester pattern https://github.com/jet/dotnet-templates/pull/94 instead unless you are snookered
+///      i.e. you have no meaningful way to stash a RegistrationEpoch attached to the source information in order to make things more
+///           deterministic in nature
 module FeedSourceTemplate.Domain.TicketsIngester
 
 open Equinox.Core
@@ -120,28 +123,18 @@ type Service internal (createForFc : FcId -> ServiceForFc) =
     member _.ForFc(fcId) : ServiceForFc =
         forFc.GetOrAdd(fcId, build).Value
 
-module Config =
+type Config() =
 
-    type Memory =
+    static let create linger maxItemsPerEpoch lookBackLimit store =
+        let remainingBatchCapacity _candidateItems currentItems =
+            let l = Array.length currentItems
+            max 0 (maxItemsPerEpoch - l)
+        let epochs = TicketsEpoch.Config.create remainingBatchCapacity store
+        let series = TicketsSeries.Config.create None store
+        let createForFc = createFcService (epochs, lookBackLimit) series linger
+        Service createForFc
 
-        static member Create(store, linger, maxItemsPerEpoch, lookBackLimit) =
-            let remainingBatchCapacity _candidateItems currentItems =
-                let l = Array.length currentItems
-                max 0 (maxItemsPerEpoch - l)
-            let epochs = TicketsEpoch.Config.Memory.create remainingBatchCapacity store
-            let series = TicketsSeries.Config.Memory.create store
-            let createForFc = createFcService (epochs, lookBackLimit) series linger
-            Service createForFc
-
-    module Cosmos =
-
-        let create (context, cache) =
-            let maxTicketsPerEpoch, lookBackLimit = 50_000, 100
-            let remainingBatchCapacity _candidateItems currentItems =
-                let l = Array.length currentItems
-                max 0 (maxTicketsPerEpoch - l)
-            let epochs = TicketsEpoch.Config.Cosmos.create remainingBatchCapacity (context, cache)
-            let series = TicketsSeries.Config.Cosmos.create (context, cache)
-            let linger = System.TimeSpan.FromMilliseconds 200.
-            let createForFc = createFcService (epochs, lookBackLimit) series linger
-            Service(createForFc)
+    static member Create(store, ?linger, ?maxItemsPerEpoch, ?lookBackLimit) =
+        let maxItemsPerEpoch, lookBackLimit = defaultArg maxItemsPerEpoch 50_000, defaultArg lookBackLimit 100
+        let linger = defaultArg linger (System.TimeSpan.FromMilliseconds 200.)
+        create linger maxItemsPerEpoch lookBackLimit store

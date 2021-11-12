@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <Compile Include="Types.fs" />
+        <Compile Include="Config.fs" />
         <Compile Include="Shipment.fs" />
         <Compile Include="Container.fs" />
         <Compile Include="FinalizationTransaction.fs" />

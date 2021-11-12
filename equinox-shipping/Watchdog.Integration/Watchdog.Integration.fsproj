@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netcoreapp3.1</TargetFramework>
+        <TargetFramework>net5.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
         <IsPackable>false</IsPackable>
         <OutputType>Library</OutputType>
@@ -9,7 +9,6 @@
 
     <ItemGroup>
         <Compile Include="Infrastructure.fs" />
-        <Compile Include="../Domain.Tests/Fixtures.fs" Link="Fixtures.fs" />
         <Compile Include="SerilogLogFixture.fs" />
         <Compile Include="MemoryStoreFixture.fs" />
         <Compile Include="MemoryStoreProjector.fs" />

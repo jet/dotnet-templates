@@ -18,7 +18,7 @@ type MemoryReactorFixture(testOutput) =
     let projector = MemoryStoreProjector.Start(log, sink)
     let projectorStoreSubscription =
         match store.Config with
-        | Config.Store.Memory store -> projector.Subscribe(store.Committed |> Observable.filter (fun (s,_e) -> Handler.isRelevant s))
+        | Shipping.Domain.Config.Store.Memory store -> projector.Subscribe(store.Committed |> Observable.filter (fun (s,_e) -> Handler.isRelevant s))
         | x -> failwith $"unexpected store config %A{x}"
 
     member val ProcessManager = processManager

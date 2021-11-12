@@ -118,7 +118,7 @@ let build (args : Args.Arguments) =
     let storeCfg =
         let context = storeClient |> CosmosStoreContext.create
         let cache = Equinox.Cache (AppName, sizeMb = 10)
-        Config.Store.Cosmos (context, cache)
+        Shipping.Domain.Config.Store.Cosmos (context, cache)
     let sink =
         let processManager = Shipping.Domain.FinalizationWorkflow.Config.create args.ProcessManagerMaxDop storeCfg
         let stats = Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
