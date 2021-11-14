@@ -112,13 +112,12 @@ let build (args : Args.Arguments) =
     let processorName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
     let client, monitored = args.Cosmos.ConnectStoreAndMonitored()
     let sink =
-        let handle =
+        let store =
             let context = client |> CosmosStoreContext.create
             let cache = Equinox.Cache (AppName, sizeMb = 10)
-            let srcService = Todo.Config.Cosmos.create (context, cache)
-            let dstService = TodoSummary.Config.Cosmos.create (context, cache)
-            Reactor.handle srcService dstService
+            Config.Store.Cosmos (context, cache)
         let stats = Reactor.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
+        let handle = Reactor.Config.createHandler store
         Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, handle, stats, args.StatsInterval)
     let pipeline =
         let parseFeedDoc : _ -> Propulsion.Streams.StreamEvent<_> seq = Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents

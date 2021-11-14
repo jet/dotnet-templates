@@ -23,7 +23,7 @@ module Fold =
         | Events.Snapshotted e -> { happened = e.happened}
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
-    let snapshot state = Events.Snapshotted { happened = state.happened }
+    let toSnapshot state = Events.Snapshotted { happened = state.happened }
 
 let interpretMarkDone (state : Fold.State) =
     if state.happened then [] else [Events.Happened]
@@ -43,6 +43,24 @@ type Service internal (resolve : string -> Equinox.Decider<Events.Event, Fold.St
         let decider = resolve clientId
         decider.Transact(interpretMarkDone)
 
-let create resolveStream =
-    let resolve = streamName >> resolveStream >> Equinox.createDecider
-    Service(resolve)
+module Config =
+
+    let private resolveStream = function
+#if (memoryStore || (!cosmos && !eventStore))
+        | Config.Store.Memory store ->
+            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            cat.Resolve
+#endif
+//#endif
+//#if cosmos
+        | Config.Store.Cosmos (context, cache) ->
+            let cat = Config.Category.createCosmosSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            cat.Resolve
+//#endif
+//#if eventStore
+        | Config.Store.Esdb (context, cache) ->
+            let cat = Config.Category.createEsdbSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            cat.Resolve
+//#endif
+    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
+    let create = resolveDecider >> Service

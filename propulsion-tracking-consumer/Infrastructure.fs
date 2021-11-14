@@ -29,12 +29,6 @@ module EventCodec =
             None
         | x -> x
 
-module Equinox =
-
-    /// Tag log entries so we can filter them out if logging to the console
-    let log = Log.ForContext("isMetric", true)
-    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
-
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =

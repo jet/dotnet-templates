@@ -40,7 +40,7 @@ module Fold =
         | Events.Ingested e -> e :: state
         | Events.Snapshotted items -> List.ofArray items
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
-    let snapshot (x : State) : Events.Event = Events.Snapshotted (Array.ofList x)
+    let toSnapshot (x : State) : Events.Event = Events.Snapshotted (Array.ofList x)
 
 let ingest (updates : Events.ItemData list) (state : Fold.State) =
     [for x in updates do if x |> Fold.State.isNewOrUpdated state then yield Events.Ingested x]
@@ -61,16 +61,9 @@ type Service internal (resolve : SkuId -> Equinox.Decider<Events.Event, Fold.Sta
 
 module Config =
 
-    let create resolveStream =
-        let resolve = streamName >> resolveStream >> Equinox.createDecider
-        Service(resolve)
-
-    module Cosmos =
-
-        open Equinox.CosmosStore
-
-        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-        let create (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-            create cat.Resolve
+    let private resolveStream = function
+        | Config.Store.Cosmos (context, cache) ->
+            let cat = Config.Category.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            cat.Resolve
+    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
+    let create = resolveDecider >> Service

@@ -43,7 +43,7 @@ module Fold =
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
     let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-    let snapshot state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
+    let toSnapshot state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
 
 /// Properties that can be edited on a Todo List item
 type Props = { order: int; title: string; completed: bool }
@@ -135,6 +135,24 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         let! state' = handle clientId (decideUpdate id value)
         return state' |> List.find (fun x -> x.id = id) |> render}
 
-let create resolveStream =
-    let resolve = streamName >> resolveStream >> Equinox.createDecider
-    Service(resolve)
+module Config =
+
+    let private resolveStream = function
+#if (memoryStore || (!cosmos && !eventStore))
+        | Config.Store.Memory store ->
+            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            cat.Resolve
+#endif
+//#endif
+//#if cosmos
+        | Config.Store.Cosmos (context, cache) ->
+            let cat = Config.Category.createCosmosSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            cat.Resolve
+//#endif
+//#if eventStore
+        | Config.Store.Esdb (context, cache) ->
+            let cat = Config.Category.createEsdbSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            cat.Resolve
+//#endif
+    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
+    let create = resolveDecider >> Service

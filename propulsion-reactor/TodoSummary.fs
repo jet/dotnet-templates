@@ -21,7 +21,7 @@ module Fold =
     let evolve _state = function
         | Events.Ingested e -> { version = e.version; value = Some e.value }
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
-    let snapshot state = Events.Ingested { version = state.version; value = state.value.Value }
+    let toSnapshot state = Events.Ingested { version = state.version; value = state.value.Value }
 
 let ingest version value (state : Fold.State) =
     if state.version >= version then false, [] else
@@ -51,25 +51,14 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
 
 module Config =
 
-    let private create resolveStream =
-        let resolve = streamName >> resolveStream >> Equinox.createDecider
-        Service(resolve)
-
+    let private resolveStream = function
+        | Config.Store.Cosmos (context, cache) ->
+            let cat = Config.Category.createCosmosRollingState Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
+            cat.Resolve
 //#if multiSource
-    module EventStore =
-
-        let create (context, cache) =
-            let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-            let resolver = Equinox.EventStore.Resolver(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy)
-            create resolver.Resolve
-
+        | Config.Store.Esdb (context, cache) ->
+            let cat = Config.Category.createEsdb Events.codec Fold.initial Fold.fold (context, cache)
+            cat.Resolve
 //#endif
-    module Cosmos =
-
-        open Equinox.CosmosStore
-
-        let accessStrategy = AccessStrategy.RollingState Fold.snapshot
-        let create (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-            create cat.Resolve
+    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
+    let create = resolveDecider >> Service

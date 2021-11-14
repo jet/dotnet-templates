@@ -4,14 +4,13 @@ module ArchiverTemplate.Infrastructure
 open Serilog
 open System
 
+module Config =
+
+    let log = Serilog.Log.ForContext("isMetric", true)
+
 module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
-
-module Equinox =
-
-    /// Tag log entries so we can filter them out if logging to the console
-    let log = Log.ForContext("isMetric", true)
 
 module Log =
 

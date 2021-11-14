@@ -46,3 +46,10 @@ let handle
         | true -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Ok (1, span.events.Length - 1)
         | false -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Skipped span.events.Length
     | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.events.Length }
+
+module Config =
+
+    let createHandler store =
+        let srcService = Todo.Config.create store
+        let dstService = TodoSummary.Config.create store
+        handle srcService dstService

@@ -16,18 +16,6 @@ type Configuration(tryGet : string -> string option) =
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
     member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
 
-[<RequireQualifiedAccess; NoEquality; NoComparison>]
-type StorageConfig =
-//#if (memoryStore || (!cosmos && !eventStore))
-    | Memory of Equinox.MemoryStore.VolatileStore<obj>
-//#endif
-//#if eventStore
-    | Es of Equinox.EventStore.EventStoreContext * Equinox.EventStore.CachingStrategy option * unfolds: bool
-//#endif
-//#if cosmos
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.CosmosStore.CachingStrategy * unfolds: bool
-//#endif
-    
 //#if (memoryStore || (!cosmos && !eventStore))
 module MemoryStore =
     type [<NoEquality; NoComparison>] Parameters =
@@ -36,7 +24,7 @@ module MemoryStore =
             member a.Usage = a |> function
                 | VerboseStore ->       "Include low level Store logging."
     let config () =
-        StorageConfig.Memory (Equinox.MemoryStore.VolatileStore())
+        Config.Store.Memory (Equinox.MemoryStore.VolatileStore())
 
 //#endif
 //#if cosmos
@@ -87,7 +75,7 @@ module Cosmos =
                 let c = Equinox.Cache("TestbedTemplate", sizeMb=50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else CachingStrategy.NoCaching
-        StorageConfig.Cosmos (createContext storeClient maxItems, cacheStrategy, unfolds)
+        Config.Store.Cosmos (createContext storeClient maxItems, cacheStrategy, unfolds)
 
 //#endif
 //#if eventStore
@@ -148,5 +136,5 @@ module EventStore =
                 let c = Equinox.Cache("TestbedTemplate", sizeMb=50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
             else None
-        StorageConfig.Es ((createContext conn batchSize), cacheStrategy, unfolds)
+        Config.Store.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)
 //#endif

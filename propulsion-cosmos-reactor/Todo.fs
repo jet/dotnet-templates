@@ -49,7 +49,7 @@ module Fold =
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
     let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-    let snapshot state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
+    let toSnapshot state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
 type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
@@ -62,16 +62,9 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
 
 module Config =
 
-    let private create resolveStream =
-        let resolve = streamName >> resolveStream >> Equinox.createDecider
-        Service(resolve)
-
-    module Cosmos =
-
-        open Equinox.CosmosStore
-
-        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.snapshot)
-        let create (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-            create cat.Resolve
+    let private resolveStream = function
+        | Config.Store.Cosmos (context, cache) ->
+            let cat = Config.Category.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            cat.Resolve
+    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
+    let create = resolveDecider >> Service

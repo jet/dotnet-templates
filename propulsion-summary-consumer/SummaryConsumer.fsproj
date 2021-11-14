@@ -9,6 +9,7 @@
   <ItemGroup>
     <None Include="README.md" />
     <Compile Include="Infrastructure.fs" />
+    <Compile Include="Config.fs" />
     <Compile Include="TodoSummary.fs" />
     <Compile Include="Ingester.fs" />
     <Compile Include="Program.fs" />

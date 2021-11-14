@@ -526,10 +526,15 @@ let build (args : Args.Arguments) =
         // TODO: establish any relevant inputs, or re-run without `--blank` for example wiring code
         let handle = Ingester.handle
 #else // blank
-        let esConn = connectEs ()
-        let srcCache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Config.EventStore.create (EventStoreContext.create esConn, srcCache)
-        let dstService = TodoSummary.Config.Cosmos.create (context, cache)
+        let srcService =
+            let esStore =
+                let esConn = connectEs ()
+                let srcCache = Equinox.Cache(AppName, sizeMb=10)
+                Config.Store.Esdb (EventStoreContext.create esConn, srcCache)
+            Todo.Config.create esStore
+        let dstService =
+            let cosmosStore = Config.Store.Cosmos (context, cache)
+            TodoSummary.Config.create cosmosStore
         let handle = Ingester.handle srcService dstService
 #endif // blank
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
@@ -560,10 +565,12 @@ let build (args : Args.Arguments) =
 
 #if (!kafka)
 #if (!blank) //!kafka && !blank -> wire up a cosmos context to an ingester
-        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let cache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Config.Cosmos.create (context, cache)
-        let dstService = TodoSummary.Config.Cosmos.create (context, cache)
+        let cosmosStore =
+            let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+            let cache = Equinox.Cache(AppName, sizeMb=10)
+            Config.Store.Cosmos (context, cache)
+        let srcService = Todo.Config.create cosmosStore
+        let dstService = TodoSummary.Config.create cosmosStore
         let handle = Ingester.handle srcService dstService
 #else // !kafka && blank -> no specific Ingester source/destination wire-up
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
