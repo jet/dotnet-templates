@@ -15,7 +15,7 @@ module Storage =
     [<RequireQualifiedAccess>]
     type Store =
 //#if (memoryStore || (!cosmos && !eventStore))
-        | Mem
+        | Memory
 //#endif
 //#if eventStore
         | Esdb of host: string * username: string * password: string * cacheMb: int
@@ -62,7 +62,7 @@ module Storage =
     /// Creates and/or connects to a specific store as dictated by the specified config
     let connect = function
 //#if (memoryStore || (!cosmos && !eventStore))
-        | Store.Mem ->
+        | Store.Memory ->
             let store = Memory.connect()
             Config.Store.Memory store
 //#endif

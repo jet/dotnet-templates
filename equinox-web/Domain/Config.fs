@@ -34,7 +34,6 @@ type Store<'t> =
 #else
 type Store =
 #endif
-//#endif
 //#if cosmos
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
 //#endif

@@ -21,6 +21,7 @@ type Configuration(tryGet) =
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
     member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
+//#if multiSource
     member _.EventStoreTcp =                isTrue "EQUINOX_ES_TCP"
     member _.EventStoreProjectionTcp =      isTrue "EQUINOX_ES_PROJ_TCP"
     member _.EventStorePort =               tryGet "EQUINOX_ES_PORT" |> Option.map int
@@ -31,6 +32,7 @@ type Configuration(tryGet) =
     member _.EventStoreProjectionUsername = tryGet "EQUINOX_ES_PROJ_USERNAME"
     member _.EventStorePassword =           get "EQUINOX_ES_PASSWORD"
     member _.EventStoreProjectionPassword = tryGet "EQUINOX_ES_PROJ_PASSWORD"
+//#endif
     member _.Broker =                       get "PROPULSION_KAFKA_BROKER"
     member _.Topic =                        get "PROPULSION_KAFKA_TOPIC"
 
