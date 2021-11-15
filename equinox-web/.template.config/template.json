@@ -7,7 +7,8 @@
     "Web"
   ],
   "tags": {
-    "language": "F#"
+    "language": "F#",
+    "type": "solution"
   },
   "identity": "Equinox.Template",
   "name": "Equinox Web App",
@@ -62,7 +63,6 @@
           "condition": "(!todos)",
           "exclude": [
             "*/Controllers/**/*",
-            "**/Ids.fs",
             "**/Todo.fs",
             "README.md"
           ]

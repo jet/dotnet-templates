@@ -11,6 +11,7 @@ open TodoBackendTemplate
 
 /// Equinox store bindings
 module Storage =
+
     /// Specifies the store to be used, together with any relevant custom parameters
     [<RequireQualifiedAccess>]
     type Store =
@@ -98,7 +99,8 @@ module Services =
 
 /// Defines the Hosting configuration, including registration of the store and backend services
 type Startup() =
-    // This method gets called by the runtime. Use this method to add services to the container.
+
+        // This method gets called by the runtime. Use this method to add services to the container.
     member _.ConfigureServices(services: IServiceCollection) : unit =
         services
             .AddMvc()
@@ -107,7 +109,7 @@ type Startup() =
             .AddNewtonsoftJson(fun options ->
                 FsCodec.NewtonsoftJson.Serdes.DefaultSettings.Converters
                 |> Seq.iter options.SerializerSettings.Converters.Add
-            )|> ignore
+            ) |> ignore
 
 //#if (cosmos || eventStore)
         // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
@@ -154,11 +156,11 @@ type Startup() =
 
 //#endif
 #if (memoryStore && !cosmos && !eventStore)
-        let storeConfig = Storage.Config.Mem
+        let storeConfig = Storage.Store.Memory
 
 #endif
 //#if (!memoryStore && !cosmos && !eventStore)
-        //let storeConfig = Storage.Config.Mem
+        //let storeConfig = Storage.Store.Memory
 
 //#endif
         Services.register(services, storeConfig)

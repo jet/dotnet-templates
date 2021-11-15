@@ -8,7 +8,7 @@
   ],
   "tags": {
     "language": "F#",
-    "type": "project"
+    "type": "solution"
   },
   "identity": "FeedSource",
   "name": "Equinox Feed Source",

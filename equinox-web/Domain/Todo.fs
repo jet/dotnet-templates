@@ -143,7 +143,6 @@ module Config =
             let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
             cat.Resolve
 #endif
-//#endif
 //#if cosmos
         | Config.Store.Cosmos (context, cache) ->
             let cat = Config.Category.createCosmosSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)

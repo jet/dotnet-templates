@@ -13,7 +13,9 @@
 	<!--#if (aggregate)-->
 	<Compile Include="Aggregate.fs" />
 	<!--#endif-->
+    <!--#if (todos)-->
     <Compile Include="Todo.fs" />
+    <!--#endif-->
   </ItemGroup>
 
   <ItemGroup>
