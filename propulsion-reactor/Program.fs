@@ -507,9 +507,12 @@ let build (args : Args.Arguments) =
 #if blank
         let handle = Handler.handle produceSummary
 #else
-        let esConn = connectEs ()
-        let srcCache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Config.EventStore.create (EventStoreContext.create esConn, srcCache)
+        let srcService =
+            let esStore =
+                let esConn = connectEs ()
+                let srcCache = Equinox.Cache(AppName, sizeMb=10)
+                Config.Store.Esdb (EventStoreContext.create esConn, srcCache)
+            Todo.Config.create esStore
         let handle = Handler.handle srcService produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
@@ -591,7 +594,8 @@ let build (args : Args.Arguments) =
         let handle = Handler.handle produceSummary
 #else
         let cache = Equinox.Cache(AppName, sizeMb=10)
-        let service = Todo.Config.Cosmos.create (context, cache)
+        let cosmosStore = Config.Store.Cosmos (context, cache)
+        let service = Todo.Config.create cosmosStore
         let handle = Handler.handle service produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)

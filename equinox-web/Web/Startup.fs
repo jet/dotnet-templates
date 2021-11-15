@@ -7,9 +7,7 @@ open Microsoft.Extensions.Hosting
 open Prometheus
 open Serilog
 open System
-//#if (aggregate || todos)
 open TodoBackendTemplate
-//#endif
 
 /// Equinox store bindings
 module Storage =

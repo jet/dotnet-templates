@@ -10,7 +10,7 @@ type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel :
     let writeSerilogEvent (logEvent : Serilog.Events.LogEvent) =
         logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.CosmosStore.Log.PropertyTag
-        logEvent.RemovePropertyIfPresent "cosmosEvt" // TOOD add constant to Equinox
+        logEvent.RemovePropertyIfPresent "cosmosEvt" // TODO Equinox.CosmosStore.Core.Log.PropertyTag
         use writer = new System.IO.StringWriter()
         formatter.Format(logEvent, writer)
         let message = writer |> string |> fun s -> s.TrimEnd('\n')
