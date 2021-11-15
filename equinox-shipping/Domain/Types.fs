@@ -19,10 +19,6 @@ module TransactionId =
     let parse (x : string) = %x
     let (|Parse|) = parse
 
-namespace global
+module Guid =
 
-module Equinox =
-
-    /// Tag log entries so we can filter them out if logging to the console
-    let log = Serilog.Log.ForContext("isMetric", true)
-    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
+    let inline toStringN (x : System.Guid) = x.ToString "N"

@@ -46,7 +46,7 @@ module Domain =
                 for e in events do evolve s e
                 s.AsState()
             let isOrigin = function Events.Snapshotted _ -> true | _ -> false
-            let snapshot state = Events.Snapshotted { net = state }
+            let toSnapshot state = Events.Snapshotted { net = state }
 
         let private doesntHave skuId (state : Fold.State) = state |> Array.exists (fun x -> x.skuId = skuId) |> not
 
@@ -79,41 +79,28 @@ module Domain =
                 Equinox.Decider(log, stream, maxAttempts=3)
             Service(resolve)
 
-open Microsoft.Extensions.DependencyInjection
+        module Config =
 
-type StreamResolver(storage) =
-    member _.Resolve
-        (   codec : FsCodec.IEventCodec<'event, byte[], _>,
-            fold: ('state -> 'event seq -> 'state),
-            initial: 'state,
-            snapshot: (('event -> bool) * ('state -> 'event))) =
-        match storage with
+            let snapshot = Fold.isOrigin, Fold.toSnapshot
+            let private resolveStream = function
 //#if memoryStore || (!cosmos && !eventStore)
-        | Storage.StorageConfig.Memory store ->
-            Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), fold, initial).Resolve
-//#endif
-//#if eventStore
-        | Storage.StorageConfig.Es (gateway, caching, unfolds) ->
-            let accessStrategy = if unfolds then Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot |> Some else None
-            Equinox.EventStore.EventStoreCategory<'event, 'state, _>(gateway, codec, fold, initial, ?caching = caching, ?access = accessStrategy).Resolve
+                | Config.Store.Memory store ->
+                    (Config.Category.createMemory Events.codec Fold.initial Fold.fold store).Resolve
 //#endif
 //#if cosmos
-        | Storage.StorageConfig.Cosmos (context, caching, unfolds) ->
-            let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot snapshot else Equinox.CosmosStore.AccessStrategy.Unoptimized
-            Equinox.CosmosStore.CosmosStoreCategory<'event, 'state, _>(context, codec, fold, initial, caching, accessStrategy).Resolve
+                | Config.Store.Cosmos (context, caching, unfolds) ->
+                    let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot snapshot else Equinox.CosmosStore.AccessStrategy.Unoptimized
+                    (Config.Category.createCosmos Events.codec Fold.initial Fold.fold caching accessStrategy context).Resolve
 //#endif
+//#if eventStore
+                | Config.Store.Esdb (context, caching, unfolds) ->
+                    let accessStrategy = if unfolds then Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot |> Some else None
+                    (Config.Category.createEsdb Events.codec Fold.initial Fold.fold caching accessStrategy context).Resolve
+//#endif
+            let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
+            let create = resolveDecider >> Service
 
-type ServiceBuilder(storageConfig, handlerLog) =
-     let resolver = StreamResolver(storageConfig)
+open Microsoft.Extensions.DependencyInjection
 
-     member _.CreateFavoritesService() =
-        let fold, initial = Domain.Favorites.Fold.fold, Domain.Favorites.Fold.initial
-        let snapshot = Domain.Favorites.Fold.isOrigin, Domain.Favorites.Fold.snapshot
-        Domain.Favorites.create handlerLog (resolver.Resolve(Domain.Favorites.Events.codec, fold, initial, snapshot))
-
-let register (services : IServiceCollection, storageConfig, handlerLog) =
-    let regF (factory : IServiceProvider -> 'T) = services.AddSingleton<'T>(fun (sp: IServiceProvider) -> factory sp) |> ignore
-
-    regF <| fun _sp -> ServiceBuilder(storageConfig, handlerLog)
-
-    regF <| fun sp -> sp.GetService<ServiceBuilder>().CreateFavoritesService()
+let register (services : IServiceCollection, storageConfig) =
+    services.AddSingleton(Domain.Favorites.Config.create storageConfig) |> ignore

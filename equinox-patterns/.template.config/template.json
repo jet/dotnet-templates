@@ -11,7 +11,7 @@
   ],
   "tags": {
     "language": "F#",
-    "type": "project"
+    "type": "solution"
   },
   "identity": "Equinox.Patterns",
   "name": "Equinox Patterns Sample",

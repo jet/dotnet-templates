@@ -182,7 +182,7 @@ module CosmosStoreContext =
 let build (args : Args.Arguments, log) =
     let archiverSink =
         let context = args.DestinationArchive.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Equinox.log)
+        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
         CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, (*purgeInterval=TimeSpan.FromMinutes 10.,*) maxBytes = args.MaxBytes)
     let pipeline =
         use observer = CosmosStoreSource.CreateObserver(log, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)

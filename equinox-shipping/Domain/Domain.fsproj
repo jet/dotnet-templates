@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <Compile Include="Types.fs" />
+        <Compile Include="Config.fs" />
         <Compile Include="Shipment.fs" />
         <Compile Include="Container.fs" />
         <Compile Include="FinalizationTransaction.fs" />
@@ -17,6 +18,7 @@
 
     <ItemGroup>
       <PackageReference Include="Equinox.CosmosStore" Version="3.0.4" />
+      <PackageReference Include="Equinox.MemoryStore" Version="3.0.4" />
     </ItemGroup>
 
 </Project>

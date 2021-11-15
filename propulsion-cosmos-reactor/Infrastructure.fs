@@ -32,12 +32,6 @@ module EventCodec =
             None
         | x -> x
 
-module Equinox =
-
-    /// Tag log entries so we can filter them out if logging to the console
-    let log = Log.ForContext("isMetric", true)
-    let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
-
 module Log =
 
     /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics

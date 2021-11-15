@@ -91,9 +91,12 @@ module Args =
 let [<Literal>] AppName = "ConsumerTemplate"
 
 let start (args : Args.Arguments) =
-    let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-    let cache = Equinox.Cache (AppName, sizeMb = 10)
-    let service = SkuSummary.Config.Cosmos.create (context, cache)
+    let service =
+        let store =
+            let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+            let cache = Equinox.Cache (AppName, sizeMb = 10)
+            Config.Store.Cosmos (context, cache)
+        SkuSummary.Config.create store
     let config =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,

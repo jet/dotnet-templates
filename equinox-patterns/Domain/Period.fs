@@ -137,26 +137,14 @@ type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equ
 
 module Config =
 
-    let private create resolveStream =
-        let resolve opt = streamName >> resolveStream opt >> Equinox.createDecider
-        Service resolve
-
-    module Memory=
-
-        let create store =
-            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-            create resolveStream
-
-    module Cosmos =
-
-        open Equinox.CosmosStore
-
-        // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
-        // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
-        let accessStrategy = AccessStrategy.Unoptimized
-        let create (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-            create resolveStream
+    let private resolveStream opt = function
+        | Config.Store.Memory store ->
+            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            fun sn -> cat.Resolve(sn, ?option = opt)
+        | Config.Store.Cosmos (context, cache) ->
+            // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
+            // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
+            let cat = Config.Category.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+            fun sn -> cat.Resolve(sn, ?option = opt)
+    let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
+    let create = resolveDecider >> Service

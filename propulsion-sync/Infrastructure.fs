@@ -5,20 +5,18 @@ open Serilog
 open Serilog.Events
 open System
 
+module Config =
+
+    let log = Serilog.Log.ForContext("isMetric", true)
+
 module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
-
-module Equinox =
-
-    /// Tag log entries so we can filter them out if logging to the console
-    let log = Log.ForContext("isMetric", true)
 
 module Log =
 
     /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
     let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
-
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 

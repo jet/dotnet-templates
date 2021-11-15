@@ -143,10 +143,10 @@ module LoadTest =
     let private createResultLog fileName = LoggerConfiguration().WriteTo.File(fileName).CreateLogger()
     let run (log: ILogger) (verbose, verboseConsole, maybeSeq) reportFilename (a : Args.TestArguments) =
         let createStoreLog verboseStore = createStoreLog verboseStore verboseConsole maybeSeq
-        let storeLog, storeConfig: ILogger * Storage.StorageConfig = a.ConfigureStore(log, createStoreLog)
+        let _storeLog, storeConfig: ILogger * Config.Store = a.ConfigureStore(log, createStoreLog)
         let runSingleTest : ClientId -> Async<unit> =
             let services = ServiceCollection()
-            Services.register(services, storeConfig, storeLog)
+            Services.register(services, storeConfig)
             let container = services.BuildServiceProvider()
             let execForClient = Tests.executeLocal container a.Test
             decorateWithLogger (log, verbose) execForClient
@@ -164,11 +164,11 @@ module LoadTest =
 
         match storeConfig with
 //#if cosmos
-        | Storage.StorageConfig.Cosmos _ ->
+        | Config.Store.Cosmos _ ->
             Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
 //#endif
 //#if eventStore
-        | Storage.StorageConfig.Es _ ->
+        | Config.Store.Esdb _ ->
             Equinox.EventStore.Log.InternalMetrics.dump log
 //#endif
 //#if memory
@@ -206,7 +206,7 @@ let main argv =
             let reportFilename = args.GetResult(LogFile, programName+".log") |> fun n -> System.IO.FileInfo(n).FullName
             LoadTest.run log (verbose, verboseConsole, maybeSeq) reportFilename (TestArguments (Storage.Configuration EnvVar.tryGet, rargs))
         | _ -> failwith "Please specify a valid subcommand :- run"
-        0 
+        0
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | :? Argu.ArguException as e -> eprintf "Argument parsing exception %s" e.Message; 1
         | Storage.MissingArg msg -> eprintfn "%s" msg; 1

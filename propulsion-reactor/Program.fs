@@ -21,6 +21,7 @@ type Configuration(tryGet) =
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
     member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
+//#if multiSource
     member _.EventStoreTcp =                isTrue "EQUINOX_ES_TCP"
     member _.EventStoreProjectionTcp =      isTrue "EQUINOX_ES_PROJ_TCP"
     member _.EventStorePort =               tryGet "EQUINOX_ES_PORT" |> Option.map int
@@ -31,6 +32,7 @@ type Configuration(tryGet) =
     member _.EventStoreProjectionUsername = tryGet "EQUINOX_ES_PROJ_USERNAME"
     member _.EventStorePassword =           get "EQUINOX_ES_PASSWORD"
     member _.EventStoreProjectionPassword = tryGet "EQUINOX_ES_PROJ_PASSWORD"
+//#endif
     member _.Broker =                       get "PROPULSION_KAFKA_BROKER"
     member _.Topic =                        get "PROPULSION_KAFKA_TOPIC"
 
@@ -507,9 +509,12 @@ let build (args : Args.Arguments) =
 #if blank
         let handle = Handler.handle produceSummary
 #else
-        let esConn = connectEs ()
-        let srcCache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Config.EventStore.create (EventStoreContext.create esConn, srcCache)
+        let srcService =
+            let esStore =
+                let esConn = connectEs ()
+                let srcCache = Equinox.Cache(AppName, sizeMb=10)
+                Config.Store.Esdb (EventStoreContext.create esConn, srcCache)
+            Todo.Config.create esStore
         let handle = Handler.handle srcService produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)
@@ -526,10 +531,15 @@ let build (args : Args.Arguments) =
         // TODO: establish any relevant inputs, or re-run without `--blank` for example wiring code
         let handle = Ingester.handle
 #else // blank
-        let esConn = connectEs ()
-        let srcCache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Config.EventStore.create (EventStoreContext.create esConn, srcCache)
-        let dstService = TodoSummary.Config.Cosmos.create (context, cache)
+        let srcService =
+            let esStore =
+                let esConn = connectEs ()
+                let srcCache = Equinox.Cache(AppName, sizeMb=10)
+                Config.Store.Esdb (EventStoreContext.create esConn, srcCache)
+            Todo.Config.create esStore
+        let dstService =
+            let cosmosStore = Config.Store.Cosmos (context, cache)
+            TodoSummary.Config.create cosmosStore
         let handle = Ingester.handle srcService dstService
 #endif // blank
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
@@ -560,10 +570,12 @@ let build (args : Args.Arguments) =
 
 #if (!kafka)
 #if (!blank) //!kafka && !blank -> wire up a cosmos context to an ingester
-        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let cache = Equinox.Cache(AppName, sizeMb=10)
-        let srcService = Todo.Config.Cosmos.create (context, cache)
-        let dstService = TodoSummary.Config.Cosmos.create (context, cache)
+        let cosmosStore =
+            let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+            let cache = Equinox.Cache(AppName, sizeMb=10)
+            Config.Store.Cosmos (context, cache)
+        let srcService = Todo.Config.create cosmosStore
+        let dstService = TodoSummary.Config.create cosmosStore
         let handle = Ingester.handle srcService dstService
 #else // !kafka && blank -> no specific Ingester source/destination wire-up
         // TODO: establish any relevant inputs, or re-run without `-blank` for example wiring code
@@ -584,7 +596,8 @@ let build (args : Args.Arguments) =
         let handle = Handler.handle produceSummary
 #else
         let cache = Equinox.Cache(AppName, sizeMb=10)
-        let service = Todo.Config.Cosmos.create (context, cache)
+        let cosmosStore = Config.Store.Cosmos (context, cache)
+        let service = Todo.Config.create cosmosStore
         let handle = Handler.handle service produceSummary
 #endif
         let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval, logExternalStats=producer.DumpStats)

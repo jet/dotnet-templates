@@ -7,35 +7,22 @@ open Microsoft.Extensions.Hosting
 open Prometheus
 open Serilog
 open System
-//#if (aggregate || todos)
 open TodoBackendTemplate
-//#endif
 
 /// Equinox store bindings
 module Storage =
+
     /// Specifies the store to be used, together with any relevant custom parameters
     [<RequireQualifiedAccess>]
-    type Config =
+    type Store =
 //#if (memoryStore || (!cosmos && !eventStore))
-        | Mem
+        | Memory
 //#endif
 //#if eventStore
-        | ES of host: string * username: string * password: string * cacheMb: int
+        | Esdb of host: string * username: string * password: string * cacheMb: int
 //#endif
 //#if cosmos
         | Cosmos of mode: Microsoft.Azure.Cosmos.ConnectionMode * connectionStringWithUriAndKey: string * database: string * container: string * cacheMb: int
-//#endif
-
-    /// Holds an initialized/customized/configured of the store as defined by the `Config`
-    type Instance =
-//#if (memoryStore || (!cosmos && !eventStore))
-        | MemoryStore of Equinox.MemoryStore.VolatileStore<obj>
-//#endif
-//#if eventStore
-        | EventStore of context: Equinox.EventStore.EventStoreContext * cache: Equinox.Cache
-//#endif
-//#if cosmos
-        | CosmosStore of context: Equinox.CosmosStore.CosmosStoreContext * cache: Equinox.Cache
 //#endif
 
 //#if (memoryStore || (!cosmos && !eventStore))
@@ -51,7 +38,7 @@ module Storage =
     module private ES =
         open Equinox.EventStore
         let connect host username password =
-            let log = Logger.SerilogNormal (Log.ForContext<Instance>())
+            let log = Logger.SerilogNormal (Log.ForContext<Store>())
             let c = Connector(username, password, reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
             let conn = c.Establish ("Twin", Discovery.GossipDns host, ConnectionStrategy.ClusterTwinPreferSlaveReads) |> Async.RunSynchronously
             EventStoreContext(conn, BatchingPolicy(maxBatchSize=500))
@@ -74,102 +61,46 @@ module Storage =
 
 //#endif
     /// Creates and/or connects to a specific store as dictated by the specified config
-    let connect : Config -> Instance = function
+    let connect = function
 //#if (memoryStore || (!cosmos && !eventStore))
-        | Config.Mem ->
+        | Store.Memory ->
             let store = Memory.connect()
-            Instance.MemoryStore store
+            Config.Store.Memory store
 //#endif
 //#if eventStore
-        | Config.ES (host, user, pass, cache) ->
+        | Store.Esdb (host, user, pass, cache) ->
             let cache = Equinox.Cache("ES", sizeMb=cache)
             let conn = ES.connect host user pass
-            Instance.EventStore (conn, cache)
+            Config.Store.Esdb (conn, cache)
 //#endif
 //#if cosmos
-        | Config.Cosmos (mode, connectionString, database, container, cache) ->
+        | Store.Cosmos (mode, connectionString, database, container, cache) ->
             let cache = Equinox.Cache("Cosmos", sizeMb=cache)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
             let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (timeout, retriesOn429Throttling, timeout)
-            Instance.CosmosStore (context, cache)
+            Config.Store.Cosmos (context, cache)
 //#endif
 
 /// Dependency Injection wiring for services using Equinox
 module Services =
-    /// Builds a Stream Resolve function appropriate to the store being used
-    type StreamResolver(storage : Storage.Instance) =
-        member _.Resolve
-            (   codec : FsCodec.IEventCodec<'event, byte[], _>,
-                fold: 'state -> 'event seq -> 'state,
-                initial: 'state,
-                snapshot: ('event -> bool) * ('state -> 'event)) =
-            match storage with
-//#if (memoryStore || (!cosmos && !eventStore))
-            | Storage.MemoryStore store ->
-                Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), fold, initial).Resolve
-//#endif
-//#if eventStore
-            | Storage.EventStore (gateway, cache) ->
-                let accessStrategy = Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot
-                let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.EventStore.EventStoreCategory<'event, 'state, _>(gateway, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
-//#endif
-//#if cosmos
-            | Storage.CosmosStore (store, cache) ->
-                let accessStrategy = Equinox.CosmosStore.AccessStrategy.Snapshot snapshot
-                let cacheStrategy = Equinox.CosmosStore.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-                Equinox.CosmosStore.CosmosStoreCategory<'event, 'state, _>(store, codec, fold, initial, cacheStrategy, accessStrategy).Resolve
-//#endif
-
-    /// Binds a storage independent Service's Handler's `resolve` function to a given Stream Policy using the StreamResolver
-    type ServiceBuilder(resolver: StreamResolver) =
-//#if todos
-         member _.CreateTodosService() =
-            let fold, initial = Todo.Fold.fold, Todo.Fold.initial
-            let snapshot = Todo.Fold.isOrigin, Todo.Fold.snapshot
-            Todo.create (resolver.Resolve(Todo.Events.codec, fold, initial, snapshot))
-//#endif
-//#if aggregate
-         member _.CreateAggregateService() =
-            let fold, initial = Aggregate.Fold.fold, Aggregate.Fold.initial
-            let snapshot = Aggregate.Fold.isOrigin, Aggregate.Fold.snapshot
-            Aggregate.create (resolver.Resolve(Aggregate.Events.codec, fold, initial, snapshot))
-//#endif
-//#if (!aggregate && !todos)
-        // TODO implement Service builders, e.g.
-        //member _.CreateThingService() =
-        //   let codec = genCodec<Thing.Events.Event>()
-        //   let fold, initial = Thing.Fold.fold, Thing.Fold.initial
-        //   let snapshot = Thing.Fold.isOrigin, Thing.Fold.compact
-        //   Thing.Service(handlerLog, resolver.Resolve(codec, fold, initial, snapshot))
-//#endif
-
-    /// F# syntactic sugar for registering services
-    type IServiceCollection with
-        /// Register a Service as a Singleton, by supplying a function that can build an instance of the type in question
-        member services.Register(factory : IServiceProvider -> 'T) = services.AddSingleton<'T>(fun (sp: IServiceProvider) -> factory sp) |> ignore
-
-    /// F# syntactic sugar to resolve a service dependency
-    type IServiceProvider with member sp.Resolve<'t>() = sp.GetRequiredService<'t>()
 
     /// Registers the Equinox Store, Stream Resolver, Service Builder and the Service
     let register (services : IServiceCollection, storeCfg) =
-        services.Register(fun _sp -> Storage.connect storeCfg)
-        services.Register(fun sp -> StreamResolver(sp.Resolve()))
-        services.Register(fun sp -> ServiceBuilder(sp.Resolve()))
+        let store = Storage.connect storeCfg
 //#if todos
-        services.Register(fun sp -> sp.Resolve<ServiceBuilder>().CreateTodosService())
+        services.AddSingleton(Todo.Config.create store) |> ignore
 //#endif
 //#if aggregate
-        services.Register(fun sp -> sp.Resolve<ServiceBuilder>().CreateAggregateService())
+        services.AddSingleton(Aggregate.Config.create store) |> ignore
 //#else
-        //services.Register(fun sp -> sp.Resolve<ServiceBuilder>().CreateThingService())
+        //services.AddSingleton(Thing.Config.create store) |> ignore
 //#endif
 
 /// Defines the Hosting configuration, including registration of the store and backend services
 type Startup() =
-    // This method gets called by the runtime. Use this method to add services to the container.
+
+        // This method gets called by the runtime. Use this method to add services to the container.
     member _.ConfigureServices(services: IServiceCollection) : unit =
         services
             .AddMvc()
@@ -178,7 +109,7 @@ type Startup() =
             .AddNewtonsoftJson(fun options ->
                 FsCodec.NewtonsoftJson.Serdes.DefaultSettings.Converters
                 |> Seq.iter options.SerializerSettings.Converters.Add
-            )|> ignore
+            ) |> ignore
 
 //#if (cosmos || eventStore)
         // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
@@ -196,7 +127,7 @@ type Startup() =
         //# run as a single-node cluster to allow connection logic to use cluster mode as for a commercial cluster
         //& $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
 
-        let storeConfig = Storage.Config.ES ("localhost", "admin", "changeit", cacheMb)
+        let storeConfig = Storage.Store.Esdb ("localhost", "admin", "changeit", cacheMb)
 
 //#endif
 //#if cosmos
@@ -212,24 +143,24 @@ type Startup() =
             match read connectionVar, read databaseVar, read containerVar with
             | Some connection, Some database, Some container ->
                 let connMode = Microsoft.Azure.Cosmos.ConnectionMode.Direct // Best perf - select one of the others iff using .NETCore on linux or encounter firewall issues
-                Storage.Config.Cosmos (connMode, connection, database, container, cacheMb)
+                Storage.Store.Cosmos (connMode, connection, database, container, cacheMb)
 //#if cosmosSimulator
             | None, Some database, Some container ->
                 // alternately, you can feed in this connection string in as a parameter externally and remove this special casing
                 let wellKnownConnectionStringForCosmosDbSimulator =
                     "AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
-                Storage.Config.Cosmos (Microsoft.Azure.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
+                Storage.Store.Cosmos (Microsoft.Azure.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
 //#endif
             | _ ->
                 failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar containerVar
 
 //#endif
 #if (memoryStore && !cosmos && !eventStore)
-        let storeConfig = Storage.Config.Mem
+        let storeConfig = Storage.Store.Memory
 
 #endif
 //#if (!memoryStore && !cosmos && !eventStore)
-        //let storeConfig = Storage.Config.Mem
+        //let storeConfig = Storage.Store.Memory
 
 //#endif
         Services.register(services, storeConfig)

@@ -43,6 +43,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
         log.Information(exn, "Unhandled")
 
     override _.DumpStats() =
+        base.DumpStats()
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0

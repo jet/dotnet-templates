@@ -510,17 +510,17 @@ let build (args : Args.Arguments, log) =
                 | None ->
 #endif
                 let context = CosmosStoreContext.create target
-                let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Equinox.log)
+                let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
                 Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
                 args.CategoryFilterFunction(excludeLong=true)
             Some target, sink, streamFilter
         | Choice2Of2 es ->
             let connect connIndex = async {
-                let lfc = Equinox.log.ForContext("ConnId", connIndex)
+                let lfc = Config.log.ForContext("ConnId", connIndex)
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, AppName, connIndex)
                 return Context(c, BatchingPolicy(Int32.MaxValue)) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            let sink = EventStoreSink.Start(log, Equinox.log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+            let sink = EventStoreSink.Start(log, Config.log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->

@@ -44,48 +44,37 @@ module EpochDto =
         for x in s -> { fc = x.Key; ingestionEpochId = x.Value }
     }
 
-type Service internal (resolve : TicketsSeriesId -> Equinox.Decider<Events.Event, Fold.State>, ?seriesId) =
-
-    // For now we have a single global sequence. This provides us an extension point should we ever need to reprocess
-    // NOTE we use a custom id in order to isolate data for acceptance tests
-    let seriesId = defaultArg seriesId TicketsSeriesId.wellKnownId
+type Service internal (seriesId, resolve : TicketsSeriesId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Exposes the set of tranches for which data is held, enabling a consumer to crawl the full dataset
     member _.ReadIngestionEpochs() : Async<EpochDto seq> =
         let decider = resolve seriesId
         decider.Query EpochDto.ofState
 
-    /// Determines the current active epoch for the specified `fcid`
-    member _.TryReadIngestionEpochId fcid : Async<TicketsEpochId option> =
+    /// Determines the current active epoch for the specified `fcId`
+    member _.TryReadIngestionEpochId fcId : Async<TicketsEpochId option> =
         let decider = resolve seriesId
-        decider.Query(readEpochId fcid)
+        decider.Query(readEpochId fcId)
 
     /// Mark specified `epochId` as live for the purposes of ingesting TicketIds
     /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by anointing the successor via this
-    member _.MarkIngestionEpochId(fcid, epochId) : Async<unit> =
+    member _.MarkIngestionEpochId(fcId, epochId) : Async<unit> =
         let decider = resolve seriesId
-        decider.Transact(interpret (fcid, epochId))
+        decider.Transact(interpret (fcId, epochId))
 
 module Config =
 
-    let private create seriesOverride resolveStream =
-        let resolve = streamName >> resolveStream Equinox.AllowStale >> Equinox.createDecider
-        Service(resolve, ?seriesId=seriesOverride)
-
-    module Memory =
-
-        let create store =
-            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-            let resolveStream opt sn = cat.Resolve(sn, opt)
-            create None resolveStream
-
-    module Cosmos =
-
-        open Equinox.CosmosStore
-
-        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-        let  create (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-            let resolveStream opt sn = cat.Resolve(sn, opt)
-            create None resolveStream
+    let private create_ seriesId resolve =
+        // For now we have a single global sequence. This provides us an extension point should we ever need to reprocess
+        // NOTE we use a custom id in order to isolate data for acceptance tests
+        let seriesId = defaultArg seriesId TicketsSeriesId.wellKnownId
+        Service(seriesId, resolve (Some Equinox.AllowStale))
+    let private resolveStream opt = function
+        | Config.Store.Memory store ->
+            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            fun sn -> cat.Resolve(sn, ?option = opt)
+        | Config.Store.Cosmos (context, cache) ->
+            let cat = Config.Category.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            fun sn -> cat.Resolve(sn, ?option = opt)
+    let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
+    let create seriesOverride = resolveDecider >> create_ seriesOverride

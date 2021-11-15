@@ -71,41 +71,31 @@ let decide capacity candidates (currentIds, closed as state) =
 type IngestionService internal (capacity, resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Handles idempotent deduplicated insertion into the set of items held within the epoch
-    member _.Ingest(fcid, epochId, ticketIds) : Async<Result> =
-        let decider = resolve (fcid, epochId)
+    member _.Ingest(fcId, epochId, ticketIds) : Async<Result> =
+        let decider = resolve (fcId, epochId)
         decider.Transact(decide capacity ticketIds)
 
     /// Obtains a complete list of all the tickets in the specified fcid/epochId
-    member _.ReadTickets(fcid, epochId) : Async<TicketId[]> =
-        let decider = resolve (fcid, epochId)
+    member _.ReadTickets(fcId, epochId) : Async<TicketId[]> =
+        let decider = resolve (fcId, epochId)
         decider.Query fst
-
-    static member internal Create(capacity, resolveStream) =
-        // Accept whatever date is in the cache on the basis that we are doing most of the writing so will more often than not
-        // have the correct state already without a roundtrip. What if the data is actually stale? we\ll end up needing to resync,
-        // but we we need to deal with that as a race condition anyway
-        let resolve = streamName >> resolveStream (Some Equinox.AllowStale) >> Equinox.createDecider
-        IngestionService(capacity, resolve)
 
 module Config =
 
-    module Memory =
-
-        let create capacity store =
-            let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, Fold.fold, Fold.initial)
-            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-            IngestionService.Create(capacity, resolveStream)
-
-    module Cosmos =
-
-        open Equinox.CosmosStore
-
-        let accessStrategy = AccessStrategy.Snapshot (Fold.isOrigin, Fold.toSnapshot)
-        let create capacity (context, cache) =
-            let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Events.codec, Fold.fold, Fold.initial, cacheStrategy, accessStrategy)
-            let resolveStream opt sn = cat.Resolve(sn, ?option = opt)
-            IngestionService.Create(capacity, resolveStream)
+    let private create_ capacity resolve =
+        // Accept whatever date is in the cache on the basis that we are doing most of the writing so will more often than not
+        // have the correct state already without a roundtrip. What if the data is actually stale? we'll end up needing to resync,
+        // but we we need to deal with that as a race condition anyway
+        IngestionService(capacity, resolve (Some Equinox.AllowStale))
+    let private resolveStream opt = function
+        | Config.Store.Memory store ->
+            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            fun sn -> cat.Resolve(sn, ?option = opt)
+        | Config.Store.Cosmos (context, cache) ->
+            let cat = Config.Category.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            fun sn -> cat.Resolve(sn, ?option = opt)
+    let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
+    let create capacity = resolveDecider >> create_ capacity
 
 /// Custom Fold and caching logic compared to the IngesterService
 /// - When reading, we want the full Items
@@ -126,28 +116,18 @@ module Reader =
     type Service internal (resolve : FcId * TicketsEpochId -> Equinox.Decider<Events.Event, State>) =
 
         /// Returns all the items currently held in the stream
-        member _.Read(fcid, epochId) : Async<StateDto> =
-            let decider = resolve (fcid, epochId)
+        member _.Read(fcId, epochId) : Async<StateDto> =
+            let decider = resolve (fcId, epochId)
             decider.Query(fun (items, closed) -> { closed = closed; tickets = items })
 
     module Config =
 
-        let private create resolveStream =
-            let resolve = streamName >> resolveStream >> Equinox.createDecider
-            Service resolve
-
-        module Memory =
-
-            let create store =
-                let cat = Equinox.MemoryStore.MemoryStoreCategory(store, Events.codec, fold, initial)
-                create cat.Resolve
-
-        module Cosmos =
-
-            open Equinox.CosmosStore
-
-            let accessStrategy = AccessStrategy.Unoptimized
-            let create (context, cache) =
-                let cacheStrategy = CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 1.)
-                let cat = CosmosStoreCategory(context, Events.codec, fold, initial, cacheStrategy, accessStrategy)
-                create cat.Resolve
+        let private resolveStream = function
+            | Config.Store.Memory store ->
+                let cat = Config.Category.createMemory Events.codec initial fold store
+                cat.Resolve
+            | Config.Store.Cosmos (context, cache) ->
+                let cat = Config.Category.createUnoptimized Events.codec initial fold (context, cache)
+                cat.Resolve
+        let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
+        let create = resolveDecider >> Service

@@ -2,6 +2,10 @@
 
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guid+strings
 
+module Guid =
+
+    let toStringN (g : System.Guid) = g.ToString "N"
+
 type [<Measure>] fcId
 type FcId = string<fcId>
 module FcId =
@@ -15,6 +19,7 @@ module TicketId =
     let toString (value : TicketId) : string = %value
     let parse (value : string) : TicketId = let raw = value in % raw
     let (|Parse|) = parse
+    let genForTest () = let g = System.Guid.NewGuid() in Guid.toStringN g |> parse
 
 (* Identifies an epoch of the series of streams bearing ticket references within our dataset *)
 

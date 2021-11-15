@@ -24,6 +24,7 @@ type Stats(log, statsInterval, stateInterval) =
         log.Information(exn, "Unhandled")
 
     override _.DumpStats() =
+        base.DumpStats()
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0
@@ -45,3 +46,10 @@ let handle
         | true -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Ok (1, span.events.Length - 1)
         | false -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Skipped span.events.Length
     | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.events.Length }
+
+module Config =
+
+    let createHandler store =
+        let srcService = Todo.Config.create store
+        let dstService = TodoSummary.Config.create store
+        handle srcService dstService

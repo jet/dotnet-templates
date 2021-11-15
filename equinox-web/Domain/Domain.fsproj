@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <WarningLevel>5</WarningLevel>
     <IsTestProject>false</IsTestProject>
     <DisableImplicitSystemValueTupleReference>true</DisableImplicitSystemValueTupleReference>
@@ -9,14 +9,19 @@
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
+    <Compile Include="Config.fs" />
 	<!--#if (aggregate)-->
 	<Compile Include="Aggregate.fs" />
 	<!--#endif-->
+    <!--#if (todos)-->
     <Compile Include="Todo.fs" />
+    <!--#endif-->
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox" Version="3.0.4" />
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.4" />
+    <PackageReference Include="Equinox.EventStore" Version="3.0.4" />
+    <PackageReference Include="Equinox.MemoryStore" Version="3.0.4" />
     <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.0.1" />
   </ItemGroup>
 

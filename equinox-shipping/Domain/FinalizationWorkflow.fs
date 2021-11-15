@@ -60,10 +60,8 @@ type Service
 
 module Config =
 
-    module Cosmos =
-
-        let create maxDop (context, cache) =
-            let transactions = Config.Cosmos.create (context, cache)
-            let containers = Container.Config.Cosmos.create (context, cache)
-            let shipments = Shipment.Config.Cosmos.create (context, cache)
-            Service(transactions, containers, shipments, maxDop=maxDop)
+    let create maxDop store =
+        let transactions = Config.create store
+        let containers = Container.Config.create store
+        let shipments = Shipment.Config.create store
+        Service(transactions, containers, shipments, maxDop=maxDop)
