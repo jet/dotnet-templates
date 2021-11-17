@@ -139,12 +139,12 @@ module Config =
 
     let private resolveStream opt = function
         | Config.Store.Memory store ->
-            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
             fun sn -> cat.Resolve(sn, ?option = opt)
         | Config.Store.Cosmos (context, cache) ->
             // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
             // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
-            let cat = Config.Category.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+            let cat = Config.Cosmos.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
             fun sn -> cat.Resolve(sn, ?option = opt)
     let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
     let create = resolveDecider >> Service

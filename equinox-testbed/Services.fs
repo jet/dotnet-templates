@@ -85,17 +85,17 @@ module Domain =
             let private resolveStream = function
 //#if memoryStore || (!cosmos && !eventStore)
                 | Config.Store.Memory store ->
-                    (Config.Category.createMemory Events.codec Fold.initial Fold.fold store).Resolve
+                    (Config.Memory.create Events.codec Fold.initial Fold.fold store).Resolve
 //#endif
 //#if cosmos
                 | Config.Store.Cosmos (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot snapshot else Equinox.CosmosStore.AccessStrategy.Unoptimized
-                    (Config.Category.createCosmos Events.codec Fold.initial Fold.fold caching accessStrategy context).Resolve
+                    (Config.Cosmos.create Events.codec Fold.initial Fold.fold caching accessStrategy context).Resolve
 //#endif
 //#if eventStore
                 | Config.Store.Esdb (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot |> Some else None
-                    (Config.Category.createEsdb Events.codec Fold.initial Fold.fold caching accessStrategy context).Resolve
+                    (Config.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context).Resolve
 //#endif
             let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
             let create = resolveDecider >> Service

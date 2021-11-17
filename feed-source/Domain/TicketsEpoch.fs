@@ -89,10 +89,10 @@ module Config =
         IngestionService(capacity, resolve (Some Equinox.AllowStale))
     let private resolveStream opt = function
         | Config.Store.Memory store ->
-            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
             fun sn -> cat.Resolve(sn, ?option = opt)
         | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Category.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
             fun sn -> cat.Resolve(sn, ?option = opt)
     let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
     let create capacity = resolveDecider >> create_ capacity
@@ -124,10 +124,10 @@ module Reader =
 
         let private resolveStream = function
             | Config.Store.Memory store ->
-                let cat = Config.Category.createMemory Events.codec initial fold store
+                let cat = Config.Memory.create Events.codec initial fold store
                 cat.Resolve
             | Config.Store.Cosmos (context, cache) ->
-                let cat = Config.Category.createUnoptimized Events.codec initial fold (context, cache)
+                let cat = Config.Cosmos.createUnoptimized Events.codec initial fold (context, cache)
                 cat.Resolve
         let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
         let create = resolveDecider >> Service

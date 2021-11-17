@@ -48,18 +48,18 @@ module Config =
     let private resolveStream = function
 #if (memoryStore || (!cosmos && !eventStore))
         | Config.Store.Memory store ->
-            let cat = Config.Category.createMemory Events.codec Fold.initial Fold.fold store
+            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
             cat.Resolve
 #endif
 //#endif
 //#if cosmos
         | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Category.createCosmosSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
             cat.Resolve
 //#endif
 //#if eventStore
         | Config.Store.Esdb (context, cache) ->
-            let cat = Config.Category.createEsdbSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            let cat = Config.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
             cat.Resolve
 //#endif
     let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider

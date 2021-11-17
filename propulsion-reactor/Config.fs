@@ -3,22 +3,24 @@ module ReactorTemplate.Config
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
 
-module Category =
+module Cosmos =
 
-    let private createCosmos codec initial fold accessStrategy (context, cache) =
+    let private createCached codec initial fold accessStrategy (context, cache) =
         let cacheStrategy = Equinox.CosmosStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.CosmosStore.CosmosStoreCategory(context, codec, fold, initial, cacheStrategy, accessStrategy)
 
-    let createCosmosSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.Snapshot (isOrigin, toSnapshot)
-        createCosmos codec initial fold accessStrategy (context, cache)
+        createCached codec initial fold accessStrategy (context, cache)
 
-    let createCosmosRollingState codec initial fold toSnapshot (context, cache) =
+    let createRollingState codec initial fold toSnapshot (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.RollingState toSnapshot
-        createCosmos codec initial fold accessStrategy (context, cache)
+        createCached codec initial fold accessStrategy (context, cache)
 
 //#if multiSource
-    let createEsdb codec initial fold (context, cache) =
+module Esdb =
+
+    let create codec initial fold (context, cache) =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.EventStore.Resolver(context, codec, fold, initial, cacheStrategy)
 

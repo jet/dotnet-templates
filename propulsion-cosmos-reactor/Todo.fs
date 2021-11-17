@@ -64,7 +64,7 @@ module Config =
 
     let private resolveStream = function
         | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Category.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
             cat.Resolve
     let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
     let create = resolveDecider >> Service

@@ -53,11 +53,11 @@ module Config =
 
     let private resolveStream = function
         | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Category.createCosmosRollingState Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
+            let cat = Config.Cosmos.createRollingState Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
             cat.Resolve
 //#if multiSource
         | Config.Store.Esdb (context, cache) ->
-            let cat = Config.Category.createEsdb Events.codec Fold.initial Fold.fold (context, cache)
+            let cat = Config.Esdb.create Events.codec Fold.initial Fold.fold (context, cache)
             cat.Resolve
 //#endif
     let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
