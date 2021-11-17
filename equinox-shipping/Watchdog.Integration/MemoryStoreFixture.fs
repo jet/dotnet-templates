@@ -2,8 +2,23 @@ namespace Shipping.Watchdog.Integration
 
 module MemoryStoreLogger =
 
+    let private propEvents name (kvps : System.Collections.Generic.KeyValuePair<string,string> seq) (log : Serilog.ILogger) =
+        let items = seq { for kv in kvps do yield sprintf "{\"%s\": %s}" kv.Key kv.Value }
+        log.ForContext(name, sprintf "[%s]" (String.concat ",\n\r" items))
+
+    let private propEventJsonUtf8 name (events : Propulsion.Streams.StreamEvent<byte[]> array) (log : Serilog.ILogger) =
+        log |> propEvents name (seq {
+            for { event = e } in events do
+                match e.Data with
+                | null -> ()
+                | d -> System.Collections.Generic.KeyValuePair<_,_>(e.EventType, System.Text.Encoding.UTF8.GetString d) })
+
     let renderSubmit (log : Serilog.ILogger) (epoch, stream, events : Propulsion.Streams.StreamEvent<'F> array) =
         if log.IsEnabled Serilog.Events.LogEventLevel.Verbose then
+            let log =
+                if (not << log.IsEnabled) Serilog.Events.LogEventLevel.Debug then log
+                elif typedefof<'F> <> typeof<byte[]> then log
+                else log |> propEventJsonUtf8 "Json" (unbox events)
             let types = seq { for x in events -> x.event.EventType }
             log.ForContext("types", types).Debug("Submit #{epoch} {stream}x{count}", epoch, stream, events.Length)
         elif log.IsEnabled Serilog.Events.LogEventLevel.Debug then
