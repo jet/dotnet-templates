@@ -15,6 +15,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - Remove usage of `type Command` DUs [#103](https://github.com/jet/dotnet-templates/pull/103)
+- Target `Equinox` v `3.0.5`
 
 ### Removed
 ### Fixed

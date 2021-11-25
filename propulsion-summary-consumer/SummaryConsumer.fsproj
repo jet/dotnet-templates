@@ -18,7 +18,7 @@
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
     <PackageReference Include="Destructurama.FSharp" Version="1.2.0" />
-    <PackageReference Include="Equinox.CosmosStore" Version="3.0.4" />
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.5" />
     <PackageReference Include="Propulsion.Kafka" Version="2.11.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.0" />
   </ItemGroup>
