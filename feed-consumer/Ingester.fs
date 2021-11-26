@@ -42,6 +42,8 @@ module PipelineEvent =
 let handle maxDop (stream, span) = async {
     match stream, span with
     | PipelineEvent.ItemsForFc (fc, items) ->
+        // Take chunks of max 1000 in order to make handler latency be less 'lumpy'
+        // What makes sense in terms of a good chunking size will vary depending on the workload in question
         let ticketIds = seq { for x in items -> x.id } |> Seq.truncate 1000 |> Seq.toArray
         let maybeAccept = Seq.distinct ticketIds |> Seq.mapi (fun i _x -> async {
             do! Async.Sleep(TimeSpan.FromSeconds 1.)
