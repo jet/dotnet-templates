@@ -1,14 +1,6 @@
 module ReactorTemplate.Reactor
 
-[<RequireQualifiedAccess>]
-type Outcome =
-    /// Handler processed the span, with counts of used vs unused known event types
-    | Ok of used : int * unused : int
-    /// Handler processed the span, but idempotency checks resulted in no writes being applied; includes count of decoded events
-    | Skipped of count : int
-    /// Handler determined the events were not relevant to its duties and performed no actions
-    /// e.g. wrong category, events that dont imply a state change
-    | NotApplicable of count : int
+type Outcome = Metrics.Outcome
 
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
 type Stats(log, statsInterval, stateInterval) =
@@ -16,7 +8,9 @@ type Stats(log, statsInterval, stateInterval) =
 
     let mutable ok, skipped, na = 0, 0, 0
 
-    override _.HandleOk res = res |> function
+    override _.HandleOk res =
+        Metrics.observeReactorOutcome res
+        match res with
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
