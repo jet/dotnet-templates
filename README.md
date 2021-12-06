@@ -89,6 +89,8 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
     - For applications where the reactions using the same Container, credentials etc as the one being Monitored by the change feed processor (simpler config wiring and less argument processing)
 
+    - includes full wiring for Prometheus metrics emission from the Handler outcomes
+
 <a name="eqxShipping"></a>
 - [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey).
  

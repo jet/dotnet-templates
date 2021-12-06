@@ -11,6 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - Use `module Config` pattern [#104](https://github.com/jet/dotnet-templates/pull/104)
+- `proReactorCosmos`: Add `ReactorMetrics` [#106](https://github.com/jet/dotnet-templates/pull/106)
 
 ### Changed
 
