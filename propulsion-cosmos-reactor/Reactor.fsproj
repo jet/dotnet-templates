@@ -13,6 +13,7 @@
         <Compile Include="Todo.fs" />
         <Compile Include="Contract.fs" />
         <Compile Include="TodoSummary.fs" />
+        <Compile Include="ReactorMetrics.fs" />
         <Compile Include="Reactor.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
