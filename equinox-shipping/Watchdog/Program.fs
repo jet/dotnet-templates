@@ -131,8 +131,7 @@ let build (args : Args.Arguments) =
 
 let run args = async {
     let sink, pipeline = build args
-    pipeline |> Async.Start
-    return! sink.AwaitWithStopOnCancellation()
+    return! Async.Parallel [ pipeline; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
 }
 
 [<EntryPoint>]

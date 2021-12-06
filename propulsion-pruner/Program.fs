@@ -189,9 +189,8 @@ let startMetricsServer port : IDisposable =
 let run args = async {
     let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
     let sink, pipeline = build (args, log)
-    pipeline |> Async.Start
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    do! sink.AwaitWithStopOnCancellation()
+    return! Async.Parallel [ pipeline; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
 }
 
 [<EntryPoint>]

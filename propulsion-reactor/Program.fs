@@ -641,11 +641,11 @@ let build (args : Args.Arguments) =
 let run args = async {
 #if (!kafkaEventSpans)
     let sink, pipeline = build args
-    pipeline |> Async.Start
+    return! Async.Parallel [ pipeline; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
 #else
     let sink = build args
-#endif
     return! sink.AwaitWithStopOnCancellation()
+#endif
 }
 
 [<EntryPoint>]

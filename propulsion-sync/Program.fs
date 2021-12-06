@@ -566,8 +566,7 @@ let build (args : Args.Arguments, log) =
 let run args = async {
     let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
     let sink, pipeline = build (args, log)
-    pipeline |> Async.Start
-    return! sink.AwaitWithStopOnCancellation()
+    return! Async.Parallel [ pipeline; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
 }
 
 [<EntryPoint>]

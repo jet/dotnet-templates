@@ -16,7 +16,7 @@
     <PackageReference Include="Argu" Version="6.1.1" />
     <PackageReference Include="Destructurama.FSharp" Version="1.2.0" />
     <PackageReference Include="Propulsion.EventStore" Version="2.10.0" />
-    <PackageReference Include="Propulsion.CosmosStore" Version="2.11.0" />
+    <PackageReference Include="Propulsion.CosmosStore" Version="2.12.0-rc.1" />
     <!--#if (kafka)-->
     <PackageReference Include="Propulsion.Kafka" Version="2.10.0" />
     <!--#endif-->
