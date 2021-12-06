@@ -327,9 +327,6 @@ module Args =
 #endif
 //#if sss
         member val SqlStreamStore =         SqlStreamStoreSourceArguments(c, a.GetResult SqlMs)
-        member x.BuildSqlStreamStoreParams() =
-            let src = x.SqlStreamStore
-            src, (src.MaxBatchSize, src.TailInterval)
 //#endif
 //#if kafka
         member val Target =                 TargetInfo (c, a)
@@ -410,7 +407,7 @@ let build (args : Args.Arguments) =
             maxReadAhead, args.StatsInterval)
 #endif // esdb
 //#if sss
-    let srcSql, (maxBatchSize, tailInterval) = args.BuildSqlStreamStoreParams()
+    let srcSql = args.SqlStreamStore
 
     let monitored = srcSql.Connect()
 
@@ -426,13 +423,13 @@ let build (args : Args.Arguments) =
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // sss && !kafka
-    let checkpointEventInterval = TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint; relevant for Cosmos
-    let sourceId = Propulsion.Feed.SourceId.parse "default" // (was hardwired as '$all' prior to v 2.12.0)
     let pumpSource =
+        let sourceId = Propulsion.Feed.SourceId.parse "default" // (was hardwired as '$all' prior to v 2.12.0)
+        let checkpointEventInterval = TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint; relevant for Cosmos
         let source =
             Propulsion.SqlStreamStore.SqlStreamStoreSource
                 (   Log.Logger, args.StatsInterval,
-                    sourceId, maxBatchSize, tailInterval,
+                    sourceId, srcSql.MaxBatchSize, srcSql.TailInterval,
                     checkpoints, checkpointEventInterval,
                     monitored, sink)
         source.Pump(args.ProcessorName)
