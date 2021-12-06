@@ -12,6 +12,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 - Use `module Config` pattern [#104](https://github.com/jet/dotnet-templates/pull/104)
 - `proReactorCosmos`: Add `ReactorMetrics` [#106](https://github.com/jet/dotnet-templates/pull/106)
+- `MemoryStoreProjector`: Add logging of UTF-8 encoded JSON bodies in [#105](https://github.com/jet/dotnet-templates/pull/105)
 
 ### Changed
 

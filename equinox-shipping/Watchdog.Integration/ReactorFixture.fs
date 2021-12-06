@@ -28,8 +28,9 @@ type MemoryReactorFixture(testOutput) =
     /// Waits until all <c>Submit</c>ted batches have been fed into the <c>inner</c> Projector
     member _.AwaitWithStopOnCancellation() = projector.AwaitWithStopOnCancellation()
 
-    /// Stops the projector, emitting the final stats to the log
     interface IDisposable with
+
+        /// Stops the projector, emitting the final stats to the log
         member _.Dispose() =
             (store :> IDisposable).Dispose()
             projectorStoreSubscription.Dispose()
