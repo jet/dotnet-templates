@@ -3,6 +3,11 @@ services:
     build: ./prometheus
     ports:
       - "9090:9090"
+    volumes:
+        - type: bind
+          source: ./config
+          target: /var/lib/prometheus
+          read_only: true
   grafana:
     build: ./grafana
     ports:
