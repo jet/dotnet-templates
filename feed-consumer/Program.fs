@@ -59,6 +59,7 @@ module Args =
             | Some (Cosmos cosmos) -> CosmosArguments(c, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos")
     and [<NoEquality; NoComparison>] CosmosParameters =
+        | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-cm">]          ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
@@ -68,6 +69,7 @@ module Args =
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member a.Usage = a |> function
+                | Verbose _ ->              "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
@@ -84,6 +86,7 @@ module Args =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
         let database =                      a.TryGetResult Database     |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     a.TryGetResult Container    |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Verbose =                a.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -118,22 +121,11 @@ let run args = async {
     return if sink.RanToCompletion then 0 else 3
 }
 
-[<System.Runtime.CompilerServices.Extension>]
-type Logging() =
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
-        configuration
-            .Destructure.FSharpTypes()
-            .Enrich.FromLogContext()
-        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
-                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
-
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
+        try let metrics = Sinks.equinoxAndPropulsionFeedConsumerMetrics (Sinks.tags AppName) args.SourceId
+            Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Cosmos.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
