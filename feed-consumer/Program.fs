@@ -45,7 +45,7 @@ module Args =
                 | Cosmos _ ->               "Cosmos Store parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
-        member val Group =                  a.TryGetResult Group        |> Option.defaultWith (fun () -> c.Group)
+        member val SourceId =               a.TryGetResult Group        |> Option.defaultWith (fun () -> c.Group) |> Propulsion.Feed.SourceId.parse
         member val BaseUri =                a.TryGetResult BaseUri      |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
         member val MaxReadAhead =           a.GetResult(MaxReadAhead,8)
         member val FcsDop =                 a.TryGetResult FcsDop       |> Option.defaultValue 4
@@ -53,6 +53,7 @@ module Args =
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val CheckpointInterval =     TimeSpan.FromHours 1.
+        member val TailSleepInterval =      TimeSpan.FromSeconds 1.
         member val Cosmos : CosmosArguments =
             match a.TryGetSubCommand() with
             | Some (Cosmos cosmos) -> CosmosArguments(c, cosmos)
@@ -102,12 +103,11 @@ let build (args : Args.Arguments) =
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
     let pumpSource =
-        let sourceId, tailSleepInterval = Propulsion.Feed.SourceId.parse args.Group, TimeSpan.FromSeconds 1.
         let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri
         let source =
             Propulsion.Feed.FeedSource(
-                Log.Logger, args.StatsInterval, sourceId, tailSleepInterval,
+                Log.Logger, args.StatsInterval, args.SourceId, args.TailSleepInterval,
                 checkpoints, args.CheckpointInterval, feed.Poll, sink)
         source.Pump feed.ReadTranches
     sink, pumpSource

@@ -72,7 +72,7 @@ module Cosmos =
         let storeClient = info.Connect() |> Async.RunSynchronously
         let cacheStrategy =
             if cache then
-                let c = Equinox.Cache("TestbedTemplate", sizeMb=50)
+                let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else CachingStrategy.NoCaching
         Config.Store.Cosmos (createContext storeClient maxItems, cacheStrategy, unfolds)
@@ -133,7 +133,7 @@ module EventStore =
         let conn = connect storeLog (a.Host, heartbeatTimeout, concurrentOperationsLimit) a.Credentials operationThrottling |> Async.RunSynchronously
         let cacheStrategy =
             if cache then
-                let c = Equinox.Cache("TestbedTemplate", sizeMb=50)
+                let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
             else None
         Config.Store.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)

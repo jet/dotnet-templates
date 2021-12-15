@@ -394,7 +394,7 @@ let build (args : Args.Arguments) =
     let srcE, context, spec = args.BuildEventStoreParams()
 
     let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.Master)
-    let cache = Equinox.Cache(AppName, sizeMb=10)
+    let cache = Equinox.Cache(AppName, sizeMb = 10)
 
     let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
 

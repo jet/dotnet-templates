@@ -69,13 +69,13 @@ module Storage =
 //#endif
 //#if eventStore
         | Store.Esdb (host, user, pass, cache) ->
-            let cache = Equinox.Cache("ES", sizeMb=cache)
+            let cache = Equinox.Cache("ES", sizeMb = cache)
             let conn = ES.connect host user pass
             Config.Store.Esdb (conn, cache)
 //#endif
 //#if cosmos
         | Store.Cosmos (mode, connectionString, database, container, cache) ->
-            let cache = Equinox.Cache("Cosmos", sizeMb=cache)
+            let cache = Equinox.Cache("Cosmos", sizeMb = cache)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
             let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (timeout, retriesOn429Throttling, timeout)

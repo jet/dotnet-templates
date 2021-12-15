@@ -7,7 +7,7 @@ open System.Text
 
 module Config =
 
-    let log = Serilog.Log.ForContext("isMetric", true)
+    let log = Log.ForContext("isMetric", true)
 
 module EnvVar =
 

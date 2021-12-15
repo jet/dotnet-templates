@@ -498,7 +498,7 @@ let build (args : Args.Arguments) =
         let connectEs () = srcE.Connect(Log.Logger, Log.Logger, AppName, Equinox.EventStore.ConnectionStrategy.ClusterSingle Equinox.EventStore.NodePreference.Master)
         let connectProjEs () = srcE.ConnectProj(Log.Logger, Log.Logger, AppName, Equinox.EventStore.NodePreference.PreferSlave)
 
-        let cache = Equinox.Cache(AppName, sizeMb=10)
+        let cache = Equinox.Cache(AppName, sizeMb = 10)
 
         let checkpoints = Checkpoints.Cosmos.create spec.groupName (context, cache)
 #if kafka
@@ -512,7 +512,7 @@ let build (args : Args.Arguments) =
         let srcService =
             let esStore =
                 let esConn = connectEs ()
-                let srcCache = Equinox.Cache(AppName, sizeMb=10)
+                let srcCache = Equinox.Cache(AppName, sizeMb = 10)
                 Config.Store.Esdb (EventStoreContext.create esConn, srcCache)
             Todo.Config.create esStore
         let handle = Handler.handle srcService produceSummary
@@ -534,7 +534,7 @@ let build (args : Args.Arguments) =
         let srcService =
             let esStore =
                 let esConn = connectEs ()
-                let srcCache = Equinox.Cache(AppName, sizeMb=10)
+                let srcCache = Equinox.Cache(AppName, sizeMb = 10)
                 Config.Store.Esdb (EventStoreContext.create esConn, srcCache)
             Todo.Config.create esStore
         let dstService =
@@ -572,7 +572,7 @@ let build (args : Args.Arguments) =
 #if (!blank) //!kafka && !blank -> wire up a cosmos context to an ingester
         let cosmosStore =
             let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-            let cache = Equinox.Cache(AppName, sizeMb=10)
+            let cache = Equinox.Cache(AppName, sizeMb = 10)
             Config.Store.Cosmos (context, cache)
         let srcService = Todo.Config.create cosmosStore
         let dstService = TodoSummary.Config.create cosmosStore
@@ -595,7 +595,7 @@ let build (args : Args.Arguments) =
 #if blank
         let handle = Handler.handle produceSummary
 #else
-        let cache = Equinox.Cache(AppName, sizeMb=10)
+        let cache = Equinox.Cache(AppName, sizeMb = 10)
         let cosmosStore = Config.Store.Cosmos (context, cache)
         let service = Todo.Config.create cosmosStore
         let handle = Handler.handle service produceSummary

@@ -71,7 +71,7 @@ module Args =
             | _ -> raise (MissingArg "Must specify cosmos")
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<AltCommandLine "-m">]          ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
+        | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string

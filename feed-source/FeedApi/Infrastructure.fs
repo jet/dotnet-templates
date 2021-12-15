@@ -2,6 +2,7 @@
 module FeedSourceTemplate.Infrastructure
 
 open Serilog
+open System
 
 module EnvVar =
 

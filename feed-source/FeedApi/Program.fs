@@ -103,7 +103,7 @@ module CosmosStoreContext =
 let run (args : Args.Arguments) =
     let cosmos = args.Cosmos
     let context = cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-    let cache = Equinox.Cache(AppName, sizeMb=2)
+    let cache = Equinox.Cache(AppName, sizeMb = 2)
     let store = FeedSourceTemplate.Domain.Config.Store.Cosmos (context, cache)
 
     Hosting.createHostBuilder()
