@@ -35,6 +35,7 @@ module Args =
             | Some (Parameters.Cosmos cosmos) -> CosmosArguments(config, cosmos)
             | _ -> raise (MissingArg "Must specify cosmos")
     and [<NoEquality; NoComparison>] CosmosParameters =
+        | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-d">]           Database of string
@@ -43,8 +44,8 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
+            member a.Usage = a |> function
+                | Verbose _ ->              "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
@@ -61,6 +62,7 @@ module Args =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
         let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Verbose =                a.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
     /// Parse the commandline; can throw MissingArg or Argu.ArguParseException in response to missing arguments and/or `-h`/`--help` args
@@ -115,7 +117,8 @@ let run (args : Args.Arguments) =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
+        try let metrics = Sinks.equinoxMetricsOnly (Sinks.tags AppName)
+            Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Cosmos.Verbose).CreateLogger()
             try run args; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

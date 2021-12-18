@@ -67,8 +67,6 @@ type Logging() =
             .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
-                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}")
 
     [<System.Runtime.CompilerServices.Extension>]
     static member private Sinks(configuration : LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =

@@ -4,6 +4,7 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
+open Prometheus
 open Serilog
 
 type Startup() =
@@ -22,20 +23,8 @@ type Startup() =
 
         app.UseEndpoints(fun endpoints ->
             endpoints.MapControllers() |> ignore
+            endpoints.MapMetrics() |> ignore // Host /metrics for Prometheus
             ) |> ignore
-
-[<System.Runtime.CompilerServices.Extension>]
-type Logging() =
-
-    [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(c : LoggerConfiguration, ?verbose) =
-        c
-            .Enrich.FromLogContext()
-            .Destructure.FSharpTypes()
-            .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
-        |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-        |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
-                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
 
 module Hosting =
 
