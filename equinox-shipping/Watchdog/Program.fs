@@ -123,16 +123,18 @@ let build (args : Args.Arguments) =
         let processManager = Shipping.Domain.FinalizationWorkflow.Config.create args.ProcessManagerMaxDop storeCfg
         let stats = Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
         startWatchdog Log.Logger (args.ProcessingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Pump
-    let pipeline =
-        use observer = CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect Handler.transformOrFilter)
+    let source =
+        let observer = CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect Handler.transformOrFilter)
         let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
-        CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
-    sink, pipeline
+        CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+    sink, source
 
-let run args = async {
-    let sink, pipeline = build args
-    return! Async.Parallel [ pipeline; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
-}
+open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+
+let run args =
+    let sink, source = build args
+    [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
+    |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]
 let main argv =

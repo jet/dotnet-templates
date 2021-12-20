@@ -362,6 +362,10 @@ module Checkpoints =
 //#endif // esdb
 let [<Literal>] AppName = "ProjectorTemplate"
 
+#if cosmos // cosmos
+open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+
+#endif
 let build (args : Args.Arguments) =
     let maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
 #if cosmos // cosmos
@@ -378,10 +382,11 @@ let build (args : Args.Arguments) =
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // cosmos && !kafka
-    let pumpSource =
-        use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
+    let source =
+        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
-        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+        Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+    [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
 #endif // cosmos
 #if esdb
     let srcE, context, spec = args.BuildEventStoreParams()
@@ -405,6 +410,7 @@ let build (args : Args.Arguments) =
         Propulsion.EventStore.EventStoreSource.Run(
             Log.Logger, sink, checkpoints, connectEs, spec, Handler.tryMapEvent filterByStreamName,
             maxReadAhead, args.StatsInterval)
+    [ pumpSource; sink.AwaitWithStopOnCancellation() ]
 #endif // esdb
 //#if sss
     let srcSql = args.SqlStreamStore
@@ -433,13 +439,11 @@ let build (args : Args.Arguments) =
                     checkpoints, checkpointEventInterval,
                     monitored, sink)
         source.Pump(args.ProcessorName)
+    [ pumpSource; sink.AwaitWithStopOnCancellation() ]
 //#endif // sss
-    sink, pumpSource
 
-let run args = async {
-    let sink, pumpSource = build args
-    return! Async.Parallel [ pumpSource; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
-}
+let run args =
+    build args |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]
 let main argv =

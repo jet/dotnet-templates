@@ -485,6 +485,8 @@ type Stats(log, statsInterval, stateInterval) =
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
+open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+
 let build (args : Args.Arguments, log) =
     let maybeDstCosmos, sink, streamFilter =
         match args.Sink with
@@ -525,15 +527,15 @@ let build (args : Args.Arguments, log) =
     match args.SourceParams() with
     | Choice1Of2 (monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->
 #if marveleqx
-        use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformV0 streamFilter))
+        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformV0 streamFilter))
 #else
-        use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
+        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
 #endif
-        let runPipeline =
-            Propulsion.CosmosStore.CosmosStoreSource.Run(
+        let source =
+            Propulsion.CosmosStore.CosmosStoreSource.Start(
                 Log.Logger, monitored, leases, processorName, observer, startFromTail,
                 ?maxItems=maxItems, lagReportFreq=lagFrequency)
-        sink, runPipeline
+        [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
     | Choice2Of2 (srcE, checkpointsContext, spec) ->
         match maybeDstCosmos with
         | None -> failwith "ES->ES checkpointing E_NOTIMPL"
@@ -561,13 +563,11 @@ let build (args : Args.Arguments, log) =
             EventStoreSource.Run(
                 log, sink, checkpoints, connect, spec, tryMapEvent streamFilter,
                 args.MaxReadAhead, args.StatsInterval)
-        sink, runPipeline
+        [ runPipeline; sink.AwaitWithStopOnCancellation() ]
 
-let run args = async {
+let run args =
     let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
-    let sink, pipeline = build (args, log)
-    return! Async.Parallel [ pipeline; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
-}
+    build (args, log) |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]
 let main argv =
