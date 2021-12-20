@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="5.2.0"></a>
+## [5.2.0] - 2021-10-20
+
+### Added
 
 - Use `module Config` pattern [#104](https://github.com/jet/dotnet-templates/pull/104)
 - `proReactorCosmos`: Add `ReactorMetrics` [#106](https://github.com/jet/dotnet-templates/pull/106)
@@ -20,9 +28,6 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - Remove usage of `type Command` DUs [#103](https://github.com/jet/dotnet-templates/pull/103)
 - Target `Equinox` v `3.0.5`, `Propulsion` v `2.12.0-rc.2`
 - Target `Destructurama.FSharp` v `1.2.0`, `Serilog.Sinks.Async` v `1.5.0`, `Serilog.Sinks.Console` v `4.0.0` [#101](https://github.com/jet/dotnet-templates/pull/101)
-
-### Removed
-### Fixed
 
 <a name="5.1.0"></a>
 ## [5.1.0] - 2021-10-19
@@ -537,7 +542,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.1.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.2.0...HEAD
+[5.2.0]: https://github.com/jet/dotnet-templates/compare/5.1.0...5.2.0
 [5.1.0]: https://github.com/jet/dotnet-templates/compare/5.0.0...5.1.0
 [5.0.0]: https://github.com/jet/dotnet-templates/compare/4.12.0...5.0.0
 [4.12.0]: https://github.com/jet/dotnet-templates/compare/4.11.0...4.12.0
