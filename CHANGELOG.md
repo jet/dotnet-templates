@@ -18,7 +18,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Changed
 
 - Remove usage of `type Command` DUs [#103](https://github.com/jet/dotnet-templates/pull/103)
-- Target `Equinox` v `3.0.5`
+- Target `Equinox` v `3.0.5`, `Propulsion` v `2.12.0-rc.2`
+- Target `Destructurama.FSharp` v `1.2.0`, `Serilog.Sinks.Async` v `1.5.0`, `Serilog.Sinks.Console` v `4.0.0` [#101](https://github.com/jet/dotnet-templates/pull/101)
 
 ### Removed
 ### Fixed

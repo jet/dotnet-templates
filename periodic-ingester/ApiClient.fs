@@ -32,5 +32,5 @@ type TicketsFeed(baseUri) =
     let tickets = TicketsClient(client)
 
     // TODO add retries - consumer loop will abort if this throws
-    member _.Crawl(): AsyncSeq<Propulsion.Feed.SourceItem[]> =
+    member _.Crawl(_trancheId): AsyncSeq<Propulsion.Feed.SourceItem[]> =
         tickets.Crawl()

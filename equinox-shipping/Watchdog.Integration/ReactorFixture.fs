@@ -13,7 +13,7 @@ type MemoryReactorFixture(testOutput) =
     let processManager = Shipping.Domain.FinalizationWorkflow.Config.create 4 store.Config
     let sink =
         let processingTimeout = TimeSpan.FromSeconds 1.
-        let maxReadAhead, maxConcurrentStreams = 1024, 4 // TODO make Int32.MaxValue work
+        let maxReadAhead, maxConcurrentStreams = Int32.MaxValue, 4
         Program.startWatchdog log (processingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Pump
     let projector = MemoryStoreProjector.Start(log, sink)
     let projectorStoreSubscription =

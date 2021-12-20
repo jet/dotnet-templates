@@ -173,11 +173,11 @@ let build (args : Args.Arguments, log : ILogger) =
         let context = target.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
         CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
-    let pipeline =
-        use observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
+    let source =
+        let observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
-        CosmosStoreSource.Run(log, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
-    deletingEventsSink, pipeline
+        CosmosStoreSource.Start(log, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+    deletingEventsSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
 let startMetricsServer port : IDisposable =
@@ -186,12 +186,13 @@ let startMetricsServer port : IDisposable =
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
     { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
 
+open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+
 let run args = async {
     let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
-    let sink, pipeline = build (args, log)
-    pipeline |> Async.Start
+    let sink, source = build (args, log)
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    do! sink.AwaitWithStopOnCancellation()
+    return! Async.Parallel [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
 }
 
 [<EntryPoint>]

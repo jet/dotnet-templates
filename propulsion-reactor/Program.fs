@@ -490,6 +490,11 @@ module EventStoreContext =
         Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
 
 //#endif
+
+#if (!kafkaEventSpans)
+open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+
+#endif
 let build (args : Args.Arguments) =
 #if (!kafkaEventSpans)
 //#if (!changeFeedOnly)
@@ -554,7 +559,7 @@ let build (args : Args.Arguments) =
             EventStoreSource.Run(
                 Log.Logger, sink, checkpoints, connectProjEs, spec, Handler.tryMapEvent filterByStreamName,
                 args.MaxReadAhead, args.StatsInterval)
-        sink, runPipeline
+        [ runPipeline; sink.AwaitWithStopOnCancellation() ]
     | Choice2Of2 (source, context, monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->
 //#endif // !changeFeedOnly
 #if changeFeedOnly
@@ -625,27 +630,26 @@ let build (args : Args.Arguments) =
         let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.MaxConcurrentStreams, handle, stats, args.StatsInterval)
 #endif
 
-        let mapToStreamItems docs : Propulsion.Streams.StreamEvent<_> seq =
-            // TODO: customize parsing to events if source is not an Equinox Container
-            docs
-            |> Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents
+        let source =
+            let mapToStreamItems docs : Propulsion.Streams.StreamEvent<_> seq =
+                // TODO: customize parsing to events if source is not an Equinox Container
+                docs
+                |> Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents
 #if filter
-            |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
+                |> Seq.filter (fun e -> e.stream |> FsCodec.StreamName.toString |> filterByStreamName)
 #endif
-        let pipeline =
-            use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
-            Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
-        sink, pipeline
+            let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, mapToStreamItems)
+            Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+        [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
 #endif // !kafkaEventSpans
 
 let run args = async {
 #if (!kafkaEventSpans)
-    let sink, pipeline = build args
-    pipeline |> Async.Start
+    return! Async.Parallel (build args) |> Async.Ignore<unit array>
 #else
     let sink = build args
-#endif
     return! sink.AwaitWithStopOnCancellation()
+#endif
 }
 
 [<EntryPoint>]

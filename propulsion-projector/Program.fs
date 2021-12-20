@@ -327,13 +327,6 @@ module Args =
 #endif
 //#if sss
         member val SqlStreamStore =         SqlStreamStoreSourceArguments(c, a.GetResult SqlMs)
-        member x.BuildSqlStreamStoreParams() =
-            let src = x.SqlStreamStore
-            let spec : Propulsion.SqlStreamStore.ReaderSpec =
-                {    consumerGroup          = x.ProcessorName
-                     maxBatchSize           = src.MaxBatchSize
-                     tailSleepInterval      = src.TailInterval }
-            src, spec
 //#endif
 //#if kafka
         member val Target =                 TargetInfo (c, a)
@@ -369,6 +362,10 @@ module Checkpoints =
 //#endif // esdb
 let [<Literal>] AppName = "ProjectorTemplate"
 
+#if cosmos // cosmos
+open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+
+#endif
 let build (args : Args.Arguments) =
     let maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
 #if cosmos // cosmos
@@ -385,10 +382,11 @@ let build (args : Args.Arguments) =
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // cosmos && !kafka
-    let pipeline =
-        use observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
+    let source =
+        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
-        Propulsion.CosmosStore.CosmosStoreSource.Run(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+        Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+    [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
 #endif // cosmos
 #if esdb
     let srcE, context, spec = args.BuildEventStoreParams()
@@ -407,19 +405,20 @@ let build (args : Args.Arguments) =
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // esdb && !kafka
-    let pipeline =
+    let pumpSource =
         let filterByStreamName _ = true // see `dotnet new proReactor --filter` for an example of how to rig filtering arguments
         Propulsion.EventStore.EventStoreSource.Run(
             Log.Logger, sink, checkpoints, connectEs, spec, Handler.tryMapEvent filterByStreamName,
             maxReadAhead, args.StatsInterval)
+    [ pumpSource; sink.AwaitWithStopOnCancellation() ]
 #endif // esdb
 //#if sss
-    let srcSql, spec = args.BuildSqlStreamStoreParams()
+    let srcSql = args.SqlStreamStore
 
     let monitored = srcSql.Connect()
 
     let connectionString = srcSql.BuildCheckpointsConnectionString()
-    let checkpointer = Propulsion.SqlStreamStore.SqlCheckpointer(connectionString)
+    let checkpoints = Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString)
 
 #if     kafka // sss && kafka
     let broker, topic = args.Target.BuildTargetParams()
@@ -430,15 +429,21 @@ let build (args : Args.Arguments) =
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // sss && !kafka
-    let pipeline = Propulsion.SqlStreamStore.SqlStreamStoreSource.Run(Log.Logger, monitored, checkpointer, spec, sink, args.StatsInterval)
+    let pumpSource =
+        let sourceId = Propulsion.Feed.SourceId.parse "default" // (was hardwired as '$all' prior to v 2.12.0)
+        let checkpointEventInterval = TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint; relevant for Cosmos
+        let source =
+            Propulsion.SqlStreamStore.SqlStreamStoreSource
+                (   Log.Logger, args.StatsInterval,
+                    sourceId, srcSql.MaxBatchSize, srcSql.TailInterval,
+                    checkpoints, checkpointEventInterval,
+                    monitored, sink)
+        source.Pump(args.ProcessorName)
+    [ pumpSource; sink.AwaitWithStopOnCancellation() ]
 //#endif // sss
-    sink, pipeline
 
-let run args = async {
-    let sink, pipeline = build args
-    pipeline |> Async.Start
-    do! sink.AwaitWithStopOnCancellation()
-}
+let run args =
+    build args |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]
 let main argv =
