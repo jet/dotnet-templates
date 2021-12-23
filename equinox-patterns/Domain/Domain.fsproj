@@ -10,10 +10,10 @@
     <Compile Include="Config.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Period.fs" />
-    <Compile Include="ListIngester.fs" />
+    <Compile Include="ListTip.fs" />
     <Compile Include="ListEpoch.fs" />
     <Compile Include="ListSeries.fs" />
-    <Compile Include="ListService.fs" />
+    <Compile Include="List.fs" />
   </ItemGroup>
 
   <ItemGroup>

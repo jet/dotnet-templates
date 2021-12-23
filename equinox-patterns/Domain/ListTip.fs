@@ -3,11 +3,11 @@
 /// - as `Epoch`s complete (have `Closed` events logged), we update the `active` Epoch in the Series to reference the new one
 /// The fact that each request walks forward from a given start point until it either gets to append (or encounters a prior insertion)
 ///   means we can guarantee the insertion/deduplication to be idempotent and insert exactly once per completed execution
-module Patterns.Domain.ListIngester
+module Patterns.Domain.ListTip
 
 open FSharp.UMX // %
 
-type Result<'req, 'res> = { accepted : 'res[]; closed : bool; residual : 'req[] }
+type IngestResult<'req, 'res> = { accepted : 'res[]; closed : bool; residual : 'req[] }
 
 /// Ensures any given item is only added to the series exactly once by virtue of the following protocol:
 /// 1. Caller obtains an origin epoch via ActiveIngestionEpochId, storing that alongside the source item
@@ -16,7 +16,7 @@ type Service<'req, 'res, 'outcome> internal
     (   log : Serilog.ILogger,
         readActiveEpoch : unit -> Async<ListEpochId>,
         markActiveEpoch : ListEpochId -> Async<unit>,
-        ingest : ListEpochId * 'req [] -> Async<Result<'req, 'res>>,
+        ingest : ListEpochId * 'req [] -> Async<IngestResult<'req, 'res>>,
         mapResults : 'res [] -> 'outcome seq,
         linger) =
 
