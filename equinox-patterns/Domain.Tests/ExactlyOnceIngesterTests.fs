@@ -35,13 +35,13 @@ let [<Property>] properties shouldUseSameSut (Gap gap) (initialEpochId, NonEmpty
 
     // Initialize with some items
     let initialSut = createSut store
-    let! initialResult = initialSut.IngestMany(initialEpochId, initialItems)
+    let! initialResult = initialSut.IngestItems(initialEpochId, initialItems)
     let initialExpected = initialItems
     test <@ set initialExpected = set initialResult @>
 
     // Add more, can be overlapping, adjacent
     let sut = if shouldUseSameSut then initialSut else createSut store
-    let! result = sut.IngestMany(nextEpochId, items)
+    let! result = sut.IngestItems(nextEpochId, items)
     let expected = items |> Seq.except initialExpected
 
     test <@ set expected = set result @> }
