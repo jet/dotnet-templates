@@ -85,6 +85,5 @@ type Service<[<Measure>]'id, 'req, 'res, 'outcome> internal
         | Some currentEpochId -> async { return currentEpochId }
         | None -> readActiveEpoch()
 
-let create linger (readIngestionEpoch, markIngestionEpoch) (apply, mapResult) =
-    let log = Serilog.Log.ForContext<Service<'id, 'req, 'res, 'outcome>>()
+let create log linger (readIngestionEpoch, markIngestionEpoch) (apply, mapResult) =
     Service<'id, 'req, 'res, 'outcome>(log, readIngestionEpoch, markIngestionEpoch, apply, mapResult, linger = linger)
