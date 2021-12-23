@@ -3,7 +3,7 @@
 /// - as `Epoch`s complete (have `Closed` events logged), we update the `active` Epoch in the Series to reference the new one
 /// The fact that each request walks forward from a given start point until it either gets to append (or encounters a prior insertion)
 ///   means we can guarantee the insertion/deduplication to be idempotent and insert exactly once per completed execution
-module Patterns.Domain.ListTip
+module Patterns.Domain.ExactlyOnceIngester
 
 open FSharp.UMX // %
 

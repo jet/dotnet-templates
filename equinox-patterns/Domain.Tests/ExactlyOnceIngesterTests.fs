@@ -31,7 +31,7 @@ let [<Property>] properties shouldUseSameSut (Gap gap) (initialEpochId, NonEmpty
     let store = Equinox.MemoryStore.VolatileStore() |> Config.Store.Memory
 
     let mutable nextEpochId = initialEpochId
-    for _ in 1 .. gap do nextEpochId <- ListTip.Internal.next nextEpochId
+    for _ in 1 .. gap do nextEpochId <- ExactlyOnceIngester.Internal.next nextEpochId
 
     // Initialize with some items
     let initialSut = createSut store

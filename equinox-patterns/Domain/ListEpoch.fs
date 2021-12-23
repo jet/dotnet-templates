@@ -41,7 +41,7 @@ let decide shouldClose candidateIds = function
                 let ingestEvent = Events.Ingested {| ids = news |}
                 news, if closing then [ ingestEvent ; Events.Closed ] else [ ingestEvent ]
         let _, closed = Fold.fold state events
-        let res : ListTip.IngestResult<_, _> = { accepted = added; closed = closed; residual = [||] }
+        let res : ExactlyOnceIngester.IngestResult<_, _> = { accepted = added; closed = closed; residual = [||] }
         res, events
     | currentIds, true ->
         { accepted = [||]; closed = true; residual = candidateIds |> Array.except currentIds (*|> Array.distinct*) }, []
@@ -55,7 +55,7 @@ type Service internal
 
     /// Ingest the supplied items. Yields relevant elements of the post-state to enable generation of stats
     /// and facilitate deduplication of incoming items in order to avoid null store round-trips where possible
-    member _.Ingest(epochId, items) : Async<ListTip.IngestResult<_, _>> =
+    member _.Ingest(epochId, items) : Async<ExactlyOnceIngester.IngestResult<_, _>> =
         let decider = resolveStale epochId
         /// NOTE decider which will initially transact against potentially stale cached state, which will trigger a
         /// resync if another writer has gotten in before us. This is a conscious decision in this instance; the bulk
