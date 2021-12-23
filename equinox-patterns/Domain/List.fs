@@ -7,12 +7,12 @@ type IngestionService internal (tip : ListTip.Service<_, _, _>) =
 
 module Config =
 
-    let create_ linger maxItemsPerEpoch store =
+    let createIngester_ linger maxItemsPerEpoch store =
         let series = ListSeries.Config.create store
         let epochs = ListEpoch.Config.create maxItemsPerEpoch store
         let tip = ListTip.create linger (series.ReadIngestionEpochId, series.MarkIngestionEpochId) (epochs.Ingest, Array.toSeq)
         IngestionService(tip)
-    let create store =
+    let createIngester store =
         let defaultLinger = System.TimeSpan.FromMilliseconds 200.
         let maxItemsPerEpoch = 10_000
-        create_ defaultLinger maxItemsPerEpoch store
+        createIngester_ defaultLinger maxItemsPerEpoch store
