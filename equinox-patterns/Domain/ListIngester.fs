@@ -2,8 +2,14 @@ module Patterns.Domain.ListIngester
 
 type Service internal (tip : ExactlyOnceIngester.Service<_, _, _, _>) =
 
-    member _.IngestItems(originEpochId, items : ItemId[]) =
+    /// Slot the item into the series of epochs.
+    /// Returns items that actually got added (i.e. may be empty if it was an idempotent retry).
+    member _.IngestItems(originEpochId, items : ItemId[]) : Async<seq<ItemId>>=
         tip.IngestMany(originEpochId, items)
+
+    /// Efficiently determine a valid ingestion origin epoch
+    member _.ActiveIngestionEpochId() =
+        tip.ActiveIngestionEpochId()
 
 module Config =
 
