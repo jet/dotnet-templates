@@ -1,6 +1,6 @@
 module Patterns.Domain.List
 
-type IngestionService internal (tip : ListTip.Service<_, _, _>) =
+type IngestionService internal (tip : ListTip.Service<_, _, _, _>) =
 
     member _.IngestItems(originEpochId, items : ItemId[]) =
         tip.IngestMany(originEpochId, items)

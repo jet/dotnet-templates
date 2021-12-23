@@ -9,22 +9,27 @@ open FSharp.UMX // %
 
 type IngestResult<'req, 'res> = { accepted : 'res[]; closed : bool; residual : 'req[] }
 
+module Internal =
+
+    let unknown<[<Measure>]'m> = UMX.tag -1
+    let next<[<Measure>]'m> (value : int<'m>) = UMX.tag<'m>(UMX.untag value + 1)
+
 /// Ensures any given item is only added to the series exactly once by virtue of the following protocol:
 /// 1. Caller obtains an origin epoch via ActiveIngestionEpochId, storing that alongside the source item
 /// 2. Caller deterministically obtains that origin epoch to supply to Ingest/TryIngest such that retries can be idempotent
-type Service<'req, 'res, 'outcome> internal
+type Service<[<Measure>]'id, 'req, 'res, 'outcome> internal
     (   log : Serilog.ILogger,
-        readActiveEpoch : unit -> Async<ListEpochId>,
-        markActiveEpoch : ListEpochId -> Async<unit>,
-        ingest : ListEpochId * 'req [] -> Async<IngestResult<'req, 'res>>,
+        readActiveEpoch : unit -> Async<int<'id>>,
+        markActiveEpoch : int<'id> -> Async<unit>,
+        ingest : int<'id> * 'req [] -> Async<IngestResult<'req, 'res>>,
         mapResults : 'res [] -> 'outcome seq,
         linger) =
 
-    let uninitializedSentinel : int = %ListEpochId.unknown
+    let uninitializedSentinel : int = %Internal.unknown
     let mutable currentEpochId_ = uninitializedSentinel
     let currentEpochId () = if currentEpochId_ <> uninitializedSentinel then Some %currentEpochId_ else None
 
-    let tryIngest (reqs : (ListEpochId * 'req)[][]) =
+    let tryIngest (reqs : (int<'id> * 'req)[][]) =
         let rec aux ingestedItems items = async {
             let epochId = items |> Array.minBy fst |> fst
             let epochItems, futureEpochItems = items |> Array.partition (fun (e, _ : 'req) -> e = epochId)
@@ -35,7 +40,7 @@ type Service<'req, 'res, 'outcome> internal
                 else Serilog.Events.LogEventLevel.Debug
             log.Write(logLevel, "Added {count}/{total} items to {epochId} Residual {residual} Future {future}",
                       res.accepted.Length, epochItems.Length, epochId, res.residual.Length, futureEpochItems.Length)
-            let nextEpochId = ListEpochId.next epochId
+            let nextEpochId = Internal.next epochId
             let pushedToNextEpoch = res.residual |> Array.map (fun x -> nextEpochId, x)
             match Array.append pushedToNextEpoch futureEpochItems with
             | [||] ->
@@ -75,11 +80,11 @@ type Service<'req, 'res, 'outcome> internal
     /// The fact that any Ingest call for a given item (or set of items) always commences from the same origin is key to exactly once insertion guarantee.
     /// Caller should first store this alongside the item in order to deterministically be able to start from the same origin in idempotent retry cases.
     /// Uses cached values as epoch transitions are rare, and caller needs to deal with the inherent race condition in any case
-    member _.ActiveIngestionEpochId() : Async<ListEpochId> =
+    member _.ActiveIngestionEpochId() : Async<int<'id>> =
         match currentEpochId () with
         | Some currentEpochId -> async { return currentEpochId }
         | None -> readActiveEpoch()
 
 let create linger (readIngestionEpoch, markIngestionEpoch) (apply, mapResult) =
-    let log = Serilog.Log.ForContext<Service<'req, 'res, 'outcome>>()
-    Service<'req, 'res, 'outcome>(log, readIngestionEpoch, markIngestionEpoch, apply, mapResult, linger = linger)
+    let log = Serilog.Log.ForContext<Service<'id, 'req, 'res, 'outcome>>()
+    Service<'id, 'req, 'res, 'outcome>(log, readIngestionEpoch, markIngestionEpoch, apply, mapResult, linger = linger)
