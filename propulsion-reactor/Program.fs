@@ -487,7 +487,7 @@ module Checkpoints =
 module EventStoreContext =
 
     let create connection =
-        Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
+        Equinox.EventStore.EventStoreContext(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
 
 //#endif
 
@@ -575,10 +575,11 @@ let build (args : Args.Arguments) =
 
 #if (!kafka)
 #if (!blank) //!kafka && !blank -> wire up a cosmos context to an ingester
-        let cosmosStore =
-            let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-            let cache = Equinox.Cache(AppName, sizeMb = 10)
-            Config.Store.Cosmos (context, cache)
+#if kafkaEventSpans
+        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+#endif // kafkaEventSpans
+        let cache = Equinox.Cache(AppName, sizeMb = 10)
+        let cosmosStore = Config.Store.Cosmos (context, cache)
         let srcService = Todo.Config.create cosmosStore
         let dstService = TodoSummary.Config.create cosmosStore
         let handle = Ingester.handle srcService dstService
@@ -643,14 +644,13 @@ let build (args : Args.Arguments) =
         [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
 #endif // !kafkaEventSpans
 
-let run args = async {
+let run args =
 #if (!kafkaEventSpans)
-    return! Async.Parallel (build args) |> Async.Ignore<unit array>
+    Async.Parallel (build args) |> Async.Ignore<unit array>
 #else
     let sink = build args
-    return! sink.AwaitWithStopOnCancellation()
+    sink.AwaitWithStopOnCancellation()
 #endif
-}
 
 [<EntryPoint>]
 let main argv =

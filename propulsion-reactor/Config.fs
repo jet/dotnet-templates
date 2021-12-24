@@ -22,12 +22,12 @@ module Esdb =
 
     let create codec initial fold (context, cache) =
         let cacheStrategy = Equinox.EventStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.EventStore.Resolver(context, codec, fold, initial, cacheStrategy)
+        Equinox.EventStore.EventStoreCategory(context, codec, fold, initial, cacheStrategy)
 
 //#endif
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Store =
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
 //#if multiSource
-    | Esdb of Equinox.EventStore.Context * Equinox.Core.ICache
+    | Esdb of Equinox.EventStore.EventStoreContext * Equinox.Core.ICache
 //#endif
