@@ -571,6 +571,7 @@ let build (args : Args.Arguments) =
             FsKafka.KafkaConsumerConfig.Create(
                 AppName, source.Broker, [source.Topic], args.ProcessorName, Confluent.Kafka.AutoOffsetReset.Earliest,
                 maxInFlightBytes = source.MaxInFlightBytes, ?statisticsInterval = source.LagFrequency)
+        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 #endif // kafkaEventSpans
 
 #if (!kafka)
