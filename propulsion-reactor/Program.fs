@@ -571,11 +571,13 @@ let build (args : Args.Arguments) =
             FsKafka.KafkaConsumerConfig.Create(
                 AppName, source.Broker, [source.Topic], args.ProcessorName, Confluent.Kafka.AutoOffsetReset.Earliest,
                 maxInFlightBytes = source.MaxInFlightBytes, ?statisticsInterval = source.LagFrequency)
-        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 #endif // kafkaEventSpans
 
 #if (!kafka)
 #if (!blank) //!kafka && !blank -> wire up a cosmos context to an ingester
+#if kafkaEventSpans
+        let context = source.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+#endif // kafkaEventSpans
         let cache = Equinox.Cache(AppName, sizeMb = 10)
         let cosmosStore = Config.Store.Cosmos (context, cache)
         let srcService = Todo.Config.create cosmosStore
