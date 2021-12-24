@@ -641,14 +641,13 @@ let build (args : Args.Arguments) =
         [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
 #endif // !kafkaEventSpans
 
-let run args = async {
+let run args =
 #if (!kafkaEventSpans)
-    return! Async.Parallel (build args) |> Async.Ignore<unit array>
+    Async.Parallel (build args) |> Async.Ignore<unit array>
 #else
     let sink = build args
-    return! sink.AwaitWithStopOnCancellation()
+    sink.AwaitWithStopOnCancellation()
 #endif
-}
 
 [<EntryPoint>]
 let main argv =
