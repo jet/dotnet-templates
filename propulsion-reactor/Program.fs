@@ -487,7 +487,7 @@ module Checkpoints =
 module EventStoreContext =
 
     let create connection =
-        Equinox.EventStore.Context(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
+        Equinox.EventStore.EventStoreContext(connection, Equinox.EventStore.BatchingPolicy(maxBatchSize=500))
 
 //#endif
 
