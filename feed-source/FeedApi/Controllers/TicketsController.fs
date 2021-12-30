@@ -7,11 +7,19 @@ open FeedSourceTemplate.Domain
 // TODO if you want to use Options etc in your Dto types here, you need to either apply https://github.com/jet/FsCodec/#aspnet-core-with-newtonsoftjson
 //      or target to STJ version >= 5 to have the default response rendering apply the correct conversions
 
-type TicketsTranchesDto = { activeEpochs : TrancheReferenceDto[] }
+type TranchesDto = { activeEpochs : TrancheReferenceDto[] }
  and TrancheReferenceDto = { fc : FcId; epochId : TicketsEpochId }
+
+module TranchesDto =
+
+    let private ofEpochDto (x : TicketsSeries.EpochDto) =
+        { fc = x.fc; epochId = x.ingestionEpochId }
+    let ofEpochDtos (x : TicketsSeries.EpochDto array) =
+        { activeEpochs = x |> Array.map ofEpochDto}
 
 type SliceDto = { closed : bool; tickets : ItemDto[]; position : TicketsCheckpoint; checkpoint : TicketsCheckpoint }
  and ItemDto = { id : TicketId; payload : string }
+
 module ItemDto =
 
     let ofDto (x : TicketsEpoch.Events.Item) : ItemDto =
@@ -36,9 +44,9 @@ type TicketsController(tickets : TicketsIngester.Service, series : TicketsSeries
     }
 
     [<HttpGet>]
-    member _.ListTranches() : Async<TicketsTranchesDto> = async {
+    member _.ListTranches() : Async<TranchesDto> = async {
         let! active = series.ReadIngestionEpochs()
-        return { activeEpochs = [| for x in active -> { fc = x.fc; epochId = x.ingestionEpochId } |]}
+        return TranchesDto.ofEpochDtos active
     }
 
     [<HttpGet; Route("{fcId}/{epoch}")>]

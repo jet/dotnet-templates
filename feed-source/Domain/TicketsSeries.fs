@@ -40,14 +40,14 @@ let interpret (fcId, epochId) (state : Fold.State) =
 
 type EpochDto = { fc : FcId; ingestionEpochId : TicketsEpochId }
 module EpochDto =
-    let ofState (s : Fold.State) = seq {
+    let ofState (s : Fold.State) = [|
         for x in s -> { fc = x.Key; ingestionEpochId = x.Value }
-    }
+    |]
 
 type Service internal (seriesId, resolve : TicketsSeriesId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Exposes the set of tranches for which data is held, enabling a consumer to crawl the full dataset
-    member _.ReadIngestionEpochs() : Async<EpochDto seq> =
+    member _.ReadIngestionEpochs() : Async<EpochDto array> =
         let decider = resolve seriesId
         decider.Query EpochDto.ofState
 
