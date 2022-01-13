@@ -22,11 +22,12 @@ Notes:
 
 Consists of:
 
+- `ExactlyOnceIngester`: Generic algorithm that manages efficient deterministic ingestion into a chain of epochs in a series
 - `ListEpoch`: Represents a span of activity during the life of the list. May be closed at an arbitrary point in time by any writer.
 - `ListSeries`: Records the identifier of the current active Epoch of the series.
-- `ListIngester`: Efficiently manages ingestion of items that must enter the List exactly once.
+- `ListIngester`: Uses an `ExactlyOnceIngester` to insert at the tail of a chain of `ListEpoch`s indexed by a `ListSeries`
 
-  This is accomplished by having each insertion logically:
+`ExactlyOnceIngester` accomplishes this by having each insertion logically:
   
   1. 'take a ticket':- grab the current epoch id from which we'll commence an attempt to insert into the list (the Ingester holds this memory for efficiency)
   2. Ensure this is stored at source in order to ensure that an idempotent reprocessing can _guarantee_ to traverse the epochs from the same starting point
