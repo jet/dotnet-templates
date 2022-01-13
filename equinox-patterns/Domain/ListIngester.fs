@@ -1,24 +1,24 @@
 module Patterns.Domain.ListIngester
 
-type Service internal (tip : ExactlyOnceIngester.Service<_, _, _, _>) =
+type Service internal (ingester : ExactlyOnceIngester.Service<_, _, _, _>) =
 
     /// Slot the item into the series of epochs.
     /// Returns items that actually got added (i.e. may be empty if it was an idempotent retry).
     member _.IngestItems(originEpochId, items : ItemId[]) : Async<seq<ItemId>>=
-        tip.IngestMany(originEpochId, items)
+        ingester.IngestMany(originEpochId, items)
 
     /// Efficiently determine a valid ingestion origin epoch
     member _.ActiveIngestionEpochId() =
-        tip.ActiveIngestionEpochId()
+        ingester.ActiveIngestionEpochId()
 
 module Config =
 
     let create_ linger maxItemsPerEpoch store =
+        let log = Serilog.Log.ForContext<Service>()
         let series = ListSeries.Config.create store
         let epochs = ListEpoch.Config.create maxItemsPerEpoch store
-        let log = Serilog.Log.ForContext<Service>()
-        let tip = ExactlyOnceIngester.create log linger (series.ReadIngestionEpochId, series.MarkIngestionEpochId) (epochs.Ingest, Array.toSeq)
-        Service(tip)
+        let ingester = ExactlyOnceIngester.create log linger (series.ReadIngestionEpochId, series.MarkIngestionEpochId) (epochs.Ingest, Array.toSeq)
+        Service(ingester)
     let create store =
         let defaultLinger = System.TimeSpan.FromMilliseconds 200.
         let maxItemsPerEpoch = 10_000
