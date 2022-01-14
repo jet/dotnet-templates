@@ -31,7 +31,7 @@ module Input =
         span.events |> Array.choose (EventCodec.tryDecode codec stream)
     let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId | _ -> None
     let (|Parse|_|) = function
-        | StreamName clientId, _ & Decode events -> Some (clientId, events)
+        | (StreamName clientId, _) & (Decode events) -> Some (clientId, events)
         | _ -> None
 
 type Data = { value : int }
