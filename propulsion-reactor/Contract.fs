@@ -25,13 +25,13 @@ module Input =
         | EventA of Value
         | EventB of Value
         interface TypeShape.UnionContract.IUnionContract
-    let private codec : FsCodec.IEventCodec<Event, _, _> = Config.EventCodec.withIndex<Events.Event>
+    let private codec : FsCodec.IEventCodec<_, _, _> = Config.EventCodec.withIndex<Event>
 
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
         span.events |> Array.choose (EventCodec.tryDecode codec stream)
     let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId | _ -> None
     let (|Parse|_|) = function
-        | (StreamName clientId, _) & (Decode events) -> Some (clientId, events)
+        | StreamName clientId, _ & Decode events -> Some (clientId, events)
         | _ -> None
 
 type Data = { value : int }
