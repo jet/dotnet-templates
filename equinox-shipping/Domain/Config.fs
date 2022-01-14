@@ -11,6 +11,7 @@ module EventCodec =
     let private defaultOptions = Options.Create(autoUnion = true)
     let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
         Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
+
 module Memory =
 
     let create codec initial fold store =

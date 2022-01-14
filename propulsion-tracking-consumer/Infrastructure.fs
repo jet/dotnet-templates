@@ -31,7 +31,7 @@ module EventCodec =
 
     open FsCodec.SystemTextJson
 
-    let private defaultOptions = Options.Create(autoUnion = true)
+    let private defaultOptions = Options.Create()
     let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
         Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
 
