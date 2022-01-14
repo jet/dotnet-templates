@@ -255,10 +255,11 @@ type HttpResponseMessage with
 
 module HttpRes =
 
-    /// Deserialize body using default Json.Net profile - throw with content details if StatusCode is unexpected or decoding fails
-    let deserializeExpectedJsonNet<'t> expectedStatusCode (res : HttpResponseMessage) =
-        res.Interpret(expectedStatusCode, FsCodec.NewtonsoftJson.Serdes.Deserialize<'t>)
+    let private serdes = FsCodec.SystemTextJson.Options.Create() |> FsCodec.SystemTextJson.Serdes
+    /// Deserialize body using default System.Text.Json profile - throw with content details if StatusCode is unexpected or decoding fails
+    let deserializeExpectedStj<'t> expectedStatusCode (res : HttpResponseMessage) =
+        res.Interpret(expectedStatusCode, serdes.Deserialize<'t>)
 
-    /// Deserialize body using default Json.Net profile - throw with content details if StatusCode is not OK or decoding fails
-    let deserializeOkJsonNet<'t> =
-        deserializeExpectedJsonNet<'t> HttpStatusCode.OK
+    /// Deserialize body using default System.Text.Json profile - throw with content details if StatusCode is not OK or decoding fails
+    let deserializeOkStj<'t> =
+        deserializeExpectedStj<'t> HttpStatusCode.OK

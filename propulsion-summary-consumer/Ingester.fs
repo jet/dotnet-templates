@@ -17,11 +17,8 @@ module Contract =
         | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
     type VersionAndMessage = int64*Message
-    let codec =
-        // We also want the index (which is the Version of the Summary) whenever we're handling an event
-        let up (encoded : FsCodec.ITimelineEvent<_>, message) : VersionAndMessage = encoded.Index, message
-        let down _union = failwith "Not Implemented"
-        FsCodec.NewtonsoftJson.Codec.Create<VersionAndMessage, Message, (*'Meta*)obj>(up, down)
+    // We also want the index (which is the Version of the Summary) whenever we're handling an event
+    let private codec : FsCodec.IEventCodec<VersionAndMessage, _, _> = Config.EventCodec.withIndex<Message>
     let (|DecodeNewest|_|) (stream, span : Propulsion.Streams.StreamSpan<_>) : VersionAndMessage option =
         span.events |> Seq.rev |> Seq.tryPick (EventCodec.tryDecode codec stream)
     let (|StreamName|_|) = function

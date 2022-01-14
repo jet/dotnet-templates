@@ -3,6 +3,14 @@ module TodoBackendTemplate.Config
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
 
+module EventCodec =
+
+    open FsCodec.SystemTextJson
+
+    let private defaultOptions = Options.Create()
+    let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
+        Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
+
 #if (memoryStore || (!cosmos && !eventStore))
 module Memory =
 

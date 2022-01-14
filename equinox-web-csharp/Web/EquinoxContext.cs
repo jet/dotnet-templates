@@ -1,8 +1,9 @@
 using Microsoft.FSharp.Core;
-using Newtonsoft.Json;
+using System.Text.Json;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using FsCodec.SystemTextJson;
 
 namespace TodoBackendTemplate
 {
@@ -30,7 +31,7 @@ namespace TodoBackendTemplate
             FSharpOption<TEvent> TryDecodeImpl(Tuple<string, byte[]> encoded) => OptionModule.OfObj(tryDecode(encoded.Item1, encoded.Item2));
         }
 
-        public static FsCodec.IEventCodec<TEvent, byte[], object> Create<TEvent>(JsonSerializerSettings settings = null) where TEvent: TypeShape.UnionContract.IUnionContract =>
-            FsCodec.NewtonsoftJson.Codec.Create<TEvent>(settings);
+        public static FsCodec.IEventCodec<TEvent, byte[], object> Create<TEvent>(JsonSerializerOptions options = null) where TEvent: TypeShape.UnionContract.IUnionContract =>
+            FsCodec.SystemTextJson.Codec.Create<TEvent>(options).ToByteArrayCodec();
     }
 }

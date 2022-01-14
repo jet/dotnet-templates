@@ -53,9 +53,10 @@ let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
 #if     (cosmos && parallelOnly) // kafka && cosmos && parallelOnly
 type ExampleOutput = { id : string }
 
+let serdes = FsCodec.SystemTextJson.Options.Create() |> FsCodec.SystemTextJson.Serdes
 let render (doc : Newtonsoft.Json.Linq.JObject) : string * string =
     let equinoxPartition, itemId = doc.Value<string>("p"), doc.Value<string>("id")
-    equinoxPartition, FsCodec.NewtonsoftJson.Serdes.Serialize { id = itemId }
+    equinoxPartition, serdes.Serialize { id = itemId }
 #else // kafka && !(cosmos && parallelOnly)
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
 // The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls

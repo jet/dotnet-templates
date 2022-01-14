@@ -18,7 +18,7 @@ module Events =
         | Cleared       of ClearedData
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
-    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let codec = Config.EventCodec.create<Event>()
 
 module Reactions =
 

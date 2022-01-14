@@ -5,6 +5,14 @@ open Serilog
 open System
 open System.Threading.Tasks
 
+module EventCodec =
+
+    open FsCodec.SystemTextJson
+
+    let private defaultOptions = Options.Create()
+    let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
+        Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
+
 module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj

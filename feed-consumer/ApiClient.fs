@@ -43,20 +43,20 @@ type TicketsClient(session: Session) =
     member _.ActiveFcs() : Async<FcId[]> = async {
         let request = HttpReq.get () |> HttpReq.withPath basePath
         let! response = session.Send request
-        let! body = response |> HttpRes.deserializeOkJsonNet<TicketsTranchesDto>
+        let! body = response |> HttpRes.deserializeOkStj<TicketsTranchesDto>
         return [| for f in body.activeEpochs -> f.fc |]
     }
 
     member _.ReadPage(fc : FcId, index : int) : Async<SliceDto> = async {
         let request = HttpReq.post () |> HttpReq.withPathf "%s/%O/%d" basePath fc index
         let! response = session.Send request
-        return! response |> HttpRes.deserializeOkJsonNet<SliceDto>
+        return! response |> HttpRes.deserializeOkStj<SliceDto>
     }
 
     member _.Poll(fc : FcId, checkpoint: TicketsCheckpoint) : Async<SliceDto> = async {
         let request = HttpReq.create () |> HttpReq.withPathf "%s/%O/slice/%O" basePath fc checkpoint
         let! response = session.Send request
-        return! response |> HttpRes.deserializeOkJsonNet<SliceDto>
+        return! response |> HttpRes.deserializeOkStj<SliceDto>
     }
 
 type Session with

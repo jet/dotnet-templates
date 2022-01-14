@@ -1,6 +1,14 @@
 [<AutoOpen>]
 module Patterns.Domain.Infrastructure
 
+module EventCodec =
+
+    open FsCodec.SystemTextJson
+
+    let private defaultOptions = Options.Create()
+    let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
+        Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
+
 /// Buffers events accumulated from a series of decisions while evolving the presented `state` to reflect said proposed `Events`
 type Accumulator<'e, 's>(originState : 's, fold : 's -> seq<'e> -> 's) =
     let mutable state = originState
