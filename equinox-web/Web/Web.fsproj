@@ -15,9 +15,7 @@
     <PackageReference Include="prometheus-net.AspNetCore" Version="3.6.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="3.2.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.0" />
-    <!-- until FsCodec.SystemTextJson is feature complete see https://github.com/jet/FsCodec/pull/59 -->
-    <PackageReference Include="FsCodec.NewtonsoftJson" Version="2.2.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="3.1.3" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.0" />
   </ItemGroup>
 
   <ItemGroup>

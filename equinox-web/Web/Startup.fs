@@ -100,15 +100,14 @@ module Services =
 /// Defines the Hosting configuration, including registration of the store and backend services
 type Startup() =
 
-        // This method gets called by the runtime. Use this method to add services to the container.
+    // This method gets called by the runtime. Use this method to add services to the container.
     member _.ConfigureServices(services: IServiceCollection) : unit =
         services
             .AddMvc()
             .SetCompatibilityVersion(CompatibilityVersion.Latest)
-            // While FsCodec.SystemTextJson is available and works well, until FsCodec.SystemTextJson has a UnionConverter https://github.com/jet/FsCodec/pull/59, use JSON.NET
-            .AddNewtonsoftJson(fun options ->
-                FsCodec.NewtonsoftJson.Serdes.DefaultSettings.Converters
-                |> Seq.iter options.SerializerSettings.Converters.Add
+            .AddJsonOptions(fun options ->
+                FsCodec.SystemTextJson.Options.Create().Converters
+                |> Seq.iter options.JsonSerializerOptions.Converters.Add
             ) |> ignore
 
 //#if (cosmos || eventStore)

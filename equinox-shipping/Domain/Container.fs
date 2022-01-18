@@ -10,8 +10,7 @@ module Events =
         | Finalized   of {| shipmentIds : ShipmentId[] |}
         | Snapshotted of {| shipmentIds : ShipmentId[] |}
         interface TypeShape.UnionContract.IUnionContract
-
-    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let codec = Config.EventCodec.create<Event>()
 
 module Fold =
 

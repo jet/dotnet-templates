@@ -19,7 +19,7 @@ module Events =
         | Snapshotted           of {| state : State |}
         interface TypeShape.UnionContract.IUnionContract
 
-    and [<Newtonsoft.Json.JsonConverter(typeof<FsCodec.NewtonsoftJson.UnionConverter>)>]
+    and // covered by autoUnion: [<System.Text.Json.Serialization.JsonConverter(typeof<FsCodec.SystemTextJson.UnionConverter<State>>)>]
         State =
         | Initial
         | Reserving of {| container : ContainerId; shipments : ShipmentId[] |}
@@ -27,8 +27,7 @@ module Events =
         | Assigning of {| container : ContainerId; shipments : ShipmentId[] |}
         | Assigned  of {| container : ContainerId; shipments : ShipmentId[] |}
         | Completed of {| success : bool |}
-
-    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let codec = Config.EventCodec.create<Event>()
 
 module Reactions =
 

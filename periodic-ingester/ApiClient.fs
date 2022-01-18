@@ -19,7 +19,7 @@ type TicketsClient(client : HttpClient) =
     member _.Crawl() : AsyncSeq<Propulsion.Feed.SourceItem[]> = asyncSeq {
         let request = HttpReq.get () |> HttpReq.withPath basePath
         let! response = client.Send request
-        let! basePage = response |> HttpRes.deserializeOkJsonNet<TicketsDto>
+        let! basePage = response |> HttpRes.deserializeOkStj<TicketsDto>
         yield
             [| for t in basePage.tickets ->
                 let data : Ingester.TicketData = { lastUpdated = t.lastUpdated; body = t.body }

@@ -42,7 +42,11 @@ namespace TodoBackendTemplate.Web
             services
                 .AddMvc()
                 .SetCompatibilityVersion(CompatibilityVersion.Latest)
-                .AddNewtonsoftJson();
+                .AddJsonOptions(o =>
+                {
+                    foreach(var c in FsCodec.SystemTextJson.Options.Create(null).Converters)
+                        o.JsonSerializerOptions.Converters.Add(c);
+                });
             var equinoxContext = ConfigureStore();
             ConfigureServices(services, equinoxContext);
         }

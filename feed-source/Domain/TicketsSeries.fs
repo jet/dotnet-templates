@@ -15,7 +15,7 @@ module Events =
         | Started of {| fcId : FcId; epochId : TicketsEpochId |}
         | Snapshotted of {| active : Map<FcId, TicketsEpochId> |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+    let codec = Config.EventCodec.create<Event>()
 
 module Fold =
 

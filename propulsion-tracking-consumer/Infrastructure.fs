@@ -29,6 +29,12 @@ module EventCodec =
             None
         | x -> x
 
+    open FsCodec.SystemTextJson
+
+    let private defaultOptions = Options.Create()
+    let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
+        Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
+
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =

@@ -25,17 +25,13 @@ module Input =
         | EventA of Value
         | EventB of Value
         interface TypeShape.UnionContract.IUnionContract
-    let codec =
-        let up (evt : FsCodec.ITimelineEvent<_>, e : Event) =
-            evt.Index, e
-        let down (_, e) = e, None, None
-        FsCodec.NewtonsoftJson.Codec.Create(up, down)
+    let private codec : FsCodec.IEventCodec<_, _, _> = Config.EventCodec.withIndex<Event>
 
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
         span.events |> Array.choose (EventCodec.tryDecode codec stream)
     let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId | _ -> None
     let (|Parse|_|) = function
-        | (StreamName clientId, _) & (Decode events) -> Some (clientId, events)
+        | (StreamName clientId, _) & Decode events -> Some (clientId, events)
         | _ -> None
 
 type Data = { value : int }
@@ -49,6 +45,6 @@ type SummaryEvent =
     | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
     interface TypeShape.UnionContract.IUnionContract
 #endif
-let codec = FsCodec.NewtonsoftJson.Codec.Create<SummaryEvent>()
+let codec = Config.EventCodec.create<SummaryEvent>()
 let encode summary = codec.Encode(None, summary)
 //#endif

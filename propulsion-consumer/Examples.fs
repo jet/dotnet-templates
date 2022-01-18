@@ -49,7 +49,7 @@ module MultiStreams =
             /// Clearing of the list
             | Cleared
             interface TypeShape.UnionContract.IUnionContract
-        let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+        let codec = EventCodec.create<Event>()
         let tryDecode = EventCodec.tryDecode codec
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
@@ -64,7 +64,7 @@ module MultiStreams =
             | Favorited         of Favorited
             | Unfavorited       of Unfavorited
             interface TypeShape.UnionContract.IUnionContract
-        let codec = FsCodec.NewtonsoftJson.Codec.Create<Event>()
+        let codec = EventCodec.create<Event>()
         let tryDecode = EventCodec.tryDecode codec
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int
@@ -158,7 +158,6 @@ module MultiMessages =
 
     // We'll use the same event parsing logic, though it works a little differently
     open MultiStreams
-    open Propulsion.Codec.NewtonsoftJson
 
     type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name : string * count : int | Unclassified of messageKey : string
 
@@ -179,7 +178,7 @@ module MultiMessages =
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
         member private _.Interpret(streamName : StreamName, spanJson) : seq<Message> = seq {
             let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
-            let decode tryDecode wrap = RenderedSpan.enum span |> Seq.choose (fun x -> x.event |> tryDecode log streamName |> Option.map wrap)
+            let decode tryDecode wrap = Propulsion.Codec.NewtonsoftJson.RenderedSpan.enum span |> Seq.choose (fun x -> x.event |> tryDecode log streamName |> Option.map wrap)
             match streamName with
             | StreamName.CategoryAndId (Favorites.Category, _) -> yield! decode Favorites.tryDecode Fave
             | StreamName.CategoryAndId (SavedForLater.Category, _) -> yield! decode SavedForLater.tryDecode Save

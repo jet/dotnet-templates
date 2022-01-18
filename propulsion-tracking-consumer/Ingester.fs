@@ -12,10 +12,11 @@ module Contract =
            messageIndex : int64
            pickTicketId : string
            purchaseOrderInfo : OrderInfo[] }
+    let serdes = FsCodec.SystemTextJson.Options.Create() |> FsCodec.SystemTextJson.Serdes
     let parse (utf8 : byte[]) : Message =
         // NB see https://github.com/jet/FsCodec for details of the default serialization profile (TL;DR only has an `OptionConverter`)
         System.Text.Encoding.UTF8.GetString(utf8)
-        |> FsCodec.NewtonsoftJson.Serdes.Deserialize<Message>
+        |> serdes.Deserialize<Message>
 
 type Outcome = Completed of used : int * unused : int
 
