@@ -71,13 +71,6 @@ type View = { id: int; order: int; title: string; completed: bool }
 /// Defines operations that a Controller can perform on a Todo List
 type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    let handle clientId decide =
-        let decider = resolve clientId
-        decider.Transact(fun state ->
-            let events = decide state
-            let state' = Fold.fold state events
-            state'.items, events)
-
     let render (item: Events.ItemData) : View =
         {   id = item.id
             order = item.order
@@ -126,14 +119,15 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
     (* WRITE-READ *)
 
     /// Create a new ToDo List item; response contains the generated `id`
-    member _.Create(clientId, template: Props) : Async<View> = async {
-        let! state' = handle clientId (decideAdd template)
-        return List.head state' |> render }
+    member _.Create(clientId, template: Props) : Async<View> =
+        let decider = resolve clientId
+        decider.TransactWithPostState(decideAdd template, fun s -> s.items |> List.head |> render)
 
     /// Update the specified item as referenced by the `item.id`
-    member _.Patch(clientId, id: int, value: Props) : Async<View> = async {
-        let! state' = handle clientId (decideUpdate id value)
-        return state' |> List.find (fun x -> x.id = id) |> render}
+    member _.Patch(clientId, id: int, value: Props) : Async<View> =
+        let decider = resolve clientId
+        let echoUpdated id (s : Fold.State) = s.items |> List.find (fun x -> x.id = id)
+        decider.TransactWithPostState(decideUpdate id value, echoUpdated id >> render)
 
 module Config =
 

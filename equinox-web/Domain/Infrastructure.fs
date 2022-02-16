@@ -11,3 +11,12 @@ type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =
     let toString (value : ClientId) : string = Guid.toStringN %value
+
+
+[<AutoOpen>]
+module DeciderExtensions =
+
+    type Equinox.Decider<'e, 's> with
+
+         member x.TransactWithPostState(decide, mapResult) =
+            x.TransactEx((fun c -> async { let events = decide c.State in return (), events }), fun () c -> mapResult c.State)
