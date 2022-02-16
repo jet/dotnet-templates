@@ -68,14 +68,14 @@ let decideClear (state : Fold.State) =
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }
 
+let private render (item: Events.ItemData) : View =
+    {   id = item.id
+        order = item.order
+        title = item.title
+        completed = item.completed }
+
 /// Defines operations that a Controller can perform on a Todo List
 type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
-
-    let render (item: Events.ItemData) : View =
-        {   id = item.id
-            order = item.order
-            title = item.title
-            completed = item.completed }
 
     (* READ *)
 
