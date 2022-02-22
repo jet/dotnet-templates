@@ -199,18 +199,22 @@ let startMetricsServer port : IDisposable =
 
 open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
 
-let run args = async {
-    let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
+let run (args : Args.Arguments) = async {
+    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
     let sink, source = build (args, log)
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    return! Async.Parallel [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
+    return! Async.Parallel [
+        Async.AwaitKeyboardInterruptAsTaskCancelledException()
+        source.AwaitWithStopOnCancellation()
+        sink.AwaitWithStopOnCancellation() ]
+    |> Async.Ignore<unit[]>
 }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         let appName = sprintf "archiver:%s" args.ProcessorName
-        try Log.Logger <- LoggerConfiguration().Configure(appName, args.ProcessorName, args.Verbose, args.SyncLogging).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(appName, args.Verbose, args.SyncLogging).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

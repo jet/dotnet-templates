@@ -565,8 +565,8 @@ let build (args : Args.Arguments, log) =
                 args.MaxReadAhead, args.StatsInterval)
         [ runPipeline; sink.AwaitWithStopOnCancellation() ]
 
-let run args =
-    let log = Log.ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
+let run (args : Args.Arguments) =
+    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
     build (args, log) |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]
