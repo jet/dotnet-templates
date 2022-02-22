@@ -213,8 +213,7 @@ let run (args : Args.Arguments) = async {
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        let appName = sprintf "archiver:%s" args.ProcessorName
-        try Log.Logger <- LoggerConfiguration().Configure(appName, args.Verbose, args.SyncLogging).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(AppName, args.Verbose, args.SyncLogging).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
