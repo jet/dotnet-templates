@@ -107,33 +107,34 @@ module Args =
 
 let [<Literal>] AppName = "Watchdog"
 
-let startWatchdog log (processingTimeout, stats : Handler.Stats) (maxReadAhead, maxConcurrentStreams) driveTransaction
-    : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<_, _>> =
-    let handle = Handler.handle processingTimeout driveTransaction
+let createProjector log (maxReadAhead, maxConcurrentStreams) (handle : _ -> Async<Propulsion.Streams.SpanResult * Handler.Outcome>) (stats : Handler.Stats) =
     Propulsion.Streams.StreamsProjector.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval)
 
 let build (args : Args.Arguments) =
     let processorName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
     let storeClient, monitored = args.Cosmos.ConnectStoreAndMonitored()
-    let storeCfg =
+    let store =
         let context = storeClient |> CosmosStoreContext.create
         let cache = Equinox.Cache (AppName, sizeMb = 10)
         Shipping.Domain.Config.Store.Cosmos (context, cache)
     let sink =
-        let processManager = Shipping.Domain.FinalizationWorkflow.Config.create args.ProcessManagerMaxDop storeCfg
-        let stats = Handler.Stats(Log.Logger, statsInterval=args.StatsInterval, stateInterval=args.StateInterval)
-        startWatchdog Log.Logger (args.ProcessingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Pump
+        let engine = Shipping.Domain.FinalizationWorkflow.Config.createEngine args.ProcessManagerMaxDop store
+        let handle = Handler.createHandler args.ProcessingTimeout engine
+        let stats = Handler.Stats(Log.Logger, statsInterval = args.StatsInterval, stateInterval = args.StateInterval)
+        createProjector Log.Logger (maxReadAhead, maxConcurrentStreams) handle stats
     let source =
         let observer = CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect Handler.transformOrFilter)
         let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
-        CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+        CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
     sink, source
 
 open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
 
 let run args =
     let sink, source = build args
-    [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
+    [   Async.AwaitKeyboardInterruptAsTaskCancelledException()
+        source.AwaitWithStopOnCancellation()
+        sink.AwaitWithStopOnCancellation() ]
     |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]

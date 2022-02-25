@@ -56,3 +56,6 @@ let handle
             return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Resolved success
     | other ->
         return failwithf "Span from unexpected category %A" other }
+
+let createHandler processingTimeout (engine : FinalizationWorkflow.Engine) =
+    handle processingTimeout engine.Pump

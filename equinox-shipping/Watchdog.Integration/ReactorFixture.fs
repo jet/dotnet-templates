@@ -9,23 +9,27 @@ type MemoryReactorFixture(testOutput) =
     let store = new MemoryStoreFixture()
     let statsFreq, stateFreq = TimeSpan.FromSeconds 10., TimeSpan.FromMinutes 1.
     let log = XunitLogger.forTest testOutput
-    let stats = Handler.Stats(log, statsFreq, stateFreq)
-    let processManager = Shipping.Domain.FinalizationWorkflow.Config.create 4 store.Config
-    let sink =
-        let processingTimeout = TimeSpan.FromSeconds 1.
-        let maxReadAhead, maxConcurrentStreams = Int32.MaxValue, 4
-        Program.startWatchdog log (processingTimeout, stats) (maxReadAhead, maxConcurrentStreams) processManager.Pump
-    let projector = MemoryStoreProjector.Start(log, sink)
-    let projectorStoreSubscription =
-        match store.Config with
-        | Shipping.Domain.Config.Store.Memory store -> projector.Subscribe(store.Committed |> Observable.filter (fun (s,_e) -> Handler.isRelevant s))
-        | x -> failwith $"unexpected store config %A{x}"
+    let buildProjector filter handle =
+        let stats = Handler.Stats(log, statsFreq, stateFreq)
+        let sink =
+            let maxReadAhead, maxConcurrentStreams = Int32.MaxValue, 4
+            Program.createProjector log (maxReadAhead, maxConcurrentStreams) handle stats
+        let projector = MemoryStoreProjector.Start(log, sink)
+        let projectorStoreSubscription =
+            match store.Config with
+            | Shipping.Domain.Config.Store.Memory store -> projector.Subscribe(store.Committed |> Observable.filter (fst >> filter))
+            | x -> failwith $"unexpected store config %A{x}"
+        projectorStoreSubscription, projector, stats
+    let processingTimeout, maxDop = TimeSpan.FromSeconds 1., 4
+    let engine = Shipping.Domain.FinalizationWorkflow.Config.createEngine maxDop store.Config
+    let handle = Handler.createHandler processingTimeout engine
+    let storeSub, projector, stats = buildProjector Handler.isRelevant handle
 
-    member val ProcessManager = processManager
+    member val Engine = engine
     member val RunTimeout = TimeSpan.FromSeconds 0.1
     member val Log = log
 
-    /// Waits until all <c>Submit</c>ted batches have been fed into the <c>inner</c> Projector
+    /// Waits until all <c>Submit</c>ted batches have been fed through the <c>inner</c> Projector
     member _.AwaitWithStopOnCancellation() = projector.AwaitWithStopOnCancellation()
 
     interface IDisposable with
@@ -33,5 +37,5 @@ type MemoryReactorFixture(testOutput) =
         /// Stops the projector, emitting the final stats to the log
         member _.Dispose() =
             (store :> IDisposable).Dispose()
-            projectorStoreSubscription.Dispose()
+            storeSub.Dispose()
             stats.DumpStats()

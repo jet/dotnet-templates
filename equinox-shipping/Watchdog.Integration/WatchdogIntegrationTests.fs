@@ -14,7 +14,7 @@ type MemoryProperties(testOutput) =
         let mutable timeouts = 0
         for GuidStringN tid, GuidStringN cid, IdsAtLeastOne shipmentIds in batches do
             counts.Push shipmentIds.Length
-            try let! _ = reactor.ProcessManager.TryFinalizeContainer(tid, cid, shipmentIds)
+            try let! _ = reactor.Engine.TryFinalizeContainer(tid, cid, shipmentIds)
                          |> Async.timeoutAfter reactor.RunTimeout
                 ()
             with :? TimeoutException -> timeouts <- timeouts + 1
