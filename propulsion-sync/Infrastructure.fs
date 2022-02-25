@@ -7,7 +7,7 @@ open System
 
 module Config =
 
-    let log = Serilog.Log.ForContext("isMetric", true)
+    let log = Log.ForContext("isMetric", true)
 
 module EnvVar =
 
@@ -17,6 +17,8 @@ module Log =
 
     /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
     let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
+    /// The Propulsion.Streams.Prometheus LogSink uses this well-known property to identify consumer group associated with the Scheduler
+    let forGroup group = Log.ForContext("group", group)
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 

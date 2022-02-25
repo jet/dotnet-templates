@@ -14,7 +14,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- Target `Propulsion` v `2.12.0-rc.3` [#111](https://github.com/jet/dotnet-templates/pull/111)
+- Target `Propulsion` v `2.12.1`, `Equinox` v `3.0.6` [#111](https://github.com/jet/dotnet-templates/pull/111) [#114](https://github.com/jet/dotnet-templates/pull/114)
 - `eqxPatterns`: Extract `ExactlyOnceIngester` [#110](https://github.com/jet/dotnet-templates/pull/110)
 - Target `FsCodec.SystemTextJson`.* v `2.3.0` [#112](https://github.com/jet/dotnet-templates/pull/112)
 

@@ -6,7 +6,7 @@ open System
 
 module Config =
 
-    let log = Serilog.Log.ForContext("isMetric", true)
+    let log = Log.ForContext("isMetric", true)
 
 module EnvVar =
 
@@ -16,6 +16,8 @@ module Log =
 
     /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
     let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
+    /// The Propulsion.Streams.Prometheus LogSink uses this well-known property to identify consumer group associated with the Scheduler
+    let forGroup group = Log.ForContext("group", group)
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 
@@ -58,12 +60,12 @@ module Sinks =
         l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
          .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(tags))
 
-    let equinoxAndPropulsionConsumerMetrics tags group (l : LoggerConfiguration) =
+    let equinoxAndPropulsionConsumerMetrics tags (l : LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags))
 
-    let equinoxAndPropulsionCosmosConsumerMetrics tags group (l : LoggerConfiguration) =
-        l |> equinoxAndPropulsionConsumerMetrics tags group
+    let equinoxAndPropulsionCosmosConsumerMetrics tags (l : LoggerConfiguration) =
+        l |> equinoxAndPropulsionConsumerMetrics tags
           |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
 
     let console verbose (configuration : LoggerConfiguration) =
@@ -92,7 +94,7 @@ type Logging() =
         configuration.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, appName, group, verbose, cfpVerbose) =
+    static member Configure(configuration : LoggerConfiguration, appName, verbose, cfpVerbose) =
         configuration.Configure(verbose)
         |> fun c -> let ingesterLevel = if cfpVerbose then Events.LogEventLevel.Debug else Events.LogEventLevel.Information
                     c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
@@ -100,4 +102,4 @@ type Logging() =
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
         |> fun c -> let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
                     let metricFilter = if cfpVerbose then None else Some (fun x -> Log.isStoreMetrics x || isWriterB x)
-                    c.Sinks(Sinks.equinoxAndPropulsionCosmosConsumerMetrics (Sinks.tags appName) group, Sinks.console verbose, ?isMetric = metricFilter)
+                    c.Sinks(Sinks.equinoxAndPropulsionCosmosConsumerMetrics (Sinks.tags appName), Sinks.console verbose, ?isMetric = metricFilter)
