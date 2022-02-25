@@ -53,7 +53,7 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
                 fun () ->
                     if logDue () then
                         log.ForContext("checkpoint", checkpointed)
-                            .Information("Waiting for epoch {epoch}. Current completed epoch {completed}", epoch, completed)
+                            .Information("Waiting for epoch {epoch}. Current completed epoch {completed}", epoch, Option.toNullable completed)
             let delayMs = int delay.TotalMilliseconds
             while Some (Volatile.Read &epoch) <> Volatile.Read &completed do
                 maybeLog()
