@@ -57,5 +57,5 @@ let handle
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
-let createHandler processingTimeout (engine : FinalizationWorkflow.Engine) =
+let createHandler processingTimeout (engine : FinalizationProcess.Engine) =
     handle processingTimeout engine.Pump

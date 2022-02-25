@@ -118,7 +118,7 @@ let build (args : Args.Arguments) =
         let cache = Equinox.Cache (AppName, sizeMb = 10)
         Shipping.Domain.Config.Store.Cosmos (context, cache)
     let sink =
-        let engine = Shipping.Domain.FinalizationWorkflow.Config.createEngine args.ProcessManagerMaxDop store
+        let engine = Shipping.Domain.FinalizationProcess.Config.createEngine args.ProcessManagerMaxDop store
         let handle = Handler.createHandler args.ProcessingTimeout engine
         let stats = Handler.Stats(Log.Logger, statsInterval = args.StatsInterval, stateInterval = args.StateInterval)
         createProjector Log.Logger (maxReadAhead, maxConcurrentStreams) handle stats

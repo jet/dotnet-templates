@@ -21,7 +21,7 @@ type MemoryReactorFixture(testOutput) =
             | x -> failwith $"unexpected store config %A{x}"
         projectorStoreSubscription, projector, stats
     let processingTimeout, maxDop = TimeSpan.FromSeconds 1., 4
-    let engine = Shipping.Domain.FinalizationWorkflow.Config.createEngine maxDop store.Config
+    let engine = Shipping.Domain.FinalizationProcess.Config.createEngine maxDop store.Config
     let handle = Handler.createHandler processingTimeout engine
     let storeSub, projector, stats = buildProjector Handler.isRelevant handle
 

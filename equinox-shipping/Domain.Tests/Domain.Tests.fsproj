@@ -12,7 +12,7 @@
         <Compile Include="ContainerTests.fs" />
         <Compile Include="ShipmentTests.fs" />
         <Compile Include="FinalizationTransactionTests.fs" />
-        <Compile Include="FinalizationWorkflowTests.fs" />
+        <Compile Include="FinalizationProcessTests.fs" />
     </ItemGroup>
 
     <ItemGroup>

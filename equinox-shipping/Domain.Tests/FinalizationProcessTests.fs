@@ -1,4 +1,4 @@
-module Shipping.Domain.Tests.FinalizationWorkflowTests
+module Shipping.Domain.Tests.FinalizationProcessTests
 
 open Shipping.Domain
 
@@ -20,14 +20,14 @@ type Custom =
 
 module FE = FinalizationTransaction.Events
 
-let [<Property>] ``FinalizationWorkflow properties``
+let [<Property>] properties
     (   GuidStringN transId1, GuidStringN transId2, GuidStringN containerId1, GuidStringN containerId2,
         NonEmptyArray (Ids shipmentIds1), NonEmptyArray (Ids shipmentIds2), GuidStringN shipment3) = async {
     let store = Equinox.MemoryStore.VolatileStore()
     let buffer = EventAccumulator()
     use __ = store.Committed.Subscribe buffer.Record
     let eventTypes = seq { for e in buffer.All() -> e.EventType }
-    let engine = FinalizationWorkflow.Config.createEngine 16 (Config.Store.Memory store)
+    let engine = FinalizationProcess.Config.createEngine 16 (Config.Store.Memory store)
 
     (* First, run the happy path - should pass through all stages of the lifecycle *)
     let requestedShipmentIds = Array.append shipmentIds1 shipmentIds2
