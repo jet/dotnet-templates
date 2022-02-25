@@ -12,7 +12,7 @@ type MemoryReactorFixture(testOutput) =
     let buildProjector filter handle =
         let stats = Handler.Stats(log, statsFreq, stateFreq)
         let sink =
-            let maxReadAhead, maxConcurrentStreams = Int32.MaxValue, 4
+            let maxReadAhead, maxConcurrentStreams = 4096, 4
             Program.createProjector log (maxReadAhead, maxConcurrentStreams) handle stats
         let projector = MemoryStoreProjector.Start(log, sink)
         let projectorStoreSubscription =

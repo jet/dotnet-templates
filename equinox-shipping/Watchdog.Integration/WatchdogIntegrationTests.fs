@@ -19,11 +19,7 @@ let run (log: Serilog.ILogger) (processManager : Shipping.Domain.FinalizationPro
 
 type MemoryProperties(testOutput) =
 
-#if DEBUG
-    [<Property(StartSize = 1000, MaxTest = 5)>]
-#else
-    [<Property(StartSize = 1000, MaxTest = 1)>]
-#endif
+    [<Property(EndSize = 1000, MaxTest = 5)>]
     let run args = async {
 
         use reactor = new MemoryReactorFixture(testOutput) // Run under debugger and/or adjust XunitLogger.minLevel to see events in test output
