@@ -102,7 +102,7 @@ module Args =
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv : Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
-        let parser = ArgumentParser.Create<Parameters>(programName=programName)
+        let parser = ArgumentParser.Create<Parameters>(programName = programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "Watchdog"
@@ -118,8 +118,8 @@ let build (args : Args.Arguments) =
         let cache = Equinox.Cache (AppName, sizeMb = 10)
         Shipping.Domain.Config.Store.Cosmos (context, cache)
     let sink =
-        let engine = Shipping.Domain.FinalizationProcess.Config.createEngine args.ProcessManagerMaxDop store
-        let handle = Handler.createHandler args.ProcessingTimeout engine
+        let manager = Shipping.Domain.FinalizationProcess.Config.create args.ProcessManagerMaxDop store
+        let handle = Handler.createHandler args.ProcessingTimeout manager
         let stats = Handler.Stats(Log.Logger, statsInterval = args.StatsInterval, stateInterval = args.StateInterval)
         createProjector Log.Logger (maxReadAhead, maxConcurrentStreams) handle stats
     let source =
@@ -140,7 +140,7 @@ let run args =
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
+        try Log.Logger <- LoggerConfiguration().Configure(verbose = args.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()

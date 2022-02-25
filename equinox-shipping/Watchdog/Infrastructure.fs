@@ -43,7 +43,7 @@ module CosmosStoreContext =
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents = maxEvents)
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
@@ -55,4 +55,4 @@ type Logging() =
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
-                    c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+                    c.WriteTo.Console(theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate = t)

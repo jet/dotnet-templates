@@ -2,10 +2,7 @@ module Shipping.Domain.FinalizationProcess
 
 open FinalizationTransaction
 
-type Service(transactions : FinalizationTransaction.Service, containers : Container.Service, shipments : Shipment.Service) =
-
-    member internal _.FinalizeContainer(containerId, shipmentIds) =
-        containers.Finalize(containerId, shipmentIds)
+type internal Service internal (transactions : FinalizationTransaction.Service, containers : Container.Service, shipments : Shipment.Service) =
 
     member internal _.TryReserveShipment(shipmentId, transactionId) =
         shipments.TryReserve(shipmentId, transactionId)
@@ -16,10 +13,13 @@ type Service(transactions : FinalizationTransaction.Service, containers : Contai
     member internal _.RevokeShipmentReservation(shipmentId, transactionId) =
         shipments.Revoke(shipmentId, transactionId)
 
+    member internal _.FinalizeContainer(containerId, shipmentIds) =
+        containers.Finalize(containerId, shipmentIds)
+
     member internal _.Step(transactionId, update) =
         transactions.Step(transactionId, update)
 
-type Engine internal (service : Service, maxDop) =
+type Manager internal (service : Service, maxDop) =
 
     let rec run transactionId update = async {
         let loop updateEvent = run transactionId (Some updateEvent)
@@ -67,10 +67,10 @@ type Engine internal (service : Service, maxDop) =
 
 module Config =
 
-    let private create store =
+    let private createService store =
         let transactions = Config.create store
         let containers = Container.Config.create store
         let shipments = Shipment.Config.create store
         Service(transactions, containers, shipments)
-    let createEngine maxDop store =
-        Engine(create store, maxDop = maxDop)
+    let create maxDop store =
+        Manager(createService store, maxDop = maxDop)
