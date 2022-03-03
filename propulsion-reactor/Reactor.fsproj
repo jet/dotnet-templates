@@ -38,7 +38,7 @@
         <!--#else-->
         <PackageReference Include="Propulsion.CosmosStore" Version="2.12.1" />
         <!--#endif-->
-        <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.0" />
+        <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.1" />
         <!--#if (multiSource) -->
         <PackageReference Include="Propulsion.EventStore" Version="2.12.1" />
         <!--#endif-->

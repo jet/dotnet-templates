@@ -19,7 +19,7 @@
     <!--#if (esdb)-->
     <PackageReference Include="Equinox.CosmosStore" Version="3.0.6" />
     <!--#endif-->
-    <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.0" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.1" />
     <!--#if cosmos-->
     <PackageReference Include="Propulsion.CosmosStore" Version="2.12.1" />
     <!--#endif-->
