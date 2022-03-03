@@ -1,0 +1,2193 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "limit": 100,
+        "name": "Annotations & Alerts",
+        "showIn": 0,
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 0,
+  "iteration": 1639168982255,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "id": 178,
+      "panels": [
+        {
+          "datasource": "$datasource",
+          "description": "Successful Transact / Query operations throughput",
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 12,
+            "x": 0,
+            "y": 181
+          },
+          "id": 121,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.1.3",
+          "repeat": "application",
+          "repeatDirection": "v",
+          "targets": [
+            {
+              "expr": "sum by (app)\n(rate(equinox_op_seconds_count{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))\n",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Equinox Traffic",
+          "transformations": [],
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Amount of RU/s consumed by successful operations carried out via Equinox Transact or Query operations",
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "RU/s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 12,
+            "x": 12,
+            "y": 181
+          },
+          "id": 128,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.1.3",
+          "repeat": "application",
+          "repeatDirection": "v",
+          "targets": [
+            {
+              "expr": "sum by (app)\n(rate(equinox_op_ru_sum{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))\n",
+              "format": "time_series",
+              "hide": false,
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "CosmosDB Consumption",
+          "type": "stat"
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "Latency per Transact / Query operation (may involve >1 roundtrip in some cases)",
+          "fill": 1,
+          "fillGradient": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 187
+          },
+          "hiddenSeries": false,
+          "id": 92,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "maxPerRow": 4,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "repeat": null,
+          "repeatDirection": "h",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (app, facet, quantile)\n(equinox_op_summary_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", facet=~\"$facet\"})",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Latency p99/95/50",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {}
+              }
+            }
+          ],
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "RU charges per Equinox internal operation (in some cases this may be the result of >1 roundtrip)",
+          "fill": 1,
+          "fillGradient": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 187
+          },
+          "hiddenSeries": false,
+          "id": 151,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "maxPerRow": 4,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "repeatDirection": "h",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (app, facet, quantile)\n(equinox_op_summary_ru{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", facet=~\"$facet\"})",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "CosmosDB Request Charges p99/95/50",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "transformations": [],
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": "RU/s",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "decimals": 0,
+          "description": "Equinox Operation counts, grouped by Facet and Category ",
+          "fill": 1,
+          "fillGradient": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 194
+          },
+          "hiddenSeries": false,
+          "id": 158,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "maxPerRow": 4,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "repeatDirection": "h",
+          "seriesOverrides": [
+            {}
+          ],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (cat, facet)\n(rate(equinox_op_seconds_count{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{cat}}: {{facet}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Traffic (Equinox CosmosDb Operations)",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {}
+            }
+          ],
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "ops",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "Equinox-incurred RU charges, grouped by Facet and Category ",
+          "fill": 1,
+          "fillGradient": 1,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 194
+          },
+          "hiddenSeries": false,
+          "id": 166,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "maxPerRow": 4,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "repeatDirection": "h",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (cat, facet)\n(rate(equinox_op_ru_sum{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{cat}}: {{facet}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Saturation (Equinox CosmosDB Load)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "transformations": [],
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "decimals": null,
+              "format": "short",
+              "label": "RU/s",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "Equinox Overview",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 24,
+      "panels": [
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 91
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 27,
+          "legend": {
+            "show": true
+          },
+          "maxPerRow": 8,
+          "pluginVersion": "7.3.2",
+          "repeat": "category",
+          "repeatDirection": "v",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(equinox_op_seconds_bucket{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Latency Distribution for $category",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": null,
+          "transformations": [],
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 91
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 37,
+          "legend": {
+            "show": true
+          },
+          "maxPerRow": 8,
+          "pluginVersion": "7.3.2",
+          "repeat": "category",
+          "repeatDirection": "v",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(equinox_op_ru_bucket{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Request Charge Distribution for $category",
+          "tooltip": {
+            "show": true,
+            "showHistogram": false
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {}
+              }
+            }
+          ],
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        }
+      ],
+      "title": "Performance By Stream Category",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 10,
+      "panels": [
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 12
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 13,
+          "legend": {
+            "show": true
+          },
+          "maxPerRow": 8,
+          "pluginVersion": "7.3.2",
+          "repeat": "facet",
+          "repeatDirection": "v",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(equinox_op_seconds_bucket{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Latency Distribution for $facet/$operation",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": null,
+          "transformations": [],
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 12
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 2,
+          "legend": {
+            "show": true
+          },
+          "maxPerRow": 8,
+          "pluginVersion": "7.3.2",
+          "repeat": "facet",
+          "repeatDirection": "v",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(equinox_op_ru_bucket{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Request Charge Distribution for $facet/$operation",
+          "tooltip": {
+            "show": true,
+            "showHistogram": false
+          },
+          "transformations": [],
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        }
+      ],
+      "repeat": null,
+      "title": "Performance By Facet (Query/Transact/Prune)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 88,
+      "panels": [
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 73
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 80,
+          "legend": {
+            "show": true
+          },
+          "maxPerRow": 8,
+          "pluginVersion": "7.3.2",
+          "repeat": null,
+          "repeatDirection": "h",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(equinox_op_seconds_bucket{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Latency Distribution for $application",
+          "tooltip": {
+            "show": true,
+            "showHistogram": false
+          },
+          "tooltipDecimals": null,
+          "transformations": [],
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 73
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 32,
+          "legend": {
+            "show": true
+          },
+          "maxPerRow": 8,
+          "pluginVersion": "7.3.2",
+          "repeat": null,
+          "repeatDirection": "h",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(equinox_op_ru_bucket{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m])) by (le)",
+              "format": "heatmap",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Request Charge Distribution for $application",
+          "tooltip": {
+            "show": true,
+            "showHistogram": false
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {}
+              }
+            }
+          ],
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        }
+      ],
+      "repeat": "application",
+      "title": "Performance for $application",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 107,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 1,
+          "gridPos": {
+            "h": 5,
+            "w": 12,
+            "x": 0,
+            "y": 75
+          },
+          "hiddenSeries": false,
+          "id": 150,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "maxPerRow": 4,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "repeatDirection": "h",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (facet, quantile)\n(equinox_op_summary_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", facet=~\"$facet\"})",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Operation Latency Quantiles for $application",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {}
+              }
+            }
+          ],
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 1,
+          "gridPos": {
+            "h": 5,
+            "w": 12,
+            "x": 12,
+            "y": 75
+          },
+          "hiddenSeries": false,
+          "id": 143,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "maxPerRow": 4,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "repeatDirection": "h",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (facet, quantile)\n(equinox_op_summary_ru{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", facet=~\"$facet\"})",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "CosmosDB Request Charge quantiles for $application",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "transformations": [],
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "repeat": "application",
+      "title": "Performance quantiles for $application",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "id": 90,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 1,
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 229
+          },
+          "hiddenSeries": false,
+          "id": 57,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "maxPerRow": 4,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "repeat": null,
+          "repeatDirection": "h",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (cat, op)\n(rate(equinox_op_seconds_count{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m])) ",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "{{cat}}: {{op}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Traffic for $application",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "transformations": [],
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 2,
+          "fillGradient": 1,
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 229
+          },
+          "hiddenSeries": false,
+          "id": 93,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "maxPerRow": 4,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "repeat": null,
+          "repeatDirection": "h",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (cat, facet)\n(rate(equinox_op_ru_sum{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 1,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "CosmosDB Usage for $application",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "transformations": [],
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "repeat": "application",
+      "title": "Traffic for $application",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 180,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 29
+          },
+          "hiddenSeries": false,
+          "id": 171,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (facet, outcome)\n(rate(equinox_payload_events_total{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Event Payloads (count)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 36
+          },
+          "hiddenSeries": false,
+          "id": 170,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (facet, outcome)\n(rate(equinox_payload_bytes_total{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Event Payloads (bytes)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "decbytes",
+              "label": null,
+              "logBase": 10,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "Payloads (bytes, events)",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "id": 173,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 35
+          },
+          "hiddenSeries": false,
+          "id": 175,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.10",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (cat, facet, op, outcome)\n(rate(equinox_payload_events_total{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Event Payloads (count)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 42
+          },
+          "hiddenSeries": false,
+          "id": 176,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.10",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (cat, facet, op, outcome)\n(rate(equinox_payload_bytes_total{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\", con=~\"$container\", cat=~\"$category\", facet=~\"$facet\", op=~\"$operation\"}[1m]))",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Event Payloads (bytes)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "decbytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "repeat": "application",
+      "title": "Payloads (bytes, events) for $application",
+      "type": "row"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Data Source",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\"}, sys)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "System",
+        "multi": false,
+        "name": "sys",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\"}, sys)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\"}, sub)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "Sub-System",
+        "multi": false,
+        "name": "sub",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\"}, sub)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, app)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Application",
+        "multi": true,
+        "name": "application",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, app)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 5,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, db)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Database",
+        "multi": true,
+        "name": "database",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, db)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, con)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Container",
+        "multi": true,
+        "name": "container",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, con)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, cat)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Category",
+        "multi": true,
+        "name": "category",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, cat)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, facet)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Facet",
+        "multi": true,
+        "name": "facet",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, facet)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, op)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Operation",
+        "multi": true,
+        "name": "operation",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, op)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Equinox Metrics",
+  "uid": "0",
+  "version": 1
+}

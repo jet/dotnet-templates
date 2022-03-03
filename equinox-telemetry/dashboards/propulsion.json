@@ -1,0 +1,3766 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "limit": 100,
+        "name": "Annotations & Alerts",
+        "showIn": 0,
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": 1,
+  "iteration": 1639168982255,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 900,
+      "panels": [
+        {
+          "datasource": "$datasource",
+          "description": "Maximum duration a handler has been processing a stream",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-BlPu"
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 12,
+            "x": 0,
+            "y": 2
+          },
+          "id": 1129,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (app)\n(propulsion_scheduler_busy_seconds{kind=\"oldest\", state=\"active\", sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 2,
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Longest Running Stream Handler Duration",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Longest durations a stream's handling has been stuck or failing",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-BlYlRd"
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 12,
+            "x": 12,
+            "y": 2
+          },
+          "id": 1164,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (app)\n(propulsion_scheduler_busy_seconds{kind=\"oldest\", state!=\"active\", sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 2,
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Longest failing or stuck Stream Duration",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "#EAB839",
+                    "value": 0
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 12,
+            "x": 0,
+            "y": 5
+          },
+          "id": 902,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "7.5.10",
+          "targets": [
+            {
+              "expr": "max by (app)\n(rate(propulsion_scheduler_handler_seconds_count{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind!=\"exceptions\"}[5m]))",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 4,
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Handler Throughput (Successes)",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-YlRd"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 12,
+            "x": 12,
+            "y": 5
+          },
+          "id": 903,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "mean"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "7.5.10",
+          "targets": [
+            {
+              "expr": "max by (app)\n(rate(propulsion_scheduler_handler_seconds_count{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind=\"exceptions\"}[5m]))",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 4,
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Handler Throughput (Exceptions)",
+          "type": "stat"
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "decimals": 3,
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
+          "hiddenSeries": false,
+          "id": 904,
+          "legend": {
+            "alignAsTable": false,
+            "avg": true,
+            "current": true,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.10",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (app)\n(propulsion_scheduler_handler_summary_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind!=\"exceptions\", quantile=\"0.99\"})",
+              "instant": false,
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Handler Latency (Successes p99)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:300",
+              "decimals": 0,
+              "format": "s",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:301",
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "decimals": 3,
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "hiddenSeries": false,
+          "id": 905,
+          "legend": {
+            "alignAsTable": false,
+            "avg": true,
+            "current": true,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "7.5.10",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (app)\n(propulsion_scheduler_handler_summary_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind=\"exceptions\", quantile=\"0.99\"})",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Handler Latency (Exceptions p99)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "decimals": 0,
+              "format": "s",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Unique changed documents awaiting processing\n\nNOTE net of read-ahead effects",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-YlRd"
+              },
+              "mappings": [],
+              "min": 0,
+              "noValue": "(Lag unknown)",
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "locale"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 15
+          },
+          "id": 1051,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum by (app)\n(propulsion_changefeed_lag_documents{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "ChangeFeed Lag (Unprocessed Changed Documents Total)",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Age of most recently read batch\n\nNOTE due to read-ahead, age at the point of processing can be higher",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-YlRd"
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "dtdhms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 18
+          },
+          "id": 907,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (app)\n(propulsion_changefeed_age_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "CosmosDb ChangeFeed Age at Ingestion",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed"
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "locale"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 21
+          },
+          "id": 993,
+          "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (app, tranche)\n(propulsion_feed_position_token%1000000000)",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}} {{tranche}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Feed Read Offset",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "#EAB839",
+                    "value": 100
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 24
+          },
+          "id": 906,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "7.5.10",
+          "targets": [
+            {
+              "expr": "sum by (app)\n(propulsion_scheduler_streams{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", state!=\"synced\"})",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Scheduler Buffered Streams (Queued + Active)",
+          "type": "stat"
+        }
+      ],
+      "title": "Propulsion Overview",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 908,
+      "panels": [
+        {
+          "datasource": "$datasource",
+          "description": "Maximum duration a stream has been running, stuck or failing",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-BlYlRd"
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 54
+          },
+          "id": 1165,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.1.3",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (state)\n(propulsion_scheduler_busy_seconds{kind=\"oldest\", sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 2,
+              "legendFormat": "{{state}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Longest Stream Handler Busy State Durations",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-BlPu"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 12,
+            "x": 0,
+            "y": 57
+          },
+          "id": 909,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.1.3",
+          "targets": [
+            {
+              "expr": "max(rate(propulsion_scheduler_handler_seconds_count{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind!=\"exceptions\"}[5m]))",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 4,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Handler Throughput (Successes)",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-YlRd"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 12,
+            "x": 12,
+            "y": 57
+          },
+          "id": 910,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "mean"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.1.3",
+          "targets": [
+            {
+              "expr": "max(rate(propulsion_scheduler_handler_seconds_count{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind=\"exceptions\"}[5m]))",
+              "format": "time_series",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 4,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Handler Throughput (Exceptions)",
+          "type": "stat"
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "decimals": 3,
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 60
+          },
+          "hiddenSeries": false,
+          "id": 911,
+          "legend": {
+            "alignAsTable": false,
+            "avg": true,
+            "current": true,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "max by (quantile)\n(propulsion_scheduler_handler_summary_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind!=\"exceptions\"})",
+              "instant": false,
+              "interval": "",
+              "legendFormat": "Quantile {{quantile}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Handler Latency (Successes)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "decimals": 0,
+              "format": "s",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "decimals": 3,
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 60
+          },
+          "hiddenSeries": false,
+          "id": 912,
+          "legend": {
+            "avg": true,
+            "current": true,
+            "max": true,
+            "min": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "max by (quantile)\n(propulsion_scheduler_handler_summary_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind=\"exceptions\"})",
+              "interval": "",
+              "legendFormat": "Quantile {{quantile}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Handler Latency (Exceptions)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "decimals": 0,
+              "format": "s",
+              "label": "",
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "description": "",
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 67
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 913,
+          "legend": {
+            "show": false
+          },
+          "pluginVersion": "7.3.2",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(propulsion_scheduler_handler_seconds_bucket{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind!=\"exceptions\"}[5m])) by (le)",
+              "format": "heatmap",
+              "interval": "",
+              "intervalFactor": 4,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Handler Latency Distribution (Successes)",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": null,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": 0,
+            "format": "s",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "description": "",
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 67
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 914,
+          "legend": {
+            "show": false
+          },
+          "pluginVersion": "7.3.2",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(propulsion_scheduler_handler_seconds_bucket{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", kind=\"exceptions\"}[5m])) by (le)",
+              "format": "heatmap",
+              "interval": "",
+              "intervalFactor": 4,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Handler Latency Distribution (Exceptions)",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": 0,
+            "format": "s",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Number of streams with processing active, failing or stuck",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 24,
+            "x": 0,
+            "y": 73
+          },
+          "id": 1131,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "lastNotNull"
+              ],
+              "displayMode": "table",
+              "placement": "right"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "pluginVersion": "8.1.3",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum by (state)\n(propulsion_scheduler_busy_count{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{state}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Stream Handler Busy State Counts",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Breakdown of longest and shortest durations that streams have been active, stuck or stalled",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 24,
+            "x": 0,
+            "y": 77
+          },
+          "id": 1133,
+          "options": {
+            "legend": {
+              "calcs": [
+                "max",
+                "last"
+              ],
+              "displayMode": "table",
+              "placement": "right"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "pluginVersion": "8.1.3",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (state, kind)\n(propulsion_scheduler_busy_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{state}} {{kind}} ",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Stream Handler Busy State Durations",
+          "type": "timeseries"
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 5,
+            "w": 12,
+            "x": 0,
+            "y": 83
+          },
+          "hiddenSeries": false,
+          "id": 915,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": true,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum(propulsion_scheduler_events{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\"})",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Propulsion Scheduler Buffers State (Total Events)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "decimals": 0,
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 5,
+            "w": 12,
+            "x": 12,
+            "y": 83
+          },
+          "hiddenSeries": false,
+          "id": 916,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": true,
+          "targets": [
+            {
+              "expr": "sum(propulsion_scheduler_bytes{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\"})",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Propulsion Scheduler Buffers State (Total Payload Size)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "bytes",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 88
+          },
+          "hiddenSeries": false,
+          "id": 917,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": true,
+          "targets": [
+            {
+              "expr": "sum(propulsion_scheduler_streams{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", state!=\"synced\"})",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Propulsion Scheduler Buffered (Streams)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "decimals": 0,
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "decimals": null,
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 93
+          },
+          "hiddenSeries": false,
+          "id": 918,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "hideZero": true,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(propulsion_scheduler_cats{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\"})",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Propulsion Scheduler Buffered (Categories)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "decimals": 0,
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": true,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "Provides itemized breakdown of the work being performed by the (single) synchronous loop driving a Propulsion Scheduler",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 98
+          },
+          "hiddenSeries": false,
+          "id": 919,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "hideEmpty": false,
+            "hideZero": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": false,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (activity)\n(rate(propulsion_scheduler_cpu{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\"}[5m]))  ",
+              "instant": false,
+              "interval": "",
+              "intervalFactor": 4,
+              "legendFormat": "{{activity}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Propulsion Scheduler CPU Usage Breakdown",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "s",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 4,
+            "w": 24,
+            "x": 0,
+            "y": 103
+          },
+          "hiddenSeries": false,
+          "id": 920,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": false,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": true,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum(propulsion_scheduler_streams{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", state=\"synced\"})",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Propulsion Scheduler Synced (Streams)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "none",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "repeat": "application",
+      "title": "Propulsion Scheduler for $application",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": null,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 2
+      },
+      "id": 960,
+      "panels": [
+        {
+          "datasource": "$datasource",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 4
+          },
+          "id": 988,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum by (app, tranche)\n(rate(propulsion_feed_pages_total{app=~\"$application\", db=~\"$database\"}[1m]))",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}} {{tranche}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Feed Read Rate (pages/s)",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 7
+          },
+          "id": 990,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum by (app, tranche)\n(rate(propulsion_feed_items_total{app=~\"$application\", db=~\"$database\"}[1m]))",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}} {{tranche}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Feed Read Rate (items/s)",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Defines the baseline position from which the read begins. The meaning of the underlying value depends on the nature of the feed",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed"
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "locale"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 10
+          },
+          "id": 245,
+          "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (app, tranche)\n(propulsion_feed_position_token/1000000000)",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}} {{tranche}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Feed Baseline (Raw)",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed"
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "locale"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 13
+          },
+          "id": 992,
+          "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "max by (app, tranche)\n(propulsion_feed_position_token%1000000000)",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}} {{tranche}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Feed Read Offset",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 16
+          },
+          "id": 989,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "7.5.10",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum by (app, tranche)\n(propulsion_feed_ingest_queue{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}} {{tranche}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Feed Read-ahead Buffer (Pages)",
+          "type": "stat"
+        }
+      ],
+      "title": "Propulsion Feed overview",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
+      "id": 202,
+      "panels": [
+        {
+          "datasource": "$datasource",
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 87
+          },
+          "id": 246,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.1.3",
+          "repeat": null,
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "sum by (app)\n(rate(propulsion_changefeed_documents_total{app=~\"$application\", db=~\"$database\"}[1m]))",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "ChangeFeed Read Rate (documents/s)",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Age of most recently read batch\n\nNOTE due to read-ahead, age at the point of processing can be higher",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-YlRd"
+              },
+              "mappings": [],
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "dtdhms"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 90
+          },
+          "id": 247,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.1.3",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "expr": "max by (app)\n(propulsion_changefeed_age_seconds{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "ChangeFeed Read Observed Age",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "description": "Unique changed documents awaiting processing\n\nNOTE net of read-ahead effects",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-YlRd"
+              },
+              "mappings": [],
+              "min": 0,
+              "noValue": "(Lag unknown)",
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "locale"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 93
+          },
+          "id": 991,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.1.3",
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "expr": "sum by (app)\n(propulsion_changefeed_lag_documents{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "ChangeFeed Lag (Unprocessed Changed Documents Total)",
+          "type": "stat"
+        },
+        {
+          "datasource": "$datasource",
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 24,
+            "x": 0,
+            "y": 96
+          },
+          "id": 224,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.1.3",
+          "repeat": null,
+          "repeatDirection": "h",
+          "targets": [
+            {
+              "expr": "sum by (app)\n(propulsion_changefeed_ingest_queue{sys=~\"$sys\", sub=~\"$sub\", app=~\"$application\", db=~\"$database\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Read-ahead Buffer (Batches)",
+          "type": "stat"
+        }
+      ],
+      "repeat": null,
+      "title": "CosmosDB Change Feed Overview",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 382,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "Age of most recent documents read\nNote: due to read-ahead, age at the point of processing can be longer",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 24,
+            "x": 0,
+            "y": 179
+          },
+          "hiddenSeries": false,
+          "id": 317,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "hideZero": false,
+            "max": true,
+            "min": true,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "max by (app, rangeId)\n(propulsion_changefeed_age_seconds{sys=~\"$sys\", sub=~\"$sub\"})",
+              "interval": "",
+              "legendFormat": "{{app}}: Range {{rangeId}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "ChangeFeed Read Observed Age",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "dtdhms",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 9,
+            "w": 24,
+            "x": 0,
+            "y": 188
+          },
+          "hiddenSeries": false,
+          "id": 318,
+          "legend": {
+            "alignAsTable": true,
+            "avg": true,
+            "current": true,
+            "hideZero": false,
+            "max": true,
+            "min": true,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (app, rangeId)\n(propulsion_changefeed_lag_documents{sys=~\"$sys\", sub=~\"$sub\"})",
+              "interval": "",
+              "legendFormat": "{{app}}: Range {{rangeId}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "ChangeFeed Lag (Unprocessed Changed Documents Total)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": "0",
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        }
+      ],
+      "title": "CosmosDB Change Feed Lag",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "datasource": "$datasource",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 283,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 25
+          },
+          "hiddenSeries": false,
+          "id": 315,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (app, rangeId)\n(rate(propulsion_changefeed_documents_total{sys=~\"$sys\", sub=~\"$sub\"}[5m]))",
+              "interval": "",
+              "legendFormat": "{{app}}: Range {{rangeId}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "ChangeFeed Read Rate (documents/s)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 30
+          },
+          "hiddenSeries": false,
+          "id": 316,
+          "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "sum by (app)\n(rate(propulsion_changefeed_read_ru_sum{sys=~\"$sys\", sub=~\"$sub\"}[5m]))",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "ChangeFeed Read Charges (RU/s)",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "description": "",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 35
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 349,
+          "legend": {
+            "show": false
+          },
+          "pluginVersion": "7.3.2",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(propulsion_changefeed_read_ru_bucket{sys=~\"$sys\", sub=~\"$sub\"}[1m])) by (le)",
+              "format": "heatmap",
+              "interval": "",
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "ChangeFeed Read Charge Distribution",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 40
+          },
+          "hiddenSeries": false,
+          "id": 459,
+          "legend": {
+            "avg": true,
+            "current": false,
+            "max": true,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "max by (app)\n(propulsion_changefeed_read_summary_ru{quantile=\"0.99\", sys=~\"$sys\", sub=~\"$sub\"})",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "ChangeFeed Read Charges RU/s Total p99",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 47
+          },
+          "hiddenSeries": false,
+          "id": 460,
+          "legend": {
+            "avg": true,
+            "current": false,
+            "max": true,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "propulsion_changefeed_read_summary_seconds{sys=~\"$sys\", sub=~\"$sub\", quantile=\"0.99\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "ChangeFeed Read Latency p99",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "description": "",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 54
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 350,
+          "legend": {
+            "show": false
+          },
+          "pluginVersion": "7.3.2",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(propulsion_changefeed_read_seconds_bucket{sys=~\"$sys\", sub=~\"$sub\"}[1m])) by (le)",
+              "format": "heatmap",
+              "interval": "",
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "ChangeFeed Read Latency Distribution",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": "$datasource",
+          "description": "In a healthy system with consumers keeping up, pauses should be minimal (ingesting should take 0ms).\n\nIf the system is working down a backlog, the buffers being full triggers a pause at the point of ingestion until such time as there is space for another batch in the buffer, whereupon the reader is released to begin the next batch of documents",
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 24,
+            "x": 0,
+            "y": 59
+          },
+          "hiddenSeries": false,
+          "id": 491,
+          "legend": {
+            "avg": true,
+            "current": false,
+            "max": true,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": true
+          },
+          "lines": true,
+          "linewidth": 1,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "8.1.3",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "targets": [
+            {
+              "expr": "propulsion_changefeed_ingest_summary_seconds{quantile=\"0.99\", sys=~\"$sys\", sub=~\"$sub\"}",
+              "format": "time_series",
+              "interval": "",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Read-ahead Pause Interval p99",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "tsbuckets",
+          "datasource": "$datasource",
+          "description": "In a healthy system with consumers keeping up, pauses should be minimal.\n\nWhere the system is working down a backlog, pauses can occur (in fact the lack of them may suggest the read configuration can be enhanced)",
+          "gridPos": {
+            "h": 5,
+            "w": 24,
+            "x": 0,
+            "y": 66
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 490,
+          "legend": {
+            "show": false
+          },
+          "pluginVersion": "7.3.2",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "expr": "sum(rate(propulsion_changefeed_ingest_seconds_bucket{sys=~\"$sys\", sub=~\"$sub\"}[1m])) by (le)",
+              "format": "heatmap",
+              "interval": "",
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "timeFrom": null,
+          "timeShift": null,
+          "title": "Read-Ahead Pause Interval Distribution",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        }
+      ],
+      "title": "CosmosDB Change Feed Details",
+      "type": "row"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 27,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
+        "description": null,
+        "error": null,
+        "hide": 0,
+        "includeAll": false,
+        "label": "Data Source",
+        "multi": false,
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\"}, sys)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "System",
+        "multi": false,
+        "name": "sys",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\"}, sys)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\"}, sub)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "Sub-System",
+        "multi": false,
+        "name": "sub",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\"}, sub)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, app)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Application",
+        "multi": true,
+        "name": "application",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, app)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 5,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, db)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Database",
+        "multi": true,
+        "name": "database",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, db)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, con)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Container",
+        "multi": true,
+        "name": "container",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, con)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, cat)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Category",
+        "multi": true,
+        "name": "category",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, cat)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, facet)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Facet",
+        "multi": true,
+        "name": "facet",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, facet)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
+        "allValue": ".*",
+        "current": {},
+        "datasource": "$datasource",
+        "definition": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, op)",
+        "description": null,
+        "error": {
+          "data": {
+            "message": "Unexpected error"
+          }
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Operation",
+        "multi": true,
+        "name": "operation",
+        "options": [],
+        "query": {
+          "query": "label_values({__name__=~\"(equinox|propulsion).*\", sys=~\"$sys\", sub=~\"$sub\"}, op)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 6,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Propulsion Metrics",
+  "uid": "1",
+  "version": 1
+}
