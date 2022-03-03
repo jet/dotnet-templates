@@ -1,4 +1,4 @@
-module Shipping.Domain.Tests.FinalizationWorkflowTests
+module Shipping.Domain.Tests.FinalizationProcessTests
 
 open Shipping.Domain
 
@@ -20,18 +20,18 @@ type Custom =
 
 module FE = FinalizationTransaction.Events
 
-let [<Property>] ``FinalizationWorkflow properties``
+let [<Property>] properties
     (   GuidStringN transId1, GuidStringN transId2, GuidStringN containerId1, GuidStringN containerId2,
         NonEmptyArray (Ids shipmentIds1), NonEmptyArray (Ids shipmentIds2), GuidStringN shipment3) = async {
     let store = Equinox.MemoryStore.VolatileStore()
     let buffer = EventAccumulator()
     use __ = store.Committed.Subscribe buffer.Record
     let eventTypes = seq { for e in buffer.All() -> e.EventType }
-    let processManager = FinalizationWorkflow.Config.create 16 (Config.Store.Memory store)
+    let manager = FinalizationProcess.Config.create 16 (Config.Store.Memory store)
 
     (* First, run the happy path - should pass through all stages of the lifecycle *)
     let requestedShipmentIds = Array.append shipmentIds1 shipmentIds2
-    let! res1 = processManager.TryFinalizeContainer(transId1, containerId1, requestedShipmentIds)
+    let! res1 = manager.TryFinalizeContainer(transId1, containerId1, requestedShipmentIds)
     let expectedEvents =
         [   nameof(FE.FinalizationRequested); nameof(FE.ReservationCompleted); nameof(FE.AssignmentCompleted); nameof(FE.Completed) // Transaction
             nameof(Shipment.Events.Reserved); nameof(FE.Assigned) // Shipment
@@ -48,7 +48,7 @@ let [<Property>] ``FinalizationWorkflow properties``
        a) yield a fail result
        b) result in triggering of Revert flow with associated Shipment revoke events *)
     buffer.Clear()
-    let! res2 = processManager.TryFinalizeContainer(transId2, containerId2, Array.append shipmentIds2 [|shipment3|])
+    let! res2 = manager.TryFinalizeContainer(transId2, containerId2, Array.append shipmentIds2 [|shipment3|])
     let expectedEvents =
         [   nameof(FE.FinalizationRequested); nameof(FE.RevertCommenced); nameof(FE.Completed) // Transaction
             nameof(Shipment.Events.Reserved); nameof(Shipment.Events.Revoked) ] // Shipment

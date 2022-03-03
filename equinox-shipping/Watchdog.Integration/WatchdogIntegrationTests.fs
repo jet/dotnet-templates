@@ -6,7 +6,7 @@ open System
 
 type MemoryProperties(testOutput) =
 
-    [<Property(StartSize=1000, MaxTest=5)>]
+    [<Property(StartSize = 1000, MaxTest = 5)>]
     let run (NonEmptyArray batches) = async {
 
         use reactor = new MemoryReactorFixture(testOutput) // Run under debugger and/or adjust XunitLogger.minLevel to see events in test output

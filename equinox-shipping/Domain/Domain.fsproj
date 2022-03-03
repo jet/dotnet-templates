@@ -12,7 +12,7 @@
         <Compile Include="Shipment.fs" />
         <Compile Include="Container.fs" />
         <Compile Include="FinalizationTransaction.fs" />
-        <Compile Include="FinalizationWorkflow.fs" />
+        <Compile Include="FinalizationProcess.fs" />
         <Compile Include="TransactionWatchdog.fs" />
     </ItemGroup>
 
