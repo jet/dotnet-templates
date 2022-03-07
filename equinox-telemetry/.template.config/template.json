@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@jet @ragiano215",
+  "classifications": [
+    "CosmosDb",
+    "ChangeFeed",
+    "ChangeFeedProcessor",
+    "Event Sourcing",
+    "Equinox",
+    "Propulsion"
+  ],
+  "tags": {
+    "language": "F#"
+  },
+  "identity": "Equinox.Telemetry",
+  "name": "Equinox Telemetry",
+  "shortName": "eqxTelemetry",
+  "sourceName": "TelemetryTemplate",
+  "preferNameDirectory": true
+}

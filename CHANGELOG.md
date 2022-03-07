@@ -11,6 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 
 - Demonstrate `TransactWith` implementation 'pattern' [#113](https://github.com/jet/dotnet-templates/pull/113) 
+- `eqxTelemetry`: Add template for quickly getting dashboards running [#108](https://github.com/jet/dotnet-templates/pull/108)
 
 ### Changed
 

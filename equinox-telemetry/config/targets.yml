@@ -1,0 +1,7 @@
+- targets:
+  # UPDATE HERE
+  # For each running process utilizing Equinox and / or Propulsion, add a line here
+  # prefixed by `host.docker.internal` followed by the port number that process is
+  # exposing for Prometheus metrics
+  # e.g.:
+  # - 'host.docker.internal:9000'
