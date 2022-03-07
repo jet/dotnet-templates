@@ -1,4 +1,4 @@
-FROM grafana/grafana:7.5.10
+FROM grafana/grafana:8.4.2
 
 ADD provisioning /etc/grafana/provisioning
 ADD dashboards /var/lib/grafana/dashboards
