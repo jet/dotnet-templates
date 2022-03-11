@@ -16,7 +16,7 @@
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
         <PackageReference Include="Destructurama.FSharp" Version="1.2.0" />
-        <PackageReference Include="Propulsion.CosmosStore" Version="2.12.1" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="2.12.2" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.0" />
     </ItemGroup>
 

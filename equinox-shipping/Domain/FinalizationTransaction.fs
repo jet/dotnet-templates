@@ -19,7 +19,7 @@ module Events =
         | Snapshotted           of {| state : State |}
         interface TypeShape.UnionContract.IUnionContract
 
-    and // covered by autoUnion: [<System.Text.Json.Serialization.JsonConverter(typeof<FsCodec.SystemTextJson.UnionConverter<State>>)>]
+    and // covered by autoUnionToJsonObject: [<System.Text.Json.Serialization.JsonConverter(typeof<FsCodec.SystemTextJson.UnionConverter<State>>)>]
         State =
         | Initial
         | Reserving of {| container : ContainerId; shipments : ShipmentId[] |}

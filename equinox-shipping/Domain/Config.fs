@@ -8,7 +8,7 @@ module EventCodec =
 
     open FsCodec.SystemTextJson
 
-    let private defaultOptions = Options.Create(autoUnion = true)
+    let private defaultOptions = Options.Create(autoTypeSafeEnumToJsonString = true, autoUnionToJsonObject = true)
     let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
         Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
 

@@ -6,7 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Equinox" Version="3.0.6" />
-    <PackageReference Include="FsCodec" Version="2.0.1" />
+    <PackageReference Include="FsCodec" Version="2.3.2" />
     <PackageReference Include="FSharp.Core" Version="4.5.4" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
   </ItemGroup>

@@ -36,14 +36,14 @@
         <!--#if (kafkaEventSpans) -->
         <PackageReference Include="Equinox.CosmosStore" Version="3.0.6" />
         <!--#else-->
-        <PackageReference Include="Propulsion.CosmosStore" Version="2.12.1" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="2.12.2" />
         <!--#endif-->
-        <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.1" />
+        <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.2" />
         <!--#if (multiSource) -->
-        <PackageReference Include="Propulsion.EventStore" Version="2.12.1" />
+        <PackageReference Include="Propulsion.EventStore" Version="2.12.2" />
         <!--#endif-->
         <!--#if (kafka || kafkaEventSpans) -->
-        <PackageReference Include="Propulsion.Kafka" Version="2.12.1" />
+        <PackageReference Include="Propulsion.Kafka" Version="2.12.2" />
         <!--#endif-->
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.0" />
     </ItemGroup>
