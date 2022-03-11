@@ -106,7 +106,7 @@ type Startup() =
             .AddMvc()
             .SetCompatibilityVersion(CompatibilityVersion.Latest)
             .AddJsonOptions(fun options ->
-                FsCodec.SystemTextJson.Options.Create().Converters
+                FsCodec.SystemTextJson.Options.Default.Converters
                 |> Seq.iter options.JsonSerializerOptions.Converters.Add
             ) |> ignore
 

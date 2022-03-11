@@ -37,14 +37,13 @@ namespace TodoBackendTemplate.Web
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
-
         {
             services
                 .AddMvc()
                 .SetCompatibilityVersion(CompatibilityVersion.Latest)
                 .AddJsonOptions(o =>
                 {
-                    foreach(var c in FsCodec.SystemTextJson.Options.Create(null).Converters)
+                    foreach(var c in FsCodec.SystemTextJson.Options.Default.Converters)
                         o.JsonSerializerOptions.Converters.Add(c);
                 });
             var equinoxContext = ConfigureStore();
