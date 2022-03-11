@@ -9,17 +9,22 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
 
-- Demonstrate `TransactWith` implementation 'pattern' [#113](https://github.com/jet/dotnet-templates/pull/113) 
+<a name="5.2.1"></a>
+## [5.2.1] - 2022-03-11
+
+### Added
+
+- Demonstrate `TransactWith` implementation 'pattern' [#113](https://github.com/jet/dotnet-templates/pull/113)
 
 ### Changed
 
 - Target `Propulsion` v `2.12.2`, `Equinox` v `3.0.6` [#111](https://github.com/jet/dotnet-templates/pull/111) [#114](https://github.com/jet/dotnet-templates/pull/114)
 - `eqxPatterns`: Extract `ExactlyOnceIngester` [#110](https://github.com/jet/dotnet-templates/pull/110)
 - Target `FsCodec.SystemTextJson`.* v `2.3.2` [#112](https://github.com/jet/dotnet-templates/pull/112)
-
-### Removed
-### Fixed
 
 <a name="5.2.0"></a>
 ## [5.2.0] - 2021-12-20
@@ -550,7 +555,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.2.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.2.1...HEAD
+[5.2.1]: https://github.com/jet/dotnet-templates/compare/5.2.0...5.2.1
 [5.2.0]: https://github.com/jet/dotnet-templates/compare/5.1.0...5.2.0
 [5.1.0]: https://github.com/jet/dotnet-templates/compare/5.0.0...5.1.0
 [5.0.0]: https://github.com/jet/dotnet-templates/compare/4.12.0...5.0.0
