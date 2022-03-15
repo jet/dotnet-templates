@@ -19,5 +19,6 @@ module DeciderExtensions =
 
     type Equinox.Decider<'e, 's> with
 
-         member x.TransactWithPostState(decide, mapResult) =
+         // see https://github.com/jet/equinox/pull/320
+         member x.Transact(decide, mapResult) =
             x.TransactEx((fun c -> async { let events = decide c.State in return (), events }), fun () c -> mapResult c.State)

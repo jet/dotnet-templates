@@ -121,13 +121,13 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
     /// Create a new ToDo List item; response contains the generated `id`
     member _.Create(clientId, template: Props) : Async<View> =
         let decider = resolve clientId
-        decider.TransactWithPostState(decideAdd template, fun s -> s.items |> List.head |> render)
+        decider.Transact(decideAdd template, fun s -> s.items |> List.head |> render)
 
     /// Update the specified item as referenced by the `item.id`
     member _.Patch(clientId, id: int, value: Props) : Async<View> =
         let decider = resolve clientId
         let echoUpdated id (s : Fold.State) = s.items |> List.find (fun x -> x.id = id)
-        decider.TransactWithPostState(decideUpdate id value, echoUpdated id >> render)
+        decider.Transact(decideUpdate id value, echoUpdated id >> render)
 
 module Config =
 
