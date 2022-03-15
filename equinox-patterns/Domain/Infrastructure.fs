@@ -31,12 +31,7 @@ type Accumulator<'e, 's>(originState : 's, fold : 's -> seq<'e> -> 's) =
 //    member _.Query(render : 's -> 'r) : 'r =
 //        render state
 
-/// For particularly common patterns used within a given app, sometimes it can make sense to name the pattern locally
-/// There are definitely trade-offs to this - one person's great intention revealing name is another's layer of obfuscation
 type Equinox.Decider<'e, 's> with
-
-     member x.Transact(decide, mapResult) =
-        x.TransactEx((fun c -> async { return! decide c.State }), fun r _c -> mapResult r)
 
      // in baseline V4 API Decider API
      member x.Transact(decide) =

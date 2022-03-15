@@ -104,7 +104,10 @@ type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equ
                 decideIngestion     = fun () _state -> (), (), []
                 decideCarryForward  = fun ()        -> genBalance } // always close
         let decider = resolve (Some Equinox.AllowStale) periodId
-        decider.Transact(decideIngestWithCarryForward rules (), fun r -> Option.get r.carryForward)
+        let decide' s = async {
+            let! r, es = decideIngestWithCarryForward rules () s
+            return Option.get r.carryForward, es }
+        decider.Transact(decide')
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     let tryTransact periodId getIncoming (decide : 'request -> Fold.State -> 'request * 'result * Events.Event list) request shouldClose : Async<Result<'request, 'result>> =
