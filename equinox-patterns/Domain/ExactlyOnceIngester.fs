@@ -31,7 +31,7 @@ type Service<[<Measure>]'id, 'req, 'res, 'outcome> internal
 
     let tryIngest (reqs : (int<'id> * 'req)[][]) =
         let rec aux ingestedItems items = async {
-            let epochId = items |> Array.minBy fst |> fst
+            let epochId = items |> Seq.map fst |> Seq.min
             let epochItems, futureEpochItems = items |> Array.partition (fun (e, _ : 'req) -> e = epochId)
             let! res = ingest (epochId, Array.map snd epochItems)
             let ingestedItemIds = Array.append ingestedItems res.accepted
@@ -68,7 +68,7 @@ type Service<[<Measure>]'id, 'req, 'res, 'outcome> internal
     let batchedIngest = Equinox.Core.AsyncBatchingGate(tryIngest, linger)
 
     /// Run the requests over a chain of epochs.
-    /// Returns the subset that actually got handled this time around (exclusive of items that did not trigger events per idempotency rules).
+    /// Returns the subset that actually got handled this time around (i.e., exclusive of items that did not trigger writes per the idempotency rules).
     member _.IngestMany(originEpoch, reqs) : Async<'outcome seq> = async {
         if Array.isEmpty reqs then return Seq.empty else
 
