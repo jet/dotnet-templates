@@ -22,3 +22,4 @@ module TransactionId =
 module Guid =
 
     let inline toStringN (x : System.Guid) = x.ToString "N"
+    let generateStringN () = let g = System.Guid.NewGuid() in toStringN g

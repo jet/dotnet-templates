@@ -29,8 +29,8 @@ type MemoryProperties(testOutput) =
         // TODO verify that each started transaction reaches a terminal state
         // For now, the poor-man's version is to look for non-zero Failed and Succeeded counts in the log output
 
-[<Xunit.Collection "CosmosReactor">]
-type CosmosProperties(reactor : CosmosReactorFixture, testOutput) =
+[<Xunit.Collection(CosmosReactor.Name)>]
+type CosmosProperties(reactor : CosmosReactor.Fixture, testOutput) =
     let logSub = reactor.CaptureSerilogLog testOutput
 
     [<Property(MaxTest = 1)>]
