@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Shipping: Cosmos Reactor Integration test [#116](https://github.com/jet/dotnet-templates/pull/116)
+
 ### Changed
 ### Removed
 ### Fixed

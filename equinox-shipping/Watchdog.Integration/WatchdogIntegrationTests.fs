@@ -33,7 +33,12 @@ type MemoryProperties(testOutput) =
 type CosmosProperties(reactor : CosmosReactor.Fixture, testOutput) =
     let logSub = reactor.CaptureSerilogLog testOutput
 
+#if skipIntegrationTests
+    // TODO remove the Skip= so you can run the tests
+    [<Property(MaxTest = 1, Skip="Cannot run in Equinox.Templates CI environment")>]
+#else
     [<Property(MaxTest = 1)>]
+#endif    
     let run args = async {
         do! run reactor.Log reactor.ProcessManager reactor.RunTimeout args
         // TODO retrying loop verifying that each started transaction reaches a terminal state
