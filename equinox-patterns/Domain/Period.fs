@@ -82,9 +82,9 @@ type Result<'request, 'result> =
 /// 3. Rules.decideCarryForward may trigger the closing of the Period based on the residual and/or the State by emitting Some balance
 let decideIngestWithCarryForward rules req s : Async<Result<'req, 'result> * Events.Event list> = async {
     let acc = Accumulator(s, Fold.fold)
-    do! acc.TransactAsync(Fold.maybeOpen rules.getIncomingBalance)
+    do! acc.Transact(Fold.maybeOpen rules.getIncomingBalance)
     let residual, result = acc.Transact(Fold.tryIngest rules.decideIngestion req)
-    let! residual, carryForward = acc.TransactAsync(Fold.maybeClose rules.decideCarryForward residual)
+    let! residual, carryForward = acc.Transact(Fold.maybeClose rules.decideCarryForward residual)
     return { residual = residual; result = result; carryForward = carryForward }, acc.Events
 }
 
@@ -104,7 +104,10 @@ type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equ
                 decideIngestion     = fun () _state -> (), (), []
                 decideCarryForward  = fun ()        -> genBalance } // always close
         let decider = resolve (Some Equinox.AllowStale) periodId
-        decider.TransactEx((fun c -> decideIngestWithCarryForward rules () c.State), fun r _c -> Option.get r.carryForward)
+        let decide' s = async {
+            let! r, es = decideIngestWithCarryForward rules () s
+            return Option.get r.carryForward, es }
+        decider.Transact(decide')
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     let tryTransact periodId getIncoming (decide : 'request -> Fold.State -> 'request * 'result * Events.Event list) request shouldClose : Async<Result<'request, 'result>> =
@@ -113,7 +116,7 @@ type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equ
                 decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
                 decideCarryForward  = fun res state -> async { if shouldClose res then return! genBalance state else return None } } // also close, if we should
         let decider = resolve (Some Equinox.AllowStale) periodId
-        decider.TransactEx((fun c -> decideIngestWithCarryForward rules request c.State), fun r _c -> r)
+        decider.Transact(decideIngestWithCarryForward rules request)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     /// Processing completes when `decide` yields None for the residual of the 'request
