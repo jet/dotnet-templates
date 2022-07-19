@@ -14,8 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.CosmosStore" Version="3.0.6" />
-    <PackageReference Include="Equinox.MemoryStore" Version="3.0.6" />
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.7" />
+    <PackageReference Include="Equinox.MemoryStore" Version="3.0.7" />
     <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.2" />
   </ItemGroup>
 

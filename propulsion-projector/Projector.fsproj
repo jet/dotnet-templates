@@ -17,7 +17,7 @@
     <PackageReference Include="Argu" Version="6.1.1" />
     <PackageReference Include="Destructurama.FSharp" Version="1.2.0" />
     <!--#if (esdb)-->
-    <PackageReference Include="Equinox.CosmosStore" Version="3.0.6" />
+    <PackageReference Include="Equinox.CosmosStore" Version="3.0.7" />
     <!--#endif-->
     <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.2" />
     <!--#if cosmos-->
@@ -27,7 +27,7 @@
     <PackageReference Include="Propulsion.EventStore" Version="2.12.2" />
     <!--#endif-->
     <!--#if (sss)-->
-    <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="3.0.6" />
+    <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="3.0.7" />
     <PackageReference Include="Propulsion.SqlStreamStore" Version="2.12.2" />
     <!--#endif-->
     <!--#if kafka-->

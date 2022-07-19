@@ -9,12 +9,22 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
-
-- Shipping: Cosmos Reactor Integration test [#116](https://github.com/jet/dotnet-templates/pull/116)
-
 ### Changed
 ### Removed
 ### Fixed
+
+<a name="5.3.0"></a>
+## [5.3.0] - 2022-07-19
+
+### Added
+
+- Shipping: Cosmos Reactor Integration test [#116](https://github.com/jet/dotnet-templates/pull/116)
+- `proIndexer`: Propulsion.DynamoStore.Lambda AWS CDK wiring [#120](https://github.com/jet/dotnet-templates/pull/120)
+
+### Changed
+
+- Target `Equinox` v `3.0.7`
+- Align with v4 Transact APIs [#117](https://github.com/jet/dotnet-templates/pull/117)
 
 <a name="5.2.1"></a>
 ## [5.2.1] - 2022-03-11
@@ -558,7 +568,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.2.1...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.3.0...HEAD
+[5.3.0]: https://github.com/jet/dotnet-templates/compare/5.2.1...5.3.0
 [5.2.1]: https://github.com/jet/dotnet-templates/compare/5.2.0...5.2.1
 [5.2.0]: https://github.com/jet/dotnet-templates/compare/5.1.0...5.2.0
 [5.1.0]: https://github.com/jet/dotnet-templates/compare/5.0.0...5.1.0
