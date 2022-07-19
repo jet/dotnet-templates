@@ -9,11 +9,21 @@
     "Watchdog"
   ],
   "tags": {
-    "language": "F#"
+    "language": "F#",
+    "type": "project"
   },
   "identity": "Equinox.Shipping",
   "name": "Equinox Shipping Sample",
   "shortName": "eqxShipping",
   "sourceName": "Shipping",
-  "preferNameDirectory": true
+  "preferNameDirectory": true,
+  "symbols": {
+    "skipIntegrationTests": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Add Skip attribute to integration tests"
+    }
+  }
 }

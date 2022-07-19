@@ -27,13 +27,15 @@ type Stats(log, statsInterval, stateInterval) =
 
 open Shipping.Domain
 
-let isRelevant = function
+let isReactionStream = function
     | FinalizationTransaction.StreamName _ -> true
     | _ -> false
 
+let filterReactorEvents seq = seq |> Seq.filter (fun ({ stream = sn } : Propulsion.Streams.StreamEvent<_>) -> isReactionStream sn)
+
 let transformOrFilter changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
     for batch in Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents changeFeedDocument do
-        if isRelevant batch.stream then
+        if isReactionStream batch.stream then
             yield batch
 }
 
