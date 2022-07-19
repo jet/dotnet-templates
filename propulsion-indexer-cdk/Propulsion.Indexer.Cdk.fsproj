@@ -20,8 +20,8 @@
         <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props-->
         <!-- <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />-->
 
-        <PackageReference Include="Propulsion.DynamoStore.Lambda" Version="*-*" PrivateAssets="all"/>
-        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="*-*"/>
+        <PackageReference Include="Propulsion.DynamoStore.Lambda" Version="2.13.0-beta.9" PrivateAssets="all"/>
+        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="2.13.0-beta.9"/>
     </ItemGroup>
 
     <!-- The Propulsion.DynamoStore.Lambda NuGet package includes the publish folder as content under 'tools/pub' -->
