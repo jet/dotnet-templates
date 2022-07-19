@@ -156,6 +156,13 @@ EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "PeriodicIngester", "periodic-ingester\PeriodicIngester.fsproj", "{AB0C8BC0-4C30-4177-9469-C06E97C9568E}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proIndexerCdk", "proIndexerCdk", "{A3A3AA9F-E039-4D1A-BA64-A8291A239861}"
+	ProjectSection(SolutionItems) = preProject
+		propulsion-indexer-cdk\.template.config\template.json = propulsion-indexer-cdk\.template.config\template.json
+	EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Propulsion.Indexer.Cdk", "propulsion-indexer-cdk\Propulsion.Indexer.Cdk.fsproj", "{B3B0C203-2648-432F-B49B-F9F8E1A4B4F1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -270,6 +277,10 @@ Global
 		{AB0C8BC0-4C30-4177-9469-C06E97C9568E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AB0C8BC0-4C30-4177-9469-C06E97C9568E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AB0C8BC0-4C30-4177-9469-C06E97C9568E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3B0C203-2648-432F-B49B-F9F8E1A4B4F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3B0C203-2648-432F-B49B-F9F8E1A4B4F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3B0C203-2648-432F-B49B-F9F8E1A4B4F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3B0C203-2648-432F-B49B-F9F8E1A4B4F1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -300,6 +311,7 @@ Global
 		{E0F63351-FADB-4972-BDE7-D5F5731B8EE4} = {CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}
 		{3A22EA30-C741-41EA-9499-7C93E5EE29FA} = {3E4CC1AC-FFA2-457E-9103-ACB497BCB270}
 		{AB0C8BC0-4C30-4177-9469-C06E97C9568E} = {4738344F-839D-4B82-8417-1B2D298E76C2}
+		{B3B0C203-2648-432F-B49B-F9F8E1A4B4F1} = {A3A3AA9F-E039-4D1A-BA64-A8291A239861}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D8B64643-4049-466D-BAFC-0437B8C1E508}

@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@moneylion @bartelink",
+  "classifications": [
+    "CDK",
+    "Event Sourcing",
+    "Equinox",
+    "DynamoDB",
+    "DynamoStore",
+    "Propulsion"
+  ],
+  "tags": {
+    "language": "F#",
+    "type": "project" 
+  },
+  "identity": "Propulsion.Indexer.Cdk",
+  "name": "Propulsion DynamoStore Indexer CDK deploy script",
+  "shortName": "proIndexer",
+  "sourceName": "IndexerCdkTemplate",
+  "preferNameDirectory": true
+}

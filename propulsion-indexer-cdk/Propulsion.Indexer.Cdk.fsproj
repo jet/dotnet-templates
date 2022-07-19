@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+
+        <OutputType>Exe</OutputType>
+        <!-- Opt into Roll forward to future major versions as needed -->
+        <RollForward>Major</RollForward>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="IndexerStack.fs"/>
+        <Compile Include="Program.fs"/>
+        <Content Include="README.md"/>
+        <Content Include=".gitignore"/>
+        <Content Include="cdk.json"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props-->
+        <!-- <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />-->
+
+        <PackageReference Include="Propulsion.DynamoStore.Lambda" Version="*-*" PrivateAssets="all"/>
+        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="*-*"/>
+    </ItemGroup>
+
+    <!-- The Propulsion.DynamoStore.Lambda NuGet package includes the publish folder as content under 'tools/pub' -->
+    <Target Name="_ExtractPropulsionDynamoStoreLambdaToolsContentToObjFolder" AfterTargets="Build">
+        <PropertyGroup>
+            <!-- PkgPropulsion_DynamoStore_Lambda is supplied via the PackageReference -->
+            <_SrcFolder>$(PkgPropulsion_DynamoStore_Lambda)\tools\pub</_SrcFolder>
+            <_DstFolder>$(BaseIntermediateOutputPath)pub</_DstFolder>
+        </PropertyGroup>
+        <ItemGroup>
+            <PublishedFiles Include="$(_SrcFolder)\**\*.*"/>
+        </ItemGroup>
+        <Message Importance="high" Text="Copying Propulsion.DynamoStore.Lambda publish Content from $(_SrcFolder) to holding folder $(_DstFolder)"/>
+        <Copy SourceFiles="@(PublishedFiles)" DestinationFolder="$(_DstFolder)\%(RecursiveDir)" SkipUnchangedFiles="true"/>
+    </Target>
+
+</Project>
