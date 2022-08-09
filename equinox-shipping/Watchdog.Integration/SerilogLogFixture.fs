@@ -38,7 +38,6 @@ module XunitLogger =
 
     let createForSink sink =
         LoggerConfiguration()
-            .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
             .Filter.ByExcluding(System.Func<_, _> Shipping.Watchdog.Infrastructure.Log.isStoreMetrics) // <- comment out to see Equinox logs
             .MinimumLevel.Is(minLevel)

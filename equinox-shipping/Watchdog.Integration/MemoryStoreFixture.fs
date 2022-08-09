@@ -1,18 +1,19 @@
 namespace Shipping.Watchdog.Integration
 
+open System
+
 module MemoryStoreLogger =
 
-    let private propEvents name (kvps : System.Collections.Generic.KeyValuePair<string,string> seq) (log : Serilog.ILogger) =
-        let items = seq { for kv in kvps do yield sprintf "{\"%s\": %s}" kv.Key kv.Value }
+    let private propEvents name kvps (log : Serilog.ILogger) =
+        let items = seq { for KeyValue (k, v) in kvps do yield sprintf "{\"%s\": %s}" k v }
         log.ForContext(name, sprintf "[%s]" (String.concat ",\n\r" items))
 
-    let private propEventJsonUtf8 name (events : Propulsion.Streams.StreamEvent<byte[]> array) (log : Serilog.ILogger) =
+    let private propEventJsonUtf8 name (events : Propulsion.Streams.StreamEvent<ReadOnlyMemory<byte>> array) (log : Serilog.ILogger) =
         log |> propEvents name (seq {
             for { event = e } in events do
-                match e.Data with
-                | null -> ()
-                | d -> System.Collections.Generic.KeyValuePair<_,_>(e.EventType, System.Text.Encoding.UTF8.GetString d) })
-
+                let d = e.Data
+                if not d.IsEmpty then System.Collections.Generic.KeyValuePair<_,_>(e.EventType, System.Text.Encoding.UTF8.GetString d.Span) })
+        
     let renderSubmit (log : Serilog.ILogger) (epoch, stream, events : Propulsion.Streams.StreamEvent<'F> array) =
         if log.IsEnabled Serilog.Events.LogEventLevel.Verbose then
             let log =
@@ -38,15 +39,15 @@ module MemoryStoreLogger =
             let epoch = System.Threading.Interlocked.Increment &epoch
             renderSubmit log (epoch, stream, events)
         if log.IsEnabled Serilog.Events.LogEventLevel.Debug then Observable.subscribe aux source
-        else { new System.IDisposable with member _.Dispose() = () }
+        else { new IDisposable with member _.Dispose() = () }
 
 /// Holds Equinox MemoryStore. Disposable to correctly manage unsubscription of logger at end of test
 type MemoryStoreFixture() =
-    let store = Equinox.MemoryStore.VolatileStore<byte[]>()
+    let store = Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>()
     let mutable disconnectLog : (unit -> unit) option = None
     member val Config = Shipping.Domain.Config.Store.Memory store
     member _.TestOutput with set testOutput =
         if Option.isSome disconnectLog then invalidOp "Cannot connect more than one test output"
         let log = XunitLogger.forTest testOutput
         disconnectLog <- Some (MemoryStoreLogger.subscribe log store.Committed).Dispose
-    interface System.IDisposable with member _.Dispose() = match disconnectLog with Some f -> f () | None -> ()
+    interface IDisposable with member _.Dispose() = match disconnectLog with Some f -> f () | None -> ()

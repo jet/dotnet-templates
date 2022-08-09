@@ -6,38 +6,32 @@ open System
 type Outcome = Completed | Deferred | Resolved of successfully : bool
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
-type Stats(log, statsInterval, stateInterval) =
+type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable completed, deferred, failed, succeeded = 0, 0, 0, 0
     member val StatsInterval = statsInterval
+    member val StateInterval = stateInterval
 
     override _.HandleOk res = res |> function
         | Outcome.Completed -> completed <- completed + 1
         | Outcome.Deferred -> deferred <- deferred + 1
         | Outcome.Resolved successfully -> if successfully then succeeded <- succeeded + 1 else failed <- failed + 1
     override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
+        Exception.dump verboseStore log exn
 
     override _.DumpStats() =
-        base.DumpStats()
         if completed <> 0 || deferred <> 0 || failed <> 0 || succeeded <> 0 then
             log.Information(" Completed {completed} Deferred {deferred} Failed {failed} Succeeded {succeeded}", completed, deferred, failed, succeeded)
             completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0
+        match logExternalStats with None -> () | Some f -> f Serilog.Log.Logger
+        base.DumpStats()
 
 open Shipping.Domain
 
 let isReactionStream = function
     | FinalizationTransaction.StreamName _ -> true
     | _ -> false
-
-let filterReactorEvents seq = seq |> Seq.filter (fun ({ stream = sn } : Propulsion.Streams.StreamEvent<_>) -> isReactionStream sn)
-
-let transformOrFilter changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
-    for batch in Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents changeFeedDocument do
-        if isReactionStream batch.stream then
-            yield batch
-}
 
 let handle
         (processingTimeout : TimeSpan)
@@ -59,5 +53,25 @@ let handle
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
-let createHandler processingTimeout (engine : FinalizationProcess.Manager) =
-    handle processingTimeout engine.Pump
+type Config private () =
+    
+    static member CreateStats(log, statsInterval, stateInterval, ?storeVerbose, ?dump) =
+        Stats(log, statsInterval, stateInterval, defaultArg storeVerbose false, ?logExternalStats=dump)
+
+    static member StartProjector(
+            stats : Stats, log : Serilog.ILogger,
+            handle : _ -> Async<Propulsion.Streams.SpanResult * Outcome>,
+            maxReadAhead : int, maxConcurrentStreams : int,
+            ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Streams.StreamsProjector.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval,
+                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+
+    static member StartSink(
+            stats : Stats, log : Serilog.ILogger, manager : FinalizationProcess.Manager, processingTimeout,
+            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        let handle = handle processingTimeout manager.Pump
+        Config.StartProjector(stats, log, handle, maxReadAhead, maxConcurrentStreams,
+                              ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+        
+    static member StartSource(log, sink, sourceConfig) =
+        Source.start (log, Config.log) sink isReactionStream sourceConfig

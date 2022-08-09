@@ -3,16 +3,15 @@
 This project was generated using:
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    # add -k to add Kafka Projection logic
-    dotnet new proReactor --source changeFeedOnly # use --help to see options
+    dotnet new eqxShipping # use --help to see options
 
-## Usage instructions
+## Cosmos Usage instructions
 
 0. establish connection strings etc. per https://github.com/jet/equinox README
 
         $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
-        $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
-        $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use -c
+        $env:EQUINOX_COSMOS_DATABASE="equinox-test"
+        $env:EQUINOX_COSMOS_CONTAINER="equinox-test"
 
 1. Use the `eqx` tool to initialize a CosmosDb container
 

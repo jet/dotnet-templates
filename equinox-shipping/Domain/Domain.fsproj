@@ -7,8 +7,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Types.fs" />
         <Compile Include="Config.fs" />
+        <Compile Include="Types.fs" />
         <Compile Include="Shipment.fs" />
         <Compile Include="Container.fs" />
         <Compile Include="FinalizationTransaction.fs" />
@@ -17,9 +17,10 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Equinox.CosmosStore" Version="3.0.7" />
-      <PackageReference Include="Equinox.MemoryStore" Version="3.0.7" />
-      <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.2" />
+      <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-beta.10.3" />
+      <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-beta.10.3" />
+      <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-beta.10.3" />
+      <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.4" />
     </ItemGroup>
 
 </Project>

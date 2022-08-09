@@ -47,3 +47,22 @@ type CosmosProperties(reactor : CosmosReactor.Fixture, testOutput) =
         reactor.DumpStats() }
 
     interface IDisposable with member _.Dispose() = logSub.Dispose()
+
+[<Xunit.Collection(DynamoReactor.Name)>]
+type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
+    let logSub = reactor.CaptureSerilogLog testOutput
+
+#if skipIntegrationTests
+    // TODO remove the Skip= so you can run the tests
+    [<Property(MaxTest = 1, Skip="Cannot run in Equinox.Templates CI environment")>]
+#else
+    [<Property(MaxTest = 1)>]
+#endif    
+    let run args = async {
+        do! run reactor.Log reactor.ProcessManager reactor.RunTimeout args
+        // TODO retrying loop verifying that each started transaction reaches a terminal state
+        // For now, the poor-man's version is to look for non-zero Failed and Succeeded counts in the log output after waiting
+        do! Async.Sleep 5000
+        reactor.DumpStats() }
+
+    interface IDisposable with member _.Dispose() = logSub.Dispose()

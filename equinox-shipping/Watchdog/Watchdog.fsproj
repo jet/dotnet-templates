@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>netcoreapp3.1</TargetFramework>
+        <TargetFramework>net6.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
     </PropertyGroup>
 
@@ -15,9 +15,9 @@
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
-        <PackageReference Include="Destructurama.FSharp" Version="1.2.0" />
-        <PackageReference Include="Propulsion.CosmosStore" Version="2.12.2" />
-        <PackageReference Include="Serilog.Sinks.Console" Version="4.0.0" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="2.13.0-beta.11" />
+        <PackageReference Include="Propulsion.DynamoStore" Version="2.13.0-beta.11" />
+        <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
 
     <ItemGroup>
