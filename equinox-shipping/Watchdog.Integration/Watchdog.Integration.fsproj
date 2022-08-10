@@ -13,7 +13,7 @@
         <Compile Include="MemoryStoreFixture.fs" />
         <Compile Include="MemoryStoreProjector.fs" />
         <Compile Include="CosmosConnector.fs" />
-        <Compile Include="DynamoConnections.fs" />
+        <Compile Include="DynamoConnector.fs" />
         <Compile Include="ReactorFixture.fs" />
         <Compile Include="WatchdogIntegrationTests.fs" />
     </ItemGroup>

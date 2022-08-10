@@ -19,7 +19,7 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
     /// Starts a projector loop, feeding into the supplied target
     static member Start(log, target : Propulsion.ProjectorPipeline<Propulsion.Ingestion.Ingester<Propulsion.Streams.StreamEvent<'F> seq, 'B>>) =
         let instance = MemoryStoreProjector(log, target)
-        do Async.Start(instance.Pump)
+        Async.Start(instance.Pump)
         instance
 
     /// Accepts an individual batch of events from a stream for submission into the <c>inner</c> projector
@@ -39,9 +39,9 @@ type MemoryStoreProjector<'F, 'B> private (log, inner : Propulsion.ProjectorPipe
 
     /// Waits until all <c>Submit</c>ted batches have been fed into the <c>inner</c> Projector
     member _.AwaitWithStopOnCancellation
-        (   /// sleep time while awaiting completion
+        (   // sleep time while awaiting completion
             ?delay,
-            /// interval at which to log progress of Projector loop
+            // interval at which to log progress of Projector loop
             ?logInterval) = async {
         if -1L = Volatile.Read(&epoch) then
             log.Warning("No events submitted; completing immediately")

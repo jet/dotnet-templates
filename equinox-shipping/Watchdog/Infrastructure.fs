@@ -133,10 +133,10 @@ module Source =
                     x.WithStartTime(let t = DateTime.UtcNow in t.AddSeconds -1.)
                 let lagFrequency = TimeSpan.FromMinutes 1.
                 CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer, startFromTail = false,
-                                        customize = withStartTime1sAgo, lagReportFreq=lagFrequency)
+                                        customize = withStartTime1sAgo, lagReportFreq = lagFrequency)
             | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
                 CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer, startFromTail,
-                                        ?maxItems=maxItems, lagReportFreq=lagFrequency)
+                                        ?maxItems=maxItems, lagReportFreq = lagFrequency)
 
     module Dynamo =
         open Propulsion.DynamoStore

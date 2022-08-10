@@ -58,19 +58,15 @@ type Config private () =
     static member CreateStats(log, statsInterval, stateInterval, ?storeVerbose, ?dump) =
         Stats(log, statsInterval, stateInterval, defaultArg storeVerbose false, ?logExternalStats=dump)
 
-    static member StartProjector(
-            stats : Stats, log : Serilog.ILogger,
-            handle : _ -> Async<Propulsion.Streams.SpanResult * Outcome>,
-            maxReadAhead : int, maxConcurrentStreams : int,
-            ?wakeForResults, ?idleDelay, ?purgeInterval) =
+    static member private StartProjector(log : Serilog.ILogger, stats : Stats, handle : _ -> Async<Propulsion.Streams.SpanResult * _>,
+                                         maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.StreamsProjector.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval,
                                                   ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
-    static member StartSink(
-            stats : Stats, log : Serilog.ILogger, manager : FinalizationProcess.Manager, processingTimeout,
-            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+    static member StartSink(log : Serilog.ILogger, stats : Stats, manager : FinalizationProcess.Manager, processingTimeout,
+                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         let handle = handle processingTimeout manager.Pump
-        Config.StartProjector(stats, log, handle, maxReadAhead, maxConcurrentStreams,
+        Config.StartProjector(log, stats, handle, maxReadAhead, maxConcurrentStreams,
                               ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
         
     static member StartSource(log, sink, sourceConfig) =

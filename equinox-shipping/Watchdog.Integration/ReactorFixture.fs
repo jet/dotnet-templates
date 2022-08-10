@@ -7,15 +7,15 @@ open System
 /// Not a Class Fixture as a) it requires TestOutput b) we want to guarantee no residual state from preceding tests (esp if they timed out)
 type MemoryReactorFixture(testOutput) =
     let store = new MemoryStoreFixture()
+    
     let manager =
         let maxDop = 4
         Shipping.Domain.FinalizationProcess.Config.create maxDop store.Config
-        
     let log = XunitLogger.forTest testOutput
     let stats = Handler.Config.CreateStats(log, statsInterval = TimeSpan.FromSeconds 10., stateInterval = TimeSpan.FromMinutes 1., storeVerbose = false)
-    let sink = Handler.Config.StartSink(stats, log, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 4096, maxConcurrentStreams = 4)
-
+    let sink = Handler.Config.StartSink(log, stats, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 4096, maxConcurrentStreams = 4)
     let source = MemoryStoreProjector.Start(log, sink)
+
     let buildProjector filter =
         let mapTimelineEvent =
             let mapBodyToBytes = (fun (x : ReadOnlyMemory<byte>) -> x.ToArray())
@@ -52,8 +52,8 @@ type FixtureBase(messageSink, store, sourceConfig) =
         let maxDop = 4
         Shipping.Domain.FinalizationProcess.Config.create maxDop store
     let log = Serilog.Log.Logger
-    let stats = Handler.Config.CreateStats(log, statsInterval = TimeSpan.FromSeconds 10., stateInterval = TimeSpan.FromMinutes 2., storeVerbose = true)
-    let sink = Handler.Config.StartSink(stats, log, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 1024, maxConcurrentStreams = 4)
+    let stats = Handler.Config.CreateStats(log, statsInterval = TimeSpan.FromSeconds 30., stateInterval = TimeSpan.FromMinutes 2., storeVerbose = true)
+    let sink = Handler.Config.StartSink(log, stats, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 1024, maxConcurrentStreams = 4)
     let source =
         let consumerGroupName = "ReactorFixture:" + Shipping.Domain.Guid.generateStringN ()
         let sourceConfig = sourceConfig consumerGroupName
@@ -81,7 +81,7 @@ type FixtureBase(messageSink, store, sourceConfig) =
 module CosmosReactor =
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.CosmosStore CFP
-    type Fixture(messageSink, store, createSourceConfig) =
+    type Fixture private (messageSink, store, createSourceConfig) =
         inherit FixtureBase(messageSink, store, createSourceConfig)
         new (messageSink) =
             let cosmos = CosmosConnector()
@@ -101,16 +101,16 @@ module CosmosReactor =
 module DynamoReactor =
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.DynamoStoreSource Feed
-    type Fixture(messageSink, store, createSource) =
+    type Fixture private (messageSink, store, createSource) =
         inherit FixtureBase(messageSink, store, createSource)
         new (messageSink) =
-            let conn = DynamoConnections()
+            let conn = DynamoConnector()
             let sourceConfig groupName =
                 let checkpointInterval = TimeSpan.FromHours 1.
                 let checkpoints = Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Shipping.Domain.Config.log (groupName, checkpointInterval) conn.DynamoStore
                 let loadMode = DynamoLoadModeConfig.Hydrate (conn.StoreContext, 2)
                 let startFromTail, batchSizeCutoff = true, 100
-                SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail, batchSizeCutoff, statsInterval = TimeSpan.FromSeconds 10.)
+                SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail, batchSizeCutoff, statsInterval = TimeSpan.FromSeconds 30.)
             new Fixture(messageSink, conn.Store, sourceConfig)
 
     let [<Literal>] Name = "DynamoReactor"

@@ -1,6 +1,5 @@
 ﻿module Shipping.Watchdog.Program
 
-open Shipping.Watchdog
 open Serilog
 open System
 
@@ -27,7 +26,7 @@ type Configuration(tryGet : string -> string option) =
     member _.DynamoAccessKey =              get ACCESS_KEY
     member _.DynamoSecretKey =              get SECRET_KEY
     member _.DynamoTable =                  get TABLE
-    member x.DynamoIndexTable =             tryGet INDEX_TABLE// |> Option.defaultWith (fun () -> x.DynamoTable)
+    member x.DynamoIndexTable =             tryGet INDEX_TABLE
 
 module Args =
 
@@ -210,14 +209,14 @@ let [<Literal>] AppName = "Watchdog"
 
 let build (args : Args.Arguments) =
     let consumerGroupName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
-    let cache = Equinox.Cache (AppName, sizeMb = 10)
+    let cache = Equinox.Cache(AppName, sizeMb = 10)
     let store, buildSourceConfig, dumpMetrics = args.ConnectStoreAndSource cache
     let log = Log.Logger
     let sink =
         let stats = Handler.Config.CreateStats(log, args.StatsInterval, args.StateInterval, args.StoreVerbose, dumpMetrics)
         let manager = Shipping.Domain.FinalizationProcess.Config.create args.ProcessManagerMaxDop store
-        Handler.Config.StartSink(stats, log, manager, args.ProcessingTimeout,
-                                 maxReadAhead, maxConcurrentStreams, wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
+        Handler.Config.StartSink(log, stats, manager, args.ProcessingTimeout, maxReadAhead, maxConcurrentStreams,
+                                 wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
     let source =
         let sourceConfig = buildSourceConfig log consumerGroupName
         Handler.Config.StartSource(log, sink, sourceConfig)
@@ -237,7 +236,7 @@ let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose = args.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? MissingArg) && not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
