@@ -3,6 +3,8 @@ namespace Shipping.Watchdog.Integration
 open Equinox.DynamoStore
 open Shipping.Watchdog.Infrastructure
 
+type Configuration = Shipping.Watchdog.Program.Configuration
+
 type DynamoConnector(serviceUrl, accessKey, secretKey, table, indexTable) =
     
     let requestTimeout, retries =               System.TimeSpan.FromSeconds 5., 5
@@ -12,8 +14,8 @@ type DynamoConnector(serviceUrl, accessKey, secretKey, table, indexTable) =
     let storeContext =                          storeClient |> DynamoStoreContext.create
     let cache =                                 Equinox.Cache("Tests", sizeMb = 10)
     
-    new (c : Shipping.Watchdog.Program.Configuration) = DynamoConnector(c.DynamoServiceUrl, c.DynamoAccessKey, c.DynamoSecretKey, c.DynamoTable, c.DynamoIndexTable)
-    new () = DynamoConnector(Shipping.Watchdog.Program.Configuration EnvVar.tryGet)
+    new (c : Configuration) =                   DynamoConnector(c.DynamoServiceUrl, c.DynamoAccessKey, c.DynamoSecretKey, c.DynamoTable, c.DynamoIndexTable)
+    new () =                                    DynamoConnector(Configuration EnvVar.tryGet)
 
     member val IndexClient =                    DynamoStoreClient(client, match indexTable with Some x -> x | None -> table + "-index")
     member val StoreContext =                   storeContext

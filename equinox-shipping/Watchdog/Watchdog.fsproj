@@ -17,10 +17,12 @@
         <PackageReference Include="Argu" Version="6.1.1" />
         <PackageReference Include="Propulsion.CosmosStore" Version="2.13.0-beta.11" />
         <PackageReference Include="Propulsion.DynamoStore" Version="2.13.0-beta.11" />
+<!--        <PackageReference Include="Propulsion.MemoryStore" Version="2.13.0-beta.12" />-->
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\..\..\propulsion\src\Propulsion.MemoryStore\Propulsion.MemoryStore.fsproj" />
       <ProjectReference Include="..\Domain\Domain.fsproj" />
     </ItemGroup>
 </Project>

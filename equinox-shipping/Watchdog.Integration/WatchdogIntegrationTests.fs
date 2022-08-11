@@ -17,21 +17,29 @@ let run (log: Serilog.ILogger) (processManager : Shipping.Domain.FinalizationPro
 
     log.Information("Awaiting ({timeouts}/{total} timeouts) batches: {counts}", timeouts, counts.Count, counts) }
 
-type MemoryProperties(testOutput) =
+[<AbstractClass>]
+type ReactorPropertiesBase(reactor : FixtureBase, testOutput) =
+    let logSub = reactor.CaptureSerilogLog testOutput
+    interface IDisposable with member _.Dispose() = reactor.DumpStats(); logSub.Dispose()
 
-    [<Property(EndSize = 1000, MaxTest = 5)>]
+type MemoryProperties (reactor : MemoryReactor.Fixture, testOutput) =
+    inherit ReactorPropertiesBase(reactor, testOutput)
+
+    [<Property(EndSize = 1000, MaxTest = 20)>]
     let run args = async {
 
-        use reactor = new MemoryReactorFixture(testOutput) // Run under debugger and/or adjust XunitLogger.minLevel to see events in test output
         do! run reactor.Log reactor.ProcessManager reactor.RunTimeout args
         // Ensure all events submitted to the projector get processed cleanly
-        do! reactor.AwaitWithStopOnCancellation() }
+        // TODO do! reactor.AwaitWithStopOnCancellation()
+        }
         // TODO verify that each started transaction reaches a terminal state
         // For now, the poor-man's version is to look for non-zero Failed and Succeeded counts in the log output
 
-[<Xunit.Collection(CosmosReactor.Name)>]
+    interface Xunit.IClassFixture<MemoryReactor.Fixture> // Don't throw away the store or restart projectors per run (academic as we only have one dest for now)
+
+[<Xunit.Collection(CosmosReactor.CollectionName)>]
 type CosmosProperties(reactor : CosmosReactor.Fixture, testOutput) =
-    let logSub = reactor.CaptureSerilogLog testOutput
+    inherit ReactorPropertiesBase(reactor, testOutput)
 
 #if skipIntegrationTests
     // TODO remove the Skip= so you can run the tests
@@ -46,11 +54,9 @@ type CosmosProperties(reactor : CosmosReactor.Fixture, testOutput) =
         do! Async.Sleep 5000
         reactor.DumpStats() }
 
-    interface IDisposable with member _.Dispose() = logSub.Dispose()
-
-[<Xunit.Collection(DynamoReactor.Name)>]
+[<Xunit.Collection(DynamoReactor.CollectionName)>]
 type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
-    let logSub = reactor.CaptureSerilogLog testOutput
+    inherit ReactorPropertiesBase(reactor, testOutput)
 
 #if skipIntegrationTests
     // TODO remove the Skip= so you can run the tests
@@ -64,5 +70,3 @@ type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
         // For now, the poor-man's version is to look for non-zero Failed and Succeeded counts in the log output after waiting
         do! Async.Sleep 5000
         reactor.DumpStats() }
-
-    interface IDisposable with member _.Dispose() = logSub.Dispose()

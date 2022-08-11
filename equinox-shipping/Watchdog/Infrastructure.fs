@@ -103,6 +103,8 @@ type Logging() =
 
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type SourceConfig =
+    | Memory of
+        store : Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>
     | Cosmos of
         monitoredContainer : Microsoft.Azure.Cosmos.Container
         * leasesContainer : Microsoft.Azure.Cosmos.Container
@@ -121,6 +123,14 @@ and [<NoEquality; NoComparison>]
     DynamoLoadModeConfig =
     | Hydrate of monitoredContext : Equinox.DynamoStore.DynamoStoreContext * hydrationConcurrency : int
 module Source =
+
+    module Memory =
+        open Propulsion.MemoryStore
+        let start log (sink : Propulsion.ProjectorPipeline<_>) streamFilter
+            (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline =
+            let source = MemoryStoreSource<_>(log, store, streamFilter, sink)
+            source.Start()
+
     module Cosmos =
         open Propulsion.CosmosStore
         let start log (sink : Propulsion.ProjectorPipeline<_>) streamFilter
@@ -140,6 +150,20 @@ module Source =
 
     module Dynamo =
         open Propulsion.DynamoStore
+        // 2.13.0-beta.12 reduces this filtering to a one-liner
+        type DynamoStoreSource(
+                log, statsInterval, indexClient, batchSizeCutoff, s,
+                checkpoints, sink, loadMode, fromTail, storeLog) =
+            inherit Propulsion.DynamoStore.DynamoStoreSource(
+                                log, statsInterval,
+                                indexClient, batchSizeCutoff, s,
+                                checkpoints, sink, loadMode, fromTail = fromTail, storeLog = storeLog
+                            )
+            let readTranches () = async {
+                let appendsTrancheIds = [| AppendsTrancheId.wellKnownId |]
+                return appendsTrancheIds |> Array.map (string >> Propulsion.Feed.TrancheId.parse) }
+
+            member _.Start() = base.Start(base.Pump(fun () -> readTranches ()))
         let start (log, storeLog) (sink : Propulsion.ProjectorPipeline<_>) streamFilter
             (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) : Propulsion.Pipeline =
             let loadMode =
@@ -153,6 +177,8 @@ module Source =
             source.Start()
 
     let start (log, storeLog) sink streamFilter : SourceConfig -> Propulsion.Pipeline = function
+        | SourceConfig.Memory volatileStore ->
+            Memory.start log sink streamFilter volatileStore
         | SourceConfig.Cosmos (monitored, leases, checkpointConfig) ->
             Cosmos.start log sink streamFilter
                (monitored, leases, checkpointConfig)

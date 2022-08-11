@@ -1,16 +1,17 @@
 namespace Shipping.Watchdog.Integration
 
-type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel : Serilog.Events.LogEventLevel) =
+type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel : Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =
-        let baseTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u1} {Message} {Properties}{NewLine}{Exception}"
-        let template = if minLevel <= Serilog.Events.LogEventLevel.Verbose then baseTemplate else baseTemplate.Replace("{Properties}", "")
+        let baseTemplate = "{Timestamp:HH:mm:ss.fff} {Level:u1} " + Option.toObj templatePrefix + "{Message} {Properties}{NewLine}{Exception}"
+        let template = if minLevel <= Serilog.Events.LogEventLevel.Debug then baseTemplate else baseTemplate.Replace("{Properties}", "")
         Serilog.Formatting.Display.MessageTemplateTextFormatter(template, null)
     let mutable currentTestOutput : Xunit.Abstractions.ITestOutputHelper option = None
     let writeSerilogEvent (logEvent : Serilog.Events.LogEvent) =
+        logEvent.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.CosmosStore.Log.PropertyTag
-        logEvent.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
+        logEvent.RemovePropertyIfPresent Propulsion.Feed.Internal.Log.PropertyTag
         use writer = new System.IO.StringWriter()
         formatter.Format(logEvent, writer)
         let message = writer |> string |> fun s -> s.TrimEnd('\n')
@@ -55,8 +56,8 @@ module XunitLogger =
 /// In order to access the full output:
 /// 0. have an xunit.runner.json alongside the test assembly with `{ "diagnosticMessages": true }` within
 /// 1. Run tests with dotnet test, or Visual Studio and examine Test Output window
-type SerilogLogFixture(messageSink) =
-    let sink = XunitOutputSink(messageSink, XunitLogger.minLevel)
+type SerilogLogFixture(messageSink, ?templatePrefix) =
+    let sink = XunitOutputSink(messageSink, XunitLogger.minLevel, ?templatePrefix = templatePrefix)
     do Serilog.Log.Logger <- XunitLogger.createForSink sink; Serilog.Log.Information "Serilog.Log -> Xunit configured..."
     /// Enables capturing of log messages in the per-test output (combine with XUnit Collection fixtures to ensure no concurrent usage)
     member _.CaptureSerilogLog value = sink.CaptureSerilogLog value
