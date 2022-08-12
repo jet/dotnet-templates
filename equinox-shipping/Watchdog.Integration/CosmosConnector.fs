@@ -3,6 +3,8 @@ namespace Shipping.Watchdog.Integration
 open Shipping.Watchdog.Infrastructure
 open System
 
+type Configuration = Shipping.Watchdog.Program.Configuration
+
 type CosmosConnector(connectionString, databaseId, containerId) =
 
     let discovery =                     connectionString |> Equinox.CosmosStore.Discovery.ConnectionString
@@ -13,8 +15,8 @@ type CosmosConnector(connectionString, databaseId, containerId) =
     let leaseContainerId =              containerId + "-aux"
     let connectLeases () =              connector.CreateUninitialized(databaseId, leaseContainerId)
     
-    new (c : Shipping.Watchdog.Program.Configuration) = CosmosConnector(c.CosmosConnection, c.CosmosDatabase, c.CosmosContainer)
-    new () = CosmosConnector(Shipping.Watchdog.Program.Configuration EnvVar.tryGet)
+    new (c : Configuration) =           CosmosConnector(c.CosmosConnection, c.CosmosDatabase, c.CosmosContainer)
+    new () =                            CosmosConnector(Configuration EnvVar.tryGet)
     
     member private _.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(databaseId, containerId)
     member _.ConnectLeases() =
