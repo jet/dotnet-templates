@@ -55,9 +55,6 @@ let handle
 
 type Config private () =
     
-    static member CreateStats(log, statsInterval, stateInterval, ?storeVerbose, ?dump) =
-        Stats(log, statsInterval, stateInterval, defaultArg storeVerbose false, ?logExternalStats = dump)
-
     static member private StartProjector(log : Serilog.ILogger, stats : Stats, handle : _ -> Async<Propulsion.Streams.SpanResult * _>,
                                          maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.StreamsProjector.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval,

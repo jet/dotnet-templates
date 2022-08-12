@@ -12,7 +12,7 @@ type FixtureBase(messageSink, store, createSourceConfig) =
         let maxDop = 4
         Shipping.Domain.FinalizationProcess.Config.create maxDop store
     let log = Serilog.Log.Logger
-    let stats = Handler.Config.CreateStats(log, statsInterval = TimeSpan.FromSeconds 30., stateInterval = TimeSpan.FromMinutes 2., storeVerbose = true)
+    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromSeconds 30., stateInterval = TimeSpan.FromMinutes 2., verboseStore = true)
     let sink = Handler.Config.StartSink(log, stats, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 1024, maxConcurrentStreams = 4)
     let source =
         let consumerGroupName = $"ReactorFixture/{contextId}"

@@ -213,7 +213,7 @@ let build (args : Args.Arguments) =
     let store, buildSourceConfig, dumpMetrics = args.ConnectStoreAndSource cache
     let log = Log.Logger
     let sink =
-        let stats = Handler.Config.CreateStats(log, args.StatsInterval, args.StateInterval, args.StoreVerbose, dumpMetrics)
+        let stats = Handler.Stats(log, args.StatsInterval, args.StateInterval, args.StoreVerbose, dumpMetrics)
         let manager = Shipping.Domain.FinalizationProcess.Config.create args.ProcessManagerMaxDop store
         Handler.Config.StartSink(log, stats, manager, args.ProcessingTimeout, maxReadAhead, maxConcurrentStreams,
                                  wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
