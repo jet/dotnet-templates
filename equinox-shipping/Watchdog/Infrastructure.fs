@@ -70,6 +70,10 @@ type Equinox.DynamoStore.DynamoStoreClient with
 
     member internal x.LogConfiguration(role, ?log) =
         (defaultArg log Log.Logger).Information("DynamoStore {role:l} Table {table} Archive {archive}", role, x.TableName, Option.toObj x.ArchiveTableName)
+    member client.CreateCheckpointService(consumerGroupName, cache, ?checkpointInterval) =
+        let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
+        let context = Equinox.DynamoStore.DynamoStoreContext(client)
+        Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Shipping.Domain.Config.log (consumerGroupName, checkpointInterval) (context, cache)
 
 type Equinox.DynamoStore.DynamoStoreContext with
 

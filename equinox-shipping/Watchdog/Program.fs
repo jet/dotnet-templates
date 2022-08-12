@@ -90,10 +90,9 @@ module Args =
                 Shipping.Domain.Config.Store.Cosmos (context, cache), buildSourceConfig, Equinox.CosmosStore.Core.Log.InternalMetrics.dump
             | Choice2Of2 dynamo ->
                 let context = dynamo.Connect()
-                let buildSourceConfig log groupName =
-                    let indexStore, startFromTail, batchSizeCutoff, streamsDop = dynamo.MonitoringParams(log)
+                let buildSourceConfig log consumerGroupName =
+                    let indexStore, checkpoints, startFromTail, batchSizeCutoff, streamsDop = dynamo.MonitoringParams(log, consumerGroupName, cache)
                     let load = DynamoLoadModeConfig.Hydrate (context, streamsDop)
-                    let checkpoints = dynamo.CreateCheckpointStore(groupName, cache)
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, x.StatsInterval)
                 Shipping.Domain.Config.Store.Dynamo (context, cache), buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
         member x.StoreVerbose =             false
@@ -187,17 +186,16 @@ module Args =
         let connector =                     Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
         let client =                        connector.CreateClient()
         let indexStoreClient =              lazy client.ConnectStore("Index", indexTable)
-        let checkpointInterval =            TimeSpan.FromHours 1.
         member val Verbose =                a.Contains Verbose
         member _.Connect() =                connector.LogConfiguration()
                                             client.ConnectStore("Main", table) |> DynamoStoreContext.create
-        member _.CreateCheckpointStore(group, cache) =
-            let context = indexStoreClient.Value |> DynamoStoreContext.create
-            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Shipping.Domain.Config.log (group, checkpointInterval) (context, cache)
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log : ILogger, consumerGroupName, cache) =
             log.Information("DynamoStoreSource MaxItems {maxItems} Hydrater parallelism {streamsDop}", maxItems, streamsDop)
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
-            indexStoreClient.Value, fromTail, maxItems, streamsDop
+            let indexStoreClient = indexStoreClient.Value
+            let checkpoints = indexStoreClient.CreateCheckpointService(consumerGroupName, cache)
+            
+            indexStoreClient, checkpoints, fromTail, maxItems, streamsDop
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv : Arguments =

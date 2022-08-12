@@ -59,8 +59,8 @@ module CosmosReactor =
             let cosmos = CosmosConnector()
             let store, monitored = cosmos.Connect()
             let leases = cosmos.ConnectLeases()
-            let createSourceConfig groupName =
-                let checkpointConfig = CosmosCheckpointConfig.Ephemeral groupName
+            let createSourceConfig consumerGroupName =
+                let checkpointConfig = CosmosCheckpointConfig.Ephemeral consumerGroupName
                 SourceConfig.Cosmos (monitored, leases, checkpointConfig)
             new Fixture(messageSink, store, createSourceConfig)
 
@@ -77,12 +77,11 @@ module DynamoReactor =
         inherit FixtureBase(messageSink, store, createSourceConfig)
         new (messageSink) =
             let conn = DynamoConnector()
-            let createSourceConfig groupName =
-                let checkpointInterval = TimeSpan.FromHours 1.
-                let checkpoints = Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Shipping.Domain.Config.log (groupName, checkpointInterval) conn.DynamoStore
+            let createSourceConfig consumerGroupName =
                 let loadMode = DynamoLoadModeConfig.Hydrate (conn.StoreContext, 2)
-                let startFromTail, batchSizeCutoff = true, 100
-                SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail, batchSizeCutoff, statsInterval = TimeSpan.FromSeconds 30.)
+                let startFromTail, batchSizeCutoff, statsInterval = true, 100, TimeSpan.FromSeconds 30.
+                let cps = conn.CreateCheckpointService(consumerGroupName)
+                SourceConfig.Dynamo (conn.IndexClient, cps, loadMode, startFromTail, batchSizeCutoff, statsInterval)
             new Fixture(messageSink, conn.Store, createSourceConfig)
 
     let [<Literal>] CollectionName = "DynamoReactor"

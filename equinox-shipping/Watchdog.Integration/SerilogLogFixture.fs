@@ -9,6 +9,7 @@ type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel :
     let mutable currentTestOutput : Xunit.Abstractions.ITestOutputHelper option = None
     let writeSerilogEvent (logEvent : Serilog.Events.LogEvent) =
         logEvent.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
+        logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.CosmosStore.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Feed.Internal.Log.PropertyTag
