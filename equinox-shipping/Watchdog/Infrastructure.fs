@@ -163,8 +163,7 @@ module Source =
                 DynamoStoreSource(
                     log, statsInterval,
                     indexStore, batchSizeCutoff, tailSleepInterval,
-                    checkpoints, sink, loadMode, fromTail = startFromTail, storeLog = storeLog,
-                    trancheIds = [|Propulsion.Feed.TrancheId.parse "0"|]) // TEMP filter for additional clones of index data in target Table
+                    checkpoints, sink, loadMode, fromTail = startFromTail, storeLog = storeLog)
             source.Start(), None
 
     let start (log, storeLog) sink streamFilter : SourceConfig -> Propulsion.Pipeline * Async<unit> option = function
