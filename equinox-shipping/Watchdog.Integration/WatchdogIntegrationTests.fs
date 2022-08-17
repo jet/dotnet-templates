@@ -21,19 +21,20 @@ let run (log: Serilog.ILogger) (processManager : Shipping.Domain.FinalizationPro
 type ReactorPropertiesBase(reactor : FixtureBase, testOutput) =
     let logSub = reactor.CaptureSerilogLog testOutput
     interface IDisposable with member _.Dispose() = reactor.DumpStats(); logSub.Dispose()
+    abstract member RunTimeout : TimeSpan with get
+    default _.RunTimeout = TimeSpan.FromSeconds 1.
 
 type MemoryProperties (reactor : MemoryReactor.Fixture, testOutput) =
     inherit ReactorPropertiesBase(reactor, testOutput)
 
-    [<Property(EndSize = 1000, MaxTest = 20)>]
-    let run args = async {
-
-        do! run reactor.Log reactor.ProcessManager reactor.RunTimeout args
-        // Ensure all events submitted to the projector get processed cleanly
-        // TODO do! reactor.AwaitWithStopOnCancellation()
-        }
-        // TODO verify that each started transaction reaches a terminal state
-        // For now, the poor-man's version is to look for non-zero Failed and Succeeded counts in the log output
+    [<Property(EndSize = 1000, MaxTest = 100)>]
+    let run args : Async<unit> = 
+        run reactor.Log reactor.ProcessManager reactor.RunTimeout args
+    
+    // Verify all Committed events submitted to the projector have been processed cleanly, and nothing remains stuck
+    // Because we're using a MemoryStore, we can do this deterministically, without arbitrary sleeps to ensure we've seen all events
+    // NOTE we do this wait exactly once after we've run all the tests - doing it every time would entail waiting 1 minute per the Timeout
+    interface IAsyncDisposable with member _.DisposeAsync() = reactor.AwaitReactions() |> Async.StartAsTask |> System.Threading.Tasks.ValueTask
 
     interface Xunit.IClassFixture<MemoryReactor.Fixture> // Don't throw away the store or restart projectors per run (academic as we only have one dest for now)
 

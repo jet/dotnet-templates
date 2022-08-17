@@ -215,7 +215,7 @@ let build (args : Args.Arguments) =
         let manager = Shipping.Domain.FinalizationProcess.Config.create args.ProcessManagerMaxDop store
         Handler.Config.StartSink(log, stats, manager, args.ProcessingTimeout, maxReadAhead, maxConcurrentStreams,
                                  wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
-    let source =
+    let source, _awaitReactions =
         let sourceConfig = buildSourceConfig log consumerGroupName
         Handler.Config.StartSource(log, sink, sourceConfig)
     sink, source

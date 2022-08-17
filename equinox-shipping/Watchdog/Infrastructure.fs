@@ -131,14 +131,14 @@ module Source =
     module Memory =
         open Propulsion.MemoryStore
         let start log (sink : Propulsion.ProjectorPipeline<_>) streamFilter
-            (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline =
+            (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline * Async<unit> option =
             let source = MemoryStoreSource<_>(log, store, streamFilter, sink)
-            source.Start()
+            source.Start(), Some (source.AwaitCompletion(ignoreSubsequent = false))
 
     module Cosmos =
         open Propulsion.CosmosStore
         let start log (sink : Propulsion.ProjectorPipeline<_>) streamFilter
-            (monitoredContainer, leasesContainer, checkpointConfig) : Propulsion.Pipeline =
+            (monitoredContainer, leasesContainer, checkpointConfig) : Propulsion.Pipeline * Async<unit> option =
             let parseFeedDoc = Seq.collect EquinoxSystemTextJsonParser.enumStreamEvents >> Seq.filter (fun { stream = s } -> streamFilter s)
             let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, parseFeedDoc)
             match checkpointConfig with
@@ -147,29 +147,15 @@ module Source =
                     x.WithStartTime(let t = DateTime.UtcNow in t.AddSeconds -1.)
                 let lagFrequency = TimeSpan.FromMinutes 1.
                 CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer, startFromTail = false,
-                                        customize = withStartTime1sAgo, lagReportFreq = lagFrequency)
+                                        customize = withStartTime1sAgo, lagReportFreq = lagFrequency), None
             | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
                 CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer, startFromTail,
-                                        ?maxItems=maxItems, lagReportFreq = lagFrequency)
+                                        ?maxItems=maxItems, lagReportFreq = lagFrequency), None
 
     module Dynamo =
         open Propulsion.DynamoStore
-        // 2.13.0-beta.12 reduces this filtering to a one-liner
-        type DynamoStoreSource(
-                log, statsInterval, indexClient, batchSizeCutoff, s,
-                checkpoints, sink, loadMode, fromTail, storeLog) =
-            inherit Propulsion.DynamoStore.DynamoStoreSource(
-                                log, statsInterval,
-                                indexClient, batchSizeCutoff, s,
-                                checkpoints, sink, loadMode, fromTail = fromTail, storeLog = storeLog
-                            )
-            let readTranches () = async {
-                let appendsTrancheIds = [| AppendsTrancheId.wellKnownId |]
-                return appendsTrancheIds |> Array.map (string >> Propulsion.Feed.TrancheId.parse) }
-
-            member _.Start() = base.Start(base.Pump(fun () -> readTranches ()))
         let start (log, storeLog) (sink : Propulsion.ProjectorPipeline<_>) streamFilter
-            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) : Propulsion.Pipeline =
+            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) : Propulsion.Pipeline * Async<unit> option =
             let loadMode =
                 match loadModeConfig with
                 | Hydrate (monitoredContext, hydrationConcurrency) -> LoadMode.Hydrated (streamFilter, hydrationConcurrency, monitoredContext)
@@ -177,10 +163,11 @@ module Source =
                 DynamoStoreSource(
                     log, statsInterval,
                     indexStore, batchSizeCutoff, tailSleepInterval,
-                    checkpoints, sink, loadMode, fromTail = startFromTail, storeLog = storeLog)
-            source.Start()
+                    checkpoints, sink, loadMode, fromTail = startFromTail, storeLog = storeLog,
+                    trancheIds = [|Propulsion.Feed.TrancheId.parse "0"|]) // TEMP filter for additional clones of index data in target Table
+            source.Start(), None
 
-    let start (log, storeLog) sink streamFilter : SourceConfig -> Propulsion.Pipeline = function
+    let start (log, storeLog) sink streamFilter : SourceConfig -> Propulsion.Pipeline * Async<unit> option = function
         | SourceConfig.Memory volatileStore ->
             Memory.start log sink streamFilter volatileStore
         | SourceConfig.Cosmos (monitored, leases, checkpointConfig) ->
