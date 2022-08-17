@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module private ConsumerTemplate.Infrastructure
+module internal ConsumerTemplate.Infrastructure
 
 open Serilog
 open System
