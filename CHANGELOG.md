@@ -9,6 +9,10 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- Shipping: `DynamoStore` support and Reactor Integration test [#121](https://github.com/jet/dotnet-templates/pull/121)
+- Shipping: Use `Propulsion.MemoryStore`'s `AwaitCompletion` [#121](https://github.com/jet/dotnet-templates/pull/121)
+
 ### Changed
 ### Removed
 ### Fixed
