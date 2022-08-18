@@ -224,7 +224,7 @@ open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCancelledException
 
 let run args =
     let sink, source = build args
-    [   Async.AwaitKeyboardInterruptAsTaskCancelledException()
+    [   Async.AwaitKeyboardInterruptAsTaskCanceledException()
         source.AwaitWithStopOnCancellation()
         sink.AwaitWithStopOnCancellation() ]
     |> Async.Parallel |> Async.Ignore<unit array>
