@@ -16,10 +16,12 @@ type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel :
         logEvent.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
+//-:cnd:noEmit
 #if !NO_CONCRETE_STORES // In Domain.Tests, we don't reference Propulsion.CosmosStore/DynamoStore etc        
         logEvent.RemovePropertyIfPresent Propulsion.CosmosStore.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Feed.Core.Log.PropertyTag
-#endif        
+#endif
+//+:cnd:noEmit
         use writer = new System.IO.StringWriter()
         formatter.Format(logEvent, writer)
         let message = writer |> string |> fun s -> s.TrimEnd('\n')
