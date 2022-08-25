@@ -8,11 +8,6 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module Log =
-
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
-
 module Exception =
 
     let dump verboseStore (log : ILogger) (exn : exn) =

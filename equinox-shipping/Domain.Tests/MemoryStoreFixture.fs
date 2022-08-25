@@ -1,4 +1,4 @@
-namespace Shipping.Watchdog.Integration
+namespace Shipping.Domain.Tests
 
 open Propulsion.MemoryStore
 open System
@@ -8,6 +8,7 @@ type MemoryStoreFixture() =
     let store = Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>()
     let mutable disconnectLog : (unit -> unit) option = None
     member val Config = Shipping.Domain.Config.Store.Memory store
+    member _.Committed = store.Committed
     member _.TestOutput with set testOutput =
         if Option.isSome disconnectLog then invalidOp "Cannot connect more than one test output"
         let log = XunitLogger.forTest testOutput

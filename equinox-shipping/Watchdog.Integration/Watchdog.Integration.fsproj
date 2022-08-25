@@ -9,8 +9,9 @@
 
     <ItemGroup>
         <Compile Include="Infrastructure.fs" />
-        <Compile Include="SerilogLogFixture.fs" />
-        <Compile Include="MemoryStoreFixture.fs" />
+        <Compile Include="..\Domain.Tests\SerilogLogFixture.fs">
+            <Link>SerilogLogFixture.fs</Link>
+        </Compile>
         <Compile Include="CosmosConnector.fs" />
         <Compile Include="DynamoConnector.fs" />
         <Compile Include="ReactorFixture.fs" />

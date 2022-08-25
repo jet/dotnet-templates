@@ -1,5 +1,10 @@
-namespace Shipping.Watchdog.Integration
+namespace Shipping.Domain.Tests
 
+module Log =
+
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let isStoreMetrics e = Serilog.Filters.Matching.WithProperty("isMetric").Invoke e
+    
 type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel : Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =
@@ -11,8 +16,10 @@ type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel :
         logEvent.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
+#if !NO_CONCRETE_STORES // In Domain.Tests, we don't reference Propulsion.CosmosStore/DynamoStore etc        
         logEvent.RemovePropertyIfPresent Propulsion.CosmosStore.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Feed.Core.Log.PropertyTag
+#endif        
         use writer = new System.IO.StringWriter()
         formatter.Format(logEvent, writer)
         let message = writer |> string |> fun s -> s.TrimEnd('\n')
@@ -46,7 +53,7 @@ module XunitLogger =
             .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
             .MinimumLevel.Is(minLevel)
             .WriteTo.Logger(fun l ->
-                l.Filter.ByExcluding(System.Func<_, _> Shipping.Infrastructure.Log.isStoreMetrics) // <- comment out to see Equinox logs in Test Output
+                l.Filter.ByExcluding(System.Func<_, _> Log.isStoreMetrics) // <- comment out to see Equinox logs in Test Output
                  .WriteTo.Sink(sink) |> ignore)
             .CreateLogger()
 

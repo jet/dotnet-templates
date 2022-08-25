@@ -3,12 +3,14 @@
     <PropertyGroup>
         <TargetFramework>net6.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
-        <IsPackable>false</IsPackable>
         <OutputType>Library</OutputType>
+        <DefineConstants>NO_CONCRETE_STORES</DefineConstants>
     </PropertyGroup>
 
     <ItemGroup>
         <Compile Include="Infrastructure.fs" />
+        <Compile Include="SerilogLogFixture.fs" />
+        <Compile Include="MemoryStoreFixture.fs" />
         <Compile Include="ContainerTests.fs" />
         <Compile Include="ShipmentTests.fs" />
         <Compile Include="FinalizationTransactionTests.fs" />
