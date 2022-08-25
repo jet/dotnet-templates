@@ -1,6 +1,6 @@
 namespace Shipping.Watchdog.Integration
 
-open Shipping.Watchdog.Infrastructure
+open Shipping.Infrastructure
 
 type DynamoConnector(serviceUrl, accessKey, secretKey, table, indexTable) =
     
@@ -14,6 +14,7 @@ type DynamoConnector(serviceUrl, accessKey, secretKey, table, indexTable) =
     new (c : Shipping.Watchdog.Program.Configuration) = DynamoConnector(c.DynamoServiceUrl, c.DynamoAccessKey, c.DynamoSecretKey, c.DynamoTable, c.DynamoIndexTable)
     new () =                            DynamoConnector(Shipping.Watchdog.Program.Configuration EnvVar.tryGet)
 
+    member val DumpStats =              Equinox.DynamoStore.Core.Log.InternalMetrics.dump
     member val IndexClient =            Equinox.DynamoStore.DynamoStoreClient(client, match indexTable with Some x -> x | None -> table + "-index")
     member val StoreContext =           storeContext
     member val StoreArgs =              (storeContext, cache)

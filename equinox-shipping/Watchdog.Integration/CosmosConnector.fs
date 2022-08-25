@@ -1,6 +1,6 @@
 namespace Shipping.Watchdog.Integration
 
-open Shipping.Watchdog.Infrastructure
+open Shipping.Infrastructure
 
 type CosmosConnector(connectionString, databaseId, containerId) =
 
@@ -15,6 +15,7 @@ type CosmosConnector(connectionString, databaseId, containerId) =
     new (c : Shipping.Watchdog.Program.Configuration) = CosmosConnector(c.CosmosConnection, c.CosmosDatabase, c.CosmosContainer)
     new () =                            CosmosConnector(Shipping.Watchdog.Program.Configuration EnvVar.tryGet)
     
+    member val DumpStats =              Equinox.CosmosStore.Core.Log.InternalMetrics.dump
     member private _.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(databaseId, containerId)
     member _.ConnectLeases() =
         let leases : Microsoft.Azure.Cosmos.Container = connectLeases()

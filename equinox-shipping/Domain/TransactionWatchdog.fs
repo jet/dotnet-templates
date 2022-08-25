@@ -4,13 +4,15 @@
 /// b) when a transaction reports that it has Completed
 module Shipping.Domain.TransactionWatchdog
 
+open System
+
 module Events =
 
     type Categorization =
         | NonTerminal of System.DateTimeOffset
         | Terminal
     let createCategorizationCodec isTerminalEvent =
-        let tryDecode (encoded : FsCodec.ITimelineEvent<byte array>) =
+        let tryDecode (encoded : FsCodec.ITimelineEvent<ReadOnlyMemory<byte>>) =
             Some (if isTerminalEvent encoded then Terminal else NonTerminal encoded.Timestamp)
         let encode _ = failwith "Not Implemented"
         let mapCausation _ = failwith "Not Implemented"

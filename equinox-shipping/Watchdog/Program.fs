@@ -1,6 +1,7 @@
 ﻿module Shipping.Watchdog.Program
 
 open Serilog
+open Shipping.Infrastructure
 open System
 
 let [<Literal>] REGION =                    "EQUINOX_DYNAMO_REGION"
@@ -91,9 +92,9 @@ module Args =
             | Choice2Of2 dynamo ->
                 let context = dynamo.Connect()
                 let buildSourceConfig log consumerGroupName =
-                    let indexStore, checkpoints, startFromTail, batchSizeCutoff, streamsDop = dynamo.MonitoringParams(log, consumerGroupName, cache)
+                    let indexStore, checkpoints, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = dynamo.MonitoringParams(log, consumerGroupName, cache)
                     let load = DynamoLoadModeConfig.Hydrate (context, streamsDop)
-                    SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, x.StatsInterval)
+                    SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 Shipping.Domain.Config.Store.Dynamo (context, cache), buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
         member x.StoreVerbose =             false
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
@@ -178,6 +179,7 @@ module Args =
         let table =                         a.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
         let indexSuffix =                   a.GetResult(IndexSuffix, "-index")
         let indexTable =                    a.TryGetResult IndexTable |> Option.orElseWith  (fun () -> c.DynamoIndexTable) |> Option.defaultWith (fun () -> table + indexSuffix)
+        let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         let maxItems =                      a.GetResult(MaxItems, 100)
         let fromTail =                      a.Contains FromTail
         let streamsDop =                    a.GetResult(StreamsDop, 4)
@@ -194,8 +196,7 @@ module Args =
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
             let indexStoreClient = indexStoreClient.Value
             let checkpoints = indexStoreClient.CreateCheckpointService(consumerGroupName, cache)
-            
-            indexStoreClient, checkpoints, fromTail, maxItems, streamsDop
+            indexStoreClient, checkpoints, fromTail, maxItems, tailSleepInterval, streamsDop
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv : Arguments =

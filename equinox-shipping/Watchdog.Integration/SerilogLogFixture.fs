@@ -12,7 +12,7 @@ type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel :
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.CosmosStore.Log.PropertyTag
-        logEvent.RemovePropertyIfPresent Propulsion.Feed.Internal.Log.PropertyTag
+        logEvent.RemovePropertyIfPresent Propulsion.Feed.Core.Log.PropertyTag
         use writer = new System.IO.StringWriter()
         formatter.Format(logEvent, writer)
         let message = writer |> string |> fun s -> s.TrimEnd('\n')
@@ -30,9 +30,10 @@ module XunitLogger =
 
     let minLevel =
 #if DEBUG
-        let debugEvents = false // <- set to true to include event Submit/Done info in test run output
-        if System.Diagnostics.Debugger.IsAttached then Events.LogEventLevel.Verbose
-        elif debugEvents then Events.LogEventLevel.Debug
+        let debugging = false // <- set to true to include event Submit/Done info in test run output, even when not running under debugger
+        let verbose = false // <- set to true to include extra diagnostics on projector batches etc when debugging
+        if System.Diagnostics.Debugger.IsAttached || debugging then
+            if verbose then Events.LogEventLevel.Verbose else Events.LogEventLevel.Debug
         else Events.LogEventLevel.Information
 #else
         Events.LogEventLevel.Debug // we want details from CI failures
@@ -41,9 +42,12 @@ module XunitLogger =
     let createForSink sink =
         LoggerConfiguration()
             .Enrich.FromLogContext()
-            .Filter.ByExcluding(System.Func<_, _> Shipping.Watchdog.Infrastructure.Log.isStoreMetrics) // <- comment out to see Equinox logs
+            .WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
+            .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
             .MinimumLevel.Is(minLevel)
-            .WriteTo.Sink(sink)
+            .WriteTo.Logger(fun l ->
+                l.Filter.ByExcluding(System.Func<_, _> Shipping.Infrastructure.Log.isStoreMetrics) // <- comment out to see Equinox logs in Test Output
+                 .WriteTo.Sink(sink) |> ignore)
             .CreateLogger()
 
     /// Creates a logger that the test will use to surface all messages
@@ -62,4 +66,5 @@ type SerilogLogFixture(messageSink, ?templatePrefix) =
     do Serilog.Log.Logger <- XunitLogger.createForSink sink; Serilog.Log.Information "Serilog.Log -> Xunit configured..."
     /// Enables capturing of log messages in the per-test output (combine with XUnit Collection fixtures to ensure no concurrent usage)
     member _.CaptureSerilogLog value = sink.CaptureSerilogLog value
+    member _.TestOutput value = sink.CaptureSerilogLog value;
     interface System.IDisposable with member _.Dispose() = Serilog.Log.Information "... Serilog.Log -> Xunit removed"; Serilog.Log.CloseAndFlush()
