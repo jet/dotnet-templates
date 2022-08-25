@@ -8,13 +8,13 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Infrastructure.fs" />
         <Compile Include="..\Domain.Tests\SerilogLogFixture.fs">
             <Link>SerilogLogFixture.fs</Link>
         </Compile>
         <Compile Include="CosmosConnector.fs" />
         <Compile Include="DynamoConnector.fs" />
         <Compile Include="ReactorFixture.fs" />
+        <Compile Include="Generators.fs" />
         <Compile Include="WatchdogIntegrationTests.fs" />
     </ItemGroup>
 

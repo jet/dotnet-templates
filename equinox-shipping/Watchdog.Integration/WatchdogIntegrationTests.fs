@@ -2,6 +2,7 @@ module Shipping.Watchdog.Integration.WatchdogIntegrationTests
 
 open FsCheck
 open FsCheck.Xunit
+open Propulsion.Reactor.Internal // Async.timeoutAfter
 open System
 
 let run (log: Serilog.ILogger) (processManager : Shipping.Domain.FinalizationProcess.Manager) runTimeout check (NonEmptyArray batches) = async {
