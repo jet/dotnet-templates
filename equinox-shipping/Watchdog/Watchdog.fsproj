@@ -15,9 +15,9 @@
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
-        <PackageReference Include="Propulsion.CosmosStore" Version="2.13.0-beta.13.1" />
-        <PackageReference Include="Propulsion.DynamoStore" Version="2.13.0-beta.13.1" />
-        <PackageReference Include="Propulsion.MemoryStore" Version="2.13.0-beta.13.1" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-beta.1" />
+        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-beta.1" />
+        <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-beta.1" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
 
