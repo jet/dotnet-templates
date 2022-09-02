@@ -6,6 +6,7 @@ open FsCheck
 open FsCheck.FSharp
 open FsCheck.Xunit
 open FSharp.UMX
+open Propulsion.Internal // Seq.chooseV
 open Swensen.Unquote
 
 type GuidStringN<[<Measure>]'m> = GuidStringN of string<'m> with static member op_Explicit(GuidStringN x) = x
@@ -42,7 +43,7 @@ type Properties(testOutput) =
         test <@ res1 && set eventTypes = set expectedEvents @>
         let containerEvents =
             buffer.Queue(Container.streamName containerId1)
-            |> Seq.choose Container.Events.codec.TryDecode
+            |> Seq.chooseV Container.Events.codec.TryDecode
             |> List.ofSeq
         test <@ match containerEvents with
                 | [ Container.Events.Finalized e ] -> e.shipmentIds = requestedShipmentIds

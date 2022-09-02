@@ -29,7 +29,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 open Shipping.Domain
 
 let isReactionStream = function
-    | FinalizationTransaction.StreamName _ -> true
+    | struct (FinalizationTransaction.Category, _) -> true
     | _ -> false
 
 let handle

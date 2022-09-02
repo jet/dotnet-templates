@@ -13,14 +13,14 @@ module Events =
         | Terminal
     let createCategorizationCodec isTerminalEvent =
         let tryDecode (encoded : FsCodec.ITimelineEvent<ReadOnlyMemory<byte>>) =
-            Some (if isTerminalEvent encoded then Terminal else NonTerminal encoded.Timestamp)
+            ValueSome (if isTerminalEvent encoded then Terminal else NonTerminal encoded.Timestamp)
         let encode _ = failwith "Not Implemented"
         let mapCausation _ = failwith "Not Implemented"
         FsCodec.Codec.Create<Categorization, _, obj>(encode, tryDecode, mapCausation)
 
 module Fold =
 
-    type State = Initial | Active of startTime: System.DateTimeOffset | Completed
+    type State = Initial | Active of startTime: DateTimeOffset | Completed
     let initial = Initial
     let evolve state = function
         | Events.NonTerminal startTime->
@@ -42,7 +42,7 @@ let fold : Events.Categorization seq -> Fold.State =
 
 let (|TransactionStatus|) (codec : #FsCodec.IEventCodec<_, _, _>) events : Fold.State =
     events
-    |> Seq.choose codec.TryDecode
+    |> Seq.choose (codec.TryDecode >> function ValueSome x -> Some x | ValueNone -> None)
     |> fold
 
 module Finalization =

@@ -1,7 +1,7 @@
 module Shipping.Domain.Container
 
 let [<Literal>] private Category = "Container"
-let streamName (containerId : ContainerId) = FsCodec.StreamName.create Category (ContainerId.toString containerId)
+let streamName (containerId : ContainerId) = struct (Category, ContainerId.toString containerId)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -37,15 +37,14 @@ type Service internal (resolve : ContainerId -> Equinox.Decider<Events.Event, Fo
 
 module Config =
 
-    let private resolveStream = function
+    let private resolve = function
         | Config.Store.Memory store ->
-            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
-            cat.Resolve
+            Config.Memory.create Events.codec Fold.initial Fold.fold store
+            |> Equinox.Decider.resolve Config.log
         | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            cat.Resolve
+            Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            |> Equinox.Decider.resolve Config.log
         | Config.Store.Dynamo (context, cache) ->
-            let cat = Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            cat.Resolve
-    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-    let create = resolveDecider >> Service
+            Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            |> Equinox.Decider.resolve Config.log
+    let create store = Service(streamName >> resolve store)
