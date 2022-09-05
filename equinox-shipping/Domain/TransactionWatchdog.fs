@@ -48,6 +48,6 @@ let (|TransactionStatus|) (codec : #FsCodec.IEventCodec<_, _, _>) events : Fold.
 module Finalization =
 
     let private codec = Events.createCategorizationCodec FinalizationTransaction.Reactions.isTerminalEvent
-    let (|MatchStatus|_|) = function
-        | FinalizationTransaction.StreamName transId, TransactionStatus codec status -> Some (transId, status)
-        | _ -> None
+    let [<return: Struct>] (|MatchStatus|_|) = function
+        | FinalizationTransaction.StreamName transId, TransactionStatus codec status -> ValueSome struct (transId, status)
+        | _ -> ValueNone

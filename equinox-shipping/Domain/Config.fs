@@ -2,22 +2,25 @@ module Shipping.Domain.Config
 
 /// Tag log entries so we can filter them out if logging to the console
 let log = Serilog.Log.ForContext("isMetric", true)
+let createDecider cat = Equinox.Decider.resolve log cat
 
 module EventCodec =
 
     open FsCodec.SystemTextJson
 
     let private defaultOptions = Options.Create(autoTypeSafeEnumToJsonString = true, autoUnionToJsonObject = true)
-    let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>(options = defaultOptions) |> FsCodec.Deflate.EncodeTryDeflate
+    let private gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
+        Codec.Create<'t>(options = defaultOptions)
+    let genTryDeflate<'t when 't :> TypeShape.UnionContract.IUnionContract> =
+        gen<'t> |> FsCodec.Deflate.EncodeTryDeflate
     let genUncompressed<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>(options = defaultOptions) |> FsCodec.Deflate.EncodeUncompressed
+        gen<'t> |> FsCodec.Deflate.EncodeTryDeflate
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
         CodecJsonElement.Create<'t>(options = defaultOptions)
 
 module Memory =
 
-    let create codec initial fold store =
+    let create codec initial fold store : Equinox.Category<_, _, _> =
         Equinox.MemoryStore.MemoryStoreCategory(store, codec, fold, initial)
 
 let defaultCacheDuration = System.TimeSpan.FromMinutes 20.

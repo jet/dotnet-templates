@@ -27,7 +27,7 @@ module Events =
         | Assigning of {| container : ContainerId; shipments : ShipmentId array |}
         | Assigned  of {| container : ContainerId; shipments : ShipmentId array |}
         | Completed of {| success : bool |}
-    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Config.EventCodec.genTryDeflate<Event>, Config.EventCodec.genJsonElement<Event>
 
 module Reactions =
 
@@ -104,14 +104,11 @@ type Service internal (resolve : TransactionId -> Equinox.Decider<Events.Event, 
 
 module Config =
 
-    let private resolve = function
+    let private (|Category|) = function
         | Config.Store.Memory store ->
             Config.Memory.create Events.codec Fold.initial Fold.fold store
-            |> Equinox.Decider.resolve Config.log
         | Config.Store.Cosmos (context, cache) ->
             Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            |> Equinox.Decider.resolve Config.log
         | Config.Store.Dynamo (context, cache) ->
             Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            |> Equinox.Decider.resolve Config.log
-    let create store = Service(streamName >> resolve store)
+    let create (Category cat) = Service(streamName >> Config.createDecider cat)
