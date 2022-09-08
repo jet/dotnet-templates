@@ -111,7 +111,7 @@ type EsdbProperties(reactor : EsdbReactor.Fixture, testOutput) =
     // TODO remove the Skip= so you can run the tests
     [<Property(MaxTest = 1, Skip="Cannot run in Equinox.Templates CI environment")>]
 #else
-    [<Property(MaxTest = 2)>]
+    [<Property(MaxTest = 10)>]
 #endif    
     let run args : Async<unit> = async {
         do! run reactor.Log reactor.ProcessManager reactor.RunTimeout reactor.CheckReactions args

@@ -157,7 +157,7 @@ module Esdb =
         let maxItems =                      a.GetResult(MaxItems, 100)
         let tailSleepInterval =             TimeSpan.FromSeconds 0.5
         let connectionStringLoggable =      a.TryGetResult Connection |> Option.defaultWith (fun () -> c.EventStoreConnection)
-        let credentials =                   a.TryGetResult Credentials |> Option.orElseWith (fun () -> c.EventStoreCredentials)
+        let credentials =                   a.TryGetResult Credentials |> Option.orElseWith (fun () -> c.MaybeEventStoreCredentials)
         let discovery =                     match credentials with Some x -> String.Join(";", connectionStringLoggable, x) | None -> connectionStringLoggable
                                             |> Equinox.EventStoreDb.Discovery.ConnectionString
         let retries =                       a.GetResult(Retries, 3)

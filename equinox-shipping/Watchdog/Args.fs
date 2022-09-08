@@ -29,10 +29,8 @@ type Configuration(tryGet : string -> string option) =
     member x.DynamoRegion =                 x.tryGet REGION
 
     member x.EventStoreConnection =         x.get "EQUINOX_ES_CONNECTION"
-    member x.EventStoreConnectionOrLocalDockerCluster =
-                                            tryGet "EQUINOX_ES_CONNECTION"
-                                            |> Option.defaultValue "esdb://localhost:2111,localhost:2112,localhost:2113?tls=true&tlsVerifyCert=false"
-    member _.EventStoreCredentials =        tryGet "EQUINOX_ES_CREDENTIALS"
+    member _.MaybeEventStoreConnection =    tryGet "EQUINOX_ES_CONNECTION"
+    member _.MaybeEventStoreCredentials =   tryGet "EQUINOX_ES_CREDENTIALS"
 
     member x.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
 
@@ -169,15 +167,16 @@ module Esdb =
                 | Dynamo _ ->               "DynamoDB (Checkpoint/Target) Store parameters (Not applicable to Web app)."
 
     type Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        let connectionString =              a.TryGetResult Connection |> Option.defaultWith (fun () -> c.EventStoreConnection)
-        let credentials =                   a.TryGetResult Credentials |> Option.orElseWith (fun () -> c.EventStoreCredentials) |> Option.toObj
+        let connectionStringLoggable =      a.TryGetResult Connection |> Option.defaultWith (fun () -> c.EventStoreConnection)
+        let credentials =                   a.TryGetResult Credentials |> Option.orElseWith (fun () -> c.EventStoreCredentials)
+        let discovery =                     match credentials with Some x -> String.Join(";", connectionStringLoggable, x) | None -> connectionStringLoggable
+                                            |> Equinox.EventStoreDb.Discovery.ConnectionString
         let retries =                       a.GetResult(Retries, 3)
         let timeout =                       a.GetResult(Timeout, 20.) |> TimeSpan.FromSeconds
         member _.Verbose =                  a.Contains Verbose
 
         member x.Connect(log : ILogger, appName, nodePreference) : Equinox.EventStoreDb.EventStoreConnection =
-            log.Information("EventStore {discovery}", connectionString)
-            let discovery = String.Join(";", connectionString, credentials) |> Equinox.EventStoreDb.Discovery.ConnectionString
+            log.Information("EventStore {discovery}", connectionStringLoggable)
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Equinox.EventStoreDb.EventStoreConnector(timeout, retries, tags = tags)
                 .Establish(appName, discovery, Equinox.EventStoreDb.ConnectionStrategy.ClusterSingle nodePreference)

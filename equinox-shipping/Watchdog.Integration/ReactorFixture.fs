@@ -100,7 +100,7 @@ module CosmosReactor =
 
 module DynamoReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 150
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.DynamoStoreSource Feed
     type Fixture private (messageSink, store, dumpStats, createSource) =
@@ -142,6 +142,7 @@ module EsdbReactor =
                 SourceConfig.Esdb (conn.EventStoreClient, checkpoints, hydrateBodies = true, startFromTail = true, batchSize = 100,
                                    tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
+        override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
         member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 300.
         member x.Backoff = tailSleepInterval * 2.
