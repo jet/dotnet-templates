@@ -72,6 +72,8 @@ module MemoryReactor =
 
 module CosmosReactor =
 
+    let tailSleepInterval = TimeSpan.FromMilliseconds 300
+
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.CosmosStore CFP
     type Fixture private (messageSink, store, createSourceConfig) =
         inherit FixtureBase(messageSink, store, ignore, createSourceConfig)
@@ -80,8 +82,8 @@ module CosmosReactor =
             let store, monitored = conn.Connect()
             let leases = conn.ConnectLeases()
             let createSourceConfig consumerGroupName =
-                let checkpointConfig = CosmosCheckpointConfig.Ephemeral consumerGroupName
-                SourceConfig.Cosmos (monitored, leases, checkpointConfig)
+                let checkpointConfig = CosmosFeedConfig.Ephemeral consumerGroupName
+                SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
             new Fixture(messageSink, store, createSourceConfig)
         member _.NullWait(_arguments) = async.Zero () // We could wire up a way to await all tranches having caught up, but not implemented yet
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
@@ -107,9 +109,8 @@ module DynamoReactor =
             let conn = DynamoConnector()
             let createSourceConfig consumerGroupName =
                 let loadMode = DynamoLoadModeConfig.Hydrate (conn.StoreContext, 4)
-                let startFromTail, batchSizeCutoff = true, 100
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
-                SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail, batchSizeCutoff,
+                SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
                                      tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
@@ -122,6 +123,34 @@ module DynamoReactor =
         member x.CheckReactions label = Propulsion.Reactor.Monitor.check x.Wait x.Backoff x.Timeout x.WarnThreshold label
 
     let [<Literal>] CollectionName = "DynamoReactor"
+
+    [<Xunit.CollectionDefinition(CollectionName)>]
+    type Collection() =
+        interface Xunit.ICollectionFixture<Fixture>
+
+module EsdbReactor =
+
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50
+
+    /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.EventStore.EventStoreSource
+    type Fixture private (messageSink, store, dumpStats, createSource) =
+        inherit FixtureBase(messageSink, store, dumpStats, createSource)
+        new (messageSink) =
+            let conn = EsdbConnector()
+            let createSourceConfig consumerGroupName =
+                let checkpoints = conn.CreateCheckpointService(consumerGroupName)
+                SourceConfig.Esdb (conn.EventStoreClient, checkpoints, hydrateBodies = true, startFromTail = true, batchSize = 100,
+                                   tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
+            new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
+        member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 300.
+        member x.Backoff = tailSleepInterval * 2.
+        // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
+        member val private WarnThreshold = TimeSpan.Zero
+        member x.Wait() = base.Await(x.PropagationDelay)
+        member x.CheckReactions label = Propulsion.Reactor.Monitor.check x.Wait x.Backoff x.Timeout x.WarnThreshold label
+
+    let [<Literal>] CollectionName = "EsdbReactor"
 
     [<Xunit.CollectionDefinition(CollectionName)>]
     type Collection() =

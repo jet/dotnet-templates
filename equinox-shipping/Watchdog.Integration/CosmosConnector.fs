@@ -12,8 +12,8 @@ type CosmosConnector(connectionString, databaseId, containerId) =
     let leaseContainerId =              containerId + "-aux"
     let connectLeases () =              connector.CreateUninitialized(databaseId, leaseContainerId)
     
-    new (c : Shipping.Watchdog.Program.Configuration) = CosmosConnector(c.CosmosConnection, c.CosmosDatabase, c.CosmosContainer)
-    new () =                            CosmosConnector(Shipping.Watchdog.Program.Configuration EnvVar.tryGet)
+    new (c : Shipping.Watchdog.SourceArgs.Configuration) = CosmosConnector(c.CosmosConnection, c.CosmosDatabase, c.CosmosContainer)
+    new () =                            CosmosConnector(Shipping.Watchdog.SourceArgs.Configuration EnvVar.tryGet)
     
     member val DumpStats =              Equinox.CosmosStore.Core.Log.InternalMetrics.dump
     member private _.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(databaseId, containerId)

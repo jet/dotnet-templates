@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>netstandard2.1</TargetFramework>
+        <!-- Could be netstandard2.1 but EventStore.Client forces net6.0-->
+        <TargetFramework>net6.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     </PropertyGroup>
@@ -19,8 +20,9 @@
     <ItemGroup>
       <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-beta.12" />
       <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-beta.12" />
+      <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-beta.12" />
       <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-beta.12" />
-      <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.6" />
+      <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.7.1" />
     </ItemGroup>
 
 </Project>

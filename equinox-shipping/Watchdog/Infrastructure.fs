@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module Shipping.Infrastructure
+module Shipping.Infrastructure.Helpers
 
 open Serilog
 open System
@@ -47,6 +47,11 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
         let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
         storeClient, monitored
+        
+    /// Connect a CosmosStoreClient, including warming up
+    member x.ConnectStore(connectionName, databaseId, containerId) =
+        x.LogConfiguration(connectionName, databaseId, containerId)
+        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
 
 module CosmosStoreContext =
 
@@ -65,10 +70,10 @@ type Equinox.DynamoStore.DynamoStoreClient with
 
     member internal x.LogConfiguration(role, ?log) =
         (defaultArg log Log.Logger).Information("DynamoStore {role:l} Table {table} Archive {archive}", role, x.TableName, Option.toObj x.ArchiveTableName)
-    member client.CreateCheckpointService(consumerGroupName, cache, ?checkpointInterval) =
+    member client.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
         let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
         let context = Equinox.DynamoStore.DynamoStoreContext(client)
-        Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Shipping.Domain.Config.log (consumerGroupName, checkpointInterval) (context, cache)
+        Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
 
 type Equinox.DynamoStore.DynamoStoreContext with
 
@@ -89,6 +94,12 @@ module DynamoStoreContext =
     let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
         Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
 
+module EventStoreContext =
+
+    let create (storeConnection : Equinox.EventStoreDb.EventStoreConnection) =
+        let batchingPolicy = Equinox.EventStoreDb.BatchingPolicy(maxBatchSize = 200)
+        Equinox.EventStoreDb.EventStoreContext(storeConnection, batchingPolicy)
+
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
@@ -99,75 +110,3 @@ type Logging() =
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         |> fun c -> let t = "{Timestamp:HH:mm:ss} {Level:u1} {Message:lj} {SourceContext} {Properties}{NewLine}{Exception}"
                     c.WriteTo.Console(theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate = t)
-
-[<RequireQualifiedAccess; NoEquality; NoComparison>]
-type SourceConfig =
-    | Memory of
-        store : Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>
-    | Cosmos of
-        monitoredContainer : Microsoft.Azure.Cosmos.Container
-        * leasesContainer : Microsoft.Azure.Cosmos.Container
-        * checkpoints : CosmosCheckpointConfig
-    | Dynamo of
-        indexStore : Equinox.DynamoStore.DynamoStoreClient
-        * checkpoints : Propulsion.Feed.IFeedCheckpointStore
-        * loading : DynamoLoadModeConfig
-        * startFromTail : bool
-        * batchSizeCutoff : int
-        * tailSleepInterval : TimeSpan
-        * statsInterval : TimeSpan
-and CosmosCheckpointConfig =
-    | Ephemeral of processorName : string
-    | Persistent of processorName : string * startFromTail : bool * maxItems : int option * lagFrequency : TimeSpan
-and [<NoEquality; NoComparison>]
-    DynamoLoadModeConfig =
-    | Hydrate of monitoredContext : Equinox.DynamoStore.DynamoStoreContext * hydrationConcurrency : int
-    
-module SourceConfig =
-    module Memory =
-        open Propulsion.MemoryStore
-        let start log (sink : Propulsion.Streams.Default.Sink) streamFilter
-            (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
-            let source = MemoryStoreSource(log, store, streamFilter, sink)
-            source.Start(), Some (fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false))
-    module Cosmos =
-        open Propulsion.CosmosStore
-        let start log (sink : Propulsion.Streams.Default.Sink) streamFilter
-            (monitoredContainer, leasesContainer, checkpointConfig) : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
-            let parseFeedDoc = EquinoxSystemTextJsonParser.enumStreamEvents streamFilter
-            let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect parseFeedDoc)
-            let source =
-                match checkpointConfig with
-                | Ephemeral processorName ->
-                    let withStartTime1sAgo (x : Microsoft.Azure.Cosmos.ChangeFeedProcessorBuilder) =
-                        x.WithStartTime(let t = DateTime.UtcNow in t.AddSeconds -1.)
-                    let lagFrequency = TimeSpan.FromMinutes 1.
-                    CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer, startFromTail = false,
-                                            customize = withStartTime1sAgo, lagReportFreq = lagFrequency)
-                | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
-                    CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer, startFromTail,
-                                            ?maxItems = maxItems, lagReportFreq = lagFrequency)
-            source, None
-    module Dynamo =
-        open Propulsion.DynamoStore
-        let start (log, storeLog) (sink : Propulsion.Streams.Default.Sink) streamFilter
-            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval)
-            : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
-            let loadMode =
-                match loadModeConfig with
-                | Hydrate (monitoredContext, hydrationConcurrency) -> LoadMode.Hydrated (streamFilter, hydrationConcurrency, monitoredContext)
-            let source =
-                DynamoStoreSource(
-                    log, statsInterval,
-                    indexStore, batchSizeCutoff, tailSleepInterval,
-                    checkpoints, sink, loadMode, fromTail = startFromTail, storeLog = storeLog)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
-
-    let start (log, storeLog) (sink : Propulsion.Streams.Default.Sink) streamFilter
-        : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Async<unit>) option = function
-        | SourceConfig.Memory volatileStore ->
-            Memory.start log sink streamFilter volatileStore
-        | SourceConfig.Cosmos (monitored, leases, checkpointConfig) ->
-            Cosmos.start log sink streamFilter (monitored, leases, checkpointConfig)
-        | SourceConfig.Dynamo (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
-            Dynamo.start (log, storeLog) sink streamFilter (indexStore, checkpoints, loading, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval)

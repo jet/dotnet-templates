@@ -13,6 +13,7 @@
         </Compile>
         <Compile Include="CosmosConnector.fs" />
         <Compile Include="DynamoConnector.fs" />
+        <Compile Include="EsdbConnector.fs" />
         <Compile Include="ReactorFixture.fs" />
         <Compile Include="Generators.fs" />
         <Compile Include="WatchdogIntegrationTests.fs" />

@@ -15,6 +15,7 @@ type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel :
     let writeSerilogEvent (logEvent : Serilog.Events.LogEvent) =
         logEvent.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
+        logEvent.RemovePropertyIfPresent Equinox.EventStoreDb.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
 //-:cnd:noEmit
 #if !NO_CONCRETE_STORES // In Domain.Tests, we don't reference Propulsion.CosmosStore/DynamoStore etc        
@@ -53,6 +54,7 @@ module XunitLogger =
             .Enrich.FromLogContext()
             .WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
             .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
+            .WriteTo.Sink(Equinox.EventStoreDb.Log.InternalMetrics.Stats.LogSink())
             .MinimumLevel.Is(minLevel)
             .WriteTo.Logger(fun l ->
                 l.Filter.ByExcluding(System.Func<_, _> Log.isStoreMetrics) // <- comment out to see Equinox logs in Test Output

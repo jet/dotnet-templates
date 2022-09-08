@@ -10,7 +10,7 @@ module Events =
         | Finalized   of {| shipmentIds : ShipmentId array |}
         | Snapshotted of {| shipmentIds : ShipmentId array |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Config.EventCodec.genUncompressed<Event>, Config.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
 
 module Fold =
 
@@ -38,10 +38,8 @@ type Service internal (resolve : ContainerId -> Equinox.Decider<Events.Event, Fo
 module Config =
 
     let private (|Category|) = function
-        | Config.Store.Memory store ->
-            Config.Memory.create Events.codec Fold.initial Fold.fold store
-        | Config.Store.Cosmos (context, cache) ->
-            Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Config.Store.Dynamo (context, cache) ->
-            Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
+        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Dynamo (context, cache) -> Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Esdb (context, cache) ->   Config.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
     let create (Category cat) = Service(streamName >> Config.createDecider cat)
