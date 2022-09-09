@@ -16,6 +16,9 @@ type Logging() =
 #if cosmos
             .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(customTags))
 #endif
+#if dynamo
+            .WriteTo.Sink(Equinox.DynamoStore.Prometheus.LogSink(customTags))
+#endif
             .Enrich.FromLogContext()
             .WriteTo.Console()
 

@@ -1,10 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.1</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <WarningLevel>5</WarningLevel>
-    <IsTestProject>false</IsTestProject>
-    <DisableImplicitSystemValueTupleReference>true</DisableImplicitSystemValueTupleReference>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,10 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.CosmosStore" Version="3.0.7" />
-    <PackageReference Include="Equinox.EventStore" Version="3.0.7" />
-    <PackageReference Include="Equinox.MemoryStore" Version="3.0.7" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.2" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-beta.12" />
+    <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-beta.12" />
+    <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-beta.12" />
+    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-beta.12" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.7.1" />
   </ItemGroup>
 
 </Project>

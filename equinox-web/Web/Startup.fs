@@ -15,17 +15,20 @@ module Storage =
     /// Specifies the store to be used, together with any relevant custom parameters
     [<RequireQualifiedAccess>]
     type Store =
-//#if (memoryStore || (!cosmos && !eventStore))
+//#if (memoryStore || (!cosmos && !dynamo && !eventStore))
         | Memory
 //#endif
 //#if eventStore
-        | Esdb of host: string * username: string * password: string * cacheMb: int
+        | Esdb of connectionString: string * cacheMb: int
 //#endif
 //#if cosmos
         | Cosmos of mode: Microsoft.Azure.Cosmos.ConnectionMode * connectionStringWithUriAndKey: string * database: string * container: string * cacheMb: int
 //#endif
+//#if dynamo
+        | Dynamo of region : string * tableName: string * cacheMb: int
+//#endif
 
-//#if (memoryStore || (!cosmos && !eventStore))
+//#if (memoryStore || (!cosmos && !dynamo && !eventStore))
     /// MemoryStore 'wiring', uses Equinox.MemoryStore nuget package
     module private Memory =
         open Equinox.MemoryStore
@@ -36,11 +39,10 @@ module Storage =
 //#if eventStore
     /// EventStore wiring, uses Equinox.EventStore nuget package
     module private ES =
-        open Equinox.EventStore
-        let connect host username password =
-            let log = Logger.SerilogNormal (Log.ForContext<Store>())
-            let c = Connector(username, password, reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1, log=log)
-            let conn = c.Establish ("Twin", Discovery.GossipDns host, ConnectionStrategy.ClusterTwinPreferSlaveReads) |> Async.RunSynchronously
+        open Equinox.EventStoreDb
+        let connect connectionString =
+            let c = EventStoreConnector(reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1)
+            let conn = c.Establish("Twin", Discovery.ConnectionString connectionString, ConnectionStrategy.ClusterTwinPreferSlaveReads)
             EventStoreContext(conn, BatchingPolicy(maxBatchSize=500))
 
 //#endif
@@ -60,17 +62,33 @@ module Storage =
             CosmosStoreClient.Connect(c.CreateAndInitialize, databaseId, containerId) |> Async.RunSynchronously |> CosmosStoreContext.create
 
 //#endif
+//#if dynamo
+    /// DynamoDB wiring, uses Equinox.DynamoStore nuget package
+    module private Dynamo =
+        open Equinox.DynamoStore
+        module DynamoStoreContext =
+
+            /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
+            let create (storeClient : DynamoStoreClient) =
+                let maxEvents = 256
+                DynamoStoreContext(storeClient, tipMaxEvents = maxEvents)
+
+        let connect (region, table) (timeout, retries) =
+            let c = DynamoStoreConnector(region, timeout, retries)
+            DynamoStoreClient.Connect(c.CreateClient(), table) |> Async.RunSynchronously |> DynamoStoreContext.create
+
+//#endif
     /// Creates and/or connects to a specific store as dictated by the specified config
     let connect = function
-//#if (memoryStore || (!cosmos && !eventStore))
+//#if (memoryStore || (!cosmos && !dynamo && !eventStore))
         | Store.Memory ->
             let store = Memory.connect()
             Config.Store.Memory store
 //#endif
 //#if eventStore
-        | Store.Esdb (host, user, pass, cache) ->
+        | Store.Esdb (connectionString, cache) ->
             let cache = Equinox.Cache("ES", sizeMb = cache)
-            let conn = ES.connect host user pass
+            let conn = ES.connect connectionString
             Config.Store.Esdb (conn, cache)
 //#endif
 //#if cosmos
@@ -80,6 +98,14 @@ module Storage =
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
             let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (timeout, retriesOn429Throttling, timeout)
             Config.Store.Cosmos (context, cache)
+//#endif
+//#if dynamo
+        | Store.Dynamo (region, table, cache) ->
+            let cache = Equinox.Cache("Dynamo", sizeMb = cache)
+            let retries = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
+            let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request, including retry attempts
+            let context = Dynamo.connect (region, table) (timeout, retries)
+            Config.Store.Dynamo (context, cache)
 //#endif
 
 /// Dependency Injection wiring for services using Equinox
@@ -104,7 +130,6 @@ type Startup() =
     member _.ConfigureServices(services: IServiceCollection) : unit =
         services
             .AddMvc()
-            .SetCompatibilityVersion(CompatibilityVersion.Latest)
             .AddJsonOptions(fun options ->
                 FsCodec.SystemTextJson.Options.Default.Converters
                 |> Seq.iter options.JsonSerializerOptions.Converters.Add
@@ -118,15 +143,9 @@ type Startup() =
 
 //#endif
 //#if eventStore
-        // EVENTSTORE: see https://eventstore.org/
-        // Requires a Commercial HA Cluster, which can be simulated by 1) installing the OSS Edition from Chocolatey 2) running it in cluster mode
-
-        //# requires admin privilege
-        //cinst eventstore-oss -y # where cinst is an invocation of the Chocolatey Package Installer on Windows
-        //# run as a single-node cluster to allow connection logic to use cluster mode as for a commercial cluster
-        //& $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
-
-        let storeConfig = Storage.Store.Esdb ("localhost", "admin", "changeit", cacheMb)
+        // EVENTSTORE: See https://github.com/jet/equinox/blob/master/docker-compose.yml for the associated docker-compose configuration
+        
+        let storeConfig = Storage.Store.Esdb ("esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?tls=true&tlsVerifyCert=false", cacheMb)
 
 //#endif
 //#if cosmos
@@ -154,11 +173,11 @@ type Startup() =
                 failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar containerVar
 
 //#endif
-#if (memoryStore && !cosmos && !eventStore)
+#if (memoryStore && !cosmos && !dynamo && !eventStore)
         let storeConfig = Storage.Store.Memory
 
 #endif
-//#if (!memoryStore && !cosmos && !eventStore)
+//#if (!memoryStore && !cosmos && !dynamo && !eventStore)
         //let storeConfig = Storage.Store.Memory
 
 //#endif
