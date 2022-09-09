@@ -6,7 +6,7 @@
 module Patterns.Domain.Period
 
 let [<Literal>] Category = "Period"
-let streamName periodId = FsCodec.StreamName.create Category (PeriodId.toString periodId)
+let streamName periodId = struct (Category, PeriodId.toString periodId)
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -18,7 +18,7 @@ module Events =
         | Added of          ItemIds
         | CarriedForward of Balance
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.create<Event>()
+    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
 
 module Fold =
 
@@ -89,7 +89,7 @@ let decideIngestWithCarryForward rules req s : Async<Result<'req, 'result> * Eve
 }
 
 /// Manages Application of Requests to the Period's stream, including closing preceding periods as appropriate
-type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve : PeriodId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     let calcBalance state =
         let createEventsBalance items : Events.Balance = { items = items }
@@ -103,11 +103,11 @@ type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equ
             {   getIncomingBalance  = fun ()        -> close periodId
                 decideIngestion     = fun () _state -> (), (), []
                 decideCarryForward  = fun ()        -> genBalance } // always close
-        let decider = resolve (Some Equinox.AllowStale) periodId
+        let decider = resolve periodId
         let decide' s = async {
             let! r, es = decideIngestWithCarryForward rules () s
             return Option.get r.carryForward, es }
-        decider.Transact(decide')
+        decider.TransactAsync(decide', load = Equinox.AllowStale)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     let tryTransact periodId getIncoming (decide : 'request -> Fold.State -> 'request * 'result * Events.Event list) request shouldClose : Async<Result<'request, 'result>> =
@@ -115,8 +115,8 @@ type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equ
             {   getIncomingBalance  = getIncoming
                 decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
                 decideCarryForward  = fun res state -> async { if shouldClose res then return! genBalance state else return None } } // also close, if we should
-        let decider = resolve (Some Equinox.AllowStale) periodId
-        decider.Transact(decideIngestWithCarryForward rules request)
+        let decider = resolve periodId
+        decider.TransactAsync(decideIngestWithCarryForward rules request, load = Equinox.AllowStale)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     /// Processing completes when `decide` yields None for the residual of the 'request
@@ -135,19 +135,15 @@ type Service internal (resolve : Equinox.ResolveOption option -> PeriodId -> Equ
     /// Exposes the full state to a reader (which is appropriate for a demo but is an anti-pattern in the general case)
     /// NOTE unlike for the Transact method, we do not supply ResolveOption.AllowStale, which means we'll see updates from other instances
     member _.Read periodId =
-        let decider = resolve None periodId
+        let decider = resolve periodId
         decider.Query id
 
 module Config =
 
-    let private resolveStream opt = function
-        | Config.Store.Memory store ->
-            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
-            fun sn -> cat.Resolve(sn, ?option = opt)
+    let private (|Category|) = function
+        | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
         | Config.Store.Cosmos (context, cache) ->
             // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
             // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
-            let cat = Config.Cosmos.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-            fun sn -> cat.Resolve(sn, ?option = opt)
-    let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
-    let create = resolveDecider >> Service
+            Config.Cosmos.createUnoptimized Events.codecJe Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(streamName >> Config.resolveDecider cat)
