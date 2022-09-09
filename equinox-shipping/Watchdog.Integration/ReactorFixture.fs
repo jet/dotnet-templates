@@ -132,7 +132,7 @@ module EsdbReactor =
 
     let tailSleepInterval = TimeSpan.FromMilliseconds 50
 
-    /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.EventStore.EventStoreSource
+    /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.EventStoreDb.EventStoreSource
     type Fixture private (messageSink, store, dumpStats, createSource) =
         inherit FixtureBase(messageSink, store, dumpStats, createSource)
         new (messageSink) =

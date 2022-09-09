@@ -7,9 +7,7 @@ type EsdbConnector(connection, credentials) =
 
     let requestTimeout, retries =       TimeSpan.FromSeconds 5., 5
     let tags =                          ["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
-    let connector =                     Equinox.EventStoreDb.EventStoreConnector(
-                                            requestTimeout, retries, tags = tags,
-                                            customize = fun s -> s.DefaultCredentials <- EventStore.Client.UserCredentials("admin", "changeit"))
+    let connector =                     Equinox.EventStoreDb.EventStoreConnector(requestTimeout, retries, tags = tags)
     let discovery =                     let connectionString = match credentials with None -> connection | Some credentials -> String.Join(";", connection, credentials)
                                         Equinox.EventStoreDb.Discovery.ConnectionString connectionString
     let connection =                    let nodePreference = EventStore.Client.NodePreference.Leader
@@ -18,9 +16,8 @@ type EsdbConnector(connection, credentials) =
     let cache =                         Equinox.Cache("Tests", sizeMb = 10)
     
     new (c : Shipping.Watchdog.SourceArgs.Configuration) =
-                                        EsdbConnector(c.MaybeEventStoreConnection |> Option.defaultValue "esdb://localhost:2111,localhost:2112,localhost:2113&tls=true&tlsVerifyCert=false",
-                                                      // TODO see if its possible to replace the DefaultCredentials above with something like this
-                                                      None) // c.MaybeEventStoreCredentials |> Option.defaultValue "DefaultUserCredentials=admin:changeit" |> Some)
+                                        EsdbConnector(c.MaybeEventStoreConnection |> Option.defaultValue "esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?tls=true&tlsVerifyCert=false",
+                                                      c.MaybeEventStoreCredentials)
     new () =                            EsdbConnector(Shipping.Watchdog.SourceArgs.Configuration EnvVar.tryGet)
 
     member val DumpStats =              Equinox.EventStoreDb.Log.InternalMetrics.dump
