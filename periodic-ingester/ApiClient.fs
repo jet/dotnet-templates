@@ -16,11 +16,12 @@ type TicketsClient(client : HttpClient) =
 
     let basePath = "api/tickets"
 
-    member _.Crawl() : AsyncSeq<Propulsion.Feed.SourceItem[]> = asyncSeq {
+    member _.Crawl() : AsyncSeq<struct (TimeSpan * Propulsion.Feed.SourceItem<Propulsion.Streams.Default.EventBody> array)> = asyncSeq {
         let request = HttpReq.get () |> HttpReq.withPath basePath
-        let! response = client.Send request
+        let ts = System.Diagnostics.Stopwatch.StartNew()
+        let! response = client.Send2(request)
         let! basePage = response |> HttpRes.deserializeOkStj<TicketsDto>
-        yield
+        yield ts.Elapsed,
             [| for t in basePage.tickets ->
                 let data : Ingester.TicketData = { lastUpdated = t.lastUpdated; body = t.body }
                 Ingester.PipelineEvent.sourceItemOfTicketIdAndData (t.id, data) |]
@@ -32,5 +33,5 @@ type TicketsFeed(baseUri) =
     let tickets = TicketsClient(client)
 
     // TODO add retries - consumer loop will abort if this throws
-    member _.Crawl(_trancheId): AsyncSeq<Propulsion.Feed.SourceItem[]> =
+    member _.Crawl(_trancheId): AsyncSeq<struct (TimeSpan * Propulsion.Feed.SourceItem<_> array)> =
         tickets.Crawl()

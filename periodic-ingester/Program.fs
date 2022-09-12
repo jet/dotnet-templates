@@ -4,13 +4,11 @@ open Serilog
 open System
 
 exception MissingArg of message : string with override this.Message = this.message
+let missingArg message = raise (MissingArg message)
 
 type Configuration(tryGet) =
 
-    let get key =
-        match tryGet key with
-        | Some value -> value
-        | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
+    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -28,6 +26,7 @@ module Args =
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-p"; Unique>]   PrometheusPort of int
+        | [<AltCommandLine "-g"; Mandatory>] GroupId of string
 
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-t"; Unique>]   TicketsDop of int
@@ -36,11 +35,14 @@ module Args =
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | Verbose _ ->              "request verbose logging."
+                | GroupId _ ->              "consumer group name. Default: 'default'"
                 | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off (optional if environment variable PROMETHEUS_PORT specified)"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 8."
                 | TicketsDop _ ->           "maximum number of Tickets to process in parallel. Default: 4"
                 | Feed _ ->                 "Feed parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
+        member val GroupId =                a.GetResult(GroupId, "default")
+
         member val Verbose =                a.Contains Parameters.Verbose
         member val PrometheusPort =         a.TryGetResult PrometheusPort |> Option.orElseWith (fun () -> c.PrometheusPort)
         member val MaxReadAhead =           a.GetResult(MaxReadAhead, 8)
@@ -49,9 +51,9 @@ module Args =
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val CheckpointInterval =     TimeSpan.FromHours 1.
         member val Feed : FeedArguments =
-            match a.TryGetSubCommand() with
-            | Some (Feed feed) -> FeedArguments(c, feed)
-            | _ -> raise (MissingArg "Must specify feed")
+            match a.GetSubCommand() with
+            | Feed feed -> FeedArguments(c, feed)
+            | _ -> missingArg "Must specify feed"
     and [<NoEquality; NoComparison>] FeedParameters =
         | [<AltCommandLine "-g"; Unique>]   Group of string
         | [<AltCommandLine "-f"; Unique>]   BaseUri of string
@@ -66,9 +68,9 @@ module Args =
         member val BaseUri =                a.TryGetResult BaseUri |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
         member val RefreshInterval =        TimeSpan.FromHours 1.
         member val Cosmos : CosmosArguments =
-            match a.TryGetSubCommand() with
-            | Some (Cosmos cosmos) -> CosmosArguments(c, cosmos)
-            | _ -> raise (MissingArg "Must specify cosmos")
+            match a.GetSubCommand() with
+            | Cosmos cosmos -> CosmosArguments(c, cosmos)
+            | _ -> missingArg "Must specify cosmos"
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
@@ -115,15 +117,14 @@ let build (args : Args.Arguments) =
 
     let sink =
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-        Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.TicketsDop, Ingester.handle, stats, args.StatsInterval)
+        Propulsion.Streams.Default.Config.Start(Log.Logger, args.MaxReadAhead, args.TicketsDop, Ingester.handle, stats, args.StatsInterval)
     let pumpSource =
-        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (context, cache)
+        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (args.GroupId, args.CheckpointInterval) (context, cache)
         let client = ApiClient.TicketsFeed feed.BaseUri
         let source =
             Propulsion.Feed.PeriodicSource(
                 Log.Logger, args.StatsInterval, feed.SourceId,
-                checkpoints, args.CheckpointInterval,
-                client.Crawl, feed.RefreshInterval,
+                client.Crawl, feed.RefreshInterval, checkpoints,
                 sink)
         source.Pump()
     sink, pumpSource
@@ -138,16 +139,14 @@ let startMetricsServer port : IDisposable =
 let run args = async {
     let sink, pumpSource = build args
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    do! Async.Parallel [ pumpSource; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
-    return if sink.RanToCompletion then 0 else 3
-}
+    return! Async.Parallel [ pumpSource; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]> }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try let metrics = Sinks.equinoxAndPropulsionFeedConsumerMetrics (Sinks.tags AppName) args.Feed.SourceId
             Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Feed.Cosmos.Verbose).CreateLogger()
-            try run args |> Async.RunSynchronously
+            try run args |> Async.RunSynchronously; 0
             with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with MissingArg msg -> eprintfn "%s" msg; 1
