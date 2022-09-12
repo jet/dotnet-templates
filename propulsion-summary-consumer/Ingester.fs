@@ -2,6 +2,8 @@
 /// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
 module ConsumerTemplate.Ingester
 
+open Propulsion.Internal
+
 /// Defines the contract we share with the proReactor --'s published feed
 module Contract =
 
@@ -19,8 +21,8 @@ module Contract =
     type VersionAndMessage = int64*Message
     // We also want the index (which is the Version of the Summary) whenever we're handling an event
     let private codec : FsCodec.IEventCodec<VersionAndMessage, _, _> = Config.EventCodec.withIndex<Message>
-    let (|DecodeNewest|_|) (stream, span : Propulsion.Streams.StreamSpan<_>) : VersionAndMessage option =
-        span.events |> Seq.rev |> Seq.tryPick (EventCodec.tryDecode codec stream)
+    let [<return: Struct>] (|DecodeNewest|_|) (stream, span : Propulsion.Streams.StreamSpan<_>) : VersionAndMessage voption =
+        span |> Seq.rev |> Seq.tryPickV (EventCodec.tryDecode codec stream)
     let (|StreamName|_|) = function
         | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
         | _ -> None
@@ -64,10 +66,10 @@ let map : Contract.Message -> TodoSummary.Events.SummaryData = function
                 { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
 
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : TodoSummary.Service) (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
+let ingest (service : TodoSummary.Service) struct (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
     | Contract.MatchNewest (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with
-        | true -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (1, span.events.Length - 1)
-        | false -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped span.events.Length
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.events.Length }
+        | true -> return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (1, span.Length - 1))
+        | false -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped span.Length
+    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
