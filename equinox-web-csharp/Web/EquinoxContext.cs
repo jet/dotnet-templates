@@ -1,16 +1,16 @@
 using Microsoft.FSharp.Core;
-using System.Text.Json;
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
-using FsCodec.SystemTextJson;
 
 namespace TodoBackendTemplate
 {
     public abstract class EquinoxContext
     {
-        public abstract Func<string, Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IEventCodec<TEvent, byte[], object> codec,
+        public abstract Func<(string, string), Equinox.DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
+            Serilog.ILogger storeLog,
+            FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
@@ -21,17 +21,21 @@ namespace TodoBackendTemplate
 
     public static class EquinoxCodec
     {
-        public static FsCodec.IEventCodec<TEvent, byte[], object> Create<TEvent>(
-            Func<TEvent, Tuple<string, byte[]>> encode,
-            Func<string, byte[], TEvent> tryDecode) where TEvent: class
-        {
-            return FsCodec.Codec.Create(
+        public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(
+            Func<TEvent, (string, ReadOnlyMemory<byte>)> encode,
+            Func<(string, ReadOnlyMemory<byte>), FSharpValueOption<TEvent>> tryDecode) where TEvent: class =>
+            
+            FsCodec.Codec.Create(
                 FuncConvert.FromFunc(encode),
-                FuncConvert.FromFunc((Func<Tuple<string, byte[]>, FSharpOption<TEvent>>) TryDecodeImpl));
-            FSharpOption<TEvent> TryDecodeImpl(Tuple<string, byte[]> encoded) => OptionModule.OfObj(tryDecode(encoded.Item1, encoded.Item2));
-        }
+                FuncConvert.FromFunc(tryDecode));
 
-        public static FsCodec.IEventCodec<TEvent, byte[], object> Create<TEvent>(JsonSerializerOptions options = null) where TEvent: TypeShape.UnionContract.IUnionContract =>
-            FsCodec.SystemTextJson.Codec.Create<TEvent>(options).ToByteArrayCodec();
+        public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(
+            Func<TEvent, (string, ReadOnlyMemory<byte>)> encode,
+            Func<string, ReadOnlyMemory<byte>, FSharpValueOption<TEvent>> tryDecode) where TEvent : class =>
+
+            Create(encode, tb => tryDecode(tb.Item1, tb.Item2));
+        
+        public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(JsonSerializerOptions options = null) where TEvent: TypeShape.UnionContract.IUnionContract =>
+            FsCodec.SystemTextJson.Codec.Create<TEvent>(options);
     }
 }

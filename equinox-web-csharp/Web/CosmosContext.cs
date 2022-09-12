@@ -1,5 +1,6 @@
 using Equinox;
 using Equinox.CosmosStore;
+using FsCodec.SystemTextJson.Interop;
 using Microsoft.Azure.Cosmos;
 using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
@@ -9,23 +10,7 @@ using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
-    public class CosmosConfig
-    {
-        public CosmosConfig(ConnectionMode mode, string connectionStringWithUriAndKey, string database, string container, int cacheMb)
-        {
-            Mode = mode;
-            ConnectionStringWithUriAndKey = connectionStringWithUriAndKey;
-            Database = database;
-            Container = container;
-            CacheMb = cacheMb;
-        }
-
-        public ConnectionMode Mode { get; }
-        public string ConnectionStringWithUriAndKey { get; }
-        public string Database { get; }
-        public string Container { get; }
-        public int CacheMb { get; }
-    }
+    public record CosmosConfig(ConnectionMode Mode, string ConnectionStringWithUriAndKey, string Database, string Container, int CacheMb);
 
     public class CosmosContext : EquinoxContext
     {
@@ -39,7 +24,7 @@ namespace TodoBackendTemplate
             _cache = new Cache("Cosmos", config.CacheMb);
             var retriesOn429Throttling = 1; // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             var timeout = TimeSpan.FromSeconds(5); // Timeout applied per request to CosmosDb, including retry attempts
-            var discovery = Discovery.ConnectionString.NewConnectionString(config.ConnectionStringWithUriAndKey);
+            var discovery = Discovery.NewConnectionString(config.ConnectionStringWithUriAndKey);
             _connect = async () =>
             {
                 var connector = new CosmosStoreConnector(discovery, timeout, retriesOn429Throttling, timeout, config.Mode);
@@ -62,8 +47,9 @@ namespace TodoBackendTemplate
             return new CosmosStoreContext(storeClient, tipMaxEvents: 256);
         }
 
-        public override Func<string, Equinox.Core.IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IEventCodec<TEvent, byte[], object> codec,
+        public override Func<(string, string), DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
+            Serilog.ILogger handlerLog,
+            FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
@@ -77,8 +63,8 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var cat = new CosmosStoreCategory<TEvent, TState, object>(_store, codec, FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy, compressUnfolds:FSharpOption<bool>.None);
-            return t => cat.Resolve(t);
+            var cat = new CosmosStoreCategory<TEvent, TState, Unit>(_store, codec.ToJsonElementCodec(), FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy, compressUnfolds:FSharpOption<bool>.None);
+            return cat.Resolve(handlerLog);
         }
     }
 }
