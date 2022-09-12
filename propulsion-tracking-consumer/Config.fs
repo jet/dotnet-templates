@@ -1,7 +1,7 @@
 module ConsumerTemplate.Config
 
 let log = Serilog.Log.ForContext("isMetric", true)
-let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
+let createDecider cat = Equinox.Decider.resolve log cat
 
 module Cosmos =
 

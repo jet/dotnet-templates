@@ -13,9 +13,9 @@ module Contract =
            pickTicketId : string
            purchaseOrderInfo : OrderInfo[] }
     let serdes = FsCodec.SystemTextJson.Options.Create() |> FsCodec.SystemTextJson.Serdes
-    let parse (utf8 : byte[]) : Message =
+    let parse (utf8 : Propulsion.Streams.Default.EventBody) : Message =
         // NB see https://github.com/jet/FsCodec for details of the default serialization profile (TL;DR only has an `OptionConverter`)
-        System.Text.Encoding.UTF8.GetString(utf8)
+        System.Text.Encoding.UTF8.GetString(utf8.Span)
         |> serdes.Deserialize<Message>
 
 type Outcome = Completed of used : int * unused : int
@@ -40,9 +40,9 @@ type Stats(log, statsInterval, stateInterval) =
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
 let ingest
         (service : SkuSummary.Service)
-        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) = async {
+        struct (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) = async {
     let items =
-        [ for e in span.events do
+        [ for e in span do
             let x = Contract.parse e.Data
             for o in x.purchaseOrderInfo do
                 let x : SkuSummary.Events.ItemData =
@@ -53,4 +53,4 @@ let ingest
                         reservedQuantity = o.reservedUnitQuantity }
                 yield x ]
     let! used = service.Ingest(skuId, items)
-    return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Completed(used, items.Length - used) }
+    return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Completed(used, items.Length - used)) }
