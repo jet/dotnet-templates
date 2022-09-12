@@ -6,7 +6,7 @@
 module FeedSourceTemplate.Domain.TicketsEpoch
 
 let [<Literal>] Category = "TicketsEpoch"
-let streamName (fcId, epochId) = FsCodec.StreamName.compose Category [FcId.toString fcId; TicketsEpochId.toString epochId]
+let streamName (fcId, epochId) = struct (Category, FsCodec.StreamName.createStreamId [FcId.toString fcId; TicketsEpochId.toString epochId])
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -19,7 +19,7 @@ module Events =
         | Closed
         | Snapshotted of {| ids : TicketId[]; closed : bool |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.create<Event>()
+    let codec = Config.EventCodec.gen<Event>
 
 let itemId (x : Events.Item) : TicketId = x.id
 let (|ItemIds|) : Events.Item[] -> TicketId[] = Array.map itemId
@@ -73,29 +73,24 @@ type IngestionService internal (capacity, resolve : FcId * TicketsEpochId -> Equ
     /// Handles idempotent deduplicated insertion into the set of items held within the epoch
     member _.Ingest(fcId, epochId, ticketIds) : Async<Result> =
         let decider = resolve (fcId, epochId)
-        decider.Transact(decide capacity ticketIds)
+        // Accept whatever date is in the cache on the basis that we are doing most of the writing so will more often than not
+        // have the correct state already without a roundtrip. What if the data is actually stale? we'll end up needing to resync,
+        // but we we need to deal with that as a race condition anyway
+        decider.Transact(decide capacity ticketIds, Equinox.AllowStale)
 
     /// Obtains a complete list of all the tickets in the specified fcid/epochId
     member _.ReadTickets(fcId, epochId) : Async<TicketId[]> =
         let decider = resolve (fcId, epochId)
-        decider.Query fst
+        decider.Query(fst, Equinox.AllowStale)
 
 module Config =
 
     let private create_ capacity resolve =
-        // Accept whatever date is in the cache on the basis that we are doing most of the writing so will more often than not
-        // have the correct state already without a roundtrip. What if the data is actually stale? we'll end up needing to resync,
-        // but we we need to deal with that as a race condition anyway
-        IngestionService(capacity, resolve (Some Equinox.AllowStale))
-    let private resolveStream opt = function
-        | Config.Store.Memory store ->
-            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
-            fun sn -> cat.Resolve(sn, ?option = opt)
-        | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            fun sn -> cat.Resolve(sn, ?option = opt)
-    let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
-    let create capacity = resolveDecider >> create_ capacity
+        IngestionService(capacity, streamName >> resolve)
+    let private (|Category|) = function
+        | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
+        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+    let create capacity (Category cat) = Config.createDecider cat |> create_ capacity
 
 /// Custom Fold and caching logic compared to the IngesterService
 /// - When reading, we want the full Items
@@ -122,12 +117,7 @@ module Reader =
 
     module Config =
 
-        let private resolveStream = function
-            | Config.Store.Memory store ->
-                let cat = Config.Memory.create Events.codec initial fold store
-                cat.Resolve
-            | Config.Store.Cosmos (context, cache) ->
-                let cat = Config.Cosmos.createUnoptimized Events.codec initial fold (context, cache)
-                cat.Resolve
-        let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-        let create = resolveDecider >> Service
+        let private (|Category|) = function
+            | Config.Store.Memory store ->            Config.Memory.create Events.codec initial fold store
+            | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createUnoptimized Events.codec initial fold (context, cache)
+        let create (Category cat) = Service(streamName >> Config.createDecider cat)

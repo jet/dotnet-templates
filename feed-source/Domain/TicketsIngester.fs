@@ -11,6 +11,7 @@
 ///           deterministic in nature
 module FeedSourceTemplate.Domain.TicketsIngester
 
+open System.Threading
 open Equinox.Core
 open FSharp.UMX
 
@@ -46,12 +47,15 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
             return! Async.Parallel(seq { for epochId in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> readEpoch %epochId }, loadDop) }
 
     // Tickets cache - used to maintain a list of tickets that have already been ingested in order to avoid db round-trips
-    let previousTickets : AsyncCacheCell<IdsCache> = AsyncCacheCell <| async {
-        let! batches = loadPreviousEpochs 4
-        return IdsCache.Create(Seq.concat batches) }
+    let previousTickets : AsyncCacheCell<IdsCache> =
+        let aux = async {
+            let! batches = loadPreviousEpochs 4
+            return IdsCache.Create(Seq.concat batches) }
+        AsyncCacheCell(fun ct -> Async.StartAsTask(aux, cancellationToken = ct))
 
     let tryIngest items = async {
-        let! previousTickets = previousTickets.AwaitValue()
+        let! ct = Async.CancellationToken
+        let! previousTickets = previousTickets.Await ct |> Async.AwaitTask
         let firstEpochId = effectiveEpochId ()
 
         let rec aux epochId ingestedTickets items = async {
@@ -94,7 +98,9 @@ type ServiceForFc internal (log : Serilog.ILogger, fcId, epochs : TicketsEpoch.I
     let batchedIngest = AsyncBatchingGate(tryIngest, linger)
 
     /// Upon startup, we initialize the Tickets cache from recent epochs; we want to kick that process off before our first ingest
-    member _.Initialize() = previousTickets.AwaitValue() |> Async.Ignore
+    member _.Initialize() = async {
+        let! ct = Async.CancellationToken
+        return! previousTickets.Await(ct) |> Async.AwaitTask |> Async.Ignore }
 
     /// Attempts to feed the items into the sequence of epochs. Returns the subset that actually got fed in this time around.
     member _.IngestMany(items : TicketsEpoch.Events.Item[]) : Async<TicketId[]> = async {

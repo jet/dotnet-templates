@@ -5,7 +5,7 @@
 module FeedSourceTemplate.Domain.TicketsSeries
 
 let [<Literal>] Category = "Tickets"
-let streamName seriesId = FsCodec.StreamName.create Category (TicketsSeriesId.toString seriesId)
+let streamName seriesId = struct (Category, TicketsSeriesId.toString seriesId)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -15,7 +15,7 @@ module Events =
         | Started of {| fcId : FcId; epochId : TicketsEpochId |}
         | Snapshotted of {| active : Map<FcId, TicketsEpochId> |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.create<Event>()
+    let codec = Config.EventCodec.gen<Event>
 
 module Fold =
 
@@ -68,13 +68,8 @@ module Config =
         // For now we have a single global sequence. This provides us an extension point should we ever need to reprocess
         // NOTE we use a custom id in order to isolate data for acceptance tests
         let seriesId = defaultArg seriesId TicketsSeriesId.wellKnownId
-        Service(seriesId, resolve (Some Equinox.AllowStale))
-    let private resolveStream opt = function
-        | Config.Store.Memory store ->
-            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
-            fun sn -> cat.Resolve(sn, ?option = opt)
-        | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            fun sn -> cat.Resolve(sn, ?option = opt)
-    let private resolveDecider store opt = streamName >> resolveStream opt store >> Config.createDecider
-    let create seriesOverride = resolveDecider >> create_ seriesOverride
+        Service(seriesId, streamName >> resolve)
+    let private (|Category|) = function
+        | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
+        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+    let create seriesOverride (Category cat) = create_ seriesOverride (Config.createDecider cat)

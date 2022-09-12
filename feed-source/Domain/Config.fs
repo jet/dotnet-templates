@@ -1,19 +1,19 @@
 module FeedSourceTemplate.Domain.Config
 
 let log = Serilog.Log.ForContext("isMetric", true)
-let createDecider stream = Equinox.Decider(log, stream, maxAttempts = 3)
+let createDecider cat = Equinox.Decider.resolve log cat
 
 module EventCodec =
 
     open FsCodec.SystemTextJson
 
     let private defaultOptions = Options.Create()
-    let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
-        Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
+    let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
+        CodecJsonElement.Create<'t>(options = defaultOptions)
 
 module Memory =
 
-    let create codec initial fold store =
+    let create codec initial fold store : Equinox.Category<_, _, _> =
         Equinox.MemoryStore.MemoryStoreCategory(store, codec, fold, initial)
 
 module Cosmos =
