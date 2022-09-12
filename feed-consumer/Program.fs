@@ -27,6 +27,7 @@ module Args =
         | [<AltCommandLine "-V"; Unique>]   Verbose
 
         | [<AltCommandLine "-g"; Unique>]   Group of string
+        | [<AltCommandLine "-s"; Unique>]   SourceId of string
         | [<AltCommandLine "-f"; Unique>]   BaseUri of string
 
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
@@ -38,6 +39,7 @@ module Args =
             member a.Usage = a |> function
                 | Verbose _ ->              "request verbose logging."
                 | Group _ ->                "specify Api Consumer Group Id. (optional if environment variable API_CONSUMER_GROUP specified)"
+                | SourceId _ ->             "specify Api SourceId. Default: 'default'"
                 | BaseUri _ ->              "specify Api endpoint. (optional if environment variable API_BASE_URI specified)"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 8."
                 | FcsDop _ ->               "maximum number of FCs to process in parallel. Default: 4"
@@ -45,7 +47,8 @@ module Args =
                 | Cosmos _ ->               "Cosmos Store parameters."
     and Arguments(c : Configuration, a : ParseResults<Parameters>) =
         member val Verbose =                a.Contains Parameters.Verbose
-        member val SourceId =               a.TryGetResult Group        |> Option.defaultWith (fun () -> c.Group) |> Propulsion.Feed.SourceId.parse
+        member val GroupId =                a.TryGetResult Group        |> Option.defaultWith (fun () -> c.Group)
+        member val SourceId =               a.GetResult(SourceId,"default") |> Propulsion.Feed.SourceId.parse
         member val BaseUri =                a.TryGetResult BaseUri      |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
         member val MaxReadAhead =           a.GetResult(MaxReadAhead,8)
         member val FcsDop =                 a.TryGetResult FcsDop       |> Option.defaultValue 4
@@ -104,14 +107,14 @@ let build (args : Args.Arguments) =
     let sink =
         let handle = Ingester.handle args.TicketsDop
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-        Propulsion.Streams.StreamsProjector.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
+        Propulsion.Streams.Default.Config.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
     let pumpSource =
-        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (context, cache)
+        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (args.GroupId, args.CheckpointInterval) (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri
         let source =
             Propulsion.Feed.FeedSource(
                 Log.Logger, args.StatsInterval, args.SourceId, args.TailSleepInterval,
-                checkpoints, args.CheckpointInterval, feed.Poll, sink)
+                checkpoints, sink, feed.Poll)
         source.Pump feed.ReadTranches
     sink, pumpSource
 
