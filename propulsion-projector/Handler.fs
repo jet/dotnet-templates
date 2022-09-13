@@ -30,9 +30,9 @@ let mapToStreamItems docs : Propulsion.Streams.StreamEvent<byte[]> seq =
 //let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
 //    { stream = e.stream; event = replaceLongDataWithNull e.event }
 
-let mapToStreamItems docs : Propulsion.Streams.StreamEvent<_> seq =
+let mapToStreamItems categoryFilter docs : Propulsion.Streams.StreamEvent<_> seq =
     docs
-    |> Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents
+    |> Seq.collect (Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents categoryFilter)
     // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
     // |> Seq.map hackDropBigBodies
 #endif // cosmos && !parallelOnly && synthesizeSequence
@@ -104,9 +104,13 @@ type Stats(log, statsInterval, stateInterval) =
         log.Information(" Total events processed {total}", totalCount)
         totalCount <- 0
 
-let handle (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
+let categoryFilter = function
+    | "categoryA"
+    | _ -> true
+
+let handle struct (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
     let r = System.Random()
-    let ms = r.Next(1, span.events.Length)
+    let ms = r.Next(1, span.Length)
     do! Async.Sleep ms
-    return Propulsion.Streams.SpanResult.AllProcessed, span.events.Length }
+    return struct (Propulsion.Streams.SpanResult.AllProcessed, span.Length) }
 #endif // !kafka

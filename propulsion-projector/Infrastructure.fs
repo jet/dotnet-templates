@@ -49,7 +49,6 @@ type Logging() =
     [<System.Runtime.CompilerServices.Extension>]
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
-            .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"

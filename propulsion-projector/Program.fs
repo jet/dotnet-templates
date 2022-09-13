@@ -345,20 +345,12 @@ module Args =
 //#if esdb
 module Checkpoints =
 
-    open Equinox.CosmosStore
-    open Propulsion.EventStore
-
     // In this implementation, we keep the checkpoints in Cosmos when consuming from EventStore
     module Cosmos =
 
-        let codec = FsCodec.NewtonsoftJson.Codec.Create<Checkpoint.Events.Event>()
-        let access = AccessStrategy.Custom (Checkpoint.Fold.isOrigin, Checkpoint.Fold.transmute)
         let create groupName (context, cache) =
-            let caching = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
-            let resolve streamName = cat.Resolve(streamName, Equinox.AllowStale)
-            Checkpoint.CheckpointSeries(groupName, resolve)
-
+            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger groupName (context, cache) 
+        
 //#endif // esdb
 let [<Literal>] AppName = "ProjectorTemplate"
 
@@ -418,7 +410,9 @@ let build (args : Args.Arguments) =
     let monitored = srcSql.Connect()
 
     let connectionString = srcSql.BuildCheckpointsConnectionString()
-    let checkpoints = Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString)
+    let checkpointEventInterval = TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint; relevant for Cosmos
+    let groupName = "default" 
+    let checkpoints = Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString, groupName, checkpointEventInterval)
 
 #if     kafka // sss && kafka
     let broker, topic = args.Target.BuildTargetParams()
@@ -427,18 +421,15 @@ let build (args : Args.Arguments) =
     let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.render, producer, stats, args.StatsInterval)
 #else // sss && !kafka
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
+    let sink = Propulsion.Streams.Default.Config.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
 #endif // sss && !kafka
     let pumpSource =
-        let sourceId = Propulsion.Feed.SourceId.parse "default" // (was hardwired as '$all' prior to v 2.12.0)
-        let checkpointEventInterval = TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint; relevant for Cosmos
         let source =
             Propulsion.SqlStreamStore.SqlStreamStoreSource
                 (   Log.Logger, args.StatsInterval,
-                    sourceId, srcSql.MaxBatchSize, srcSql.TailInterval,
-                    checkpoints, checkpointEventInterval,
-                    monitored, sink)
-        source.Pump(args.ProcessorName)
+                    monitored, srcSql.MaxBatchSize, srcSql.TailInterval,
+                    checkpoints, sink, Handler.categoryFilter, hydrateBodies = true)
+        source.Pump
     [ pumpSource; sink.AwaitWithStopOnCancellation() ]
 //#endif // sss
 
