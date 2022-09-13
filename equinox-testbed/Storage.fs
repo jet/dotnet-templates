@@ -2,15 +2,14 @@
 
 open Argu
 open System
+open Equinox.CosmosStore.Core
 
 exception MissingArg of message : string with override this.Message = this.message
+let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet : string -> string option) =
 
-    let get key =
-        match tryGet key with
-        | Some value -> value
-        | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
+    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -87,50 +86,35 @@ module EventStore =
         | [<AltCommandLine "-V">]       VerboseStore
         | [<AltCommandLine "-o">]       Timeout of float
         | [<AltCommandLine "-r">]       Retries of int
-        | [<AltCommandLine "-T">]       Tcp
-        | [<AltCommandLine "-h">]       Host of string
-        | [<AltCommandLine "-u">]       Username of string
-        | [<AltCommandLine "-p">]       Password of string
-        | [<AltCommandLine "-c">]       ConcurrentOperationsLimit of int
-        | [<AltCommandLine "-h">]       HeartbeatTimeout of float
+        | [<AltCommandLine "-h">]       ConnectionString of string
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | VerboseStore ->       "include low level Store logging."
                 | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->          "specify operation retries. Default: 1."
-                | Tcp ->                "Request connecting direct to a TCP/IP endpoint. Default: Use Clustered mode with Gossip-driven discovery (unless environment variable EQUINOX_ES_TCP specifies 'true')."
-                | Host _ ->             "TCP mode: specify a hostname to connect to directly. Clustered mode: use Gossip protocol against all A records returned from DNS query. (optional if environment variable EQUINOX_ES_HOST specified)"
-                | Username _ ->         "specify a username. Default: admin."
-                | Password _ ->         "specify a Password. Default: changeit."
-                | ConcurrentOperationsLimit _ -> "max concurrent operations in flight. Default: 5000."
-                | HeartbeatTimeout _ -> "specify heartbeat timeout in seconds. Default: 1.5."
+                | ConnectionString _ -> "esdb connection string"
 
-    open Equinox.EventStore
+    open Equinox.EventStoreDb
 
     type Arguments(a : ParseResults<Parameters>) =
-        member val Host =               a.GetResult(Host, "localhost")
-        member val Credentials =        a.GetResult(Username, "admin"), a.GetResult(Password, "changeit")
+        member val ConnectionString =   a.GetResult(ConnectionString)
 
         member val Retries =            a.GetResult(Retries, 1)
         member val Timeout =            a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-        member val HeartbeatTimeout =   a.GetResult(HeartbeatTimeout, 1.5) |> float |> TimeSpan.FromSeconds
-        member val ConcurrentOperationsLimit = a.GetResult(ConcurrentOperationsLimit, 5000)
 
-    let private connect (log: Serilog.ILogger) (dnsQuery, heartbeatTimeout, col) (username, password) (operationTimeout, operationRetries) =
-        Connector(username, password, reqTimeout=operationTimeout, reqRetries=operationRetries,
-                heartbeatTimeout=heartbeatTimeout, concurrentOperationsLimit=col,
-                log = (if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
+    let private connect (log: Serilog.ILogger) connectionString (operationTimeout, operationRetries) =
+        EventStoreConnector(reqTimeout=operationTimeout, reqRetries=operationRetries,
+                // heartbeatTimeout=heartbeatTimeout, concurrentOperationsLimit=col,
+                // log = (if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
                 tags = ["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
-            .Establish("TestbedTemplate", Discovery.GossipDns dnsQuery, ConnectionStrategy.ClusterTwinPreferSlaveReads)
+            .Establish("TestbedTemplate", Discovery.ConnectionString connectionString, ConnectionStrategy.ClusterTwinPreferSlaveReads)
     let private createContext connection batchSize = EventStoreContext(connection, BatchingPolicy(maxBatchSize=batchSize))
     let config (log: Serilog.ILogger, storeLog) (cache, unfolds, batchSize) (args : ParseResults<Parameters>) =
         let a = Arguments args
         let timeout, retries as operationThrottling = a.Timeout, a.Retries
-        let heartbeatTimeout = a.HeartbeatTimeout
-        let concurrentOperationsLimit = a.ConcurrentOperationsLimit
-        log.Information("EventStore {host} heartbeat: {heartbeat}s timeout: {timeout}s concurrent reqs: {concurrency} retries {retries}",
-            a.Host, heartbeatTimeout.TotalSeconds, timeout.TotalSeconds, concurrentOperationsLimit, retries)
-        let conn = connect storeLog (a.Host, heartbeatTimeout, concurrentOperationsLimit) a.Credentials operationThrottling |> Async.RunSynchronously
+        log.Information("EventStore {connectionString} timeout: {timeout}s retries {retries}",
+            a.ConnectionString, timeout.TotalSeconds, retries)
+        let conn = connect storeLog a.ConnectionString operationThrottling
         let cacheStrategy =
             if cache then
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)

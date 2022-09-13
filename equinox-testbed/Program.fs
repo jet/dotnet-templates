@@ -80,40 +80,39 @@ module Args =
             | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(float i) }
             |> fun intervals -> [| yield duration; yield! intervals |]
         member x.ConfigureStore(log : ILogger, createStoreLog) =
-            match a.TryGetSubCommand() with
+            match a.GetSubCommand() with
 //#if memoryStore || (!cosmos && !eventStore)
-            | Some (Memory _) ->
+            | Memory _ ->
                 log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", x.Options)
                 createStoreLog false, Storage.MemoryStore.config ()
 //#endif
 //#if eventStore
-            | Some (Es sargs) ->
+            | Es sargs ->
                 let storeLog = createStoreLog <| sargs.Contains Storage.EventStore.Parameters.VerboseStore
                 log.Information("Running transactions in-process against EventStore with storage options: {options:l}", x.Options)
                 storeLog, Storage.EventStore.config (log, storeLog) (x.Cache, x.Unfolds, x.BatchSize) sargs
 //#endif
 //#if cosmos
-            | Some (Cosmos sargs) ->
+            | Cosmos sargs ->
                 let storeLog = createStoreLog <| sargs.Contains Storage.Cosmos.Parameters.VerboseStore
                 log.Information("Running transactions in-process against CosmosDb with storage options: {options:l}", x.Options)
-                storeLog, Storage.Cosmos.config (x.Cache, x.Unfolds, x.BatchSize) (Storage.Cosmos.Arguments (c, sargs))
+                storeLog, Storage.Cosmos.config (x.Cache, x.Unfolds, x.BatchSize) (Storage.Cosmos.Arguments(c, sargs))
 //#endif
 #if ((!cosmos && !eventStore) || (cosmos && eventStore))
-            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es, cosmos")
+            | _ -> Storage.missingArg "Please identify a valid store: memory, es, cosmos"
 #endif
 #if eventStore
-            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es")
+            | _ -> Storage.missingArg "Please identify a valid store: memory, es"
 #endif
 #if cosmos
-            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, cosmos")
+            | _ -> Storage.missingArg "Please identify a valid store: memory, cosmos"
 #endif
 
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration()
-                .Destructure.FSharpTypes()
     let c = if verbose then c.MinimumLevel.Debug() else c
 //#if eventStore
-    let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
+    let c = c.WriteTo.Sink(Equinox.EventStoreDb.Log.InternalMetrics.Stats.LogSink())
 //#endif
 //#if cosmos
     let c = c.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
@@ -169,7 +168,7 @@ module LoadTest =
 //#endif
 //#if eventStore
         | Config.Store.Esdb _ ->
-            Equinox.EventStore.Log.InternalMetrics.dump log
+            Equinox.EventStoreDb.Log.InternalMetrics.dump log
 //#endif
 //#if memory
         | _ -> ()
@@ -178,11 +177,10 @@ module LoadTest =
 
 let createDomainLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration()
-                .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
     let c = if verbose then c.MinimumLevel.Debug() else c
 //#if eventStore
-    let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
+    let c = c.WriteTo.Sink(Equinox.EventStoreDb.Log.InternalMetrics.Stats.LogSink())
 //#endif
 //#if cosmos
     let c = c.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
@@ -204,7 +202,7 @@ let main argv =
             let verbose = args.Contains Verbose
             let log = createDomainLog verbose verboseConsole maybeSeq
             let reportFilename = args.GetResult(LogFile, programName+".log") |> fun n -> System.IO.FileInfo(n).FullName
-            LoadTest.run log (verbose, verboseConsole, maybeSeq) reportFilename (TestArguments (Storage.Configuration EnvVar.tryGet, rargs))
+            LoadTest.run log (verbose, verboseConsole, maybeSeq) reportFilename (TestArguments(Storage.Configuration EnvVar.tryGet, rargs))
         | _ -> failwith "Please specify a valid subcommand :- run"
         0
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

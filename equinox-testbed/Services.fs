@@ -5,7 +5,7 @@ open System
 module Domain =
     module Favorites =
 
-        let streamName (id : ClientId) = FsCodec.StreamName.create "Favorites" (ClientId.toString id)
+        let streamName (id : ClientId) = struct ("Favorites", ClientId.toString id)
 
         // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
         module Events =
@@ -20,7 +20,7 @@ module Domain =
                 | Favorited                             of Favorited
                 | Unfavorited                           of Unfavorited
                 interface TypeShape.UnionContract.IUnionContract
-            let codec = Config.EventCodec.create<Event>()
+            let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJe<Event>
 
         module Fold =
 
@@ -73,32 +73,28 @@ module Domain =
                 let decider = resolve clientId
                 decider.Query id
 
-        let create log resolve =
-            let resolve clientId =
-                let stream = resolve (streamName clientId)
-                Equinox.Decider(log, stream, maxAttempts=3)
-            Service(resolve)
+        let create cat =
+            streamName >> Config.createDecider cat |> Service
 
         module Config =
 
             let snapshot = Fold.isOrigin, Fold.toSnapshot
-            let private resolveStream = function
+            let private (|Category|) = function
 //#if memoryStore || (!cosmos && !eventStore)
                 | Config.Store.Memory store ->
-                    (Config.Memory.create Events.codec Fold.initial Fold.fold store).Resolve
+                    Config.Memory.create Events.codec Fold.initial Fold.fold store
 //#endif
 //#if cosmos
                 | Config.Store.Cosmos (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot snapshot else Equinox.CosmosStore.AccessStrategy.Unoptimized
-                    (Config.Cosmos.create Events.codec Fold.initial Fold.fold caching accessStrategy context).Resolve
+                    Config.Cosmos.create Events.codecJe Fold.initial Fold.fold caching accessStrategy context
 //#endif
 //#if eventStore
                 | Config.Store.Esdb (context, caching, unfolds) ->
-                    let accessStrategy = if unfolds then Equinox.EventStore.AccessStrategy.RollingSnapshots snapshot |> Some else None
-                    (Config.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context).Resolve
+                    let accessStrategy = if unfolds then Equinox.EventStoreDb.AccessStrategy.RollingSnapshots snapshot |> Some else None
+                    Config.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context
 //#endif
-            let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-            let create = resolveDecider >> Service
+            let create (Category cat) = streamName >> Config.createDecider cat |> Service
 
 open Microsoft.Extensions.DependencyInjection
 
