@@ -5,13 +5,11 @@ open Serilog
 open System
 
 exception MissingArg of message : string with override this.Message = this.message
+let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
 
-    let get key =
-        match tryGet key with
-        | Some value -> value
-        | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
+    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -45,9 +43,9 @@ module Args =
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val Source : CosmosSourceArguments =
-            match a.TryGetSubCommand() with
-            | Some (SrcCosmos cosmos) -> (CosmosSourceArguments (c, cosmos))
-            | _ -> raise (MissingArg "Must specify cosmos for Source")
+            match a.GetSubCommand() with
+            | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
+            | _ -> missingArg "Must specify cosmos for Source"
         member x.DeletionTarget = x.Source.Target
         member x.MonitoringParams() =
             let srcC = x.Source
@@ -57,7 +55,7 @@ module Args =
                 | None, None ->     srcC.ConnectLeases(srcC.ContainerId + "-aux")
                 | Some sc, None ->  srcC.ConnectLeases(sc)
                 | None, Some dc ->  dstC.ConnectLeases(dc)
-                | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
+                | Some _, Some _ -> missingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database"
             Log.Information("Pruning... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
             Log.Information("ChangeFeed {processorName} Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
                 x.ProcessorName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxItems)
@@ -117,9 +115,9 @@ module Args =
         member x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
 
         member val Target =
-            match a.TryGetSubCommand() with
-            | Some (DstCosmos cosmos) -> CosmosSinkArguments (c, cosmos)
-            | _ -> raise (MissingArg "Must specify cosmos for Target")
+            match a.GetSubCommand() with
+            | DstCosmos cosmos -> CosmosSinkArguments(c, cosmos)
+            | _ -> missingArg "Must specify cosmos for Target"
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -169,14 +167,15 @@ let build (args : Args.Arguments, log : ILogger) =
     let deletingEventsSink =
         let target = args.DeletionTarget
         if (target.DatabaseId, target.ContainerId) = (archive.DatabaseId, archive.ContainerId) then
-            raise (MissingArg "Danger! Can not prune a target based on itself")
+            missingArg "Danger! Can not prune a target based on itself"
         let context = target.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
         CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
     let source =
         let observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
-        CosmosStoreSource.Start(log, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+        CosmosStoreSource.Start(log, monitored, leases, processorName, observer,
+                                startFromTail = startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
     deletingEventsSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
@@ -186,17 +185,16 @@ let startMetricsServer port : IDisposable =
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
     { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
 
-open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
 let run (args : Args.Arguments) = async {
     let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
     let sink, source = build (args, log)
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    return! Async.Parallel [
-        Async.AwaitKeyboardInterruptAsTaskCancelledException()
-        source.AwaitWithStopOnCancellation()
-        sink.AwaitWithStopOnCancellation()
-    ] |> Async.Ignore<unit[]>
+    return! [|   Async.AwaitKeyboardInterruptAsTaskCanceledException()
+                 source.AwaitWithStopOnCancellation()
+                 sink.AwaitWithStopOnCancellation()
+            |] |> Async.Parallel |> Async.Ignore<unit[]>
 }
 
 [<EntryPoint>]
