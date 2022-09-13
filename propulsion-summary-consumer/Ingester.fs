@@ -23,12 +23,12 @@ module Contract =
     let private codec : FsCodec.IEventCodec<VersionAndMessage, _, _> = Config.EventCodec.withIndex<Message>
     let [<return: Struct>] (|DecodeNewest|_|) (stream, span : Propulsion.Streams.StreamSpan<_>) : VersionAndMessage voption =
         span |> Seq.rev |> Seq.tryPickV (EventCodec.tryDecode codec stream)
-    let (|StreamName|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId
-        | _ -> None
-    let (|MatchNewest|_|) = function
-        | (StreamName clientId, _) & DecodeNewest (version, update) -> Some (clientId, version, update)
-        | _ -> None
+    let [<return: Struct>] (|StreamName|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId
+        | _ -> ValueNone
+    let [<return: Struct>] (|MatchNewest|_|) = function
+        | (StreamName clientId, _) & DecodeNewest (version, update) -> ValueSome struct (clientId, version, update)
+        | _ -> ValueNone
 
 [<RequireQualifiedAccess>]
 type Outcome =
