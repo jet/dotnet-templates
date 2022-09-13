@@ -5,13 +5,11 @@ open Serilog
 open System
 
 exception MissingArg of message : string with override this.Message = this.message
+let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
 
-    let get key =
-        match tryGet key with
-        | Some value -> value
-        | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
+    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -53,9 +51,9 @@ module Args =
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val Source : CosmosSourceArguments =
-            match a.TryGetSubCommand() with
-            | Some (SrcCosmos cosmos) -> CosmosSourceArguments (c, cosmos)
-            | _ -> raise (MissingArg "Must specify cosmos for SrcCosmos")
+            match a.GetSubCommand() with
+            | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
+            | _ -> missingArg "Must specify cosmos for SrcCosmos"
         member x.DestinationArchive = x.Source.Archive
         member x.MonitoringParams() =
             let srcC = x.Source
@@ -64,7 +62,7 @@ module Args =
                 match srcC.LeaseContainer, dstC.LeaseContainerId with
                 | _, None ->        srcC.ConnectLeases()
                 | None, Some dc ->  dstC.ConnectLeases dc
-                | Some _, Some _ -> raise (MissingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database")
+                | Some _, Some _ -> missingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database"
             Log.Information("Archiving... {dop} writers, max {maxReadAhead} batches read ahead, max write batch {maxKib} KiB", x.MaxWriters, x.MaxReadAhead, x.MaxBytes / 1024)
             Log.Information("ChangeFeed {processorName} Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
                 x.ProcessorName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxItems)
@@ -127,9 +125,9 @@ module Args =
                                             | Some sc -> x.ConnectLeases(sc)
 
         member val Archive =
-            match a.TryGetSubCommand() with
-            | Some (DstCosmos cosmos) -> CosmosSinkArguments (c, cosmos)
-            | _ -> raise (MissingArg "Must specify cosmos for Sink")
+            match a.GetSubCommand() with
+            | DstCosmos cosmos -> CosmosSinkArguments(c, cosmos)
+            | _ -> missingArg "Must specify cosmos for Sink"
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -183,11 +181,13 @@ let build (args : Args.Arguments, log) =
     let archiverSink =
         let context = args.DestinationArchive.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
-        CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, (*purgeInterval=TimeSpan.FromMinutes 10.,*) maxBytes = args.MaxBytes)
+        CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval,
+                              purgeInterval=TimeSpan.FromMinutes 10., maxBytes = args.MaxBytes)
     let source =
         let observer = CosmosStoreSource.CreateObserver(log, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
-        CosmosStoreSource.Start(log, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+        CosmosStoreSource.Start(log, monitored, leases, processorName, observer,
+                                startFromTail = startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
     archiverSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
@@ -197,25 +197,23 @@ let startMetricsServer port : IDisposable =
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
     { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
 
-open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
 let run (args : Args.Arguments) = async {
     let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
     let sink, source = build (args, log)
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    return! Async.Parallel [
-        Async.AwaitKeyboardInterruptAsTaskCancelledException()
-        source.AwaitWithStopOnCancellation()
-        sink.AwaitWithStopOnCancellation() ]
-    |> Async.Ignore<unit[]>
-}
+    return! [|  Async.AwaitKeyboardInterruptAsTaskCanceledException()
+                source.AwaitWithStopOnCancellation()
+                sink.AwaitWithStopOnCancellation()
+            |] |> Async.Parallel |> Async.Ignore<unit array> }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(AppName, args.Verbose, args.SyncLogging).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? MissingArg) && not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

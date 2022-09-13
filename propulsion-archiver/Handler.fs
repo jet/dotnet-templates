@@ -7,6 +7,10 @@ type Stats(log, statsInterval, stateInterval) =
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
+let categoryFilter = function
+    | "CategoryName" -> true
+    | _ -> false
+    
 let (|Archivable|NotArchivable|) = function
     // TODO define Categories that should be copied to the secondary Container
     | "CategoryName" ->
@@ -14,11 +18,9 @@ let (|Archivable|NotArchivable|) = function
     | _ ->
         NotArchivable
 
-let selectArchivable (changeFeedDocument : Newtonsoft.Json.Linq.JObject) : Propulsion.Streams.StreamEvent<_> seq = seq {
-    let s = changeFeedDocument.GetValue("p") |> string
-    if s.StartsWith("events-") then () else
-    for batch in Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents changeFeedDocument do
-        let (FsCodec.StreamName.CategoryAndId (cat,_)) = batch.stream
+let selectArchivable changeFeedDocument: Propulsion.Streams.StreamEvent<_> seq = seq {
+    for struct (s, _e) as batch in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents categoryFilter changeFeedDocument do
+        let (FsCodec.StreamName.Category cat) = s
         match cat with
         | Archivable -> yield batch
         | NotArchivable -> ()
