@@ -4,13 +4,11 @@ open Serilog
 open System
 
 exception MissingArg of message : string with override this.Message = this.message
+let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
 
-    let get key =
-        match tryGet key with
-        | Some value -> value
-        | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
+    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -58,9 +56,9 @@ module Args =
         member val CheckpointInterval =     TimeSpan.FromHours 1.
         member val TailSleepInterval =      TimeSpan.FromSeconds 1.
         member val Cosmos : CosmosArguments =
-            match a.TryGetSubCommand() with
-            | Some (Cosmos cosmos) -> CosmosArguments(c, cosmos)
-            | _ -> raise (MissingArg "Must specify cosmos")
+            match a.GetSubCommand() with
+            | Cosmos cosmos -> CosmosArguments(c, cosmos)
+            | _ -> missingArg "Must specify cosmos"
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-cm">]          ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
