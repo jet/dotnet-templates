@@ -6,6 +6,7 @@
     "Equinox",
     "Propulsion",
     "CosmosDb",
+    "DynamoDb",
     "ChangeFeed",
     "ChangeFeedProcessor",
     "EventStore",
@@ -33,6 +34,10 @@
           "description": "Wire for CosmosDB ChangeFeedProcessor source"
         },
         {
+          "choice": "dynamo",
+          "description": "Wire for DynamoStoreSource"
+        },
+        {
           "choice": "eventStore",
           "description": "Wire for EventStoreDB $all source"
         },
@@ -54,12 +59,9 @@
       "type": "computed",
       "value": "(source == \"cosmos\")"
     },
-    "synthesizeSequence": {
-      "type": "parameter",
-      "datatype": "bool",
-      "isRequired": false,
-      "defaultValue": "false",
-      "description": "(--source=cosmos only) Include custom parsing / sequence generation logic for projecting arbitrary CosmosDB document changes, maintaining ordering."
+    "dynamo": {
+      "type": "computed",
+      "value": "(source == \"dynamo\")"
     },
     "kafka": {
       "type": "parameter",

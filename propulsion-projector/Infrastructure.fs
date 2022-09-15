@@ -8,7 +8,7 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-#if esdb
+#if (cosmos || esdb || sss)
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
@@ -16,8 +16,6 @@ module CosmosStoreContext =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
-#endif
-//#if (cosmos || esdb)
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =
@@ -42,7 +40,62 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         x.LogConfiguration(defaultArg connectionName "Source", databaseId, containerId)
         x.CreateUninitialized(databaseId, containerId)
 
-//#endif
+    /// Connects to a Store as both a ChangeFeedProcessor Monitored Container and a CosmosStoreClient
+    member x.ConnectStoreAndMonitored(databaseId, containerId) =
+        let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
+        let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
+        storeClient, monitored
+
+#endif
+#if (dynamo || esdb || sss)
+module Dynamo =
+
+    open Equinox.DynamoStore
+    
+    let defaultCacheDuration = System.TimeSpan.FromMinutes 20.
+    let private createCached codec initial fold accessStrategy (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
+        DynamoStoreCategory(context, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, cacheStrategy, accessStrategy)
+
+    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+        let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
+        createCached codec initial fold accessStrategy (context, cache)
+
+type Equinox.DynamoStore.DynamoStoreConnector with
+
+    member x.LogConfiguration() =
+        Log.Information("DynamoStore {endpoint} Timeout {timeoutS}s Retries {retries}",
+                        x.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries)
+
+type Equinox.DynamoStore.DynamoStoreClient with
+
+    member internal x.LogConfiguration(role, ?log) =
+        (defaultArg log Log.Logger).Information("DynamoStore {role:l} Table {table} Archive {archive}", role, x.TableName, Option.toObj x.ArchiveTableName)
+    member client.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
+        let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
+        let context = Equinox.DynamoStore.DynamoStoreContext(client)
+        Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
+
+type Equinox.DynamoStore.DynamoStoreContext with
+
+    member internal x.LogConfiguration(log : ILogger) =
+        log.Information("DynamoStore Tip thresholds: {maxTipBytes}b {maxTipEvents}e Query Paging {queryMaxItems} items",
+                        x.TipOptions.MaxBytes, Option.toNullable x.TipOptions.MaxEvents, x.QueryOptions.MaxItems)
+
+type Amazon.DynamoDBv2.IAmazonDynamoDB with
+
+    member x.ConnectStore(role, table) =
+        let storeClient = Equinox.DynamoStore.DynamoStoreClient(x, table)
+        storeClient.LogConfiguration(role)
+        storeClient
+
+module DynamoStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
+    let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
+        Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
+
+#endif
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 

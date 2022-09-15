@@ -29,7 +29,7 @@ namespace TodoBackendTemplate
             var c = new EventStoreConnector(reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
 
             var conn = c.Establish("Twin", Discovery.NewConnectionString(config.ConnectionString), ConnectionStrategy.ClusterTwinPreferSlaveReads);
-            return Task.FromResult(new Equinox.EventStoreDb.EventStoreContext(conn, new BatchingPolicy(maxBatchSize: 500)));
+            return Task.FromResult(new Equinox.EventStoreDb.EventStoreContext(conn));
         }
 
         public override Func<(string, string), DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(

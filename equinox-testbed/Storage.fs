@@ -2,7 +2,6 @@
 
 open Argu
 open System
-open Equinox.CosmosStore.Core
 
 exception MissingArg of message : string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
@@ -18,10 +17,10 @@ type Configuration(tryGet : string -> string option) =
 //#if (memoryStore || (!cosmos && !eventStore))
 module MemoryStore =
     type [<NoEquality; NoComparison>] Parameters =
-        | [<AltCommandLine "-V">]       VerboseStore
+        | [<AltCommandLine "-V">]       Verbose
         interface IArgParserTemplate with
-            member a.Usage = a |> function
-                | VerboseStore ->       "Include low level Store logging."
+            member p.Usage = p |> function
+                | Verbose ->       "Include low level Store logging."
     let config () =
         Config.Store.Memory (Equinox.MemoryStore.VolatileStore())
 
@@ -30,7 +29,7 @@ module MemoryStore =
 module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
-        | [<AltCommandLine "-V">]       VerboseStore
+        | [<AltCommandLine "-V">]       Verbose
         | [<AltCommandLine "-m">]       ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-o">]       Timeout of float
         | [<AltCommandLine "-r">]       Retries of int
@@ -39,8 +38,8 @@ module Cosmos =
         | [<AltCommandLine "-d">]       Database of string
         | [<AltCommandLine "-c">]       Container of string
         interface IArgParserTemplate with
-            member a.Usage = a |> function
-                | VerboseStore ->       "Include low level Store logging."
+            member p.Usage = p |> function
+                | Verbose ->       "Include low level Store logging."
                 | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->          "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
@@ -48,15 +47,15 @@ module Cosmos =
                 | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
                 | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
-    type Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
-        let mode =                          a.TryGetResult ConnectionMode
-        let timeout =                       a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-        let retries =                       a.GetResult(Retries, 1)
-        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+        let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          p.TryGetResult ConnectionMode
+        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       p.GetResult(Retries, 1)
+        let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
 
@@ -83,24 +82,24 @@ module Cosmos =
 ///   2. & $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
 module EventStore =
     type [<NoEquality; NoComparison>] Parameters =
-        | [<AltCommandLine "-V">]       VerboseStore
+        | [<AltCommandLine "-V">]       Verbose
         | [<AltCommandLine "-o">]       Timeout of float
         | [<AltCommandLine "-r">]       Retries of int
         | [<AltCommandLine "-h">]       ConnectionString of string
         interface IArgParserTemplate with
-            member a.Usage = a |> function
-                | VerboseStore ->       "include low level Store logging."
+            member p.Usage = p |> function
+                | Verbose ->            "include low level Store logging."
                 | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->          "specify operation retries. Default: 1."
                 | ConnectionString _ -> "esdb connection string"
 
     open Equinox.EventStoreDb
 
-    type Arguments(a : ParseResults<Parameters>) =
-        member val ConnectionString =   a.GetResult(ConnectionString)
+    type Arguments(p : ParseResults<Parameters>) =
+        member val ConnectionString =   p.GetResult(ConnectionString)
 
-        member val Retries =            a.GetResult(Retries, 1)
-        member val Timeout =            a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        member val Retries =            p.GetResult(Retries, 1)
+        member val Timeout =            p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
 
     let private connect (log: Serilog.ILogger) connectionString (operationTimeout, operationRetries) =
         EventStoreConnector(reqTimeout=operationTimeout, reqRetries=operationRetries,
@@ -108,7 +107,7 @@ module EventStore =
                 // log = (if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
                 tags = ["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
             .Establish("TestbedTemplate", Discovery.ConnectionString connectionString, ConnectionStrategy.ClusterTwinPreferSlaveReads)
-    let private createContext connection batchSize = EventStoreContext(connection, BatchingPolicy(maxBatchSize=batchSize))
+    let private createContext connection batchSize = EventStoreContext(connection, batchSize = batchSize)
     let config (log: Serilog.ILogger, storeLog) (cache, unfolds, batchSize) (args : ParseResults<Parameters>) =
         let a = Arguments args
         let timeout, retries as operationThrottling = a.Timeout, a.Retries

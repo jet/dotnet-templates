@@ -26,10 +26,10 @@ module Args =
                 match a with
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | Cosmos _ ->               "specify CosmosDB input parameters."
-    and Arguments(config : Configuration, a : ParseResults<Parameters>) =
-        member val Verbose =                a.Contains Parameters.Verbose
+    and Arguments(config : Configuration, p : ParseResults<Parameters>) =
+        member val Verbose =                p.Contains Parameters.Verbose
         member val Cosmos : CosmosArguments =
-            match a.GetSubCommand() with
+            match p.GetSubCommand() with
             | Parameters.Cosmos cosmos -> CosmosArguments(config, cosmos)
             | _ -> missingArg "Must specify cosmos"
     and [<NoEquality; NoComparison>] CosmosParameters =
@@ -42,7 +42,7 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose _ ->              "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
@@ -51,16 +51,16 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 9."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
-    and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
-        let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
-        let mode =                          a.TryGetResult ConnectionMode
-        let timeout =                       a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-        let retries =                       a.GetResult(Retries, 9)
-        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
+    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+        let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          p.TryGetResult ConnectionMode
+        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       p.GetResult(Retries, 9)
+        let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
-        let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member val Verbose =                a.Contains Verbose
+        let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
     /// Parse the commandline; can throw MissingArg or Argu.ArguParseException in response to missing arguments and/or `-h`/`--help` args

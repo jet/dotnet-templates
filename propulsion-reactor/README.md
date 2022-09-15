@@ -1,30 +1,10 @@
 //#if kafka
-//#if changeFeedOnly
-# Propulsion CosmosDb ChangeFeedProcessor -> Kafka Projector
+# Propulsion EventStore $all/CosmosDb ChangeFeedProcessor/DynamoStoreSource -> Kafka Projector
 //#else
-# Propulsion EventStore $all/CosmosDb ChangeFeedProcessor -> Kafka Projector
-//#endif
-//#else
-//#if changeFeedOnly
-# Propulsion CosmosDb ChangeFeedProcessor Projector (without Kafka emission)
-//#else
-# Propulsion EventStore $all/CosmosDb ChangeFeedProcessor Projector (without Kafka emission)
-//#endif
+# Propulsion EventStore $all/CosmosDb ChangeFeedProcessor/DynamoStoreSource Projector (without Kafka emission)
 //#endif
 
 This project was generated using:
-//#if changeFeedOnly
-//#if kafka
-
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new proReactor --source changeFeedOnly -k # -k => include Kafka projection logic
-//#else
-
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    # add -k to add Kafka Projection logic
-    dotnet new proReactor --source changeFeedOnly # use --help to see options
-//#endif
-//#else
 //#if kafka
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
@@ -34,7 +14,6 @@ This project was generated using:
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
     dotnet new proReactor # use --help to see options
-//#endif
 //#endif
 
 ## Usage instructions
@@ -59,12 +38,10 @@ This project was generated using:
         # default name is "($EQUINOX_COSMOS_CONTAINER)-aux"
         propulsion init -ru 400 cosmos
 
-//#if (!changeFeedOnly)
-    NOTE when projecting from EventStore, the current implementation stores the checkpoints within the CosmosDB store in order to remove feedback effects.
+    NOTE when projecting from EventStore, the current implementation stores the checkpoints within a CosmosStore or DynamoStore in order to remove feedback effects.
 
     (Yes, someone should do a PR to store the checkpoints in EventStore itself; this is extracted from working code, which can assume there's always a CosmosDB around)
 
-//#endif
 3. To run an instance of the Projector from a CosmosDb ChangeFeed
 
 //#if kafka

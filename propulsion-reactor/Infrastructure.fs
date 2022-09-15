@@ -1,13 +1,13 @@
 ﻿[<AutoOpen>]
 module ReactorTemplate.Infrastructure
 
-#if (kafka || !blank)
+// #if (kafka || !blank)
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
-#endif
+// #endif
 open Serilog
 open System
 
-#if (kafka || !blank)
+// #if (kafka || !blank)
 module Guid =
 
     let inline toStringN (x : Guid) = x.ToString "N"
@@ -20,25 +20,40 @@ module ClientId =
     let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
 
-#endif
+// #endif
 module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-#if (kafka || !blank)
+module Exception =
+
+    let dump verboseStore (log : ILogger) (exn : exn) =
+        match exn with // TODO provide override option?
+        | :? Microsoft.Azure.Cosmos.CosmosException as e
+            when (e.StatusCode = System.Net.HttpStatusCode.TooManyRequests
+                  || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
+                 && not verboseStore -> ()
+        
+        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded
+        | :? TimeoutException when not verboseStore -> ()
+        
+        | _ ->
+            log.Information(exn, "Unhandled")
+
+// #if (kafka || !blank)
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x : FsCodec.ITimelineEvent<byte[]>) =
+    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x : FsCodec.ITimelineEvent<Propulsion.Streams.Default.EventBody>) =
         match codec.TryDecode x with
-        | None ->
+        | ValueNone ->
             if Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                Log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
+                Log.ForContext("event", System.Text.Encoding.UTF8.GetString(let d = x.Data in d.Span), true)
                     .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
-            None
+            ValueNone
         | x -> x
 
-#endif
+// #endif
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =
@@ -75,6 +90,53 @@ module CosmosStoreContext =
     let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+        
+module Dynamo =
+
+    open Equinox.DynamoStore
+    
+    let defaultCacheDuration = System.TimeSpan.FromMinutes 20.
+    let private createCached codec initial fold accessStrategy (context, cache) =
+        let cacheStrategy = CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
+        DynamoStoreCategory(context, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, cacheStrategy, accessStrategy)
+
+    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+        let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
+        createCached codec initial fold accessStrategy (context, cache)
+
+type Equinox.DynamoStore.DynamoStoreConnector with
+
+    member x.LogConfiguration() =
+        Log.Information("DynamoStore {endpoint} Timeout {timeoutS}s Retries {retries}",
+                        x.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries)
+
+type Equinox.DynamoStore.DynamoStoreClient with
+
+    member internal x.LogConfiguration(role, ?log) =
+        (defaultArg log Log.Logger).Information("DynamoStore {role:l} Table {table} Archive {archive}", role, x.TableName, Option.toObj x.ArchiveTableName)
+    member client.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
+        let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
+        let context = Equinox.DynamoStore.DynamoStoreContext(client)
+        Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
+
+type Equinox.DynamoStore.DynamoStoreContext with
+
+    member internal x.LogConfiguration(log : ILogger) =
+        log.Information("DynamoStore Tip thresholds: {maxTipBytes}b {maxTipEvents}e Query Paging {queryMaxItems} items",
+                        x.TipOptions.MaxBytes, Option.toNullable x.TipOptions.MaxEvents, x.QueryOptions.MaxItems)
+
+type Amazon.DynamoDBv2.IAmazonDynamoDB with
+
+    member x.ConnectStore(role, table) =
+        let storeClient = Equinox.DynamoStore.DynamoStoreClient(x, table)
+        storeClient.LogConfiguration(role)
+        storeClient
+
+module DynamoStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
+    let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
+        Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
@@ -82,7 +144,6 @@ type Logging() =
     [<System.Runtime.CompilerServices.Extension>]
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
-            .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"

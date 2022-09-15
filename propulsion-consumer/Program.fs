@@ -32,7 +32,7 @@ module Args =
         | [<AltCommandLine "-V"; Unique>]   Verbose
 
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)."
                 | Topic _ ->                "specify Kafka Topic name. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)."
                 | Group _ ->                "specify Kafka Consumer Group Id. (optional if environment variable PROPULSION_KAFKA_GROUP specified)."
@@ -41,15 +41,15 @@ module Args =
 
                 | MaxDop _ ->               "maximum number of items to process in parallel. Default: 8"
                 | Verbose _ ->              "request verbose logging."
-    type Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        member val Broker =                 a.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
-        member val Topic =                  a.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
-        member val Group =                  a.TryGetResult Group  |> Option.defaultWith (fun () -> c.Group)
-        member val MaxInFlightBytes =       a.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
-        member val LagFrequency =           a.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
+    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+        member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
+        member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
+        member val Group =                  p.TryGetResult Group  |> Option.defaultWith (fun () -> c.Group)
+        member val MaxInFlightBytes =       p.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
+        member val LagFrequency =           p.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
 
-        member val MaxDop =                 a.GetResult(MaxDop, 8)
-        member val Verbose =                a.Contains Verbose
+        member val MaxDop =                 p.GetResult(MaxDop, 8)
+        member val Verbose =                p.Contains Verbose
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv : Arguments =

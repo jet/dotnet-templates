@@ -30,7 +30,7 @@ module Args =
         | [<AltCommandLine "-k"; Unique>]   MaxKib of int
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off"
                 | SyncVerbose ->            "request Logging for Sync operations (Writes). Default: off"
                 | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off"
@@ -40,18 +40,18 @@ module Args =
                 | RuThreshold _ ->          "minimum request charge required to log. Default: 0"
                 | MaxKib _ ->               "max KiB to submit to Sync operation. Default: 512"
                 | SrcCosmos _ ->            "Cosmos input parameters."
-    and Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        member val Verbose =                a.Contains Parameters.Verbose
-        member val SyncLogging =            a.Contains SyncVerbose, a.TryGetResult RuThreshold
-        member val PrometheusPort =         a.TryGetResult PrometheusPort
-        member val ProcessorName =          a.GetResult ProcessorName
-        member val MaxReadAhead =           a.GetResult(MaxReadAhead, 32)
-        member val MaxWriters =             a.GetResult(MaxWriters, 4)
-        member val MaxBytes =               a.GetResult(MaxKib, 512) * 1024
+    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+        member val Verbose =                p.Contains Parameters.Verbose
+        member val SyncLogging =            p.Contains SyncVerbose, p.TryGetResult RuThreshold
+        member val PrometheusPort =         p.TryGetResult PrometheusPort
+        member val ProcessorName =          p.GetResult ProcessorName
+        member val MaxReadAhead =           p.GetResult(MaxReadAhead, 32)
+        member val MaxWriters =             p.GetResult(MaxWriters, 4)
+        member val MaxBytes =               p.GetResult(MaxKib, 512) * 1024
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val Source : CosmosSourceArguments =
-            match a.GetSubCommand() with
+            match p.GetSubCommand() with
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for SrcCosmos"
         member x.DestinationArchive = x.Source.Archive
@@ -73,7 +73,7 @@ module Args =
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
-        | [<AltCommandLine "-mi"; Unique>]  MaxItems of int
+        | [<AltCommandLine "-b"; Unique>]   MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
 
@@ -87,7 +87,7 @@ module Args =
 
         | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] DstCosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose ->                "request Verbose Change Feed Processor Logging. Default: off"
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to request from feed. Default: unlimited"
@@ -103,29 +103,29 @@ module Args =
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
 
                 | DstCosmos _ ->            "CosmosDb Sink parameters."
-    and CosmosSourceArguments(c : Configuration, a : ParseResults<CosmosSourceParameters>) =
-        let discovery =                     a.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
-        let mode =                          a.TryGetResult CosmosSourceParameters.ConnectionMode
-        let timeout =                       a.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        let retries =                       a.GetResult(CosmosSourceParameters.Retries, 5)
-        let maxRetryWaitTime =              a.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
+    and CosmosSourceArguments(c : Configuration, p : ParseResults<CosmosSourceParameters>) =
+        let discovery =                     p.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
+        let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       p.GetResult(CosmosSourceParameters.Retries, 5)
+        let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      a.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val ContainerId =            a.GetResult CosmosSourceParameters.Container
+        let database =                      p.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        member val ContainerId =            p.GetResult CosmosSourceParameters.Container
         member x.MonitoredContainer() =     connector.ConnectMonitored(database, x.ContainerId)
 
-        member val FromTail =               a.Contains CosmosSourceParameters.FromTail
-        member val MaxItems =               a.TryGetResult MaxItems
-        member val LagFrequency : TimeSpan = a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member val LeaseContainer =         a.TryGetResult CosmosSourceParameters.LeaseContainer
-        member val Verbose =                a.Contains Verbose
+        member val FromTail =               p.Contains CosmosSourceParameters.FromTail
+        member val MaxItems =               p.TryGetResult MaxItems
+        member val LagFrequency : TimeSpan = p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
+        member val LeaseContainer =         p.TryGetResult CosmosSourceParameters.LeaseContainer
+        member val Verbose =                p.Contains Verbose
         member private _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
         member x.ConnectLeases() =          match x.LeaseContainer with
                                             | None ->    x.ConnectLeases(x.ContainerId + "-aux")
                                             | Some sc -> x.ConnectLeases(sc)
 
         member val Archive =
-            match a.GetSubCommand() with
+            match p.GetSubCommand() with
             | DstCosmos cosmos -> CosmosSinkArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for Sink"
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
@@ -138,7 +138,7 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
@@ -147,18 +147,18 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 0."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
-    and CosmosSinkArguments(c : Configuration, a : ParseResults<CosmosSinkParameters>) =
-        let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
-        let mode =                          a.TryGetResult ConnectionMode
-        let timeout =                       a.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        let retries =                       a.GetResult(CosmosSinkParameters.Retries, 0)
-        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+    and CosmosSinkArguments(c : Configuration, p : ParseResults<CosmosSinkParameters>) =
+        let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          p.TryGetResult ConnectionMode
+        let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       p.GetResult(CosmosSinkParameters.Retries, 0)
+        let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member _.Connect() =                connector.ConnectStore("Destination", database, container)
 
-        member val LeaseContainerId =       a.TryGetResult LeaseContainer
+        member val LeaseContainerId =       p.TryGetResult LeaseContainer
         member _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args

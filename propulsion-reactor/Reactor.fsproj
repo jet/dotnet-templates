@@ -2,12 +2,12 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
-        <TargetFramework>netcoreapp3.1</TargetFramework>
+        <TargetFramework>net6.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
     </PropertyGroup>
 
     <ItemGroup>
-        <!--#if (!kafkaEventSpans) -->
+        <!--#if (!sourceKafka) -->
         <None Include="README.md" />
         <!--#endif-->
         <Compile Include="Infrastructure.fs" />
@@ -24,27 +24,29 @@
         <!--#if (!kafka) -->
         <Compile Include="Ingester.fs" />
         <!--#endif-->
-        <!--#if (multiSource || kafka)-->
+        <Compile Include="Args.fs" />
+        <Compile Include="SourceArgs.fs" />
+        <Compile Include="SourceConfig.fs" />
         <Compile Include="Handler.fs" />
-        <!--#endif-->
         <Compile Include="Program.fs" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
-        <PackageReference Include="Destructurama.FSharp" Version="1.2.0" />
-        <!--#if (kafkaEventSpans) -->
-        <PackageReference Include="Equinox.CosmosStore" Version="3.0.7" />
+        <!--#if (sourceKafka) -->
+        <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.1" />
+        <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.1" />
+        <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.1" />
         <!--#else-->
-        <PackageReference Include="Propulsion.CosmosStore" Version="2.12.2" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-beta.4" />
+        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-beta.4" />
+        <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-beta.4" />
+        <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-beta.4" />
         <!--#endif-->
-        <PackageReference Include="FsCodec.SystemTextJson" Version="2.3.2" />
-        <!--#if (multiSource) -->
-        <PackageReference Include="Propulsion.EventStore" Version="2.12.2" />
+        <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.7.1" />
+        <!--#if (kafka || sourceKafka) -->
+        <PackageReference Include="Propulsion.Kafka" Version="3.0.0-beta.4.1" />
         <!--#endif-->
-        <!--#if (kafka || kafkaEventSpans) -->
-        <PackageReference Include="Propulsion.Kafka" Version="2.12.2" />
-        <!--#endif-->
-        <PackageReference Include="Serilog.Sinks.Console" Version="4.0.0" />
+        <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
 </Project>

@@ -33,25 +33,25 @@ module Args =
 
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Feed of ParseResults<FeedParameters>
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose _ ->              "request verbose logging."
                 | GroupId _ ->              "consumer group name. Default: 'default'"
                 | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off (optional if environment variable PROMETHEUS_PORT specified)"
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 8."
                 | TicketsDop _ ->           "maximum number of Tickets to process in parallel. Default: 4"
                 | Feed _ ->                 "Feed parameters."
-    and Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        member val GroupId =                a.GetResult(GroupId, "default")
+    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+        member val GroupId =                p.GetResult(GroupId, "default")
 
-        member val Verbose =                a.Contains Parameters.Verbose
-        member val PrometheusPort =         a.TryGetResult PrometheusPort |> Option.orElseWith (fun () -> c.PrometheusPort)
-        member val MaxReadAhead =           a.GetResult(MaxReadAhead, 8)
-        member val TicketsDop =             a.GetResult(TicketsDop, 4)
+        member val Verbose =                p.Contains Parameters.Verbose
+        member val PrometheusPort =         p.TryGetResult PrometheusPort |> Option.orElseWith (fun () -> c.PrometheusPort)
+        member val MaxReadAhead =           p.GetResult(MaxReadAhead, 8)
+        member val TicketsDop =             p.GetResult(TicketsDop, 4)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val CheckpointInterval =     TimeSpan.FromHours 1.
         member val Feed : FeedArguments =
-            match a.GetSubCommand() with
+            match p.GetSubCommand() with
             | Feed feed -> FeedArguments(c, feed)
             | _ -> missingArg "Must specify feed"
     and [<NoEquality; NoComparison>] FeedParameters =
@@ -59,16 +59,16 @@ module Args =
         | [<AltCommandLine "-f"; Unique>]   BaseUri of string
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Group _ ->                "specify Api Consumer Group Id. (optional if environment variable API_CONSUMER_GROUP specified)"
                 | BaseUri _ ->              "specify Api endpoint. (optional if environment variable API_BASE_URI specified)"
                 | Cosmos _ ->               "Cosmos Store parameters."
-    and FeedArguments(c : Configuration, a : ParseResults<FeedParameters>) =
-        member val SourceId =               a.TryGetResult Group   |> Option.defaultWith (fun () -> c.Group)   |> Propulsion.Feed.SourceId.parse
-        member val BaseUri =                a.TryGetResult BaseUri |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
+    and FeedArguments(c : Configuration, p : ParseResults<FeedParameters>) =
+        member val SourceId =               p.TryGetResult Group   |> Option.defaultWith (fun () -> c.Group)   |> Propulsion.Feed.SourceId.parse
+        member val BaseUri =                p.TryGetResult BaseUri |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
         member val RefreshInterval =        TimeSpan.FromHours 1.
         member val Cosmos : CosmosArguments =
-            match a.GetSubCommand() with
+            match p.GetSubCommand() with
             | Cosmos cosmos -> CosmosArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos"
     and [<NoEquality; NoComparison>] CosmosParameters =
@@ -81,7 +81,7 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose _ ->              "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
@@ -90,16 +90,16 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds (default: 30)."
                 | Retries _ ->              "specify operation retries (default: 9)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 30)"
-    and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
-        let discovery =                     a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
-        let mode =                          a.TryGetResult ConnectionMode
-        let timeout =                       a.GetResult(Timeout, 30.) |> TimeSpan.FromSeconds
-        let retries =                       a.GetResult(Retries, 9)
-        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
+    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+        let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          p.TryGetResult ConnectionMode
+        let timeout =                       p.GetResult(Timeout, 30.) |> TimeSpan.FromSeconds
+        let retries =                       p.GetResult(Retries, 9)
+        let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
-        let database =                      a.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     a.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member val Verbose =                a.Contains Verbose
+        let database =                      p.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     p.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -111,7 +111,7 @@ module Args =
 let [<Literal>] AppName = "PeriodicIngesterTemplate"
 
 let build (args : Args.Arguments) =
-    let cache = Equinox.Cache (AppName, sizeMb = 10)
+    let cache = Equinox.Cache(AppName, sizeMb = 10)
     let feed = args.Feed
     let context = feed.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 

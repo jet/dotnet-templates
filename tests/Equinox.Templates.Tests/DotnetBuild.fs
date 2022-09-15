@@ -21,7 +21,7 @@ type ProProjector() as this =
 type ProReactor() as this =
     inherit TheoryData<string list>()
 
-    do for source in ["multiSource"; (* <-default *) "kafkaEventSpans"; "changeFeedOnly"] do
+    do for source in ["multiSource"; (* <-default *) "kafkaEventSpans"] do
         for opts in [ []; ["--blank"]; ["--kafka"]; ["--kafka"; "--blank"] ] do
             this.Add(["--source " + source] @ opts)
 
@@ -44,7 +44,7 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
         Dotnet.build [folder]
 
     #if DEBUG // Use this one to trigger an individual test
-    let [<Fact>] ``*pending*`` ()               = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]
+    let [<Fact>] ``*pending*`` ()               = run "proProjector" ["--source cosmos"; "--kafka"]
     #endif
 
     let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []
@@ -54,7 +54,6 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] feedConsumer ()                = run "feedConsumer" []
     [<ClassData(typeof<ProProjector>)>]
     let [<Theory>] proProjector args            = run "proProjector" args
-    let [<Fact>] proProjectorSynth ()           = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]
     let [<Fact>] proConsumer ()                 = run "proConsumer" []
     let [<Fact>] trackingConsumer ()            = run "trackingConsumer" []
     let [<Fact>] summaryConsumer ()             = run "summaryConsumer" []
@@ -74,7 +73,6 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     [<ClassData(typeof<ProReactor>)>]
     let [<Theory>] proReactor args              = run "proReactor" args
     let [<Fact>] proReactorDefault ()           = run "proReactor" []
-    let [<Fact>] proReactorFilter ()            = run "proReactor" ["--filter"]
 
     let [<Fact>] proCosmosReactor ()            = run "proCosmosReactor" []
     

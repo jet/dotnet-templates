@@ -43,7 +43,7 @@ module Storage =
         let connect connectionString =
             let c = EventStoreConnector(reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1)
             let conn = c.Establish("Twin", Discovery.ConnectionString connectionString, ConnectionStrategy.ClusterTwinPreferSlaveReads)
-            EventStoreContext(conn, BatchingPolicy(maxBatchSize=500))
+            EventStoreContext(conn, batchSize = 500)
 
 //#endif
 //#if cosmos
