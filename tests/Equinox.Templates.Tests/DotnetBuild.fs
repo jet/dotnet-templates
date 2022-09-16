@@ -34,7 +34,7 @@ type EqxWebs() as this =
             do this.Add(t, ["--todos"])
             do this.Add(t, ["--todos"; "--eventStore"])
 #endif
-       do this.Add("eqxweb", ["--todos"; "--cosmos"; "--aggregate"; "--dynamo"])
+       do this.Add("eqxweb", ["--todos"; "--aggregate"; "--dynamo"])
 
 type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
 
@@ -45,7 +45,7 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
         Dotnet.build [folder]
 
     #if DEBUG // Use this one to trigger an individual test
-    let [<Fact>] ``*pending*`` ()               = run "eqxwebcs" ["--todos"; "--eventStore"]
+    let [<Fact>] ``*pending*`` ()               = run "eqxwebcs" ["--todos"; "--cosmos"]
     #endif
 
     let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []

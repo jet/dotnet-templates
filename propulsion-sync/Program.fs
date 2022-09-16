@@ -438,12 +438,12 @@ module EventV0Parser =
             member _.CausationId = null
             member _.Context = null
 
-    type Newtonsoft.Json.Linq.JObject with
+    type System.Text.Json.JsonDocument with
         member document.Cast<'T>() =
-            document.ToObject<'T>()
+            System.Text.Json.JsonSerializer.Deserialize<'T>(document.RootElement)
 
     /// We assume all Documents represent Events laid out as above
-    let parse (d : Newtonsoft.Json.Linq.JObject) : Propulsion.Streams.Default.StreamEvent =
+    let parse (d : System.Text.Json.JsonDocument) : Propulsion.Streams.Default.StreamEvent =
         let e = d.Cast<EventV0>()
         FsCodec.StreamName.parse e.s, e |> FsCodec.Core.TimelineEvent.Map ReadOnlyMemory 
 
