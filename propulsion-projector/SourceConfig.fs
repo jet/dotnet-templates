@@ -4,12 +4,12 @@ open System
 
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type SourceConfig =
-#if (cosmos)    
+// #if (cosmos)    
     | Cosmos of monitoredContainer : Microsoft.Azure.Cosmos.Container
         * leasesContainer : Microsoft.Azure.Cosmos.Container
         * checkpoints : CosmosFeedConfig
         * tailSleepInterval : TimeSpan
-#endif        
+// #endif        
     | Dynamo of indexStore : Equinox.DynamoStore.DynamoStoreClient
         * checkpoints : Propulsion.Feed.IFeedCheckpointStore
         * loading : DynamoLoadModeConfig
@@ -38,7 +38,7 @@ and [<NoEquality; NoComparison>] DynamoLoadModeConfig =
     | Hydrate of monitoredContext : Equinox.DynamoStore.DynamoStoreContext * hydrationConcurrency : int
 
 module SourceConfig =
-#if cosmos    
+// #if cosmos    
     module Cosmos =
         open Propulsion.CosmosStore
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
@@ -59,7 +59,7 @@ module SourceConfig =
                                             startFromTail = startFromTail, ?maxItems = maxItems, tailSleepInterval = tailSleepInterval,
                                             lagReportFreq = lagFrequency)
             source, None
-#endif            
+// #endif            
 #if dynamo    
     module Dynamo =
         open Propulsion.DynamoStore
@@ -101,10 +101,10 @@ module SourceConfig =
             source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
     let start (log, storeLog) sink categoryFilter : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Async<unit>) option = function
-#if cosmos    
+// #if cosmos    
         | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval) ->
             Cosmos.start log sink categoryFilter (monitored, leases, checkpointConfig, tailSleepInterval)
-#endif
+// #endif
 #if dynamo    
         | SourceConfig.Dynamo (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
             Dynamo.start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loading, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval)

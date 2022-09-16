@@ -57,19 +57,19 @@ module Args =
                                             (processorName, maxReadAhead, maxConcurrentStreams)
 #if sourceKafka
         member _.ConnectStoreAndSource(appName) : _ * _ * _ * (string -> FsKafka.KafkaConsumerConfig) * (ILogger -> unit) =
-            let p =
+            let a =
                 match p.GetSubCommand() with
                 | Kafka p -> SourceArgs.Kafka.Arguments(c, p)
                 | p -> Args.missingArg $"Unexpected Source subcommand %A{p}"
             let createConsumerConfig groupName =
                 FsKafka.KafkaConsumerConfig.Create(
-                    appName, p.Broker, [p.Topic], groupName, Confluent.Kafka.AutoOffsetReset.Earliest,
-                    maxInFlightBytes = p.MaxInFlightBytes, ?statisticsInterval = p.LagFrequency)
+                    appName, a.Broker, [a.Topic], groupName, Confluent.Kafka.AutoOffsetReset.Earliest,
+                    maxInFlightBytes = a.MaxInFlightBytes, ?statisticsInterval = a.LagFrequency)
 #if (kafka && blank)
-            let targetStore = () in targetStore, targetStore, p.Kafka, createConsumerConfig, ignore
+            let targetStore = () in targetStore, targetStore, a.Kafka, createConsumerConfig, ignore
 #else
             let cache = Equinox.Cache (appName, sizeMb = cacheSizeMb)
-            let targetStore = p.ConnectTarget cache
+            let targetStore = a.ConnectTarget cache
 #if kafka
             let kafka = a.Kafka
 #else
@@ -78,7 +78,7 @@ module Args =
             targetStore, targetStore, kafka, createConsumerConfig, fun log ->
                 Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
                 Equinox.DynamoStore.Core.Log.InternalMetrics.dump log
-#endif                        
+#endif                       
         member val VerboseStore =           false
 #else            
         member val Store : Choice<SourceArgs.Cosmos.Arguments, SourceArgs.Dynamo.Arguments, SourceArgs.Esdb.Arguments, SourceArgs.Sss.Arguments> =
