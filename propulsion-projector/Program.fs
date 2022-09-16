@@ -28,7 +28,7 @@ module Args =
         | [<CliPrefix(CliPrefix.None); Last>] Esdb of ParseResults<SourceArgs.Esdb.Parameters>
 #endif
 #if sss
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "ms"; Last>] Sss of ParseResults<SourceArgs.Sss.Parameters>
+        | [<CliPrefix(CliPrefix.None); Last>] SqlMs of ParseResults<SourceArgs.Sss.Parameters>
 #endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
@@ -50,7 +50,7 @@ module Args =
                 | Esdb _ ->                 "specify EventStore input parameters."
 #endif
 #if sss
-                | Sss _ ->                 "specify SqlStreamStore.MsSql input parameters."
+                | SqlMs _ ->                "specify SqlStreamStore input parameters."
 #endif
     and Arguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
         let processorName =                 p.GetResult ProcessorName
@@ -75,7 +75,7 @@ module Args =
                                             | Esdb p ->   SourceArgs.Esdb.Arguments(c, p)
 #endif                                            
 #if sss                                            
-                                            | Sss p ->    SourceArgs.Sss.Arguments(c, p)
+                                            | SqlMs p ->  SourceArgs.Sss.Arguments(c, p)
 #endif                                            
                                             | p ->        Args.missingArg $"Unexpected Store subcommand %A{p}"
         member x.VerboseStore =             x.Store.Verbose

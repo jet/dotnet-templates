@@ -21,13 +21,15 @@ The following templates focus specifically on the usage of `Propulsion` componen
 
   * consumes events from one of:
   
-    1. _(default)_ `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.Cosmos` stores using `Propulsion.Cosmos`)
+    1. _(default)_ `--source cosmos`: an Azure CosmosDb ChangeFeedProcessor (typically unrolling events from `Equinox.CosmosStore` stores using `Propulsion.CosmosStore`)
  
        * `-k --parallelOnly` schedule kafka emission to operate in parallel at document (rather than accumulated span of events for a stream) level
 
-    2. `--source eventStore`: EventStoreDB's `$all` feed
+    2. `--source eventStore`: Track an EventStoreDB >= 21.10 instance's `$all` feed using the gRPC interface (via `Propulsion.EventStoreDb`)
     
     3. `--source sqlStreamStore`: [`SqlStreamStore`](https://github.com/SQLStreamStore/SQLStreamStore)'s `$all` feed
+    
+    4. `--source dynamo`
 
   * `-k` adds publishing to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion).
       
@@ -49,7 +51,7 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
    Input options are:
    
-   0. (default) `Propulsion.Cosmos`/`Propulsion.DynamoStore`/`Propulsion.EventStore` depending on whether the program is run with `cosmos`, `dynamo`, `es` arguments
+   0. (default) `Propulsion.Cosmos`/`Propulsion.DynamoStore`/`Propulsion.EventStoreDb`/`Propulsion.SqlStreamStore` depending on whether the program is run with `cosmos`, `dynamo`, `es`, `sss` arguments
    2. `--source kafkaEventSpans`: changes source to be Kafka Event Spans, as emitted from `dotnet new proProjector --kafka`
 
    The reactive behavior template has the following options:
