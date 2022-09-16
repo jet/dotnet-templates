@@ -8,7 +8,7 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-#if (cosmos || esdb || sss)
+// #if (cosmos || esdb || sss)
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
@@ -46,8 +46,8 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
         storeClient, monitored
 
-#endif
-#if (dynamo || esdb || sss)
+// #endif
+// #if (dynamo || esdb || sss)
 module Dynamo =
 
     open Equinox.DynamoStore
@@ -95,7 +95,7 @@ module DynamoStoreContext =
     let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
         Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
 
-#endif
+// #endif
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 

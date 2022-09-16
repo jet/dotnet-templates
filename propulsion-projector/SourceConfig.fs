@@ -4,10 +4,12 @@ open System
 
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type SourceConfig =
+#if (cosmos)    
     | Cosmos of monitoredContainer : Microsoft.Azure.Cosmos.Container
         * leasesContainer : Microsoft.Azure.Cosmos.Container
         * checkpoints : CosmosFeedConfig
         * tailSleepInterval : TimeSpan
+#endif        
     | Dynamo of indexStore : Equinox.DynamoStore.DynamoStoreClient
         * checkpoints : Propulsion.Feed.IFeedCheckpointStore
         * loading : DynamoLoadModeConfig
@@ -36,6 +38,7 @@ and [<NoEquality; NoComparison>] DynamoLoadModeConfig =
     | Hydrate of monitoredContext : Equinox.DynamoStore.DynamoStoreContext * hydrationConcurrency : int
 
 module SourceConfig =
+#if cosmos    
     module Cosmos =
         open Propulsion.CosmosStore
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
@@ -56,6 +59,8 @@ module SourceConfig =
                                             startFromTail = startFromTail, ?maxItems = maxItems, tailSleepInterval = tailSleepInterval,
                                             lagReportFreq = lagFrequency)
             source, None
+#endif            
+#if dynamo    
     module Dynamo =
         open Propulsion.DynamoStore
         let start (log, storeLog) (sink : Propulsion.Streams.Default.Sink) categoryFilter
@@ -70,6 +75,8 @@ module SourceConfig =
                     checkpoints, sink, loadMode,
                     startFromTail = startFromTail, storeLog = storeLog)
             source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+#endif            
+#if esdb    
     module Esdb =
         open Propulsion.EventStoreDb
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
@@ -80,6 +87,8 @@ module SourceConfig =
                     client, batchSize, tailSleepInterval,
                     checkpoints, sink, categoryFilter, hydrateBodies = hydrateBodies, startFromTail = startFromTail)
             source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+#endif            
+#if sss    
     module Sss =
         open Propulsion.SqlStreamStore
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
@@ -90,13 +99,21 @@ module SourceConfig =
                     client, batchSize, tailSleepInterval,
                     checkpoints, sink, categoryFilter, hydrateBodies = hydrateBodies, startFromTail = startFromTail)
             source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
-            
+#endif            
     let start (log, storeLog) sink categoryFilter : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Async<unit>) option = function
+#if cosmos    
         | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval) ->
             Cosmos.start log sink categoryFilter (monitored, leases, checkpointConfig, tailSleepInterval)
+#endif
+#if dynamo    
         | SourceConfig.Dynamo (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
             Dynamo.start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loading, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval)
+#endif
+#if esdb    
         | SourceConfig.Esdb (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval) ->
             Esdb.start log sink categoryFilter (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval)
+#endif
+#if sss    
         | SourceConfig.Sss (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval) ->
             Sss.start log sink categoryFilter (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval)
+#endif

@@ -46,13 +46,16 @@ type Configuration(tryGet : string -> string option) =
     
     member x.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
 
+#if (esdb || sss || dynamo)
 // Type used to represent where checkpoints (for either the FeedConsumer position, or for a Reactor's Event Store subscription position) will be stored
 // In a typical app you don't have anything like this as you'll simply use your primary Event Store (see)
 module Checkpoints =
 
     [<RequireQualifiedAccess; NoComparison; NoEquality>]
     type Store =
+#if (!dynamo)
         | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
+#endif           
         | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
         (*  Propulsion.EventStoreDb does not implement a native checkpoint storage mechanism,
             perhaps port https://github.com/absolutejam/Propulsion.EventStoreDB ?
@@ -62,17 +65,22 @@ module Checkpoints =
             For now, we store the Checkpoints in one of the above stores *)
 
     let create (consumerGroup, checkpointInterval) storeLog : Store  -> Propulsion.Feed.IFeedCheckpointStore = function
+#if (!dynamo)
         | Store.Cosmos (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.CosmosStore.create storeLog (consumerGroup, checkpointInterval) (context, cache)
+#endif            
         | Store.Dynamo (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.DynamoStore.create storeLog (consumerGroup, checkpointInterval) (context, cache)
     let createCheckpointStore (group, checkpointInterval, store : Config.Store) : Propulsion.Feed.IFeedCheckpointStore =
         let checkpointStore =
             match store with
+#if (!dynamo)
             | Config.Store.Cosmos (context, cache) -> Store.Cosmos (context, cache)
+#endif           
             | Config.Store.Dynamo (context, cache) -> Store.Dynamo (context, cache)
         create (group, checkpointInterval) Config.log checkpointStore
 
+#endif
 open Argu
 
 #if kafka
@@ -91,7 +99,7 @@ type KafkaSinkArguments(c : Configuration, p : ParseResults<KafkaSinkParameters>
 
 #endif
 
-#if (esdb || sss || cosmos)
+// #if (esdb || sss || cosmos)
 module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -138,8 +146,8 @@ module Cosmos =
             | _ -> missingArg "Must specify `kafka` arguments"
 #endif
 
-#endif // cosmos
-#if (esdb || sss || dynamo)
+// #endif // cosmos
+// #if (esdb || sss || dynamo)
 module Dynamo =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -198,13 +206,13 @@ module Dynamo =
             | _ -> missingArg "Must specify `kafka` arguments"
 #endif
 
-#endif // dynamo
+// #endif // dynamo
 
+#if (esdb || sss)
 type [<RequireQualifiedAccess; NoComparison; NoEquality>]
     TargetStoreArgs =
     | Cosmos of Cosmos.Arguments
     | Dynamo of Dynamo.Arguments
-
 module TargetStoreArgs =
     
     let connectTarget targetStore cache: Config.Store =
@@ -215,3 +223,4 @@ module TargetStoreArgs =
         | TargetStoreArgs.Dynamo a ->
             let context = a.Connect() |> DynamoStoreContext.create
             Config.Store.Dynamo (context, cache)
+#endif

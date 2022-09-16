@@ -18,9 +18,9 @@ module Args =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
 #endif
-#if cosmos
+// #if cosmos
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
-#endif
+// #endif
 #if dynamo
         | [<CliPrefix(CliPrefix.None); Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
 #endif
@@ -36,13 +36,13 @@ module Args =
                 | ProcessorName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 64"
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 1024"
-//#if kafka
+#if kafka
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
-//#endif
-#if cosmos
-                | Cosmos _ ->               "specify CosmosDb input parameters"
 #endif
+// #if cosmos
+                | Cosmos _ ->               "specify CosmosDb input parameters"
+// #endif
 #if dynamo
                 | Dynamo _ ->               "specify DynamoDb input parameters"
 #endif
@@ -63,22 +63,27 @@ module Args =
         member _.ProcessorParams() =        Log.Information("Projecting... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
                                                             processorName, maxReadAhead, maxConcurrentProcessors)
                                             (processorName, maxReadAhead, maxConcurrentProcessors)
-        member val Store : Choice<SourceArgs.Cosmos.Arguments, SourceArgs.Dynamo.Arguments, SourceArgs.Esdb.Arguments, SourceArgs.Sss.Arguments> =
+        member val Store =
                                             match p.GetSubCommand() with
-                                            | Cosmos p -> Choice1Of4 <| SourceArgs.Cosmos.Arguments(c, p)
-                                            | Dynamo p -> Choice2Of4 <| SourceArgs.Dynamo.Arguments(c, p)
-                                            | Esdb p ->   Choice3Of4 <| SourceArgs.Esdb.Arguments(c, p)
-                                            | Sss p ->    Choice4Of4 <| SourceArgs.Sss.Arguments(c, p)
+// #if cosmos                                            
+                                            | Cosmos p -> SourceArgs.Cosmos.Arguments(c, p)
+// #endif                                            
+#if dynamo                                            
+                                            | Dynamo p -> SourceArgs.Dynamo.Arguments(c, p)
+#endif                                            
+#if esdb                                            
+                                            | Esdb p ->   SourceArgs.Esdb.Arguments(c, p)
+#endif                                            
+#if sss                                            
+                                            | Sss p ->    SourceArgs.Sss.Arguments(c, p)
+#endif                                            
                                             | p ->        Args.missingArg $"Unexpected Store subcommand %A{p}"
-        member x.VerboseStore =             match x.Store with
-                                            | Choice1Of4 p -> p.Verbose
-                                            | Choice2Of4 p -> p.Verbose
-                                            | Choice3Of4 p -> p.Verbose
-                                            | Choice4Of4 p -> p.Verbose
+        member x.VerboseStore =             x.Store.Verbose
         member x.ConnectSource(appName) : (ILogger -> string -> SourceConfig) * _ * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
-            | Choice1Of4 a ->
+            | a ->
+//#if cosmos            
                 let monitored = a.ConnectMonitored()
                 let buildSourceConfig log groupName =
                     let leases, startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams(log)
@@ -90,7 +95,8 @@ module Args =
                 let target = ()
 #endif
                 buildSourceConfig, target, ignore
-            | Choice2Of4 a ->
+// #endif                
+#if dynamo
                 let context = a.Connect()
                 let buildSourceConfig log groupName =
                     let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
@@ -103,7 +109,8 @@ module Args =
                 let target = ()
 #endif
                 buildSourceConfig, target, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
-            | Choice3Of4 a ->
+#endif
+#if esdb
                 let connection = a.Connect(Log.Logger, appName, EventStore.Client.NodePreference.Leader)
                 let targetStore = a.ConnectTarget(cache)
                 let buildSourceConfig log groupName =
@@ -119,7 +126,8 @@ module Args =
                 buildSourceConfig, target, fun log ->
                     Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
                     Equinox.DynamoStore.Core.Log.InternalMetrics.dump log
-            | Choice4Of4 a ->
+#endif
+#if sss
                 let connection = a.Connect()
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval = a.MonitoringParams(log)
@@ -135,6 +143,7 @@ module Args =
                     Equinox.SqlStreamStore.Log.InternalMetrics.dump log
                     Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
                     Equinox.DynamoStore.Core.Log.InternalMetrics.dump log
+#endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv : Arguments =
@@ -160,7 +169,7 @@ let build (args : Args.Arguments) =
 #endif // kafka && !parallelOnly
 #else // !kafka
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-    let sink = Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, Handler.handle, stats, args.StatsInterval)
+    let sink = Propulsion.Streams.Default.Config.Start(Log.Logger, maxReadAhead, maxConcurrentProcessors, Handler.handle, stats, args.StatsInterval)
 #endif // !kafka
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig Log.Logger consumerGroupName

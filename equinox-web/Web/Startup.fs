@@ -135,7 +135,7 @@ type Startup() =
                 |> Seq.iter options.JsonSerializerOptions.Converters.Add
             ) |> ignore
 
-//#if (cosmos || eventStore)
+//#if (cosmos || eventStore || dynamo)
         // This is the allocation limit passed internally to a System.Caching.MemoryCache instance
         // The primary objects held in the cache are the Folded State of Event-sourced aggregates
         // see https://docs.microsoft.com/en-us/dotnet/framework/performance/caching-in-net-framework-applications for more information

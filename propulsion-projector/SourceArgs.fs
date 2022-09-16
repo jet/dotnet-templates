@@ -10,7 +10,7 @@ type Configuration(tryGet) =
     member _.DynamoIndexTable =             tryGet Args.INDEX_TABLE
 #endif
 
-#if cosmos
+// #if cosmos
 module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -81,7 +81,7 @@ module Cosmos =
             | _ -> Args.missingArg "Must specify `kafka` arguments"
 #endif
 
-#endif // cosmos
+// #endif // cosmos
 #if dynamo
 module Dynamo =
 

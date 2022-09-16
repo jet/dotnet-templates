@@ -2,6 +2,7 @@ module ProjectorTemplate.Config
 
 let log = Serilog.Log.ForContext("isMetric", true)
 
+// #if (esdb || sss || cosmos)
 module Cosmos =
 
     let private createCached codec initial fold accessStrategy (context, cache) : Equinox.Category<_, _, _> =
@@ -16,6 +17,7 @@ module Cosmos =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.RollingState toSnapshot
         createCached codec initial fold accessStrategy (context, cache)
 
+// #endif
 module Dynamo =
 
     let private createCached codec initial fold accessStrategy (context, cache) : Equinox.Category<_, _, _> =
@@ -45,11 +47,11 @@ module Sss =
 
 #endif
 
+// #if (esdb || sss || dynamo)    
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Store =
-#if cosmos || esdb || sss    
+#if (esdb || sss)
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-#endif
-#if dynamo || esdb || sss    
+#endif    
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-#endif
+// #endif

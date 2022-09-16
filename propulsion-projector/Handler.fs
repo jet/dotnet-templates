@@ -4,8 +4,8 @@ module ProjectorTemplate.Handler
 #if     parallelOnly
 // Here we pass the items directly through to the handler without parsing them
 let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : seq<'a> = upcast x
-#else // cosmos && !parallelOnly
 let categoryFilter _ = true
+#else // cosmos && !parallelOnly
 #endif // !parallelOnly
 //#endif // cosmos
 
@@ -14,8 +14,10 @@ let categoryFilter _ = true
 type ExampleOutput = { id : string }
 
 let serdes = FsCodec.SystemTextJson.Options.Create() |> FsCodec.SystemTextJson.Serdes
-let render (doc : Newtonsoft.Json.Linq.JObject) : string * string =
-    let equinoxPartition, itemId = doc.Value<string>("p"), doc.Value<string>("id")
+let render (doc : System.Text.Json.JsonDocument) =
+    let r = doc.RootElement
+    let gs (name : string) = let x = r.GetProperty name in x.GetString()
+    let equinoxPartition, itemId = gs "p", gs "id"
     equinoxPartition, serdes.Serialize { id = itemId }
 #else // kafka && !(cosmos && parallelOnly)
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
@@ -42,6 +44,10 @@ let render struct (stream : FsCodec.StreamName, span : Propulsion.Streams.Defaul
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
         |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
     return struct (FsCodec.StreamName.toString stream, value) }
+
+let categoryFilter = function
+    | _ -> true // TODO filter categories to be rendered
+
 #endif // kafka && !(cosmos && parallelOnly)
 #else // !kafka
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
