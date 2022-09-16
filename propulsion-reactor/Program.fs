@@ -71,7 +71,7 @@ module Args =
             let cache = Equinox.Cache (appName, sizeMb = cacheSizeMb)
             let targetStore = p.ConnectTarget cache
 #if kafka
-            let kafka = p.Kafka
+            let kafka = a.Kafka
 #else
             let kafka = ()
 #endif
@@ -105,7 +105,7 @@ module Args =
                 let context = client |> CosmosStoreContext.create
                 let store = Config.Store.Cosmos (context, cache)
 #if kafka
-                let kafka = p.Kafka
+                let kafka = a.Kafka
 #if blank
                 let targetStore = store
 #else                
@@ -124,7 +124,7 @@ module Args =
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 let store = Config.Store.Dynamo (context, cache)
 #if kafka
-                let kafka = p.Kafka
+                let kafka = a.Kafka
 #if blank
                 let targetStore = store
 #else                
@@ -145,7 +145,7 @@ module Args =
                     let hydrateBodies = true
                     SourceConfig.Esdb (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
 #if kafka
-                let kafka = p.Kafka
+                let kafka = a.Kafka
 #else
                 let kafka = ()
 #endif
@@ -164,7 +164,7 @@ module Args =
                     let hydrateBodies = true
                     SourceConfig.Sss (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
 #if kafka
-                let kafka = p.Kafka
+                let kafka = a.Kafka
 #else
                 let kafka = ()
 #endif
