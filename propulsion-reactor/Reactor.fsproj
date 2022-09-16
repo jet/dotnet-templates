@@ -35,15 +35,15 @@
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
-        <!--#if (sourceKafka) -->
+        <!--#if (sourceKafka && !kafka) -->
         <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.1" />
         <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.1" />
-        <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.1" />
         <!--#else-->
         <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-beta.4" />
         <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-beta.4" />
         <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-beta.4" />
         <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-beta.4" />
+        <!--#endif-->
         <!--#endif-->
         <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.7.1" />
         <!--#if (kafka || sourceKafka) -->
