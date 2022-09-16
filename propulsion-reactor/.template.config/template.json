@@ -13,7 +13,8 @@
     "Reactor"
   ],
   "tags": {
-    "language": "F#"
+    "language": "F#",
+    "type": "project"
   },
   "identity": "Propulsion.Template.Reactor",
   "name": "Propulsion EventStore/Cosmos/Kafka Reactor",
@@ -32,33 +33,14 @@
           "description": "Use Kafka EventSpan feed as input"
         },
         {
-          "choice": "changeFeedOnly",
-          "description": "Only wire for CosmosDB ChangeFeedProcessor source"
-        },
-        {
           "choice": "multiSource",
-          "description": "Support EventStore $all or CosmosDB ChangeFeedProcessor"
+          "description": "Support EventStore $all, CosmosDB ChangeFeedProcessor or DynamoStore Index"
         }
       ]
     },
-    "kafkaEventSpans": {
+    "sourceKafka": {
       "type": "computed",
       "value": "(source == \"kafkaEventSpans\")"
-    },
-    "changeFeedOnly": {
-      "type": "computed",
-      "value": "(source == \"changeFeedOnly\")"
-    },
-    "multiSource": {
-      "type": "computed",
-      "value": "(source == \"multiSource\")"
-    },
-    "filter": {
-      "type": "parameter",
-      "datatype": "bool",
-      "isRequired": false,
-      "defaultValue": "false",
-      "description": "Include logic and commandline handling relating to filtering based on stream names."
     },
     "blank": {
       "type": "parameter",
@@ -99,13 +81,13 @@
           ]
         },
         {
-          "condition": "!multiSource && !kafka",
+          "condition": "sourceKafka && !kafka",
           "exclude": [
             "Handler.fs"
           ]
         },
         {
-          "condition": "kafkaEventSpans",
+          "condition": "sourceKafka",
           "exclude": [
             "README.md"
           ]

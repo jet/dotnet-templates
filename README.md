@@ -25,8 +25,6 @@ The following templates focus specifically on the usage of `Propulsion` componen
  
        * `-k --parallelOnly` schedule kafka emission to operate in parallel at document (rather than accumulated span of events for a stream) level
 
-       * `-k --synthesizeSequence` parse documents, preserving input order as items are produced to Kafka
-
     2. `--source eventStore`: EventStoreDB's `$all` feed
     
     3. `--source sqlStreamStore`: [`SqlStreamStore`](https://github.com/SQLStreamStore/SQLStreamStore)'s `$all` feed
@@ -51,8 +49,7 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
    Input options are:
    
-   0. (default) dual mode CosmosDB ChangeFeed Processor and/or EventStore `$all` stream projector/reactor using `Propulsion.Cosmos`/`Propulsion.EventStore` depending on whether the program is run with `cosmos` or `es` arguments
-   1. `--source changeFeedOnly`: removes `EventStore` wiring from commandline processing
+   0. (default) `Propulsion.Cosmos`/`Propulsion.DynamoStore`/`Propulsion.EventStore` depending on whether the program is run with `cosmos`, `dynamo`, `es` arguments
    2. `--source kafkaEventSpans`: changes source to be Kafka Event Spans, as emitted from `dotnet new proProjector --kafka`
 
    The reactive behavior template has the following options:
@@ -62,9 +59,6 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
    2. `--kafka` (without `--blank`): adds Optional projection to Apache Kafka using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (instead of ingesting into a local `Cosmos` store). Produces versioned [Summary Event](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) feed.
    3. `--kafka --blank`: provides wiring for producing to Kafka, without summary reading logic etc
     
-   Miscellaneous options:
-   - `--filter` - include category filtering boilerplate
-
   **NOTE At present, checkpoint storage when projecting from EventStore uses Azure CosmosDB - help wanted ;)**
   
 - [`feedSource`](feed-source/) - Boilerplate for an ASP.NET Core Web Api serving a feed of items stashed in an `Equinox.CosmosStore`. See `dotnet new feedConsumer` for the associated consumption logic
@@ -192,7 +186,7 @@ There's [integration tests in the repo](https://github.com/jet/dotnet-templates/
 
     dotnet build build.proj # build Equinox.Templates package, run tests \/
     dotnet pack build.proj # build Equinox.Templates package only
-    dotnet test build.proj # Test aphabetically newest file in bin/nupkgs only
+    dotnet test build.proj -c Release # Test aphabetically newest file in bin/nupkgs only (-c Release to run full tests)
 
 One can also do it manually:
 

@@ -33,24 +33,24 @@ module PipelineEvent =
 
     let [<Literal>] Category = "Ticket"
     let streamName = TicketId.toString >> FsCodec.StreamName.create Category
-    let (|StreamName|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, TicketId.Parse id) -> Some id
-        | _ -> None
+    let [<return: Struct>] (|StreamName|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, TicketId.Parse id) -> ValueSome id
+        | _ -> ValueNone
 
     (* Each item per stream is represented as an event; if multiple events have been found for a given stream, they are delivered together *)
 
-    let private dummyEventData = let dummyEventType, noBody = "eventType", null in FsCodec.Core.EventData.Create(dummyEventType, noBody)
-    let sourceItemOfTicketIdAndData (id : TicketId, data : TicketData) : Propulsion.Feed.SourceItem =
+    let private dummyEventData = let dummyEventType, noBody = "eventType", Unchecked.defaultof<_> in FsCodec.Core.EventData.Create(dummyEventType, noBody)
+    let sourceItemOfTicketIdAndData (id : TicketId, data : TicketData) : Propulsion.Feed.SourceItem<Propulsion.Streams.Default.EventBody> =
         { streamName = streamName id; eventData = dummyEventData; context = box data }
-    let (|TicketEvents|_|) = function
+    let [<return: Struct>] (|TicketEvents|_|) = function
         | StreamName ticketId, (s : Propulsion.Streams.StreamSpan<_>) ->
-            Some (ticketId, s.events |> Seq.map (fun e -> Unchecked.unbox<TicketData> e.Context))
-        | _ -> None
+            ValueSome (ticketId, s |> Seq.map (fun e -> Unchecked.unbox<TicketData> e.Context))
+        | _ -> ValueNone
 
-let handle (stream, span) = async {
+let handle struct (stream, span) = async {
     match stream, span with
     | PipelineEvent.TicketEvents (ticketId, items) ->
         // TODO : Ingest the data
-        return Propulsion.Streams.SpanResult.AllProcessed, IngestionOutcome.Unchanged
+        return struct (Propulsion.Streams.SpanResult.AllProcessed, IngestionOutcome.Unchanged)
     | x -> return failwithf "Unexpected stream %O" x
 }

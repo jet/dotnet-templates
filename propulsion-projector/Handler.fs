@@ -4,58 +4,20 @@ module ProjectorTemplate.Handler
 #if     parallelOnly
 // Here we pass the items directly through to the handler without parsing them
 let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : seq<'a> = upcast x
+let categoryFilter _ = true
 #else // cosmos && !parallelOnly
-#if    synthesizeSequence // cosmos && !parallelOnly && !synthesizeSequence
-let indices = Propulsion.Kafka.StreamNameSequenceGenerator()
-
-let parseDocumentAsEvent (doc : Newtonsoft.Json.Linq.JObject) : Propulsion.Streams.StreamEvent<byte[]> =
-    let docId = doc.Value<string>("id")
-    //let streamName = Propulsion.Streams.StreamName.internalParseSafe docId // if we're not sure there is a `-` in the id, this helper adds one
-    let streamName = FsCodec.StreamName.parse docId // throws if there's no `-` in the id
-    let ts = let raw = Propulsion.CosmosStore.EquinoxNewtonsoftParser.timestamp doc in raw.ToUniversalTime() |> System.DateTimeOffset
-    let docType = "DocumentTypeA" // each Event requires an EventType - enables the handler to route without having to parse the Data first
-    let data = string doc |> System.Text.Encoding.UTF8.GetBytes
-    // Ideally, we'd extract a monotonically incrementing index/version from the source and use that
-    // (Using this technique neuters the deduplication mechanism)
-    let streamIndex = indices.GenerateIndex streamName
-    { stream = streamName; event = FsCodec.Core.TimelineEvent.Create(streamIndex, docType, data, timestamp=ts) }
-
-let mapToStreamItems docs : Propulsion.Streams.StreamEvent<byte[]> seq =
-    docs |> Seq.map parseDocumentAsEvent
-#else // cosmos && !parallelOnly && synthesizeSequence
-//let replaceLongDataWithNull (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
-//    if x.Data.Length < 900_000 then x
-//    else FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, x.Meta, timestamp=x.Timestamp)
-//
-//let hackDropBigBodies (e : Propulsion.Streams.StreamEvent<_>) : Propulsion.Streams.StreamEvent<_> =
-//    { stream = e.stream; event = replaceLongDataWithNull e.event }
-
-let mapToStreamItems docs : Propulsion.Streams.StreamEvent<_> seq =
-    docs
-    |> Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents
-    // TODO use Seq.filter and/or Seq.map to adjust what's being sent etc
-    // |> Seq.map hackDropBigBodies
-#endif // cosmos && !parallelOnly && synthesizeSequence
 #endif // !parallelOnly
 //#endif // cosmos
-#if esdb
-open Propulsion.EventStore
-
-/// Responsible for inspecting and then either dropping or tweaking events coming from EventStore
-// NB the `Index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
-    match x.Event with
-    | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
-    | PropulsionStreamEvent e -> Some e
-#endif // esdb
 
 #if kafka
 #if     (cosmos && parallelOnly) // kafka && cosmos && parallelOnly
 type ExampleOutput = { id : string }
 
 let serdes = FsCodec.SystemTextJson.Options.Create() |> FsCodec.SystemTextJson.Serdes
-let render (doc : Newtonsoft.Json.Linq.JObject) : string * string =
-    let equinoxPartition, itemId = doc.Value<string>("p"), doc.Value<string>("id")
+let render (doc : System.Text.Json.JsonDocument) =
+    let r = doc.RootElement
+    let gs (name : string) = let x = r.GetProperty name in x.GetString()
+    let equinoxPartition, itemId = gs "p", gs "id"
     equinoxPartition, serdes.Serialize { id = itemId }
 #else // kafka && !(cosmos && parallelOnly)
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
@@ -76,12 +38,16 @@ type ProductionStats(log, statsInterval, stateInterval) =
 ///   to preserve ordering at stream (key) level for messages produced to the topic)
 // TODO NOTE: The bulk of any manipulation should take place before events enter the scheduler, i.e. in program.fs
 // TODO NOTE: While filtering out entire categories is appropriate, you should not filter within a given stream (i.e., by event type)
-let render (stream : FsCodec.StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
+let render struct (stream : FsCodec.StreamName, span : Propulsion.Streams.Default.StreamSpan) = async {
     let value =
         span
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
         |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
-    return FsCodec.StreamName.toString stream, value }
+    return struct (FsCodec.StreamName.toString stream, value) }
+
+let categoryFilter = function
+    | _ -> true // TODO filter categories to be rendered
+
 #endif // kafka && !(cosmos && parallelOnly)
 #else // !kafka
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
@@ -104,9 +70,25 @@ type Stats(log, statsInterval, stateInterval) =
         log.Information(" Total events processed {total}", totalCount)
         totalCount <- 0
 
-let handle (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
+let categoryFilter = function
+    | "categoryA"
+    | _ -> true
+
+let handle struct (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
     let r = System.Random()
-    let ms = r.Next(1, span.events.Length)
+    let ms = r.Next(1, span.Length)
     do! Async.Sleep ms
-    return Propulsion.Streams.SpanResult.AllProcessed, span.events.Length }
+    return struct (Propulsion.Streams.SpanResult.AllProcessed, span.Length) }
 #endif // !kafka
+
+type Config private () =
+    
+    static member StartSink(log : Serilog.ILogger, stats,
+                            handle : struct (FsCodec.StreamName * Propulsion.Streams.Default.StreamSpan)
+                                     -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
+                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
+                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+
+    static member StartSource(log, sink, sourceConfig) =
+        SourceConfig.start (log, Config.log) sink categoryFilter sourceConfig

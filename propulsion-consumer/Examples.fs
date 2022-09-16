@@ -1,6 +1,7 @@
 ﻿namespace ConsumerTemplate
 
 open FsCodec
+open Propulsion.Internal
 open Serilog
 open System
 open System.Collections.Concurrent
@@ -10,13 +11,13 @@ open System.Threading
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) (log : ILogger) streamName (x : FsCodec.ITimelineEvent<byte[]>) =
+    let tryDecode (codec : IEventCodec<_, _, _>) (log : ILogger) streamName (x : ITimelineEvent<Propulsion.Streams.Default.EventBody>) =
         match codec.TryDecode x with
-        | None ->
+        | ValueNone ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                log.ForContext("event", System.Text.Encoding.UTF8.GetString(x.Data), true)
+                log.ForContext("event", System.Text.Encoding.UTF8.GetString(let d = x.Data in d.Span), true)
                     .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
-            None
+            ValueNone
         | x -> x
 
 /// This more advanced sample shows processing >1 category of events, and maintaining derived state based on it
@@ -49,7 +50,7 @@ module MultiStreams =
             /// Clearing of the list
             | Cleared
             interface TypeShape.UnionContract.IUnionContract
-        let codec = EventCodec.create<Event>()
+        let codec = EventCodec.gen<Event>
         let tryDecode = EventCodec.tryDecode codec
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
@@ -64,7 +65,7 @@ module MultiStreams =
             | Favorited         of Favorited
             | Unfavorited       of Unfavorited
             interface TypeShape.UnionContract.IUnionContract
-        let codec = EventCodec.create<Event>()
+        let codec = EventCodec.gen<Event>
         let tryDecode = EventCodec.tryDecode codec
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int
@@ -77,22 +78,22 @@ module MultiStreams =
         let faves, saves = ConcurrentDictionary<string, HashSet<SkuId>>(), ConcurrentDictionary<string, SkuId list>()
 
         // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
-        let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) (streamName, span : Propulsion.Streams.StreamSpan<byte[]>) =
-            let decode tryDecode = span.events |> Seq.choose (tryDecode log streamName) |> Array.ofSeq
+        let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) (streamName, span : Propulsion.Streams.StreamSpan<Propulsion.Streams.Default.EventBody>) =
+            let decode tryDecode = span |> Seq.chooseV (tryDecode log streamName) |> Array.ofSeq
             match streamName with
-            | FsCodec.StreamName.CategoryAndId (Favorites.Category, id) ->
-                let s = match faves.TryGetValue id with true, value -> value | false, _ -> new HashSet<SkuId>()
+            | StreamName.CategoryAndId (Favorites.Category, id) ->
+                let s = match faves.TryGetValue id with true, value -> value | false, _ -> HashSet<SkuId>()
                 FavoritesEvents (id, s, decode Favorites.tryDecode)
-            | FsCodec.StreamName.CategoryAndId (SavedForLater.Category, id) ->
+            | StreamName.CategoryAndId (SavedForLater.Category, id) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
                 SavedForLaterEvents (id, s, decode SavedForLater.tryDecode)
-            | FsCodec.StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span.events)
+            | StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
-        member _.Handle(streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>) = async {
+        member _.Handle(struct (streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>)) = async {
             match streamName, span with
             | OtherCategory (cat, count) ->
-                return Propulsion.Streams.SpanResult.AllProcessed, OtherCategory (cat, count)
+                return struct (Propulsion.Streams.SpanResult.AllProcessed, OtherCategory (cat, count))
             | FavoritesEvents (id, s, xs) ->
                 let folder (s : HashSet<_>) = function
                     | Favorites.Favorited e -> s.Add(e.skuId) |> ignore; s
@@ -123,7 +124,7 @@ module MultiStreams =
         inherit Propulsion.Streams.Stats<Stat>(log, statsInterval, stateInterval)
 
         let mutable faves, saves = 0, 0
-        let otherCats = Propulsion.Streams.Internal.CatStats()
+        let otherCats = Stats.CatStats()
 
         override _.HandleOk res = res |> function
             | Faves count -> faves <- faves + count
@@ -142,7 +143,7 @@ module MultiStreams =
                 log.Information(" Ignored Categories {ignoredCats}", Seq.truncate 5 otherCats.StatsDescending)
                 otherCats.Clear()
 
-    let private parseStreamEvents(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
+    let private parseStreamEvents(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.Default.StreamEvent> =
         Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse res.Message.Value
 
     let start (config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
@@ -164,7 +165,7 @@ module MultiMessages =
     type Processor() =
         let log = Log.ForContext<Processor>()
         let mutable favorited, unfavorited, saved, removed, cleared = 0, 0, 0, 0, 0
-        let cats, keys = Propulsion.Streams.Internal.CatStats(), ConcurrentDictionary()
+        let cats, keys = Stats.CatStats(), ConcurrentDictionary()
 
         // `BatchedConsumer` holds a `Processor` instance per in-flight batch (there will likely be a batch in flight per partition assigned to this consumer)
         //   and waits for the work to complete before calling this
@@ -178,7 +179,7 @@ module MultiMessages =
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
         member private _.Interpret(streamName : StreamName, spanJson) : seq<Message> = seq {
             let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
-            let decode tryDecode wrap = Propulsion.Codec.NewtonsoftJson.RenderedSpan.enum span |> Seq.choose (fun x -> x.event |> tryDecode log streamName |> Option.map wrap)
+            let decode tryDecode wrap = Propulsion.Codec.NewtonsoftJson.RenderedSpan.enum span |> Seq.chooseV (fun struct (_s, e) -> e |> tryDecode log streamName |> ValueOption.map wrap)
             match streamName with
             | StreamName.CategoryAndId (Favorites.Category, _) -> yield! decode Favorites.tryDecode Fave
             | StreamName.CategoryAndId (SavedForLater.Category, _) -> yield! decode SavedForLater.tryDecode Save
@@ -193,7 +194,7 @@ module MultiMessages =
                 | Save (SavedForLater.Added e) -> Interlocked.Add(&saved, e.skus.Length) |> ignore
                 | Save (SavedForLater.Removed e) -> Interlocked.Add(&cleared, e.skus.Length) |> ignore
                 | Save (SavedForLater.Merged e) -> Interlocked.Add(&saved, e.items.Length) |> ignore
-                | Save (SavedForLater.Cleared) -> Interlocked.Increment(&cleared) |> ignore
+                | Save SavedForLater.Cleared -> Interlocked.Increment(&cleared) |> ignore
                 | OtherCat (cat, count) -> lock cats <| fun () -> cats.Ingest(cat, int64 count)
                 | Unclassified messageKey -> keys.TryAdd(messageKey, ()) |> ignore
 

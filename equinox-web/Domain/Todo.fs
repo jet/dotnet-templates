@@ -2,7 +2,7 @@
 
 let [<Literal>] Category = "Todos"
 /// Maps a ClientId to the StreamName where data for that client will be held
-let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
+let streamName (clientId: ClientId) = struct (Category, ClientId.toString clientId)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -22,7 +22,7 @@ module Events =
         /// For EventStore, AccessStrategy.RollingSnapshots embeds these events every `batchSize` events
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.create<Event>()
+    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Fold =
@@ -131,21 +131,21 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
 
 module Config =
 
-    let private resolveStream = function
-#if (memoryStore || (!cosmos && !eventStore))
+    let private resolveCategory = function
+#if (memoryStore || (!cosmos && !dynamo && !eventStore))
         | Config.Store.Memory store ->
-            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
-            cat.Resolve
+            Config.Memory.create Events.codec Fold.initial Fold.fold store
 #endif
 //#if cosmos
         | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            cat.Resolve
+            Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+//#endif
+//#if dynamo
+        | Config.Store.Dynamo (context, cache) ->
+            Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if eventStore
         | Config.Store.Esdb (context, cache) ->
-            let cat = Config.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            cat.Resolve
+            Config.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
-    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-    let create = resolveDecider >> Service
+    let create store = Service(fun id -> Config.resolveDecider (resolveCategory store) (streamName id))

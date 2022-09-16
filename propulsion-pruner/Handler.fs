@@ -4,8 +4,12 @@ open System
 
 // As we're not looking at the bodies of the events in the course of the shouldPrune decision, we remove them
 //   from the Event immediately in order to avoid consuming lots of memory without purpose while they're queued
-let removeDataAndMeta (x : FsCodec.ITimelineEvent<byte[]>) : FsCodec.ITimelineEvent<_> =
-    FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, null, timestamp=x.Timestamp)
+let removeDataAndMeta (x : FsCodec.ITimelineEvent<Propulsion.Streams.Default.EventBody>) : FsCodec.ITimelineEvent<_> =
+    FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, Unchecked.defaultof<Propulsion.Streams.Default.EventBody>, timestamp = x.Timestamp)
+
+let categoryFilter = function
+    | "CategoryName" -> true
+    | _ -> false
 
 // We prune events from the Primary Container as we reach the point where there's no benefit to them staying there. e.g.
 // 1. If a ChangeFeedProcessor (including new ones) needs to be able to walk those events
@@ -22,9 +26,9 @@ let shouldPrune category (age : TimeSpan) =
 // NOTE - DANGEROUS - events submitted to the CosmosPruner get removed from the supplied Context!
 let selectPrunable changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
     let asOf = DateTimeOffset.UtcNow
-    for se in Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents changeFeedDocument do
-        let (FsCodec.StreamName.CategoryAndId (cat,_)) = se.stream
-        let age = asOf - se.event.Timestamp
+    for s, e in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents categoryFilter changeFeedDocument do
+        let (FsCodec.StreamName.Category cat) = s
+        let age = asOf - e.Timestamp
         if shouldPrune cat age then
-            yield { se with event = removeDataAndMeta se.event }
+            yield s, removeDataAndMeta e
 }

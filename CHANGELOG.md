@@ -15,7 +15,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - `eqxShipping`: Use `Propulsion.DynamoStore`+`EventStoreDb`'s `AwaitCompletion` [#121](https://github.com/jet/dotnet-templates/pull/121)
 
 ### Changed
+
+- Target `Equinox` v `4.0.0`, `Propulsion` v `3.0.0`, `FsCodec` v `3.0.0`, `net6.0` [#122](https://github.com/jet/dotnet-templates/pull/122)
+
 ### Removed
+
+- `eqxProjector --source cosmos --kafka --synthesizeSequence`: Removed custom mode [#122](https://github.com/jet/dotnet-templates/pull/122)
+- `proReactor`: remove `--filter` (see `proSync`) and `--changeFeedOnly` (see `proReactorCosmos`) [#122](https://github.com/jet/dotnet-templates/pull/122)
+
 ### Fixed
 
 <a name="5.3.0"></a>

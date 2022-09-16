@@ -10,8 +10,8 @@ module EventCodec =
     open FsCodec.SystemTextJson
 
     let private defaultOptions = Options.Create()
-    let create<'t when 't :> TypeShape.UnionContract.IUnionContract> () =
-        Codec.Create<'t>(options = defaultOptions).ToByteArrayCodec()
+    let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
+        Codec.Create<'t>(options = defaultOptions)
 
 module EnvVar =
 
@@ -68,7 +68,6 @@ type Logging() =
     [<System.Runtime.CompilerServices.Extension>]
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
-            .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code

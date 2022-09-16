@@ -1,99 +1,17 @@
-using Equinox;
-using Equinox.Core;
-using Microsoft.FSharp.Collections;
-using Microsoft.FSharp.Control;
-using Microsoft.FSharp.Core;
-using Newtonsoft.Json;
-using Serilog;
 using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
-    public class Accumulator<TEvent,TState>
+    /// System.Text.Json implementation of IEncoder that encodes direct to a UTF-8 Buffer
+    public class SystemTextJsonUtf8Codec
     {
-        readonly Func<TState, IEnumerable<TEvent>, TState> _fold;
-        readonly TState _state;
-        public List<TEvent> Accumulated { get; } = new List<TEvent>();
+        private readonly TypeShape.UnionContract.IEncoder<ReadOnlyMemory<byte>> _codec; 
 
-        public Accumulator(Func<TState,IEnumerable<TEvent>,TState> fold, TState state)
-        {
-            _fold = fold;
-            _state = state;
-        }
+        public SystemTextJsonUtf8Codec(System.Text.Json.JsonSerializerOptions options) =>
+            _codec = new FsCodec.SystemTextJson.Core.ReadOnlyMemoryEncoder(options);
 
-        public TState State => _fold(_state,Accumulated);
+        public ReadOnlyMemory<byte> Encode<T>(T value) where T : class => _codec.Encode(value);
 
-        public void Execute(Func<TState, IEnumerable<TEvent>> f) => Accumulated.AddRange(f(State));
-
-    }
-
-    public class EquinoxStream<TEvent, TState> : Decider<TEvent, TState>
-    {
-        private readonly Func<TState, IEnumerable<TEvent>, TState> _fold;
-
-        public EquinoxStream(
-                Func<TState, IEnumerable<TEvent>, TState> fold,
-                ILogger log, IStream<TEvent, TState> stream, int maxAttempts = 3)
-            : base(log, stream, maxAttempts)
-        {
-            _fold = fold;
-        }
-
-        /// Run the decision method, letting it decide whether or not the Command's intent should manifest as Events
-        public async Task<Unit> Execute(Func<TState, IEnumerable<TEvent>> interpret)
-        {
-            FSharpList<TEvent> decide_(TState state)
-            {
-                var a = new Accumulator<TEvent, TState>(_fold, state);
-                a.Execute(interpret);
-                return ListModule.OfSeq(a.Accumulated);
-            }
-            return await FSharpAsync.StartAsTask(Transact(FuncConvert.FromFunc<TState, FSharpList<TEvent>>(decide_)), null, null);
-        }
-
-        /// Execute a command, as Decide(Action) does, but also yield an outcome from the decision
-        public async Task<T> Decide<T>(Func<Accumulator<TEvent, TState>, T> decide)
-        {
-            Tuple<T, FSharpList<TEvent>> decide_(TState state)
-            {
-                var a = new Accumulator<TEvent, TState>(_fold, state);
-                var r = decide(a);
-                return Tuple.Create(r, ListModule.OfSeq(a.Accumulated));
-            }
-            return await FSharpAsync.StartAsTask<T>(Transact(FuncConvert.FromFunc<TState, Tuple<T, FSharpList<TEvent>>>(decide_)), null, null);
-        }
-
-        // Project from the synchronized state, without the possibility of adding events that Decide(Func) admits
-        public async Task<T> Query<T>(Func<TState, T> project) =>
-            await FSharpAsync.StartAsTask(Query(FuncConvert.FromFunc(project)), null, null);
-    }
-
-    /// Newtonsoft.Json implementation of IEncoder that encodes direct to a UTF-8 Buffer
-    public class JsonNetUtf8Codec
-    {
-        readonly JsonSerializer _serializer;
-
-        public JsonNetUtf8Codec(JsonSerializerSettings settings) =>
-            _serializer = JsonSerializer.Create(settings);
-
-        public byte[] Encode<T>(T value) where T : class
-        {
-            using (var ms = new MemoryStream())
-            {
-                using (var jsonWriter = new JsonTextWriter(new StreamWriter(ms)))
-                    _serializer.Serialize(jsonWriter, value, typeof(T));
-                return ms.ToArray();
-            }
-        }
-
-        public T Decode<T>(byte[] json) where T : class
-        {
-            using (var ms = new MemoryStream(json))
-            using (var jsonReader = new JsonTextReader(new StreamReader(ms)))
-                return _serializer.Deserialize<T>(jsonReader);
-        }
+        public T Decode<T>(ReadOnlyMemory<byte> json) where T : class => _codec.Decode<T>(json);
     }
 }

@@ -1,5 +1,5 @@
+using Equinox;
 using Equinox.MemoryStore;
-using Equinox.Core;
 using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
@@ -9,20 +9,21 @@ namespace TodoBackendTemplate
 {
     public class MemoryStoreContext : EquinoxContext
     {
-        readonly VolatileStore<byte[]> _store;
+        readonly VolatileStore<ReadOnlyMemory<byte>> _store;
 
-        public MemoryStoreContext(VolatileStore<byte[]> store) =>
+        public MemoryStoreContext(VolatileStore<ReadOnlyMemory<byte>> store) =>
             _store = store;
 
-        public override Func<string, IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IEventCodec<TEvent, byte[], object> codec,
+        public override Func<(string, string), DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
+            Serilog.ILogger handlerLog,
+            FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> toSnapshot = null)
         {
-            var resolver = new MemoryStoreCategory<TEvent, TState, byte[], object>(_store, codec, FuncConvert.FromFunc(fold), initial);
-            return target => resolver.Resolve(target);
+            var cat = new MemoryStoreCategory<TEvent, TState, ReadOnlyMemory<byte>, Unit>(_store, codec, FuncConvert.FromFunc(fold), initial);
+            return cat.Resolve(log: handlerLog);
         }
 
         internal override Task Connect() => Task.CompletedTask;

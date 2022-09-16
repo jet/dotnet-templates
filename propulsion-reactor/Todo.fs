@@ -1,8 +1,10 @@
 module ReactorTemplate.Todo
 
+open Propulsion.Internal
+
 let [<Literal>] Category = "Todos"
-let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
-let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId | _ -> None
+let streamName (clientId : ClientId) = struct (Category, ClientId.toString clientId)
+let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -18,15 +20,16 @@ module Events =
         | Cleared       of ClearedData
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.create<Event>()
+    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJe<Event>
 
 module Reactions =
 
+    let [<Literal>] Category = Category
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
-        span.events |> Array.choose (EventCodec.tryDecode Events.codec stream)
-    let (|Parse|_|) = function
-        | (StreamName clientId, _) & Decode events -> Some (clientId, events)
-        | _ -> None
+        span |> Array.chooseV (EventCodec.tryDecode Events.codec stream)
+    let [<return: Struct>] (|Parse|_|) = function
+        | (StreamName clientId, _) & Decode events -> ValueSome struct (clientId, events)
+        | _ -> ValueNone
 
     /// Allows us to skip producing summaries for events that we know won't result in an externally discernable change to the summary output
     let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
@@ -63,14 +66,11 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
 
 module Config =
 
-    let private resolveStream = function
-        | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            cat.Resolve
-//#if multiSource
-        | Config.Store.Esdb (context, cache) ->
-            let cat = Config.Esdb.create Events.codec Fold.initial Fold.fold (context, cache)
-            cat.Resolve
-//#endif
-    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-    let create = resolveDecider >> Service
+    let private (|Category|) = function
+        | Config.Store.Dynamo (context, cache) -> Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+#if !(sourceKafka && kafka)
+        | Config.Store.Esdb (context, cache) ->   Config.Esdb.create Events.codec Fold.initial Fold.fold (context, cache)
+        | Config.Store.Sss (context, cache) ->    Config.Sss.create Events.codec Fold.initial Fold.fold (context, cache)
+#endif
+    let create (Category cat) = Service(streamName >> Config.createDecider cat)

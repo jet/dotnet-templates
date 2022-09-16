@@ -1,16 +1,5 @@
 module ReactorTemplate.Handler
 
-//#if multiSource
-open Propulsion.EventStore
-
-/// Responsible for inspecting and then either dropping or tweaking events coming from EventStore
-// NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-let tryMapEvent filterByStreamName (x : EventStore.ClientAPI.ResolvedEvent) =
-    match x.Event with
-    | e when not e.IsJson || e.EventStreamId.StartsWith "$" || not (filterByStreamName e.EventStreamId) -> None
-    | PropulsionStreamEvent e -> Some e
-
-//#endif
 //#if kafka
 [<RequireQualifiedAccess>]
 type Outcome =
@@ -22,15 +11,11 @@ type Outcome =
     | NotApplicable of count : int
 
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
-type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
-#if kafkaEventSpans
-    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
-#else
-#if blank
+type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
+#if (blank || sourceKafka)
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
     inherit Propulsion.Streams.Sync.Stats<Outcome>(log, statsInterval, stateInterval)
-#endif
 #endif
 
     let mutable ok, skipped, na = 0, 0, 0
@@ -40,7 +25,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
     override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
+        Exception.dump verboseStore log exn
 
     override _.DumpStats() =
         base.DumpStats()
@@ -54,11 +39,15 @@ let generate stream version summary =
     Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version event
 
 #if blank
+let categoryFilter = function
+    | Contract.Input.Category -> true
+    | _ -> false
+    
 let handle
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
-        (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
+        struct (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
-    | Contract.Input.Parse (clientId, events) ->
+    | Contract.Input.Parse (_clientId, events) ->
         for version, event in events do
             let summary =
                 match event with
@@ -66,22 +55,38 @@ let handle
                 | Contract.Input.EventB { field = x } -> Contract.EventB { value = x }
             let wrapped = generate stream version summary
             let! _ = produceSummary wrapped in ()
-        return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (events.Length, 0)
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.events.Length }
+        return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (events.Length, 0))
+    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
 #else
+let categoryFilter = function
+    | Todo.Reactions.Category -> true
+    | _ -> false
+    
 let handle
         (service : Todo.Service)
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
-        (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
+        struct (stream, span) = async {
     match stream, span with
     | Todo.Reactions.Parse (clientId, events) ->
         if events |> Seq.exists Todo.Reactions.impliesStateChange then
             let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
             let wrapped = generate stream version' (Contract.Summary summary)
             let! _ = produceSummary wrapped
-            return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Ok (1, events.Length - 1)
+            return struct (Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Ok (1, events.Length - 1))
         else
             return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped events.Length
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.events.Length }
+    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
 #endif
+
+type Config private () =
+    
+    static member StartSink(log : Serilog.ILogger, stats,
+                            handle : struct (FsCodec.StreamName * Propulsion.Streams.Default.StreamSpan)
+                                     -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
+                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
+                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+    
+    static member StartSource(log, sink, sourceConfig) =
+        SourceConfig.start (log, Config.log) sink categoryFilter sourceConfig
 //#endif

@@ -1,7 +1,7 @@
 module ReactorTemplate.TodoSummary
 
 let [<Literal>] Category = "TodoSummary"
-let streamName (clientId: ClientId) = FsCodec.StreamName.create Category (ClientId.toString clientId)
+let streamName (clientId : ClientId) = struct (Category, ClientId.toString clientId)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -12,7 +12,7 @@ module Events =
     type Event =
         | Ingested of IngestedData
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.create<Event>()
+    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJe<Event>
 
 module Fold =
 
@@ -51,9 +51,6 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
 
 module Config =
 
-    let private resolveStream = function
-        | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createRollingState Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
-            cat.Resolve
-    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-    let create = resolveDecider >> Service
+    let private (|Category|) = function
+        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createRollingState Events.codecJe Fold.initial Fold.fold Fold.toSnapshot (context, cache)
+    let create (Category cat) = streamName >> Config.createDecider cat |> Service

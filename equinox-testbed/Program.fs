@@ -18,7 +18,7 @@ module Args =
         | [<AltCommandLine "-l">]       LogFile of string
         | [<CliPrefix(CliPrefix.None); Last; Unique>] Run of ParseResults<TestParameters>
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose ->            "Include low level logging regarding specific test runs."
                 | VerboseConsole ->     "Include low level test and store actions logging in on-screen output to console."
                 | LocalSeq ->           "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
@@ -45,7 +45,7 @@ module Args =
         | [<CliPrefix(CliPrefix.None); Last; Unique>] Cosmos of ParseResults<Storage.Cosmos.Parameters>
 //#endif
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Name _ ->             "specify which test to run. Default: Favorite."
                 | Size _ ->             "For `-t Todo`: specify random title length max size to use. Default 100."
                 | Cached ->             "employ a 50MB cache, wire in to Stream configuration."
@@ -64,56 +64,55 @@ module Args =
 //#if cosmos
                 | Cosmos _ ->           "Run transactions in-process against CosmosDb."
 //#endif
-    and TestArguments(c : Storage.Configuration, a : ParseResults<TestParameters>) =
-        let duration =                  a.GetResult(DurationM, 30.) |> TimeSpan.FromMinutes
-        member val Options =            a.GetResults Cached @ a.GetResults Unfolds
-        member val Cache =              a.Contains Cached
-        member val Unfolds =            a.Contains Unfolds
-        member val BatchSize =          a.GetResult(BatchSize, 500)
-        member val Test =               a.GetResult(Name, Tests.Favorite)
-        member val ErrorCutoff =        a.GetResult(ErrorCutoff, 10000L)
-        member val TestsPerSecond =     a.GetResult(TestsPerSecond, 100)
+    and TestArguments(c : Storage.Configuration, p : ParseResults<TestParameters>) =
+        let duration =                  p.GetResult(DurationM, 30.) |> TimeSpan.FromMinutes
+        member val Options =            p.GetResults Cached @ p.GetResults Unfolds
+        member val Cache =              p.Contains Cached
+        member val Unfolds =            p.Contains Unfolds
+        member val BatchSize =          p.GetResult(BatchSize, 500)
+        member val Test =               p.GetResult(Name, Tests.Favorite)
+        member val ErrorCutoff =        p.GetResult(ErrorCutoff, 10000L)
+        member val TestsPerSecond =     p.GetResult(TestsPerSecond, 100)
         member val Duration =           duration
         member val ReportingIntervals =
-            match a.GetResults(ReportIntervalS) with
+            match p.GetResults(ReportIntervalS) with
             | [] -> TimeSpan.FromSeconds 10.|> Seq.singleton
             | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(float i) }
             |> fun intervals -> [| yield duration; yield! intervals |]
         member x.ConfigureStore(log : ILogger, createStoreLog) =
-            match a.TryGetSubCommand() with
+            match p.GetSubCommand() with
 //#if memoryStore || (!cosmos && !eventStore)
-            | Some (Memory _) ->
+            | Memory _ ->
                 log.Warning("Running transactions in-process against Volatile Store with storage options: {options:l}", x.Options)
                 createStoreLog false, Storage.MemoryStore.config ()
 //#endif
 //#if eventStore
-            | Some (Es sargs) ->
-                let storeLog = createStoreLog <| sargs.Contains Storage.EventStore.Parameters.VerboseStore
+            | Es sargs ->
+                let storeLog = createStoreLog <| sargs.Contains Storage.EventStore.Parameters.Verbose
                 log.Information("Running transactions in-process against EventStore with storage options: {options:l}", x.Options)
                 storeLog, Storage.EventStore.config (log, storeLog) (x.Cache, x.Unfolds, x.BatchSize) sargs
 //#endif
 //#if cosmos
-            | Some (Cosmos sargs) ->
-                let storeLog = createStoreLog <| sargs.Contains Storage.Cosmos.Parameters.VerboseStore
+            | Cosmos sargs ->
+                let storeLog = createStoreLog <| sargs.Contains Storage.Cosmos.Parameters.Verbose
                 log.Information("Running transactions in-process against CosmosDb with storage options: {options:l}", x.Options)
-                storeLog, Storage.Cosmos.config (x.Cache, x.Unfolds, x.BatchSize) (Storage.Cosmos.Arguments (c, sargs))
+                storeLog, Storage.Cosmos.config (x.Cache, x.Unfolds, x.BatchSize) (Storage.Cosmos.Arguments(c, sargs))
 //#endif
 #if ((!cosmos && !eventStore) || (cosmos && eventStore))
-            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es, cosmos")
+            | _ -> Storage.missingArg "Please identify a valid store: memory, es, cosmos"
 #endif
 #if eventStore
-            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, es")
+            | _ -> Storage.missingArg "Please identify a valid store: memory, es"
 #endif
 #if cosmos
-            | _ -> raise <| Storage.MissingArg (sprintf "Please identify a valid store: memory, cosmos")
+            | _ -> Storage.missingArg "Please identify a valid store: memory, cosmos"
 #endif
 
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration()
-                .Destructure.FSharpTypes()
     let c = if verbose then c.MinimumLevel.Debug() else c
 //#if eventStore
-    let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
+    let c = c.WriteTo.Sink(Equinox.EventStoreDb.Log.InternalMetrics.Stats.LogSink())
 //#endif
 //#if cosmos
     let c = c.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
@@ -169,7 +168,7 @@ module LoadTest =
 //#endif
 //#if eventStore
         | Config.Store.Esdb _ ->
-            Equinox.EventStore.Log.InternalMetrics.dump log
+            Equinox.EventStoreDb.Log.InternalMetrics.dump log
 //#endif
 //#if memory
         | _ -> ()
@@ -178,11 +177,10 @@ module LoadTest =
 
 let createDomainLog verbose verboseConsole maybeSeqEndpoint =
     let c = LoggerConfiguration()
-                .Destructure.FSharpTypes()
                 .Enrich.FromLogContext()
     let c = if verbose then c.MinimumLevel.Debug() else c
 //#if eventStore
-    let c = c.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
+    let c = c.WriteTo.Sink(Equinox.EventStoreDb.Log.InternalMetrics.Stats.LogSink())
 //#endif
 //#if cosmos
     let c = c.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
@@ -204,7 +202,7 @@ let main argv =
             let verbose = args.Contains Verbose
             let log = createDomainLog verbose verboseConsole maybeSeq
             let reportFilename = args.GetResult(LogFile, programName+".log") |> fun n -> System.IO.FileInfo(n).FullName
-            LoadTest.run log (verbose, verboseConsole, maybeSeq) reportFilename (TestArguments (Storage.Configuration EnvVar.tryGet, rargs))
+            LoadTest.run log (verbose, verboseConsole, maybeSeq) reportFilename (TestArguments(Storage.Configuration EnvVar.tryGet, rargs))
         | _ -> failwith "Please specify a valid subcommand :- run"
         0
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

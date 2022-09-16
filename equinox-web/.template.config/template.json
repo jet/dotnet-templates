@@ -47,7 +47,13 @@
       "type": "parameter",
       "dataType": "bool",
       "defaultValue": "false",
-      "description": "Store Events in an Azure CosmosDb Account"
+      "description": "Store Events in an Azure CosmosDb Container"
+    },
+    "dynamo": {
+      "type": "parameter",
+      "dataType": "bool",
+      "defaultValue": "false",
+      "description": "Store Events in an AWS Dynamo Table"
     },
     "cosmosSimulator": {
       "type": "parameter",

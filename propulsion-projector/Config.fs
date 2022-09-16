@@ -1,31 +1,11 @@
-module TodoBackendTemplate.Config
+module ProjectorTemplate.Config
 
 let log = Serilog.Log.ForContext("isMetric", true)
-let resolveDecider cat = Equinox.Decider.resolve log cat
 
-module EventCodec =
-
-    open FsCodec.SystemTextJson
-
-    let private defaultOptions = Options.Create()
-    let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>(options = defaultOptions)
-    let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>(options = defaultOptions)
-
-#if (memoryStore || (!cosmos && !dynamo && !eventStore))
-module Memory =
-
-    let create _codec initial fold store : Equinox.Category<_, _, _> =
-        // While the actual prod codec can be used, the Box codec allows one to stub out the decoding on the basis that
-        // nothing will be proved beyond what a complete roundtripping test per `module Aggregate` would already cover
-        Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), fold, initial)
-
-#endif
-//#if cosmos
+// #if (cosmos || esdb || sss)
 module Cosmos =
 
-    let private createCached codec initial fold accessStrategy (context, cache) =
+    let private createCached codec initial fold accessStrategy (context, cache) : Equinox.Category<_, _, _> =
         let cacheStrategy = Equinox.CosmosStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.CosmosStore.CosmosStoreCategory(context, codec, fold, initial, cacheStrategy, accessStrategy)
 
@@ -37,11 +17,10 @@ module Cosmos =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.RollingState toSnapshot
         createCached codec initial fold accessStrategy (context, cache)
 
-//#endif
-//#if dynamo
+// #endif
 module Dynamo =
 
-    let private createCached codec initial fold accessStrategy (context, cache) =
+    let private createCached codec initial fold accessStrategy (context, cache) : Equinox.Category<_, _, _> =
         let cacheStrategy = Equinox.DynamoStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.DynamoStore.DynamoStoreCategory(context, FsCodec.Deflate.EncodeUncompressed codec, fold, initial, cacheStrategy, accessStrategy)
 
@@ -53,29 +32,21 @@ module Dynamo =
         let accessStrategy = Equinox.DynamoStore.AccessStrategy.RollingState toSnapshot
         createCached codec initial fold accessStrategy (context, cache)
 
-//#endif
-//#if eventStore
 module Esdb =
 
-    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+    let create codec initial fold (context, cache) =
         let cacheStrategy = Equinox.EventStoreDb.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        let accessStrategy = Equinox.EventStoreDb.AccessStrategy.RollingSnapshots (isOrigin, toSnapshot)
-        Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, cacheStrategy, accessStrategy)
+        Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, cacheStrategy)
 
-//#endif
+module Sss =
+
+    let create codec initial fold (context, cache) =
+        let cacheStrategy = Equinox.SqlStreamStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.SqlStreamStore.SqlStreamStoreCategory(context, codec, fold, initial, cacheStrategy)
+
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-#if (memoryStore || (!cosmos && !dynamo && !eventStore))
-type Store<'t> =
-    | Memory of Equinox.MemoryStore.VolatileStore<'t>
-#else
 type Store =
-#endif
-//#if cosmos
+#if (esdb || sss || cosmos)
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-//#endif
-//#if dynamo
+#endif    
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-//#endif
-//#if eventStore
-    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.Core.ICache
-//#endif

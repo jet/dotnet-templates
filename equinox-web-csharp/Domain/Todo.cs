@@ -1,13 +1,9 @@
-﻿using Equinox;
-using Equinox.Core;
-using Microsoft.FSharp.Core;
-using Newtonsoft.Json;
-using Serilog;
+﻿using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
-using FsCodec;
 
 namespace TodoBackendTemplate
 {
@@ -55,26 +51,26 @@ namespace TodoBackendTemplate
                 public ItemData[] Items { get; set; }
             }
 
-            static readonly JsonNetUtf8Codec Codec = new JsonNetUtf8Codec(new JsonSerializerSettings());
+            static readonly SystemTextJsonUtf8Codec Codec =
+                new (new JsonSerializerOptions());
 
-            public static Event TryDecode(string et, byte[] json)
-            {
-                switch (et)
+            public static FSharpValueOption<Event> TryDecode(string et, ReadOnlyMemory<byte> json) =>
+                et switch
                 {
-                    case nameof(Added): return Codec.Decode<Added>(json);
-                    case nameof(Updated): return Codec.Decode<Updated>(json);
-                    case nameof(Deleted): return Codec.Decode<Deleted>(json);
-                    case nameof(Cleared): return Codec.Decode<Cleared>(json);
-                    case nameof(Snapshotted): return Codec.Decode<Snapshotted>(json);
-                    default: return null;
-                }
-            }
+                    nameof(Added) => Codec.Decode<Added>(json),
+                    nameof(Updated) => Codec.Decode<Updated>(json),
+                    nameof(Deleted) => Codec.Decode<Deleted>(json),
+                    nameof(Cleared) => Codec.Decode<Cleared>(json),
+                    nameof(Snapshotted) => Codec.Decode<Snapshotted>(json),
+                    _ => FSharpValueOption<Event>.None
+                };
 
-            public static Tuple<string, byte[]> Encode(Event e) => Tuple.Create(e.GetType().Name, Codec.Encode(e));
+            public static (string, ReadOnlyMemory<byte>) Encode(Event e) =>
+                (e.GetType().Name, Codec.Encode(e));
 
             /// Maps a ClientId to the Target that specifies the Stream in which the data for that client will be held
-            public static string For(ClientId id) =>
-                StreamNameModule.create("Todos", id?.ToString() ?? "1");
+            public static (string, string) StreamIds(ClientId id) =>
+                ("Todos", id?.ToString() ?? "1");
         }
 
         /// Present state of the Todo List as inferred from the Events we've seen to date
@@ -93,7 +89,7 @@ namespace TodoBackendTemplate
                 Items = items;
             }
 
-            public static State Initial = new State(0, new Event.ItemData[0]);
+            public static readonly State Initial = new State(0, Array.Empty<Event.ItemData>());
 
             /// Folds a set of events from the store into a given `state`
             public static State Fold(State origin, IEnumerable<Event> xs)
@@ -172,9 +168,9 @@ namespace TodoBackendTemplate
             }
 
             /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
-            public static IEnumerable<Event> Interpret(State s, Command x)
+            public IEnumerable<Event> Interpret(State s)
             {
-                switch (x)
+                switch (this)
                 {
                     case Add c:
                         yield return Make<Event.Added>(s.NextId, c.Props);
@@ -198,37 +194,12 @@ namespace TodoBackendTemplate
                         break;
 
                     default:
-                        throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
+                        throw new ArgumentOutOfRangeException("this", this, "invalid");
                 }
 
                 T Make<T>(int id, Props value) where T : Event.ItemEvent, new() =>
                     new T {Data = {Id = id, Order = value.Order, Title = value.Title, Completed = value.Completed}};
             }
-        }
-
-        /// Defines low level stream operations relevant to the Todo Stream in terms of Command and Events
-        class Handler
-        {
-            readonly EquinoxStream<Event, State> _stream;
-
-            public Handler(ILogger log, IStream<Event, State> stream) =>
-                _stream = new EquinoxStream<Event, State>(State.Fold, log, stream);
-
-            /// Execute `command`; does not emit the post state
-            public Task<Unit> Execute(Command c) =>
-                _stream.Execute(s => Command.Interpret(s, c));
-
-            /// Handle `command`, return the items after the command's intent has been applied to the stream
-            public Task<Event.ItemData[]> Decide(Command c) =>
-                _stream.Decide(ctx =>
-                {
-                    ctx.Execute(s => Command.Interpret(s, c));
-                    return ctx.State.Items;
-                });
-
-            /// Establish the present state of the Stream, project from that as specified by `projection`
-            public Task<T> Query<T>(Func<State, T> projection) =>
-                _stream.Query(projection);
         }
 
         /// A single Item in the Todo List
@@ -244,10 +215,10 @@ namespace TodoBackendTemplate
         public class Service
         {
             /// Maps a ClientId to Handler for the relevant stream
-            readonly Func<ClientId, Handler> _stream;
+            readonly Func<ClientId, Equinox.DeciderCore<Event, State>> _resolve;
 
-            public Service(ILogger handlerLog, Func<string, IStream<Event, State>> resolve) =>
-                _stream = id => new Handler(handlerLog, resolve(Event.For(id)));
+            public Service(Func<ClientId, Equinox.DeciderCore<Event, State>> resolve) =>
+                _resolve = resolve;
 
             //
             // READ
@@ -255,11 +226,11 @@ namespace TodoBackendTemplate
 
             /// List all open items
             public Task<IEnumerable<View>> List(ClientId clientId) =>
-                _stream(clientId).Query(s => s.Items.Select(Render));
+                _resolve(clientId).Query(s => s.Items.Select(Render));
 
             /// Load details for a single specific item
             public Task<View> TryGet(ClientId clientId, int id) =>
-                _stream(clientId).Query(s =>
+                _resolve(clientId).Query(s =>
                 {
                     var i = s.Items.SingleOrDefault(x => x.Id == id);
                     return i == null ? null : Render(i);
@@ -271,28 +242,26 @@ namespace TodoBackendTemplate
 
             /// Execute the specified (blind write) command 
             public Task<Unit> Execute(ClientId clientId, Command command) =>
-                _stream(clientId).Execute(command);
+                _resolve(clientId).Transact(command.Interpret);
 
             //
             // WRITE-READ
             //
 
             /// Create a new ToDo List item; response contains the generated `id`
-            public async Task<View> Create(ClientId clientId, Props template)
-            {
-                var state = await _stream(clientId).Decide(new Command.Add {Props = template});
-                return Render(state.First());
-            }
+            public Task<View> Create(ClientId clientId, Props template) =>
+                _resolve(clientId).Transact(
+                    new Command.Add {Props = template}.Interpret, 
+                    s => Render(s.Items.First()));
 
             /// Update the specified item as referenced by the `item.id`
-            public async Task<View> Patch(ClientId clientId, int id, Props value)
-            {
-                var state = await _stream(clientId).Decide(new Command.Update {Id = id, Props = value});
-                return Render(state.Single(x => x.Id == id));
-            }
+            public Task<View> Patch(ClientId clientId, int id, Props value) =>
+                _resolve(clientId).Transact(
+                    new Command.Update {Id = id, Props = value}.Interpret,
+                    s => Render(s.Items.Single(x => x.Id == id)));
 
-            static View Render(Event.ItemData i) =>
-                new View {Id = i.Id, Order = i.Order, Title = i.Title, Completed = i.Completed};
+                static View Render(Event.ItemData i) =>
+                    new View {Id = i.Id, Order = i.Order, Title = i.Title, Completed = i.Completed};
         }
     }
 }

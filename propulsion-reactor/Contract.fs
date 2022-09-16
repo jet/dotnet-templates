@@ -27,12 +27,13 @@ module Input =
         interface TypeShape.UnionContract.IUnionContract
     let private codec : FsCodec.IEventCodec<_, _, _> = Config.EventCodec.withIndex<Event>
 
+    open Propulsion.Internal
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
-        span.events |> Array.choose (EventCodec.tryDecode codec stream)
-    let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> Some clientId | _ -> None
-    let (|Parse|_|) = function
-        | (StreamName clientId, _) & Decode events -> Some (clientId, events)
-        | _ -> None
+        span |> Array.chooseV (EventCodec.tryDecode codec stream)
+    let [<return: Struct>](|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
+    let [<return: Struct>] (|Parse|_|) = function
+        | (StreamName clientId, _) & Decode events -> ValueSome struct (clientId, events)
+        | _ -> ValueNone
 
 type Data = { value : int }
 type SummaryEvent =
@@ -45,6 +46,6 @@ type SummaryEvent =
     | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
     interface TypeShape.UnionContract.IUnionContract
 #endif
-let codec = Config.EventCodec.create<SummaryEvent>()
-let encode summary = codec.Encode(None, summary)
+let codec = Config.EventCodec.gen<SummaryEvent>
+let encode summary = codec.Encode((), summary)
 //#endif

@@ -4,13 +4,11 @@ open Serilog
 open System
 
 exception MissingArg of message : string with override this.Message = this.message
+let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
 
-    let get key =
-        match tryGet key with
-        | Some value -> value
-        | None -> raise (MissingArg (sprintf "Missing Argument/Environment Variable %s" key))
+    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -28,25 +26,25 @@ module Args =
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off."
                 | ProcessorName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 2."
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
                 | Cosmos _ ->               "specify CosmosDB input parameters"
-    and Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        let maxReadAhead =                  a.GetResult(MaxReadAhead, 2)
-        let maxConcurrentProcessors =       a.GetResult(MaxWriters, 8)
-        member val Verbose =                a.Contains Parameters.Verbose
-        member val PrometheusPort =         a.TryGetResult PrometheusPort
-        member val ProcessorName =          a.GetResult ProcessorName
+    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+        let maxReadAhead =                  p.GetResult(MaxReadAhead, 2)
+        let maxConcurrentProcessors =       p.GetResult(MaxWriters, 8)
+        member val Verbose =                p.Contains Parameters.Verbose
+        member val PrometheusPort =         p.TryGetResult PrometheusPort
+        member val ProcessorName =          p.GetResult ProcessorName
         member x.ProcessorParams() =        Log.Information("Reacting... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
                                                             x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
                                             (x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
-        member val Cosmos =                 CosmosArguments (c, a.GetResult Cosmos)
+        member val Cosmos =                 CosmosArguments(c, p.GetResult Cosmos)
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -59,10 +57,10 @@ module Args =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
         | [<AltCommandLine "-Z"; Unique>]   FromTail
-        | [<AltCommandLine "-mi"; Unique>]  MaxItems of int
+        | [<AltCommandLine "-b"; Unique>]   MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
@@ -76,21 +74,21 @@ module Args =
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to request from the feed. Default: unlimited."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
-    and CosmosArguments(c : Configuration, a : ParseResults<CosmosParameters>) =
-        let discovery =                     a.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
-        let mode =                          a.TryGetResult ConnectionMode
-        let timeout =                       a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-        let retries =                       a.GetResult(Retries, 1)
-        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+        let discovery =                     p.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let mode =                          p.TryGetResult ConnectionMode
+        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       p.GetResult(Retries, 1)
+        let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      a.TryGetResult Database  |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let containerId =                   a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let database =                      p.TryGetResult Database  |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let containerId =                   p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
 
-        let leaseContainerId =              a.GetResult(LeaseContainer, containerId + "-aux")
-        let fromTail =                      a.Contains FromTail
-        let maxItems =                      a.TryGetResult MaxItems
-        let lagFrequency =                  a.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member _.Verbose =                  a.Contains Verbose
+        let leaseContainerId =              p.GetResult(LeaseContainer, containerId + "-aux")
+        let fromTail =                      p.Contains FromTail
+        let maxItems =                      p.TryGetResult MaxItems
+        let lagFrequency =                  p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
+        member _.Verbose =                  p.Contains Verbose
         member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
         member x.MonitoringParams() =
             let leases : Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
@@ -114,16 +112,17 @@ let build (args : Args.Arguments) =
     let sink =
         let store =
             let context = client |> CosmosStoreContext.create
-            let cache = Equinox.Cache (AppName, sizeMb = 10)
+            let cache = Equinox.Cache(AppName, sizeMb = 10)
             Config.Store.Cosmos (context, cache)
         let stats = Reactor.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         let handle = Reactor.Config.createHandler store
-        Propulsion.Streams.StreamsProjector.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, handle, stats, args.StatsInterval)
+        Propulsion.Streams.Default.Config.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, handle, stats, args.StatsInterval)
     let source =
-        let parseFeedDoc : _ -> Propulsion.Streams.StreamEvent<_> seq = Seq.collect Propulsion.CosmosStore.EquinoxNewtonsoftParser.enumStreamEvents
-        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, parseFeedDoc)
+        let parseFeedDoc = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents Reactor.categoryFilter
+        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect parseFeedDoc)
         let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
-        Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer, startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+        Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer,
+                                                       startFromTail = startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
     sink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
@@ -133,13 +132,15 @@ let startMetricsServer port : IDisposable =
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
     { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
 
-open Propulsion.CosmosStore.Infrastructure // AwaitKeyboardInterruptAsTaskCancelledException
+open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
 let run args = async {
     let sink, source = build args
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    return! Async.Parallel [ Async.AwaitKeyboardInterruptAsTaskCancelledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
-}
+    return! [|   Async.AwaitKeyboardInterruptAsTaskCanceledException()
+                 source.AwaitWithStopOnCancellation()
+                 sink.AwaitWithStopOnCancellation()
+            |] |> Async.Parallel |> Async.Ignore<unit[]> }
 
 [<EntryPoint>]
 let main argv =
@@ -147,7 +148,7 @@ let main argv =
         try let metrics = Sinks.equinoxAndPropulsionCosmosConsumerMetrics (Sinks.tags AppName) args.ProcessorName
             Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Cosmos.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? MissingArg) && not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
     with MissingArg msg -> eprintfn "%s" msg; 1
         | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1

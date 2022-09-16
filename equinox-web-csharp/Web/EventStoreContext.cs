@@ -1,7 +1,5 @@
 using Equinox;
-using Equinox.EventStore;
-using Equinox.Core;
-using Microsoft.FSharp.Control;
+using Equinox.EventStoreDb;
 using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
@@ -9,27 +7,13 @@ using System.Threading.Tasks;
 
 namespace TodoBackendTemplate
 {
-     public class EventStoreConfig
-    {
-        public EventStoreConfig(string host, string username, string password, int cacheMb)
-        {
-            Host = host;
-            Username = username;
-            Password = password;
-            CacheMb = cacheMb;
-        }
-
-        public string Host { get; }
-        public string Username { get; }
-        public string Password { get; }
-        public int CacheMb { get; }
-    }
+    public record EventStoreConfig(string ConnectionString, int CacheMb);
 
     public class EventStoreContext : EquinoxContext
     {
         readonly Cache _cache;
 
-        Equinox.EventStore.EventStoreContext _connection;
+        Equinox.EventStoreDb.EventStoreContext _connection;
         readonly Func<Task> _connect;
 
         public EventStoreContext(EventStoreConfig config)
@@ -40,18 +24,17 @@ namespace TodoBackendTemplate
 
         internal override async Task Connect() => await _connect();
 
-        static async Task<Equinox.EventStore.EventStoreContext> Connect(EventStoreConfig config)
+        static Task<Equinox.EventStoreDb.EventStoreContext> Connect(EventStoreConfig config)
         {
-            var c = new Connector(config.Username, config.Password, reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
+            var c = new EventStoreConnector(reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
 
-            var conn = await FSharpAsync.StartAsTask(
-                c.Establish("Twin", Discovery.NewGossipDns(config.Host), ConnectionStrategy.ClusterTwinPreferSlaveReads),
-                null, null);
-            return new Equinox.EventStore.EventStoreContext(conn, new BatchingPolicy(maxBatchSize: 500));
+            var conn = c.Establish("Twin", Discovery.NewConnectionString(config.ConnectionString), ConnectionStrategy.ClusterTwinPreferSlaveReads);
+            return Task.FromResult(new Equinox.EventStoreDb.EventStoreContext(conn));
         }
 
-        public override Func<string, IStream<TEvent, TState>> Resolve<TEvent, TState>(
-            FsCodec.IEventCodec<TEvent, byte[], object> codec,
+        public override Func<(string, string), DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
+            Serilog.ILogger handlerLog,
+            FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
             Func<TState, IEnumerable<TEvent>, TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
@@ -64,9 +47,9 @@ namespace TodoBackendTemplate
             var cacheStrategy = _cache == null
                 ? null
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var cat = new EventStoreCategory<TEvent, TState, object>(_connection, codec, FuncConvert.FromFunc(fold),
+            var cat = new EventStoreCategory<TEvent, TState, Unit>(_connection, codec, FuncConvert.FromFunc(fold),
                 initial, cacheStrategy, accessStrategy);
-            return t => cat.Resolve(t);
+            return cat.Resolve(log: handlerLog);
         }
     }
 }

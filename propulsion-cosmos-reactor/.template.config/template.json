@@ -11,7 +11,8 @@
     "Reactor"
   ],
   "tags": {
-    "language": "F#"
+    "language": "F#",
+    "type": "project"
   },
   "identity": "Propulsion.Template.CosmosReactor",
   "name": "Propulsion Cosmos Reactor",

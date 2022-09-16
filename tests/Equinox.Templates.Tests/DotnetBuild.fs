@@ -6,7 +6,7 @@ open Xunit.Abstractions
 type ProProjector() as this =
     inherit TheoryData<string list>()
 
-    do for source in ["cosmos"; (* <-default *) "eventStore"; "sqlStreamStore"] do
+    do for source in ["cosmos"; (* <-default *) "dynamo"; "eventStore"; "sqlStreamStore"] do
         let variants =
             if source <> "cosmos" then [ []; ["--kafka"] ]
             else
@@ -21,7 +21,7 @@ type ProProjector() as this =
 type ProReactor() as this =
     inherit TheoryData<string list>()
 
-    do for source in ["multiSource"; (* <-default *) "kafkaEventSpans"; "changeFeedOnly"] do
+    do for source in ["multiSource"; (* <-default *) "kafkaEventSpans"] do
         for opts in [ []; ["--blank"]; ["--kafka"]; ["--kafka"; "--blank"] ] do
             this.Add(["--source " + source] @ opts)
 
@@ -29,11 +29,12 @@ type EqxWebs() as this =
     inherit TheoryData<string, string list>()
 
     do for t in ["eqxweb"; "eqxwebcs"] do
-        do this.Add(t, ["--todos"; "--cosmos"])
+            do this.Add(t, ["--todos"; "--cosmos"])
 #if !DEBUG
-        do this.Add(t, ["--todos"])
-        do this.Add(t, ["--todos"; "--eventStore"])
+            do this.Add(t, ["--todos"])
+            do this.Add(t, ["--todos"; "--eventStore"])
 #endif
+       do this.Add("eqxweb", ["--todos"; "--aggregate"; "--dynamo"])
 
 type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
 
@@ -44,9 +45,8 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
         Dotnet.build [folder]
 
     #if DEBUG // Use this one to trigger an individual test
-    let [<Fact>] ``*pending*`` ()               = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]
+    let [<Fact>] ``*pending*`` ()               = run "eqxwebcs" ["--todos"; "--cosmos"]
     #endif
-
     let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []
     let [<Fact>] eqxTestbed ()                  = run "eqxTestbed" []
     let [<Fact>] eqxShipping ()                 = run "eqxShipping" ["--skipIntegrationTests"]
@@ -54,7 +54,6 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] feedConsumer ()                = run "feedConsumer" []
     [<ClassData(typeof<ProProjector>)>]
     let [<Theory>] proProjector args            = run "proProjector" args
-    let [<Fact>] proProjectorSynth ()           = run "proProjector" ["--source cosmos"; "--kafka"; "--synthesizeSequence"]
     let [<Fact>] proConsumer ()                 = run "proConsumer" []
     let [<Fact>] trackingConsumer ()            = run "trackingConsumer" []
     let [<Fact>] summaryConsumer ()             = run "summaryConsumer" []
@@ -74,7 +73,6 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     [<ClassData(typeof<ProReactor>)>]
     let [<Theory>] proReactor args              = run "proReactor" args
     let [<Fact>] proReactorDefault ()           = run "proReactor" []
-    let [<Fact>] proReactorFilter ()            = run "proReactor" ["--filter"]
 
     let [<Fact>] proCosmosReactor ()            = run "proCosmosReactor" []
     

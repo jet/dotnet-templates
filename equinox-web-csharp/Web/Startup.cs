@@ -40,7 +40,6 @@ namespace TodoBackendTemplate.Web
         {
             services
                 .AddMvc()
-                .SetCompatibilityVersion(CompatibilityVersion.Latest)
                 .AddJsonOptions(o =>
                 {
                     foreach(var c in FsCodec.SystemTextJson.Options.Default.Converters)
@@ -83,7 +82,7 @@ namespace TodoBackendTemplate.Web
             // # run as a single-node cluster to allow connection logic to use cluster mode as for a commercial cluster
             // & $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
 
-            var esConfig = new EventStoreConfig("localhost", "admin", "changeit", cacheMb);
+            var esConfig = new EventStoreConfig("esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?tls=true&tlsVerifyCert=false", cacheMb);
             return new EventStoreContext(esConfig);
 #endif
 #if cosmos
@@ -106,10 +105,10 @@ namespace TodoBackendTemplate.Web
             var config = new CosmosConfig(connMode, conn, db, container, cacheMb);
             return new CosmosContext(config);
 #endif
-#if (!cosmos && !eventStore)
-            return new MemoryStoreContext(new Equinox.MemoryStore.VolatileStore<byte[]>());
+#if (!cosmos && !dynamo && !eventStore)
+            return new MemoryStoreContext(new Equinox.MemoryStore.VolatileStore<ReadOnlyMemory<byte>>());
 #endif
-#if (!memoryStore && !cosmos && !eventStore)
+#if (!memoryStore && !cosmos && !dynamo && !eventStore)
             //return new MemoryStoreContext(new Equinox.MemoryStore.VolatileStore());
 #endif
         }
@@ -128,32 +127,39 @@ namespace TodoBackendTemplate.Web
         }
 
 #if todos
-        public Todo.Service CreateTodoService() =>
-            new Todo.Service(
-                _handlerLog,
+        public Todo.Service CreateTodoService()
+        {
+            var resolve =
                 _context.Resolve(
+                    _handlerLog,
                     EquinoxCodec.Create(Todo.Event.Encode, Todo.Event.TryDecode),
                     Todo.State.Fold,
                     Todo.State.Initial,
                     Todo.State.IsOrigin,
-                    Todo.State.Snapshot));
+                    Todo.State.Snapshot);
+            return new Todo.Service(ids => resolve(Todo.Event.StreamIds(ids)));
+        }
+
 #endif
 #if aggregate
-        public Aggregate.Service CreateAggregateService() =>
-            new Aggregate.Service(
-                _handlerLog,
+        public Aggregate.Service CreateAggregateService()
+        {
+            var resolve =
                 _context.Resolve(
+                    _handlerLog,
                     EquinoxCodec.Create(Aggregate.Event.Encode, Aggregate.Event.TryDecode),
                     Aggregate.State.Fold,
                     Aggregate.State.Initial,
                     Aggregate.State.IsOrigin,
-                    Aggregate.State.Snapshot));
+                    Aggregate.State.Snapshot);
+            return new Aggregate.Service(ids => resolve(Aggregate.Event.StreamIds(ids)));
+        }
 #endif
 #if (!aggregate && !todos)
 //        public Thing.Service CreateThingService() =>
 //            Thing.Service(
-//                _handlerLog,
 //                _context.Resolve(
+//                    _handlerLog,
 //                    EquinoxCodec.Create<Thing.Events.Event>(), // Requires Union following IUnionContract pattern, see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
 //                    Thing.Fold.Fold,
 //                    Thing.Fold.Initial,

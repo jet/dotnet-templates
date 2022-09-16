@@ -68,7 +68,6 @@ type Logging() =
     [<System.Runtime.CompilerServices.Extension>]
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
-            .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 
@@ -152,7 +151,7 @@ type HttpClient with
     ///     Drop-in replacement for HttpClient.SendAsync which addresses known timeout issues
     /// </summary>
     /// <param name="msg">HttpRequestMessage to be submitted.</param>
-    member client.Send(msg : HttpRequestMessage) = async {
+    member client.Send2(msg : HttpRequestMessage) = async {
         let! ct = Async.CancellationToken
         try return! client.SendAsync(msg, ct) |> Async.AwaitTask
         // address https://github.com/dotnet/corefx/issues/20296

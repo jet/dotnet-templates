@@ -55,12 +55,11 @@ module CosmosStoreContext =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, verbose, storeVerbose, ?maybeSeqEndpoint) =
+    static member Configure(configuration : LoggerConfiguration, verbose, verboseStore, ?maybeSeqEndpoint) =
         configuration
-            .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose then c.MinimumLevel.Debug() else c
-        |> fun c -> let ingesterLevel = if storeVerbose then LogEventLevel.Debug else LogEventLevel.Information
+        |> fun c -> let ingesterLevel = if verboseStore then LogEventLevel.Debug else LogEventLevel.Information
                     c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
         |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
@@ -74,7 +73,7 @@ type Logging() =
                             let isWriterA = Filters.Matching.FromSource<Propulsion.EventStore.Internal.Writer.Result>().Invoke
                             let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
                             let l =
-                                if storeVerbose then l
+                                if verboseStore then l
                                 else l.Filter.ByExcluding(fun x -> Log.isStoreMetrics x || isWriterA x || isWriterB x)
                             l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                             |> ignore) |> ignore

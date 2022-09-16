@@ -32,14 +32,14 @@ module PipelineEvent =
         FsCodec.Core.TimelineEvent.Create(
             index,
             "eventType",
-            null,
+            Unchecked.defaultof<_>,
             context = item)
-    let (|ItemsForFc|_|) = function
-        | FsCodec.StreamName.CategoryAndIds (_,[|_ ; FcId.Parse fc|]), (s : Propulsion.Streams.StreamSpan<_>) ->
-            Some (fc, s.events |> Seq.map (fun e -> Unchecked.unbox<Item> e.Context))
-        | _ -> None
+    let [<return: Struct>] (|ItemsForFc|_|) = function
+        | FsCodec.StreamName.CategoryAndIds (_,[|_ ; FcId.Parse fc|]), (s : Propulsion.Streams.StreamSpan<Propulsion.Streams.Default.EventBody>) ->
+            ValueSome (fc, s |> Seq.map (fun e -> Unchecked.unbox<Item> e.Context))
+        | _ -> ValueNone
 
-let handle maxDop (stream, span) = async {
+let handle maxDop struct (stream, span) = async {
     match stream, span with
     | PipelineEvent.ItemsForFc (fc, items) ->
         // Take chunks of max 1000 in order to make handler latency be less 'lumpy'
@@ -57,6 +57,6 @@ let handle maxDop (stream, span) = async {
         })
         let! added = Async.Parallel(maybeAdd, maxDegreeOfParallelism=maxDop)
         let outcome = { added = Seq.length added; notReady = results.Length - ready.Length; dups = results.Length - ticketIds.Length }
-        return Propulsion.Streams.SpanResult.PartiallyProcessed ticketIds.Length, outcome
+        return struct (Propulsion.Streams.SpanResult.PartiallyProcessed ticketIds.Length, outcome)
     | x -> return failwithf "Unexpected stream %O" x
 }
