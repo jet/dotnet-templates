@@ -11,7 +11,8 @@
     "Kafka"
   ],
   "tags": {
-    "language": "F#"
+    "language": "F#",
+    "type": "project"
   },
   "identity": "Propulsion.Template.Sync",
   "name": "Propulsion Sync tool",

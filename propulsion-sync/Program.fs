@@ -329,7 +329,7 @@ module Args =
         member _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
 #if kafka
         member val KafkaSink =
-            match a.GetSubCommand() with
+            match p.GetSubCommand() with
             | Kafka kafka -> Some (KafkaSinkArguments(c, kafka))
             | _ -> None
 #endif
