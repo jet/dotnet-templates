@@ -9,21 +9,31 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed 
+### Fixed
+
+<a name="6.0.0"></a>
+## [6.0.0] - 2022-09-16
+
+### Added
 
 - `eqxShipping`: `DynamoStore` and `EventStoreDb` support and Reactor Integration test [#121](https://github.com/jet/dotnet-templates/pull/121)
 - `eqxShipping`: Use `Propulsion.MemoryStore`'s `AwaitCompletion` [#121](https://github.com/jet/dotnet-templates/pull/121)
 - `eqxShipping`: Use `Propulsion.DynamoStore`+`EventStoreDb`'s `AwaitCompletion` [#121](https://github.com/jet/dotnet-templates/pull/121)
+- `proProjector`, `proReactor`: Add, standardize `cosmos`, `dynamo`, `esdb`, `sss` [#122](https://github.com/jet/dotnet-templates/pull/122)
+- `eqxwebcs`: Removed lots of boilerplate/wiring (by using `DeciderCore`) [#122](https://github.com/jet/dotnet-templates/pull/122)
+- `eqxweb`: Add `dynamo` [#122](https://github.com/jet/dotnet-templates/pull/122)
 
 ### Changed
 
-- Target `Equinox` v `4.0.0`, `Propulsion` v `3.0.0`, `FsCodec` v `3.0.0`, `net6.0` [#122](https://github.com/jet/dotnet-templates/pull/122)
+- Target `Equinox` v `4.0.0-rc.1`, `Propulsion` v `3.0.0-beta.4`, `FsCodec` v `3.0.0-rc.7.1`, `net6.0` [#122](https://github.com/jet/dotnet-templates/pull/122)
+- All EventStoreDB templates (except `proSync`) now use the `*.EventStoreDb` edition (which uses `grpc`) [#122](https://github.com/jet/dotnet-templates/pull/122)
 
 ### Removed
 
 - `eqxProjector --source cosmos --kafka --synthesizeSequence`: Removed custom mode [#122](https://github.com/jet/dotnet-templates/pull/122)
 - `proReactor`: remove `--filter` (see `proSync`) and `--changeFeedOnly` (see `proReactorCosmos`) [#122](https://github.com/jet/dotnet-templates/pull/122)
-
-### Fixed
 
 <a name="5.3.0"></a>
 ## [5.3.0] - 2022-07-19
@@ -580,7 +590,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/5.3.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/6.0.0...HEAD
+[6.0.0]: https://github.com/jet/dotnet-templates/compare/5.3.0...6.0.0
 [5.3.0]: https://github.com/jet/dotnet-templates/compare/5.2.1...5.3.0
 [5.2.1]: https://github.com/jet/dotnet-templates/compare/5.2.0...5.2.1
 [5.2.0]: https://github.com/jet/dotnet-templates/compare/5.1.0...5.2.0

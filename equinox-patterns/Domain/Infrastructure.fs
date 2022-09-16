@@ -30,9 +30,3 @@ type Accumulator<'e, 's>(originState : 's, fold : 's -> seq<'e> -> 's) =
 //    /// Projects from the present state including accumulated events
 //    member _.Query(render : 's -> 'r) : 'r =
 //        render state
-
-type Equinox.Decider<'e, 's> with
-
-     // in baseline V4 API Decider API
-     member x.Transact(decide) =
-        x.TransactAsync decide
