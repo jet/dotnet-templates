@@ -99,7 +99,7 @@ type KafkaSinkArguments(c : Configuration, p : ParseResults<KafkaSinkParameters>
 
 #endif
 
-// #if (esdb || sss || cosmos)
+//#if (esdb || sss || cosmos)
 module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -146,8 +146,8 @@ module Cosmos =
             | _ -> missingArg "Must specify `kafka` arguments"
 #endif
 
-// #endif // cosmos
-// #if (esdb || sss || dynamo)
+//#endif // cosmos
+//#if (esdb || sss || dynamo)
 module Dynamo =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -206,9 +206,9 @@ module Dynamo =
             | _ -> missingArg "Must specify `kafka` arguments"
 #endif
 
-// #endif // dynamo
+//#endif // dynamo
 
-#if (esdb || sss)
+#if esdb
 type [<RequireQualifiedAccess; NoComparison; NoEquality>]
     TargetStoreArgs =
     | Cosmos of Cosmos.Arguments

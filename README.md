@@ -186,7 +186,7 @@ There's [integration tests in the repo](https://github.com/jet/dotnet-templates/
 
     dotnet build build.proj # build Equinox.Templates package, run tests \/
     dotnet pack build.proj # build Equinox.Templates package only
-    dotnet test build.proj # Test aphabetically newest file in bin/nupkgs only
+    dotnet test build.proj -c Release # Test aphabetically newest file in bin/nupkgs only (-c Release to run full tests)
 
 One can also do it manually:
 
