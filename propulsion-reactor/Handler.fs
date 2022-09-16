@@ -77,7 +77,6 @@ let handle
             return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped events.Length
     | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
 #endif
-//#endif
 
 type Config private () =
     
@@ -90,3 +89,4 @@ type Config private () =
     
     static member StartSource(log, sink, sourceConfig) =
         SourceConfig.start (log, Config.log) sink categoryFilter sourceConfig
+//#endif
