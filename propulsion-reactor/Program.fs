@@ -56,7 +56,7 @@ module Args =
                                                             processorName, maxReadAhead, maxConcurrentStreams)
                                             (processorName, maxReadAhead, maxConcurrentStreams)
 #if sourceKafka
-        member _.ConnectStoreAndSource(appName) : _ * _ * Args.KafkaSinkArguments * (string -> FsKafka.KafkaConsumerConfig) * (ILogger -> unit) =
+        member _.ConnectStoreAndSource(appName) : _ * _ * _ * (string -> FsKafka.KafkaConsumerConfig) * (ILogger -> unit) =
             let p =
                 match p.GetSubCommand() with
                 | Kafka p -> SourceArgs.Kafka.Arguments(c, p)
@@ -70,7 +70,12 @@ module Args =
 #else
             let cache = Equinox.Cache (appName, sizeMb = cacheSizeMb)
             let targetStore = p.ConnectTarget cache
-            targetStore, targetStore, p.Kafka, createConsumerConfig, fun log ->
+#if kafka
+            let kafka = a.Kafka
+#else
+            let kafka = ()
+#endif
+            targetStore, targetStore, kafka, createConsumerConfig, fun log ->
                 Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
                 Equinox.DynamoStore.Core.Log.InternalMetrics.dump log
 #endif                        
