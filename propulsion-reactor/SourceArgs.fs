@@ -6,11 +6,11 @@ open System
 
 type Configuration(tryGet) =
     inherit Args.Configuration(tryGet)
-#if !sourceKafka
+#if (!sourceKafka)
     member _.DynamoIndexTable =             tryGet Args.INDEX_TABLE
 #endif
 
-#if !sourceKafka
+#if (!sourceKafka)
 module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -381,8 +381,8 @@ module Kafka =
 #if kafka            
         member x.Kafka =
             match x.TargetStoreArgs with
-            | Args.TargetStoreArgs.Cosmos cosmos -> cosmos.Sink
-            | Args.TargetStoreArgs.Dynamo dynamo -> dynamo.Sink
+            | Args.TargetStoreArgs.Cosmos cosmos -> cosmos.Kafka
+            | Args.TargetStoreArgs.Dynamo dynamo -> dynamo.Kafka
 #endif            
         member x.ConnectTarget(cache) : Config.Store =
             Args.TargetStoreArgs.connectTarget x.TargetStoreArgs cache

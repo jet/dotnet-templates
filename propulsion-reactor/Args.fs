@@ -43,7 +43,7 @@ type Configuration(tryGet : string -> string option) =
     member x.SqlStreamStoreContainer =      x.get "SQLSTREAMSTORE_CONTAINER"
 
 #endif
-//#if kafka
+//#if (kafka || sourceKafka)
     member x.Broker =                       x.get "PROPULSION_KAFKA_BROKER"
     member x.Topic =                        x.get "PROPULSION_KAFKA_TOPIC"
 //#endif

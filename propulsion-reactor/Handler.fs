@@ -12,7 +12,7 @@ type Outcome =
 
 /// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
 type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
-#if sourceKafka || blank
+#if (blank || sourceKafka)
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
     inherit Propulsion.Streams.Sync.Stats<Outcome>(log, statsInterval, stateInterval)

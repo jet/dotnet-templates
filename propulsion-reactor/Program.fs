@@ -65,13 +65,13 @@ module Args =
                 FsKafka.KafkaConsumerConfig.Create(
                     appName, p.Broker, [p.Topic], groupName, Confluent.Kafka.AutoOffsetReset.Earliest,
                     maxInFlightBytes = p.MaxInFlightBytes, ?statisticsInterval = p.LagFrequency)
-#if kafka && blank
+#if (kafka && blank)
             let targetStore = () in targetStore, targetStore, p.Kafka, createConsumerConfig, ignore
 #else
             let cache = Equinox.Cache (appName, sizeMb = cacheSizeMb)
             let targetStore = p.ConnectTarget cache
 #if kafka
-            let kafka = a.Kafka
+            let kafka = p.Kafka
 #else
             let kafka = ()
 #endif
@@ -105,7 +105,7 @@ module Args =
                 let context = client |> CosmosStoreContext.create
                 let store = Config.Store.Cosmos (context, cache)
 #if kafka
-                let kafka = a.Kafka
+                let kafka = p.Kafka
 #if blank
                 let targetStore = store
 #else                
@@ -124,7 +124,7 @@ module Args =
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 let store = Config.Store.Dynamo (context, cache)
 #if kafka
-                let kafka = a.Kafka
+                let kafka = p.Kafka
 #if blank
                 let targetStore = store
 #else                
@@ -145,7 +145,7 @@ module Args =
                     let hydrateBodies = true
                     SourceConfig.Esdb (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
 #if kafka
-                let kafka = a.Kafka
+                let kafka = p.Kafka
 #else
                 let kafka = ()
 #endif
@@ -164,7 +164,7 @@ module Args =
                     let hydrateBodies = true
                     SourceConfig.Sss (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
 #if kafka
-                let kafka = a.Kafka
+                let kafka = p.Kafka
 #else
                 let kafka = ()
 #endif
