@@ -171,9 +171,23 @@ let build (args : Args.Arguments) =
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     let sink = Propulsion.Streams.Default.Config.Start(Log.Logger, maxReadAhead, maxConcurrentProcessors, Handler.handle, stats, args.StatsInterval)
 #endif // !kafka
+#if (cosmos && parallelOnly)
+    // Custom logic for establishing the source, as we're not projecting StreamEvents - TODO could probably be generalized
+    let source =
+        let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : seq<'a> = upcast x
+        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
+        match buildSourceConfig Log.Logger consumerGroupName with SourceConfig.Cosmos (monitoredContainer, leasesContainer, checkpoints, tailSleepInterval : TimeSpan) ->
+        match checkpoints with
+        | Ephemeral _ -> failwith "Unexpected"
+        | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
+
+        Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitoredContainer, leasesContainer, consumerGroupName, observer,
+                                                       startFromTail = startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+#else
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig Log.Logger consumerGroupName
         Handler.Config.StartSource(Log.Logger, sink, sourceConfig)
+#endif        
     [|  Async.AwaitKeyboardInterruptAsTaskCanceledException()
         source.AwaitWithStopOnCancellation()
         sink.AwaitWithStopOnCancellation() |]

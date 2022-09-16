@@ -47,7 +47,6 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     #if DEBUG // Use this one to trigger an individual test
     let [<Fact>] ``*pending*`` ()               = run "eqxwebcs" ["--todos"; "--cosmos"]
     #endif
-
     let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []
     let [<Fact>] eqxTestbed ()                  = run "eqxTestbed" []
     let [<Fact>] eqxShipping ()                 = run "eqxShipping" ["--skipIntegrationTests"]

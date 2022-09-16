@@ -9,7 +9,8 @@ type SourceConfig =
         * leasesContainer : Microsoft.Azure.Cosmos.Container
         * checkpoints : CosmosFeedConfig
         * tailSleepInterval : TimeSpan
-// #endif        
+// #endif
+#if dynamo    
     | Dynamo of indexStore : Equinox.DynamoStore.DynamoStoreClient
         * checkpoints : Propulsion.Feed.IFeedCheckpointStore
         * loading : DynamoLoadModeConfig
@@ -17,6 +18,8 @@ type SourceConfig =
         * batchSizeCutoff : int
         * tailSleepInterval : TimeSpan
         * statsInterval : TimeSpan
+#endif        
+#if esdb     
     | Esdb of client : EventStore.Client.EventStoreClient
         * checkpoints : Propulsion.Feed.IFeedCheckpointStore
         * hydrateBodies : bool
@@ -24,6 +27,8 @@ type SourceConfig =
         * batchSize : int
         * tailSleepInterval : TimeSpan
         * statsInterval : TimeSpan
+#endif        
+#if sss     
     | Sss of client : SqlStreamStore.IStreamStore
         * checkpoints : Propulsion.Feed.IFeedCheckpointStore
         * hydrateBodies : bool
@@ -31,11 +36,16 @@ type SourceConfig =
         * batchSize : int
         * tailSleepInterval : TimeSpan
         * statsInterval : TimeSpan
+#endif        
+// #if cosmos
 and [<NoEquality; NoComparison>] CosmosFeedConfig =
     | Ephemeral of processorName : string
     | Persistent of processorName : string * startFromTail : bool * maxItems : int option * lagFrequency : TimeSpan
+// #endif
+#if dynamo     
 and [<NoEquality; NoComparison>] DynamoLoadModeConfig =
     | Hydrate of monitoredContext : Equinox.DynamoStore.DynamoStoreContext * hydrationConcurrency : int
+#endif
 
 module SourceConfig =
 // #if cosmos    
