@@ -1,7 +1,9 @@
 ﻿module ReactorTemplate.Program
 
+#if !sourceKafka
 open Equinox.EventStoreDb
 open Equinox.SqlStreamStore
+#endif
 open Infrastructure
 open Serilog
 open System
