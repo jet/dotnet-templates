@@ -81,12 +81,10 @@ module Cosmos =
         member x.ConnectStoreAndMonitored() =
             connector.ConnectStoreAndMonitored(database, containerId)
 #if (kafka && blank)
-#if kafka            
         member val Kafka =
             match p.GetSubCommand() with
             | Kafka kafka -> Args.KafkaSinkArguments(c, kafka)
             | _ -> Args.missingArg "Must specify `kafka` arguments"
-#endif            
         member x.ConnectTarget(_cache) = ()
 #else
         member private _.TargetStoreArgs : Args.TargetStoreArgs =
@@ -175,12 +173,10 @@ module Dynamo =
             indexTable.CreateCheckpointService(group, cache, Config.log)
 #if (kafka && blank)
         member x.ConnectTarget(_cache) = ()
-#if kafka        
         member val Kafka =
             match p.GetSubCommand() with
             | Kafka kafka -> Args.KafkaSinkArguments(c, kafka)
             | _ -> Args.missingArg "Must specify `kafka` arguments"
-#endif            
 #else            
         member private _.TargetStoreArgs : Args.TargetStoreArgs =
             match p.GetSubCommand() with
@@ -372,12 +368,10 @@ module Kafka =
 
 #if (kafka && blank)
         member x.ConnectTarget(_cache) = ()
-#if kafka            
         member val Kafka =
              match p.GetSubCommand() with
              | Kafka kafka -> Args.KafkaSinkArguments(c, kafka)
              | _ -> Args.missingArg "Must specify kafka arguments"
-#endif             
 #else
         member private _.TargetStoreArgs : Args.TargetStoreArgs =
             match p.GetSubCommand() with
