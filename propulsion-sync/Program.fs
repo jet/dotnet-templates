@@ -454,7 +454,7 @@ let transformV0 catFilter v0SchemaDocument : Propulsion.Streams.StreamEvent<_> s
         yield parsed }
 //#else
 let transformOrFilter catFilter changeFeedDocument : Propulsion.Streams.Default.StreamEvent seq = seq {
-    for FsCodec.StreamName.Category cat, e as x in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents catFilter changeFeedDocument do
+    for FsCodec.StreamName.Category cat, _ as x in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents catFilter changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter cat then
             yield x }
@@ -498,16 +498,16 @@ let build (args : Args.Arguments, log) =
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let broker, topic, producers = kafka.BuildTargetParams()
-                    let render (stream: FsCodec.StreamName, span: Propulsion.Streams.StreamSpan<_>) = async {
+                    let render struct (stream: FsCodec.StreamName, span: Propulsion.Streams.Default.StreamSpan) = async {
                         let value =
                             span
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
                             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
-                        return FsCodec.StreamName.toString stream, value }
+                        return struct (FsCodec.StreamName.toString stream, value) }
                     let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic, degreeOfParallelism=producers)
                     let stats = Stats(Log.Logger, args.StatsInterval, args.StateInterval)
                     StreamsProducerSink.Start(
-                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, stats, args.StatsInterval, maxBytes=maxBytes, maxEvents=maxEvents),
+                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, stats, statsInterval = args.StatsInterval, maxBytes = maxBytes, maxEvents = maxEvents),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif
