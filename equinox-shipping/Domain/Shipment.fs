@@ -1,7 +1,7 @@
 ﻿module Shipping.Domain.Shipment
 
 let [<Literal>] private Category = "Shipment"
-let streamName (shipmentId : ShipmentId) = FsCodec.StreamName.create Category (ShipmentId.toString shipmentId)
+let streamName (shipmentId : ShipmentId) = struct (Category, ShipmentId.toString shipmentId)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -12,7 +12,7 @@ module Events =
         | Revoked
         | Snapshotted of {| reservation : TransactionId option; association : ContainerId option |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.create<Event>()
+    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
 
 module Fold =
 
@@ -60,12 +60,9 @@ type Service internal (resolve : ShipmentId -> Equinox.Decider<Events.Event, Fol
 
 module Config =
 
-    let private resolveStream = function
-        | Config.Store.Memory store ->
-            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
-            cat.Resolve
-        | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            cat.Resolve
-    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-    let create = resolveDecider >> Service
+    let private (|Category|) = function
+        | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
+        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Dynamo (context, cache) -> Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Esdb (context, cache) ->   Config.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(streamName >> Config.createDecider cat)

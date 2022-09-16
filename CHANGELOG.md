@@ -9,6 +9,11 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `eqxShipping`: `DynamoStore` and `EventStoreDb` support and Reactor Integration test [#121](https://github.com/jet/dotnet-templates/pull/121)
+- `eqxShipping`: Use `Propulsion.MemoryStore`'s `AwaitCompletion` [#121](https://github.com/jet/dotnet-templates/pull/121)
+- `eqxShipping`: Use `Propulsion.DynamoStore`+`EventStoreDb`'s `AwaitCompletion` [#121](https://github.com/jet/dotnet-templates/pull/121)
+
 ### Changed
 ### Removed
 ### Fixed
@@ -18,7 +23,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
-- Shipping: Cosmos Reactor Integration test [#116](https://github.com/jet/dotnet-templates/pull/116)
+- `eqxShipping`: Cosmos Reactor Integration test [#116](https://github.com/jet/dotnet-templates/pull/116)
 - `proIndexer`: Propulsion.DynamoStore.Lambda AWS CDK wiring [#120](https://github.com/jet/dotnet-templates/pull/120)
 
 ### Changed

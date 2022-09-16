@@ -4,12 +4,12 @@ module Shipping.Domain.Tests.Infrastructure
 open System.Collections.Concurrent
 
 type EventAccumulator<'E>() =
-    let messages = ConcurrentDictionary<FsCodec.StreamName, ConcurrentQueue<'E>>()
+    let messages = ConcurrentDictionary<struct (string * string), ConcurrentQueue<'E>>()
 
-    member _.Record(stream, events : 'E seq) =
+    member _.Record(struct (categoryName, streamId, events : 'E array)) =
         let initStreamQueue _ = ConcurrentQueue events
         let appendToQueue _ (queue : ConcurrentQueue<'E>) = events |> Seq.iter queue.Enqueue; queue
-        messages.AddOrUpdate(stream, initStreamQueue, appendToQueue) |> ignore
+        messages.AddOrUpdate(struct (categoryName, streamId), initStreamQueue, appendToQueue) |> ignore
 
     member _.Queue(stream) =
         match messages.TryGetValue stream with

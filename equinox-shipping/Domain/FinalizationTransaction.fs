@@ -1,18 +1,18 @@
 module Shipping.Domain.FinalizationTransaction
 
-let [<Literal>] private Category = "FinalizationTransaction"
-let streamName (transactionId : TransactionId) = FsCodec.StreamName.create Category (TransactionId.toString transactionId)
-let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> Some transId | _ -> None
+let [<Literal>] Category = "FinalizationTransaction"
+let streamName (transactionId : TransactionId) = struct (Category, TransactionId.toString transactionId)
+let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
     type Event =
-        | FinalizationRequested of {| container : ContainerId; shipments : ShipmentId[] |}
+        | FinalizationRequested of {| container : ContainerId; shipments : ShipmentId array |}
         | ReservationCompleted
         /// Signifies we're switching focus to relinquishing any assignments we completed.
         /// The list includes any items we could possibly have touched (including via idempotent retries)
-        | RevertCommenced       of {| shipments : ShipmentId[] |}
+        | RevertCommenced       of {| shipments : ShipmentId array |}
         | AssignmentCompleted
         /// Signifies all processing for the transaction has completed - the Watchdog looks for this event
         | Completed
@@ -22,12 +22,12 @@ module Events =
     and // covered by autoUnionToJsonObject: [<System.Text.Json.Serialization.JsonConverter(typeof<FsCodec.SystemTextJson.UnionConverter<State>>)>]
         State =
         | Initial
-        | Reserving of {| container : ContainerId; shipments : ShipmentId[] |}
-        | Reverting of {| shipments : ShipmentId[] |}
-        | Assigning of {| container : ContainerId; shipments : ShipmentId[] |}
-        | Assigned  of {| container : ContainerId; shipments : ShipmentId[] |}
+        | Reserving of {| container : ContainerId; shipments : ShipmentId array |}
+        | Reverting of {| shipments : ShipmentId array |}
+        | Assigning of {| container : ContainerId; shipments : ShipmentId array |}
+        | Assigned  of {| container : ContainerId; shipments : ShipmentId array |}
         | Completed of {| success : bool |}
-    let codec = Config.EventCodec.create<Event>()
+    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
 
 module Reactions =
 
@@ -60,10 +60,10 @@ module Fold =
 module Flow =
 
     type Action =
-        | ReserveShipments      of shipmentIds : ShipmentId[]
-        | RevertReservations    of shipmentIds : ShipmentId[]
-        | AssignShipments       of shipmentIds : ShipmentId[] * containerId : ContainerId
-        | FinalizeContainer     of containerId : ContainerId * shipmentIds : ShipmentId[]
+        | ReserveShipments      of shipmentIds : ShipmentId array
+        | RevertReservations    of shipmentIds : ShipmentId array
+        | AssignShipments       of shipmentIds : ShipmentId array * containerId : ContainerId
+        | FinalizeContainer     of containerId : ContainerId * shipmentIds : ShipmentId array
         | Finish                of success : bool
 
     let nextAction : Fold.State -> Action = function
@@ -104,12 +104,9 @@ type Service internal (resolve : TransactionId -> Equinox.Decider<Events.Event, 
 
 module Config =
 
-    let private resolveStream = function
-        | Config.Store.Memory store ->
-            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
-            cat.Resolve
-        | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            cat.Resolve
-    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-    let create = resolveDecider >> Service
+    let private (|Category|) = function
+        | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
+        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Dynamo (context, cache) -> Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Esdb (context, cache) ->   Config.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(streamName >> Config.createDecider cat)

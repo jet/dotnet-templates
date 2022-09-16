@@ -1,20 +1,20 @@
 module Shipping.Domain.Container
 
 let [<Literal>] private Category = "Container"
-let streamName (containerId : ContainerId) = FsCodec.StreamName.create Category (ContainerId.toString containerId)
+let streamName (containerId : ContainerId) = struct (Category, ContainerId.toString containerId)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
     type Event =
-        | Finalized   of {| shipmentIds : ShipmentId[] |}
-        | Snapshotted of {| shipmentIds : ShipmentId[] |}
+        | Finalized   of {| shipmentIds : ShipmentId array |}
+        | Snapshotted of {| shipmentIds : ShipmentId array |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.create<Event>()
+    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
 
 module Fold =
 
-    type State = { shipmentIds : ShipmentId[] }
+    type State = { shipmentIds : ShipmentId array }
     let initial = { shipmentIds = Array.empty }
 
     let evolve (_state : State) (event : Events.Event) : State =
@@ -37,12 +37,9 @@ type Service internal (resolve : ContainerId -> Equinox.Decider<Events.Event, Fo
 
 module Config =
 
-    let private resolveStream = function
-        | Config.Store.Memory store ->
-            let cat = Config.Memory.create Events.codec Fold.initial Fold.fold store
-            cat.Resolve
-        | Config.Store.Cosmos (context, cache) ->
-            let cat = Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-            cat.Resolve
-    let private resolveDecider store = streamName >> resolveStream store >> Config.createDecider
-    let create = resolveDecider >> Service
+    let private (|Category|) = function
+        | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
+        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Dynamo (context, cache) -> Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Config.Store.Esdb (context, cache) ->   Config.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(streamName >> Config.createDecider cat)

@@ -646,7 +646,7 @@ let build (args : Args.Arguments) =
 
 let run args =
 #if (!kafkaEventSpans)
-    Async.Parallel (build args) |> Async.Ignore<unit array>
+    build args |> Async.Parallel |> Async.Ignore<unit array>
 #else
     let sink = build args
     sink.AwaitWithStopOnCancellation()

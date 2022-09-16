@@ -1,18 +1,10 @@
 [<AutoOpen>]
-module Shipping.Watchdog.Integration.Infrastructure
+module Shipping.Watchdog.Integration.Generators
 
 open FsCheck
 open FsCheck.FSharp
 open FsCheck.Xunit
 open FSharp.UMX
-open System
-
-module Async =
-
-    /// Wraps a computation, cancelling (and triggering a timeout exception) if it doesn't complete within the specified timeout
-    let timeoutAfter (timeout : TimeSpan) (c : Async<'a>) = async {
-        let! r = Async.StartChild(c, int timeout.TotalMilliseconds)
-        return! r }
 
 type GuidStringN<[<Measure>]'m> = GuidStringN of string<'m> with static member op_Explicit(GuidStringN x) = x
 

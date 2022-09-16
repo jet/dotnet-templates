@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module Shipping.Watchdog.Infrastructure
+module Shipping.Infrastructure.Helpers
 
 open Serilog
 open System
@@ -8,10 +8,20 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module Log =
+module Exception =
 
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
+    let dump verboseStore (log : ILogger) (exn : exn) =
+        match exn with // TODO provide override option?
+        | :? Microsoft.Azure.Cosmos.CosmosException as e
+            when (e.StatusCode = System.Net.HttpStatusCode.TooManyRequests
+                  || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
+                 && not verboseStore -> ()
+        
+        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded
+        | :? TimeoutException when not verboseStore -> ()
+        
+        | _ ->
+            log.Information(exn, "Unhandled")
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 
@@ -37,6 +47,11 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let monitored = x.ConnectMonitored(databaseId, containerId, "Main")
         let storeClient = Equinox.CosmosStore.CosmosStoreClient(monitored.Database.Client, databaseId, containerId)
         storeClient, monitored
+        
+    /// Connect a CosmosStoreClient, including warming up
+    member x.ConnectStore(connectionName, databaseId, containerId) =
+        x.LogConfiguration(connectionName, databaseId, containerId)
+        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
 
 module CosmosStoreContext =
 
@@ -45,14 +60,52 @@ module CosmosStoreContext =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents = maxEvents)
 
+type Equinox.DynamoStore.DynamoStoreConnector with
+
+    member x.LogConfiguration() =
+        Log.Information("DynamoStore {endpoint} Timeout {timeoutS}s Retries {retries}",
+                        x.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries)
+
+type Equinox.DynamoStore.DynamoStoreClient with
+
+    member internal x.LogConfiguration(role, ?log) =
+        (defaultArg log Log.Logger).Information("DynamoStore {role:l} Table {table} Archive {archive}", role, x.TableName, Option.toObj x.ArchiveTableName)
+    member client.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
+        let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
+        let context = Equinox.DynamoStore.DynamoStoreContext(client)
+        Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
+
+type Equinox.DynamoStore.DynamoStoreContext with
+
+    member internal x.LogConfiguration(log : ILogger) =
+        log.Information("DynamoStore Tip thresholds: {maxTipBytes}b {maxTipEvents}e Query Paging {queryMaxItems} items",
+                        x.TipOptions.MaxBytes, Option.toNullable x.TipOptions.MaxEvents, x.QueryOptions.MaxItems)
+
+type Amazon.DynamoDBv2.IAmazonDynamoDB with
+
+    member x.ConnectStore(role, table) =
+        let storeClient = Equinox.DynamoStore.DynamoStoreClient(x, table)
+        storeClient.LogConfiguration(role)
+        storeClient
+
+module DynamoStoreContext =
+
+    /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
+    let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
+        Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
+
+module EventStoreContext =
+
+    let create (storeConnection : Equinox.EventStoreDb.EventStoreConnection) =
+        Equinox.EventStoreDb.EventStoreContext(storeConnection, batchSize = 200)
+
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
     static member Configure(configuration : LoggerConfiguration, ?verbose) =
         configuration
-            .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
+        |> fun c -> let t = "{Timestamp:HH:mm:ss} {Level:u1} {Message:lj} {SourceContext} {Properties}{NewLine}{Exception}"
                     c.WriteTo.Console(theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate = t)
