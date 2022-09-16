@@ -7,7 +7,8 @@
     "Web"
   ],
   "tags": {
-    "language": "C#"
+    "language": "C#",
+    "type": "solution"
   },
   "identity": "Equinox.Template.CSharp",
   "name": "Equinox Web App",

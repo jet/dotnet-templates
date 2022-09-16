@@ -29,11 +29,12 @@ type EqxWebs() as this =
     inherit TheoryData<string, string list>()
 
     do for t in ["eqxweb"; "eqxwebcs"] do
-        do this.Add(t, ["--todos"; "--cosmos"])
+            do this.Add(t, ["--todos"; "--cosmos"])
 #if !DEBUG
-        do this.Add(t, ["--todos"])
-        do this.Add(t, ["--todos"; "--eventStore"])
+            do this.Add(t, ["--todos"])
+            do this.Add(t, ["--todos"; "--eventStore"])
 #endif
+       do this.Add("eqxweb", ["--todos"; "--cosmos"; "--aggregate"; "--dynamo"])
 
 type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
 
@@ -44,7 +45,7 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
         Dotnet.build [folder]
 
     #if DEBUG // Use this one to trigger an individual test
-    let [<Fact>] ``*pending*`` ()               = run "proProjector" ["--source cosmos"; "--kafka"]
+    let [<Fact>] ``*pending*`` ()               = run "eqxwebcs" ["--todos"; "--eventStore"]
     #endif
 
     let [<Fact>] eqxPatterns ()                 = run "eqxPatterns" []

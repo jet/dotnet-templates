@@ -21,7 +21,7 @@ namespace TodoBackendTemplate
 
             static readonly SystemTextJsonUtf8Codec Codec = new(new());
             
-            public static FSharpValueOption<Event> TryDecode(string et, byte[] json) =>
+            public static FSharpValueOption<Event> TryDecode(string et, ReadOnlyMemory<byte> json) =>
                 et switch
                 {
                     nameof(Happened) => Codec.Decode<Happened>(json),

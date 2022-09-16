@@ -173,6 +173,17 @@ type Startup() =
                 failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar containerVar
 
 //#endif
+//#if dynamo
+        let storeConfig =
+            let regionVar, tableVar = "EQUINOX_DYNAMO_REGION", "EQUINOX_DYNAMO_TABLE"
+            let read key = Environment.GetEnvironmentVariable key |> Option.ofObj
+            match read regionVar, read tableVar with
+            | Some region, Some table ->
+                Storage.Store.Dynamo (region, table, cacheMb)
+            | _ ->
+                failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s" regionVar tableVar
+
+//#endif
 #if (memoryStore && !cosmos && !dynamo && !eventStore)
         let storeConfig = Storage.Store.Memory
 

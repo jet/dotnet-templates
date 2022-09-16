@@ -82,7 +82,7 @@ namespace TodoBackendTemplate.Web
             // # run as a single-node cluster to allow connection logic to use cluster mode as for a commercial cluster
             // & $env:ProgramData\chocolatey\bin\EventStore.ClusterNode.exe --gossip-on-single-node --discover-via-dns 0 --ext-http-port=30778
 
-            var esConfig = new EventStoreConfig("localhost", "admin", "changeit", cacheMb);
+            var esConfig = new EventStoreConfig("esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?tls=true&tlsVerifyCert=false", cacheMb);
             return new EventStoreContext(esConfig);
 #endif
 #if cosmos
@@ -130,7 +130,7 @@ namespace TodoBackendTemplate.Web
         public Todo.Service CreateTodoService()
         {
             var resolve =
-                _context.Resolve<Todo.Event, Todo.State>(
+                _context.Resolve(
                     _handlerLog,
                     EquinoxCodec.Create(Todo.Event.Encode, Todo.Event.TryDecode),
                     Todo.State.Fold,
@@ -142,15 +142,18 @@ namespace TodoBackendTemplate.Web
 
 #endif
 #if aggregate
-        public Aggregate.Service CreateAggregateService() =>
-            new Aggregate.Service(
+        public Aggregate.Service CreateAggregateService()
+        {
+            var resolve =
                 _context.Resolve(
                     _handlerLog,
                     EquinoxCodec.Create(Aggregate.Event.Encode, Aggregate.Event.TryDecode),
                     Aggregate.State.Fold,
                     Aggregate.State.Initial,
                     Aggregate.State.IsOrigin,
-                    Aggregate.State.Snapshot));
+                    Aggregate.State.Snapshot);
+            return new Aggregate.Service(ids => resolve(Aggregate.Event.StreamIds(ids)));
+        }
 #endif
 #if (!aggregate && !todos)
 //        public Thing.Service CreateThingService() =>
