@@ -2,7 +2,7 @@ module ProjectorTemplate.Config
 
 let log = Serilog.Log.ForContext("isMetric", true)
 
-// #if (esdb || sss || cosmos)
+// #if (cosmos || esdb || sss)
 module Cosmos =
 
     let private createCached codec initial fold accessStrategy (context, cache) : Equinox.Category<_, _, _> =
@@ -32,7 +32,6 @@ module Dynamo =
         let accessStrategy = Equinox.DynamoStore.AccessStrategy.RollingState toSnapshot
         createCached codec initial fold accessStrategy (context, cache)
 
-#if !(sourceKafka && kafka)
 module Esdb =
 
     let create codec initial fold (context, cache) =
@@ -45,13 +44,9 @@ module Sss =
         let cacheStrategy = Equinox.SqlStreamStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.SqlStreamStore.SqlStreamStoreCategory(context, codec, fold, initial, cacheStrategy)
 
-#endif
-
-// #if (esdb || sss || dynamo)    
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Store =
-#if (esdb || sss)
+#if (esdb || sss || cosmos)
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
 #endif    
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-// #endif
