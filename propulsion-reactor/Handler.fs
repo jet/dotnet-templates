@@ -87,6 +87,6 @@ type Config private () =
                             maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
-
+    
     static member StartSource(log, sink, sourceConfig) =
         SourceConfig.start (log, Config.log) sink categoryFilter sourceConfig

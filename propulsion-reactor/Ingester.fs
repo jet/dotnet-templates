@@ -31,6 +31,10 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
         logExternalStats |> Option.iter (fun dumpTo -> dumpTo log)
 
 #if blank
+let categoryFilter = function
+    | sn when sn = "Todos" -> true
+    | _ -> false
+    
 let handle struct (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
     | FsCodec.StreamName.CategoryAndId ("Todos", id), _ ->
@@ -47,6 +51,10 @@ let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryD
         [| for x in x.items ->
             { id = x.id; order = x.order; title = x.title; completed = x.completed } |] }
 
+let categoryFilter = function
+    | Todo.Reactions.Category -> true
+    | _ -> false
+
 let handle
         (sourceService : Todo.Service)
         (summaryService : TodoSummary.Service)
@@ -59,3 +67,15 @@ let handle
         | false -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Skipped span.Length
     | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
 #endif
+
+type Config private () =
+    
+    static member StartSink(log : Serilog.ILogger, stats,
+                            handle : struct (FsCodec.StreamName * Propulsion.Streams.Default.StreamSpan)
+                                     -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
+                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
+                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+    
+    static member StartSource(log, sink, sourceConfig) =
+        SourceConfig.start (log, Config.log) sink categoryFilter sourceConfig

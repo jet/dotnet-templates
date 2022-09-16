@@ -229,26 +229,29 @@ let build (args : Args.Arguments) =
             (   Log.Logger, consumerConfig, parseStreamEvents, handle, maxConcurrentStreams,
                 stats = stats, statsInterval = args.StateInterval)
     [|  pipeline.AwaitWithStopOnCancellation()
-#else
+#else // !sourceKafka
     let sink =
-#if kafka // kafka 
-#if blank // kafka && blank
+#if kafka // !sourceKafka && kafka 
+#if blank // !sourceKafka && kafka && blank
         Handler.Config.StartSink(log, stats, handle, maxReadAhead, maxConcurrentStreams, purgeInterval = args.PurgeInterval)
-#else // kafka && !blank
+#else // !sourceKafka && kafka && !blank
         Propulsion.Streams.Sync.StreamsSync.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, handle, stats, args.StatsInterval,
             Propulsion.Streams.Default.jsonSize, Propulsion.Streams.Default.eventSize)
-#endif // kafka && !blank
-#else // !kafka (i.e., ingester)
-        Handler.Config.StartSink(log, stats, handle, maxReadAhead, maxConcurrentStreams, purgeInterval = args.PurgeInterval)
-#endif // !kafka
+#endif // !sourceKafka && kafka && !blank
+#else // !sourceKafka && !kafka (i.e., ingester)
+        Ingester.Config.StartSink(log, stats, handle, maxReadAhead, maxConcurrentStreams, purgeInterval = args.PurgeInterval)
+#endif // !sourceKafka && !kafka
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig log consumerGroupName
+#if kafka        
         Handler.Config.StartSource(log, sink, sourceConfig)
-        
+#else
+        Ingester.Config.StartSource(log, sink, sourceConfig)
+#endif
     [|  source.AwaitWithStopOnCancellation()
         sink.AwaitWithStopOnCancellation()
-#endif
+#endif // !sourceKafka
         Async.AwaitKeyboardInterruptAsTaskCanceledException() |]
 
 [<EntryPoint>]
