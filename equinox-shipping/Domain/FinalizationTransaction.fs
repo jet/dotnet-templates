@@ -2,7 +2,7 @@ module Shipping.Domain.FinalizationTransaction
 
 let [<Literal>] Category = "FinalizationTransaction"
 let streamName (transactionId : TransactionId) = struct (Category, TransactionId.toString transactionId)
-let (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> Some transId | _ -> None
+let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =

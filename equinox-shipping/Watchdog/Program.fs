@@ -24,7 +24,7 @@ module Args =
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Esdb of ParseResults<SourceArgs.Esdb.Parameters>
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | ProcessorName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
@@ -37,35 +37,33 @@ module Args =
                 | Cosmos _ ->               "specify CosmosDB parameters."
                 | Dynamo _ ->               "specify DynamoDB input parameters"
                 | Esdb _ ->                 "specify EventStore DB input parameters"
-    and Arguments(c : SourceArgs.Configuration, a : ParseResults<Parameters>) =
-        let maxReadAhead =                  a.GetResult(MaxReadAhead, 16)
-        let maxConcurrentProcessors =       a.GetResult(MaxWriters, 8)
-        member val Verbose =                a.Contains Parameters.Verbose
-        member val ProcessorName =          a.GetResult ProcessorName
+    and Arguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
+        let processorName =                 p.GetResult ProcessorName
+        let maxReadAhead =                  p.GetResult(MaxReadAhead, 16)
+        let maxConcurrentProcessors =       p.GetResult(MaxWriters, 8)
+        member val Verbose =                p.Contains Parameters.Verbose
         member val ProcessManagerMaxDop =   4
         member val CacheSizeMb =            10
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 10.
         member val PurgeInterval =          TimeSpan.FromHours 1.
-        member val IdleDelay =              a.GetResult(IdleDelayMs, 1000) |> TimeSpan.FromMilliseconds
-        member val WakeForResults =         a.Contains WakeForResults
+        member val IdleDelay =              p.GetResult(IdleDelayMs, 1000) |> TimeSpan.FromMilliseconds
+        member val WakeForResults =         p.Contains WakeForResults
         member x.ProcessorParams() =        Log.Information("Watching... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
-                                                            x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
-                                            (x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
-        member val ProcessingTimeout =      a.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
-        // member val Cosmos =                 CosmosSourceArguments(c, a.GetResult Cosmos)
+                                                            processorName, maxReadAhead, maxConcurrentProcessors)
+                                            (processorName, maxReadAhead, maxConcurrentProcessors)
+        member val ProcessingTimeout =      p.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
         member val Store : Choice<SourceArgs.Cosmos.Arguments, SourceArgs.Dynamo.Arguments, SourceArgs.Esdb.Arguments> =
-                                            match a.GetSubCommand() with
+                                            match p.GetSubCommand() with
                                             | Cosmos a -> Choice1Of3 <| SourceArgs.Cosmos.Arguments(c, a)
                                             | Dynamo a -> Choice2Of3 <| SourceArgs.Dynamo.Arguments(c, a)
                                             | Esdb a ->   Choice3Of3 <| SourceArgs.Esdb.Arguments(c, a)
                                             | a ->        Args.missingArg $"Unexpected Store subcommand %A{a}"
-        member x.StoreVerbose =             match x.Store with
+        member x.VerboseStore =             match x.Store with
                                             | Choice1Of3 s -> s.Verbose
                                             | Choice2Of3 s -> s.Verbose
                                             | Choice3Of3 s -> s.Verbose
-
-        member x.ConnectStoreAndSource(appName) : Config.Store<_> * (ILogger -> string -> SourceConfig) * (Serilog.ILogger -> unit) =
+        member x.ConnectStoreAndSource(appName) : Config.Store<_> * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | Choice1Of3 a ->
@@ -111,7 +109,7 @@ let build (args : Args.Arguments) =
     let store, buildSourceConfig, dumpMetrics = args.ConnectStoreAndSource(AppName)
     let log = Log.Logger
     let sink =
-        let stats = Handler.Stats(log, args.StatsInterval, args.StateInterval, args.StoreVerbose, dumpMetrics)
+        let stats = Handler.Stats(log, args.StatsInterval, args.StateInterval, args.VerboseStore, dumpMetrics)
         let manager = Shipping.Domain.FinalizationProcess.Config.create args.ProcessManagerMaxDop store
         Handler.Config.StartSink(log, stats, manager, args.ProcessingTimeout, maxReadAhead, maxConcurrentStreams,
                                  wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
@@ -120,7 +118,7 @@ let build (args : Args.Arguments) =
         Handler.Config.StartSource(log, sink, sourceConfig)
     sink, source
 
-open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCancelledException
+open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
 let run args =
     let sink, source = build args

@@ -97,8 +97,7 @@ module DynamoStoreContext =
 module EventStoreContext =
 
     let create (storeConnection : Equinox.EventStoreDb.EventStoreConnection) =
-        let batchingPolicy = Equinox.EventStoreDb.BatchingPolicy(maxBatchSize = 200)
-        Equinox.EventStoreDb.EventStoreContext(storeConnection, batchingPolicy)
+        Equinox.EventStoreDb.EventStoreContext(storeConnection, batchSize = 200)
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =

@@ -100,7 +100,7 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
  
    - processing is fully idempotent; retries, concurrent or overlapping transactions are intended to be handled thoroughly and correctly
    - if any `Shipment`s cannot be `Reserved`, those that have been get `Revoked`, and the failure is reported to the caller
-   - includes a `Watchdog` console app (based on `dotnet new proReactor --source changeFeedOnly --blank`) responsible for concluding abandoned transaction instances (e.g., where processing is carried out in response to a HTTP request and the Clients fails to retry after a transient failure leaves processing in a non-terminal state).
+   - includes a `Watchdog` console app (based on `dotnet new proReactor --blank`) responsible for concluding abandoned transaction instances (e.g., where processing is carried out in response to a HTTP request and the Clients fails to retry after a transient failure leaves processing in a non-terminal state).
 
 ## Walkthrough
 
@@ -298,7 +298,6 @@ type Logging() =
     [<Extension>]
     static member Configure(configuration : LoggingConfiguration, ?verbose) =
         configuration
-            .Destructure.FSharpTypes()
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         // etc.

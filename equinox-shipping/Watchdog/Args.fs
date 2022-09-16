@@ -2,6 +2,7 @@
 module Shipping.Infrastructure.Args
 
 open System
+module Config = Shipping.Domain.Config
 
 exception MissingArg of message : string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
@@ -36,10 +37,10 @@ type Configuration(tryGet : string -> string option) =
 
 // Type used to represent where checkpoints (for either the FeedConsumer position, or for a Reactor's Event Store subscription position) will be stored
 // In a typical app you don't have anything like this as you'll simply use your primary Event Store (see)
-module CheckpointStore =
+module Checkpoints =
 
     [<RequireQualifiedAccess; NoComparison; NoEquality>]
-    type Config =
+    type Store =
         | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
         | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
         (*  Propulsion.EventStoreDb does not implement a native checkpoint storage mechanism,
@@ -49,11 +50,18 @@ module CheckpointStore =
 
             For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
 
-    let create (consumerGroup, checkpointInterval) storeLog : Config -> Propulsion.Feed.IFeedCheckpointStore = function
-        | Config.Cosmos (context, cache) ->
+    let private create (consumerGroup, checkpointInterval) storeLog : Store  -> Propulsion.Feed.IFeedCheckpointStore = function
+        | Store.Cosmos (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.CosmosStore.create storeLog (consumerGroup, checkpointInterval) (context, cache)
-        | Config.Dynamo (context, cache) ->
+        | Store.Dynamo (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.DynamoStore.create storeLog (consumerGroup, checkpointInterval) (context, cache)
+    let createCheckpointStore (group, checkpointInterval, store : Config.Store<_>) : Propulsion.Feed.IFeedCheckpointStore =
+        let checkpointStore : Store =
+            match store with
+            | Config.Store.Cosmos (context, cache) -> Store.Cosmos (context, cache)
+            | Config.Store.Dynamo (context, cache) -> Store.Dynamo (context, cache)
+            | Config.Store.Memory _ | Config.Store.Esdb _ -> missingArg "Unexpected store type"
+        create (group, checkpointInterval) Config.log checkpointStore
 
 open Argu
 
@@ -69,7 +77,7 @@ module Cosmos =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose _ ->              "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
@@ -79,17 +87,17 @@ module Cosmos =
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
 
-    type Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        let connection =                    a.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection)
+    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+        let connection =                    p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection)
         let discovery =                     Equinox.CosmosStore.Discovery.ConnectionString connection
-        let mode =                          a.TryGetResult ConnectionMode
-        let timeout =                       a.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
-        let retries =                       a.GetResult(Retries, 1)
-        let maxRetryWaitTime =              a.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
+        let mode =                          p.TryGetResult ConnectionMode
+        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       p.GetResult(Retries, 1)
+        let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      a.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     a.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member val Verbose =                a.Contains Verbose
+        let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
 module Dynamo =
@@ -104,7 +112,7 @@ module Dynamo =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesTimeoutS of float
         interface IArgParserTemplate with
-            member a.Usage = a |> function
+            member p.Usage = p |> function
                 | Verbose ->                "Include low level Store logging."
                 | RegionProfile _ ->        "specify an AWS Region (aka System Name, e.g. \"us-east-1\") to connect to using the implicit AWS SDK/tooling config and/or environment variables etc. Optional if:\n" +
                                             "1) $" + REGION + " specified OR\n" +
@@ -139,65 +147,18 @@ module Dynamo =
                                             let client = connector.CreateClient()
                                             client.ConnectStore("Main", table)
 
-module Esdb =
+type [<RequireQualifiedAccess; NoComparison; NoEquality>]
+    TargetStoreArgs =
+    | Cosmos of Cosmos.Arguments
+    | Dynamo of Dynamo.Arguments
 
-    (* Not yet required as there's no host app that would use this logic
+module TargetStoreArgs =
     
-    [<NoEquality; NoComparison>]
-    type Parameters =
-        | [<AltCommandLine "-V">]           Verbose
-        | [<AltCommandLine "-c">]           Connection of string
-        | [<AltCommandLine "-p"; Unique>]   Credentials of string
-        | [<AltCommandLine "-o">]           Timeout of float
-        | [<AltCommandLine "-r">]           Retries of int
-
-        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<Cosmos.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Dynamo of ParseResults<Dynamo.Parameters>
-        interface IArgParserTemplate with
-            member a.Usage = a |> function
-                | Verbose ->                "Include low level Store logging."
-                | Connection _ ->           "EventStore Connection String. (optional if environment variable EQUINOX_ES_CONNECTION specified)"
-                | Credentials _ ->          "Credentials string for EventStore (used as part of connection string, but NOT logged). Default: use EQUINOX_ES_CREDENTIALS environment variable (or assume no credentials)"
-                | Timeout _ ->              "specify operation timeout in seconds. Default: 20."
-                | Retries _ ->              "specify operation retries. Default: 3."
-
-                // Feed Consumer app needs somewhere to store checkpoints
-                // Here we align with the structure of the commandline parameters for the Reactor app and also require a Dynamo or Cosmos instance to be specified
-                | Cosmos _ ->               "CosmosDB (Checkpoint/Target) Store parameters (Not applicable for Web app)."
-                | Dynamo _ ->               "DynamoDB (Checkpoint/Target) Store parameters (Not applicable to Web app)."
-
-    type Arguments(c : Configuration, a : ParseResults<Parameters>) =
-        let connectionStringLoggable =      a.TryGetResult Connection |> Option.defaultWith (fun () -> c.EventStoreConnection)
-        let credentials =                   a.TryGetResult Credentials |> Option.orElseWith (fun () -> c.EventStoreCredentials)
-        let discovery =                     match credentials with Some x -> String.Join(";", connectionStringLoggable, x) | None -> connectionStringLoggable
-                                            |> Equinox.EventStoreDb.Discovery.ConnectionString
-        let retries =                       a.GetResult(Retries, 3)
-        let timeout =                       a.GetResult(Timeout, 20.) |> TimeSpan.FromSeconds
-        member _.Verbose =                  a.Contains Verbose
-
-        member x.Connect(log : ILogger, appName, nodePreference) : Equinox.EventStoreDb.EventStoreConnection =
-            log.Information("EventStore {discovery}", connectionStringLoggable)
-            let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
-            Equinox.EventStoreDb.EventStoreConnector(timeout, retries, tags = tags)
-                .Establish(appName, discovery, Equinox.EventStoreDb.ConnectionStrategy.ClusterSingle nodePreference)
-
-        member _.TargetStoreArgs : TargetStoreArgs =
-            match a.GetSubCommand() with
-            | Cosmos cosmos -> TargetStoreArgs.Cosmos (Cosmos.Arguments(c, cosmos))
-            | Dynamo dynamo -> TargetStoreArgs.Dynamo (Dynamo.Arguments(c, dynamo))
-            | _ -> missingArg "Must specify `cosmos` or `dynamo` target store when source is `esdb`"
-*)
-    type [<RequireQualifiedAccess; NoComparison; NoEquality>]
-        TargetStoreArgs =
-        | Cosmos of Cosmos.Arguments
-        | Dynamo of Dynamo.Arguments
-
-    module TargetStoreArgs =
-        let connectCheckpointStore args cache : CheckpointStore.Config =
-            match args with
-            | TargetStoreArgs.Cosmos a ->
-                let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-                CheckpointStore.Config.Cosmos (context, cache)
-            | TargetStoreArgs.Dynamo a ->
-                let context = a.Connect() |> DynamoStoreContext.create
-                CheckpointStore.Config.Dynamo (context, cache)
+    let connectTarget targetStore cache : Config.Store<_> =
+        match targetStore with
+        | TargetStoreArgs.Cosmos a ->
+            let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+            Config.Store.Cosmos (context, cache)
+        | TargetStoreArgs.Dynamo a ->
+            let context = a.Connect() |> DynamoStoreContext.create
+            Config.Store.Dynamo (context, cache)

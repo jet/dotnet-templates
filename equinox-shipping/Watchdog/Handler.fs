@@ -55,9 +55,9 @@ let handle
 type Config private () =
     
     static member private StartSink(log : Serilog.ILogger, stats : Stats,
-                            handle : struct (FsCodec.StreamName * Propulsion.Streams.Default.StreamSpan) ->
-                                     Async<struct (Propulsion.Streams.SpanResult * Outcome)>,
-                                    maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+                            handle : struct (FsCodec.StreamName * Propulsion.Streams.Default.StreamSpan)
+                                     -> Async<struct (Propulsion.Streams.SpanResult * Outcome)>,
+                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 

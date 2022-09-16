@@ -68,8 +68,7 @@ module SourceConfig =
                     log, statsInterval,
                     indexStore, batchSizeCutoff, tailSleepInterval,
                     checkpoints, sink, loadMode,
-                    startFromTail = startFromTail, storeLog = storeLog,
-                    trancheIds = [|Propulsion.Feed.TrancheId.parse "0"|]) // TEMP filter for additional clones of index data in target Table
+                    startFromTail = startFromTail, storeLog = storeLog)
             source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
     module Esdb =
         open Propulsion.EventStoreDb
