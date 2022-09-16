@@ -27,7 +27,9 @@
         <Compile Include="Args.fs" />
         <Compile Include="SourceArgs.fs" />
         <Compile Include="SourceConfig.fs" />
+        <!--#if (!sourceKafka || kafka) -->
         <Compile Include="Handler.fs" />
+        <!--#endif-->
         <Compile Include="Program.fs" />
     </ItemGroup>
 
