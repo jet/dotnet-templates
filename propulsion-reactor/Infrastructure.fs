@@ -114,11 +114,13 @@ type Equinox.DynamoStore.DynamoStoreClient with
 
     member internal x.LogConfiguration(role, ?log) =
         (defaultArg log Log.Logger).Information("DynamoStore {role:l} Table {table} Archive {archive}", role, x.TableName, Option.toObj x.ArchiveTableName)
+#if !sourceKafka        
     member client.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
         let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
         let context = Equinox.DynamoStore.DynamoStoreContext(client)
         Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
 
+#endif
 type Equinox.DynamoStore.DynamoStoreContext with
 
     member internal x.LogConfiguration(log : ILogger) =
