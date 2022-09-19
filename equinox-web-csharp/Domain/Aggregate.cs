@@ -43,7 +43,7 @@ namespace TodoBackendTemplate
             static void Evolve(State s, Event x) =>
                 s.Happened = x switch
                 {
-                    Event.Happened e => true,
+                    Event.Happened => true,
                     Event.Snapshotted e => e.HasHappened,
                     _ => throw new ArgumentOutOfRangeException(nameof(x), x, "invalid")
                 };
@@ -73,10 +73,10 @@ namespace TodoBackendTemplate
             {
                 switch (this)
                 {
-                    case MakeItSo c:
+                    case MakeItSo:
                         if (!s.Happened) yield return new Event.Happened();
                         break;
-                    default: throw new ArgumentOutOfRangeException("this", this, "invalid");
+                    default: throw new ArgumentOutOfRangeException(nameof(Command), this, "invalid");
                 }
             }
         }

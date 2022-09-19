@@ -37,18 +37,18 @@ namespace TodoBackendTemplate
 
             public class Deleted : Event
             {
-                public int Id { get; set; }
+                public int Id { get; init; }
             }
 
             public class Cleared : Event
             {
-                public int NextId { get; set; }
+                public int NextId { get; init; }
             }
 
             public class Snapshotted : Event
             {
-                public int NextId { get; set; }
-                public ItemData[] Items { get; set; }
+                public int NextId { get; init; }
+                public ItemData[] Items { get; init; }
             }
 
             static readonly SystemTextJsonUtf8Codec Codec =
@@ -83,13 +83,13 @@ namespace TodoBackendTemplate
             public int NextId { get; }
             public Event.ItemData[] Items { get; }
 
-            internal State(int nextId, Event.ItemData[] items)
+            private State(int nextId, Event.ItemData[] items)
             {
                 NextId = nextId;
                 Items = items;
             }
 
-            public static readonly State Initial = new State(0, Array.Empty<Event.ItemData>());
+            public static readonly State Initial = new (0, Array.Empty<Event.ItemData>());
 
             /// Folds a set of events from the store into a given `state`
             public static State Fold(State origin, IEnumerable<Event> xs)
@@ -120,7 +120,7 @@ namespace TodoBackendTemplate
                             items = e.Items.ToList();
                             break;
                         default:
-                            throw new ArgumentOutOfRangeException(nameof(x), x, "invalid");
+                            throw new ArgumentOutOfRangeException(nameof(Command), x, "invalid");
                     }
                 return new State(nextId, items.ToArray());
             }
@@ -135,9 +135,9 @@ namespace TodoBackendTemplate
         /// Properties that can be edited on a Todo List item
         public class Props
         {
-            public int Order { get; set; }
-            public string Title { get; set; }
-            public bool Completed { get; set; }
+            public int Order { get; init; }
+            public string Title { get; init; }
+            public bool Completed { get; init; }
         }
 
         /// Defines the operations a caller can perform on a Todo List
@@ -146,23 +146,23 @@ namespace TodoBackendTemplate
             /// Create a single item
             public class Add : Command
             {
-                public Props Props { get; set; }
+                public Props Props { get; init; }
             }
 
             /// Update a single item
             public class Update : Command
             {
-                public int Id { get; set; }
-                public Props Props { get; set; }
+                public int Id { get; init; }
+                public Props Props { get; init; }
             }
 
             /// Delete a single item from the list
             public class Delete : Command
             {
-                public int Id { get; set; }
+                public int Id { get; init; }
             }
 
-            /// Complete clear the todo list
+            /// Completely clear the list
             public class Clear : Command
             {
             }
@@ -189,12 +189,13 @@ namespace TodoBackendTemplate
                         if (s.Items.Any(i => i.Id == c.Id))
                             yield return new Event.Deleted {Id = c.Id};
                         break;
-                    case Clear _:
-                        if (s.Items.Any()) yield return new Event.Cleared {NextId = s.NextId};
+                    case Clear:
+                        if (s.Items.Any())
+                            yield return new Event.Cleared {NextId = s.NextId};
                         break;
 
                     default:
-                        throw new ArgumentOutOfRangeException("this", this, "invalid");
+                        throw new ArgumentOutOfRangeException(nameof(s), this, "invalid");
                 }
 
                 T Make<T>(int id, Props value) where T : Event.ItemEvent, new() =>
@@ -205,10 +206,10 @@ namespace TodoBackendTemplate
         /// A single Item in the Todo List
         public class View
         {
-            public int Id { get; set; }
-            public int Order { get; set; }
-            public string Title { get; set; }
-            public bool Completed { get; set; }
+            public int Id { get; init; }
+            public int Order { get; init; }
+            public string Title { get; init; }
+            public bool Completed { get; init; }
         }
 
         /// Defines operations that a Controller can perform on a Todo List
