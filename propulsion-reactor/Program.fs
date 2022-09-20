@@ -4,7 +4,6 @@
 open Equinox.EventStoreDb
 open Equinox.SqlStreamStore
 #endif
-open Infrastructure
 open Serilog
 open System
 
@@ -13,6 +12,24 @@ type Configuration(tryGet) =
 
 module Args =
 
+    [<NoComparison; NoEquality>]
+    type Source =
+#if sourceKafka
+        | Kafka of SourceArgs.Kafka.Arguments
+        member _.VerboseStore = false
+#else
+        | Cosmos of SourceArgs.Cosmos.Arguments
+        | Dynamo of SourceArgs.Dynamo.Arguments
+        | Esdb of SourceArgs.Esdb.Arguments
+        | SqlMs of SourceArgs.Sss.Arguments
+        member x.VerboseStore =
+            match x with
+            | Cosmos s -> s.Verbose
+            | Dynamo s -> s.Verbose
+            | Esdb s -> s.Verbose
+            | SqlMs s -> false
+#endif
+
     open Argu
     [<NoEquality; NoComparison>]
     type Parameters =
@@ -20,13 +37,17 @@ module Args =
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
-#if sourceKafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<SourceArgs.Kafka.Parameters>
+#if kafka
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
 #else
+#if     sourceKafka // && kafka
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<SourceArgs.Kafka.Parameters>
+#else   // kafka && !sourceKafka
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Esdb of ParseResults<SourceArgs.Esdb.Parameters>
         | [<CliPrefix(CliPrefix.None); Unique; Last>] SqlMs of ParseResults<SourceArgs.Sss.Parameters>
+#endif
 #endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
@@ -34,7 +55,10 @@ module Args =
                 | ProcessorName _ ->        "Projector consumer group name."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
-#if sourceKafka
+#if kafka                
+                | Kafka _ ->                "Kafka Sink parameters."
+#else                
+#if     sourceKafka // && kafka
                 | Kafka _ ->                "specify Kafka input parameters."
 #else                
                 | Cosmos _ ->               "specify CosmosDB input parameters."
@@ -42,12 +66,14 @@ module Args =
                 | Esdb _ ->                 "specify EventStore input parameters."
                 | SqlMs _ ->                "specify SqlStreamStore input parameters."
 #endif
+#endif
     and Arguments(c : Configuration, p : ParseResults<Parameters>) =
         let processorName =                 p.GetResult ProcessorName
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 16)
         let maxConcurrentStreams =          p.GetResult(MaxWriters, 8)
         let cacheSizeMb =                   10
         member val Verbose =                p.Contains Verbose
+        member x.VerboseStore =             x.Source.VerboseStore           
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val PurgeInterval =          TimeSpan.FromHours 1.
@@ -56,47 +82,26 @@ module Args =
                                                             processorName, maxReadAhead, maxConcurrentStreams)
                                             (processorName, maxReadAhead, maxConcurrentStreams)
 #if sourceKafka
-        member _.ConnectStoreAndSource(appName) : _ * _ * _ * (string -> FsKafka.KafkaConsumerConfig) * (ILogger -> unit) =
-            let a =
-                match p.GetSubCommand() with
-                | Kafka p -> SourceArgs.Kafka.Arguments(c, p)
-                | p -> Args.missingArg $"Unexpected Source subcommand %A{p}"
+        member x.ConnectStoreAndSource(appName) : _ * _ * _ * (string -> FsKafka.KafkaConsumerConfig) * (ILogger -> unit) =
+            let (Source.Kafka a) = x.Source
             let createConsumerConfig groupName =
                 FsKafka.KafkaConsumerConfig.Create(
                     appName, a.Broker, [a.Topic], groupName, Confluent.Kafka.AutoOffsetReset.Earliest,
                     maxInFlightBytes = a.MaxInFlightBytes, ?statisticsInterval = a.LagFrequency)
 #if (kafka && blank)
-            let targetStore = () in targetStore, targetStore, a.Kafka, createConsumerConfig, ignore
+            let targetStore = () in targetStore, targetStore, x.Sink, createConsumerConfig, ignore
 #else
             let cache = Equinox.Cache (appName, sizeMb = cacheSizeMb)
             let targetStore = a.ConnectTarget cache
-#if kafka
-            let kafka = a.Kafka
-#else
-            let kafka = ()
-#endif
-            targetStore, targetStore, kafka, createConsumerConfig, fun log ->
+            targetStore, targetStore, x.Sink, createConsumerConfig, fun log ->
                 Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
                 Equinox.DynamoStore.Core.Log.InternalMetrics.dump log
 #endif                       
-        member val VerboseStore =           false
 #else            
-        member val Store : Choice<SourceArgs.Cosmos.Arguments, SourceArgs.Dynamo.Arguments, SourceArgs.Esdb.Arguments, SourceArgs.Sss.Arguments> =
-                                            match p.GetSubCommand() with
-                                            | Cosmos p -> Choice1Of4 <| SourceArgs.Cosmos.Arguments(c, p)
-                                            | Dynamo p -> Choice2Of4 <| SourceArgs.Dynamo.Arguments(c, p)
-                                            | Esdb p ->   Choice3Of4 <| SourceArgs.Esdb.Arguments(c, p)
-                                            | SqlMs p ->  Choice4Of4 <| SourceArgs.Sss.Arguments(c, p)
-                                            | p ->        Args.missingArg $"Unexpected Store subcommand %A{p}"
-        member x.VerboseStore =             match x.Store with
-                                            | Choice1Of4 s -> s.Verbose
-                                            | Choice2Of4 s -> s.Verbose
-                                            | Choice3Of4 s -> s.Verbose
-                                            | Choice4Of4 s -> false
         member x.ConnectStoreAndSource(appName) : Config.Store * _ * _ * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = cacheSizeMb)
-            match x.Store with
-            | Choice1Of4 a ->
+            match x.Source with
+            | Source.Cosmos a ->
                 let client, monitored = a.ConnectStoreAndMonitored()
                 let buildSourceConfig log groupName =
                     let leases, startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams(log)
@@ -104,18 +109,13 @@ module Args =
                     SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
                 let context = client |> CosmosStoreContext.create
                 let store = Config.Store.Cosmos (context, cache)
-#if kafka
-                let kafka = a.Kafka
 #if blank
                 let targetStore = store
 #else                
                 let targetStore = a.ConnectTarget(cache)
 #endif
-#else
-                let kafka, targetStore = (), a.ConnectTarget(cache)
-#endif
-                store, targetStore, kafka, buildSourceConfig, Equinox.CosmosStore.Core.Log.InternalMetrics.dump
-            | Choice2Of4 a ->
+                store, targetStore, x.Sink, buildSourceConfig, Equinox.CosmosStore.Core.Log.InternalMetrics.dump
+            | Source.Dynamo a ->
                 let context = a.Connect()
                 let buildSourceConfig log groupName =
                     let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
@@ -123,55 +123,109 @@ module Args =
                     let load = DynamoLoadModeConfig.Hydrate (context, streamsDop)
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 let store = Config.Store.Dynamo (context, cache)
-#if kafka
-                let kafka = a.Kafka
 #if blank
                 let targetStore = store
 #else                
                 let targetStore = a.ConnectTarget(cache)
 #endif
-#else
-                let kafka, targetStore = (), a.ConnectTarget(cache)
-#endif
-                store, targetStore, kafka, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
-            | Choice3Of4 a ->
-                let connection = a.Connect(Log.Logger, appName, EventStore.Client.NodePreference.Leader)
+                store, targetStore, x.Sink, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
+            | Source.Esdb a ->
+                let connection = a.Connect(appName, EventStore.Client.NodePreference.Leader)
                 let context = EventStoreContext connection
                 let store = Config.Store.Esdb (context, cache)
+#if blank
+                let targetStore = store
+#else                
                 let targetStore = a.ConnectTarget(cache)
+#endif
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, targetStore)
                     let hydrateBodies = true
                     SourceConfig.Esdb (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
-#if kafka
-                let kafka = a.Kafka
-#else
-                let kafka = ()
-#endif
-                store, targetStore, kafka, buildSourceConfig, fun log ->
+                store, targetStore, x.Sink, buildSourceConfig, fun log ->
                     Equinox.EventStoreDb.Log.InternalMetrics.dump log
                     Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
                     Equinox.DynamoStore.Core.Log.InternalMetrics.dump log
-            | Choice4Of4 a ->
+            | Source.SqlMs a ->
                 let connection = a.Connect()
                 let context = SqlStreamStoreContext connection
                 let store = Config.Store.Sss (context, cache)
-                let targetStore = a.ConnectTarget(cache)
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStoreSql(groupName)
                     let hydrateBodies = true
                     SourceConfig.Sss (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
-#if kafka
-                let kafka = a.Kafka
-#else
-                let kafka = ()
+#if blank
+                let targetStore = store
+#else                
+                let targetStore = a.ConnectTarget(cache)
 #endif
-                store, targetStore, kafka, buildSourceConfig, fun log ->
+                store, targetStore, x.Sink, buildSourceConfig, fun log ->
                     Equinox.SqlStreamStore.Log.InternalMetrics.dump log
                     Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
                     Equinox.DynamoStore.Core.Log.InternalMetrics.dump log
+#endif
+#if (!kafka)
+        member val Sink =                   ()
+#if sourceKafka
+        member val Source : Source =        match p.GetSubCommand() with
+                                            | Kafka p -> Source.Kafka <| SourceArgs.Kafka.Arguments(c, p)
+                                            | p -> Args.missingArg $"Unexpected Source subcommand %A{p}"
+#else        
+        member val Source : Source =        match p.GetSubCommand() with
+                                            | Cosmos p -> Source.Cosmos <| SourceArgs.Cosmos.Arguments(c, p)
+                                            | Dynamo p -> Source.Dynamo <| SourceArgs.Dynamo.Arguments(c, p)
+                                            | Esdb p ->   Source.Esdb   <| SourceArgs.Esdb.Arguments(c, p)
+                                            | SqlMs p ->  Source.SqlMs  <| SourceArgs.Sss.Arguments(c, p)
+                                            | p ->        Args.missingArg $"Unexpected Source subcommand %A{p}"
+#endif
+#else // kafka                                            
+        member val Sink =                   match p.GetSubCommand() with
+                                            | Parameters.Kafka p -> KafkaSinkArguments(c, p)
+                                            | p -> Args.missingArg $"Unexpected Sink subcommand %A{p}"
+        member x.Source : Source =          x.Sink.Source
+
+    and [<NoEquality; NoComparison>] KafkaSinkParameters =
+        | [<AltCommandLine "-b"; Unique>]   Broker of string
+        | [<AltCommandLine "-t"; Unique>]   Topic of string
+#if     sourceKafka
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<SourceArgs.Kafka.Parameters>
+#else   
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Esdb of ParseResults<SourceArgs.Esdb.Parameters>
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] SqlMs of ParseResults<SourceArgs.Sss.Parameters>
+#endif
+        interface IArgParserTemplate with
+            member p.Usage = p |> function
+                | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
+                | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
+#if     sourceKafka
+                | Kafka _ ->                "specify Kafka input parameters."
+#else                
+                | Cosmos _ ->               "specify CosmosDB input parameters."
+                | Dynamo _ ->               "specify DynamoDB input parameters."
+                | Esdb _ ->                 "specify EventStore input parameters."
+                | SqlMs _ ->                "specify SqlStreamStore input parameters."
+#endif
+
+    and KafkaSinkArguments(c : Configuration, p : ParseResults<KafkaSinkParameters>) =
+        member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
+        member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
+        member x.BuildTargetParams() =      x.Broker, x.Topic
+#if sourceKafka
+        member val Source =                 match p.GetSubCommand() with
+                                            | KafkaSinkParameters.Kafka p -> Source.Kafka <| SourceArgs.Kafka.Arguments(c, p)
+                                            | p -> Args.missingArg $"Unexpected Source subcommand %A{p}"
+#else        
+        member val Source : Source =        match p.GetSubCommand() with
+                                            | Cosmos p -> Source.Cosmos <| SourceArgs.Cosmos.Arguments(c, p)
+                                            | Dynamo p -> Source.Dynamo <| SourceArgs.Dynamo.Arguments(c, p)
+                                            | Esdb p ->   Source.Esdb   <| SourceArgs.Esdb.Arguments(c, p)
+                                            | SqlMs p ->  Source.SqlMs  <| SourceArgs.Sss.Arguments(c, p)
+                                            | p ->        Args.missingArg $"Unexpected Source subcommand %A{p}"
+#endif
 #endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args

@@ -30,7 +30,7 @@ module Input =
     open Propulsion.Internal
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
         span |> Array.chooseV (EventCodec.tryDecode codec stream)
-    let [<return: Struct>](|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
+    let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
     let [<return: Struct>] (|Parse|_|) = function
         | (StreamName clientId, _) & Decode events -> ValueSome struct (clientId, events)
         | _ -> ValueNone

@@ -12,6 +12,7 @@
         <!--#endif-->
         <Compile Include="Infrastructure.fs" />
         <Compile Include="Config.fs" />
+        <Compile Include="SourceConfig.fs" />
         <!--#if (!blank) -->
         <Compile Include="Todo.fs" />
         <!--#endif-->
@@ -21,15 +22,14 @@
         <!--#if (!kafka && !blank) -->
         <Compile Include="TodoSummary.fs" />
         <!--#endif-->
-        <Compile Include="Args.fs" />
-        <Compile Include="SourceArgs.fs" />
-        <Compile Include="SourceConfig.fs" />
         <!--#if (!kafka) -->
         <Compile Include="Ingester.fs" />
         <!--#endif-->
         <!--#if (!sourceKafka || kafka) -->
         <Compile Include="Handler.fs" />
         <!--#endif-->
+        <Compile Include="Args.fs" />
+        <Compile Include="SourceArgs.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
 

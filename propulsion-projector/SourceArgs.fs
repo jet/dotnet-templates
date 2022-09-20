@@ -6,9 +6,24 @@ open System
 
 type Configuration(tryGet) =
     inherit Args.Configuration(tryGet)
+    
 #if dynamo
     member _.DynamoIndexTable =             tryGet Args.INDEX_TABLE
+
 #endif
+    member x.EventStoreConnection =         x.get "EQUINOX_ES_CONNECTION"
+    member _.MaybeEventStoreCredentials =   tryGet "EQUINOX_ES_CREDENTIALS"
+
+    member x.SqlStreamStoreConnection =     x.get "SQLSTREAMSTORE_CONNECTION"
+    member _.SqlStreamStoreCredentials =    tryGet "SQLSTREAMSTORE_CREDENTIALS"
+    member x.SqlStreamStoreCredentialsCheckpoints = tryGet "SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS"
+
+//#if kafka
+    member x.Broker =                       x.get "PROPULSION_KAFKA_BROKER"
+    member x.Topic =                        x.get "PROPULSION_KAFKA_TOPIC"
+//#endif
+    
+    member _.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
 
 // #if cosmos
 module Cosmos =
@@ -27,10 +42,6 @@ module Cosmos =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-b"; Unique>]   MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
-        
-#if kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<Args.KafkaSinkParameters>
-#endif        
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging from ChangeFeedProcessor and Store. Default: off"
@@ -46,10 +57,6 @@ module Cosmos =
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to supply for the Change Feed query. Default: use response size limit"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
-
-#if kafka
-                | Kafka _ ->                "Kafka Sink parameters."
-#endif
     type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
@@ -74,12 +81,6 @@ module Cosmos =
             (leases, fromTail, maxItems, tailSleepInterval, lagFrequency)
         member x.ConnectMonitored() =
             connector.ConnectMonitored(database, containerId)
-#if kafka
-        member val Kafka =
-            match p.GetSubCommand() with
-            | Kafka kafka -> Args.KafkaSinkArguments(c, kafka)
-            | _ -> Args.missingArg "Must specify `kafka` arguments"
-#endif
 
 // #endif // cosmos
 #if dynamo
@@ -98,9 +99,6 @@ module Dynamo =
         | [<AltCommandLine "-b"; Unique>]   MaxItems of int
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-d">]           StreamsDop of int
-#if kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<Args.KafkaSinkParameters>
-#endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "Include low level Store logging."
@@ -115,9 +113,6 @@ module Dynamo =
                 | MaxItems _ ->             "maximum events to load in a batch. Default: 100"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | StreamsDop _ ->           "parallelism when loading events from Store Feed Source. Default 4"
-#if kafka
-                | Kafka _ ->                "Kafka Sink parameters."
-#endif
 
     type Arguments(c : Configuration, p : ParseResults<Parameters>) =
         let serviceUrl =                    p.TryGetResult ServiceUrl |> Option.defaultWith (fun () -> c.DynamoServiceUrl)
@@ -146,15 +141,24 @@ module Dynamo =
         member _.CreateCheckpointStore(group, cache) =
             let indexTable = indexStoreClient.Value
             indexTable.CreateCheckpointService(group, cache, Config.log)
-#if kafka        
-        member val Kafka =
-            match p.GetSubCommand() with
-            | Kafka kafka -> Args.KafkaSinkArguments(c, kafka)
-            | _ -> Args.missingArg "Must specify `kafka` arguments"
-#endif            
 
 #endif // dynamo
 #if esdb
+type [<RequireQualifiedAccess; NoComparison; NoEquality>]
+    TargetStoreArgs =
+    | Cosmos of Cosmos.Arguments
+    | Dynamo of Dynamo.Arguments
+module TargetStoreArgs =
+    
+    let connectTarget targetStore cache: Config.Store =
+        match targetStore with
+        | TargetStoreArgs.Cosmos a ->
+            let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+            Config.Store.Cosmos (context, cache)
+        | TargetStoreArgs.Dynamo a ->
+            let context = a.Connect() |> DynamoStoreContext.create
+            Config.Store.Dynamo (context, cache)
+
 module Esdb =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -182,6 +186,7 @@ module Esdb =
                 
                 | Cosmos _ ->               "CosmosDB Target Store parameters (also used for checkpoint storage)."
                 | Dynamo _ ->               "DynamoDB Target Store parameters (also used for checkpoint storage)."
+                
     type Arguments(c : Configuration, p : ParseResults<Parameters>) =
         let startFromTail =                 p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 100)
@@ -195,8 +200,8 @@ module Esdb =
         let checkpointInterval =            TimeSpan.FromHours 1.
         member val Verbose =                p.Contains Verbose
 
-        member _.Connect(log : ILogger, appName, nodePreference) : Equinox.EventStoreDb.EventStoreConnection =
-            log.Information("EventStore {discovery}", connectionStringLoggable)
+        member _.Connect(appName, nodePreference) : Equinox.EventStoreDb.EventStoreConnection =
+            Log.Information("EventStore {discovery}", connectionStringLoggable)
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Equinox.EventStoreDb.EventStoreConnector(timeout, retries, tags = tags)
                 .Establish(appName, discovery, Equinox.EventStoreDb.ConnectionStrategy.ClusterSingle nodePreference)
@@ -206,19 +211,13 @@ module Esdb =
             startFromTail, batchSize, tailSleepInterval
         member _.CreateCheckpointStore(group, store : Config.Store) : Propulsion.Feed.IFeedCheckpointStore =
             Args.Checkpoints.createCheckpointStore (group, checkpointInterval, store) 
-        member private _.TargetStoreArgs : Args.TargetStoreArgs =
+        member private _.TargetStoreArgs : TargetStoreArgs =
             match p.GetSubCommand() with
-            | Cosmos cosmos -> Args.TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
-            | Dynamo dynamo -> Args.TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
+            | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
+            | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `esdb`"
-#if kafka
-        member x.Kafka =
-            match x.TargetStoreArgs with
-            | Args.TargetStoreArgs.Cosmos cosmos -> cosmos.Kafka
-            | Args.TargetStoreArgs.Dynamo dynamo -> dynamo.Kafka
-#endif            
         member x.ConnectTarget(cache) : Config.Store =
-            Args.TargetStoreArgs.connectTarget x.TargetStoreArgs cache
+            TargetStoreArgs.connectTarget x.TargetStoreArgs cache
 
 #endif // esdb
 #if sss
@@ -236,9 +235,6 @@ module Sss =
 
         | [<AltCommandLine "-cc"; Unique>]  CheckpointsConnection of string
         | [<AltCommandLine "-cp"; Unique>]  CheckpointsCredentials of string
-#if kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<Args.KafkaSinkParameters>
-#endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Tail _ ->                 "Polling interval in Seconds. Default: 1"
@@ -249,9 +245,6 @@ module Sss =
                 | FromTail ->               "Start the processing from the Tail"
                 | CheckpointsConnection _ ->"Connection string for Checkpoints sql db. Optional if SQLSTREAMSTORE_CONNECTION_CHECKPOINTS specified. Default: same as `Connection`"
                 | CheckpointsCredentials _ ->"Credentials string for Checkpoints sql db. (used as part of checkpoints connection string, but NOT logged). Default (when no `CheckpointsConnection`: use `Credentials. Default (when `CheckpointsConnection` specified): use SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS environment variable (or assume no credentials)"
-#if kafka
-                | Kafka _ ->                "Kafka Sink parameters."
-#endif
 
     type Arguments(c : Configuration, p : ParseResults<Parameters>) =
         let startFromTail =                 p.Contains FromTail
@@ -285,11 +278,5 @@ module Sss =
         member x.CreateCheckpointStoreSql(groupName) : Propulsion.Feed.IFeedCheckpointStore =
             let connectionString = x.BuildCheckpointsConnectionString()
             Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString, groupName, checkpointEventInterval)
-#if kafka        
-        member val Kafka =
-            match p.GetSubCommand() with
-            | Kafka kafka -> Args.KafkaSinkArguments(c, kafka)
-            | _ -> Args.missingArg "Must specify `kafka` arguments"
-#endif            
             
 #endif // sss
