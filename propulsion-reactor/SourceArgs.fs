@@ -20,7 +20,7 @@ type Configuration(tryGet) =
 
 #endif
 
-#if !(sourceKafka && blank && kafka) 
+#if !(kafka && blank) 
 type [<RequireQualifiedAccess; NoComparison; NoEquality>]
     TargetStoreArgs =
     | Cosmos of Args.Cosmos.Arguments
@@ -67,13 +67,13 @@ module Kafka =
         member x.BuildSourceParams() =      x.Broker, x.Topic
 
 #if !(kafka && blank)
-        member private _.TargetStoreArgs : Args.TargetStoreArgs =
+        member private _.TargetStoreArgs : TargetStoreArgs =
             match p.GetSubCommand() with
-            | Cosmos cosmos -> Args.TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
-            | Dynamo dynamo -> Args.TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
+            | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
+            | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `kafka`"
         member x.ConnectTarget(cache) : Config.Store =
-            Args.TargetStoreArgs.connectTarget x.TargetStoreArgs cache
+            TargetStoreArgs.connectTarget x.TargetStoreArgs cache
 #endif
 #else // !sourceKafka
 module Cosmos =
