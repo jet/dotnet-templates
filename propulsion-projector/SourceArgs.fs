@@ -198,12 +198,12 @@ module Esdb =
         member x.ConnectTarget(cache) : Config.Store =
             match p.GetSubCommand() with
             | Cosmos a ->
-                let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+                let context = (Args.Cosmos.Arguments a).Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
                 Config.Store.Cosmos (context, cache)
             | Dynamo a ->
-                let context = a.Connect() |> DynamoStoreContext.create
+                let context = (Args.Dynamo.Arguments a).Connect() |> DynamoStoreContext.create
                 Config.Store.Dynamo (context, cache)
-            | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `esdb`"
+            | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` checkpoint store when source is `esdb`"
 
 #endif // esdb
 #if sss

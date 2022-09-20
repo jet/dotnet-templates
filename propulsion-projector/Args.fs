@@ -147,5 +147,4 @@ module Dynamo =
         member _.Connect() =                connector.LogConfiguration()
                                             let client = connector.CreateClient()
                                             client.ConnectStore("Main", table)
-
 //#endif // dynamo
