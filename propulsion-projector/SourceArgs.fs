@@ -144,21 +144,6 @@ module Dynamo =
 
 #endif // dynamo
 #if esdb
-type [<RequireQualifiedAccess; NoComparison; NoEquality>]
-    TargetStoreArgs =
-    | Cosmos of Cosmos.Arguments
-    | Dynamo of Dynamo.Arguments
-module TargetStoreArgs =
-    
-    let connectTarget targetStore cache: Config.Store =
-        match targetStore with
-        | TargetStoreArgs.Cosmos a ->
-            let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-            Config.Store.Cosmos (context, cache)
-        | TargetStoreArgs.Dynamo a ->
-            let context = a.Connect() |> DynamoStoreContext.create
-            Config.Store.Dynamo (context, cache)
-
 module Esdb =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -205,19 +190,20 @@ module Esdb =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Equinox.EventStoreDb.EventStoreConnector(timeout, retries, tags = tags)
                 .Establish(appName, discovery, Equinox.EventStoreDb.ConnectionStrategy.ClusterSingle nodePreference)
-    
         member _.MonitoringParams(log : ILogger) =
             log.Information("EventStoreSource BatchSize {batchSize} ", batchSize)
             startFromTail, batchSize, tailSleepInterval
         member _.CreateCheckpointStore(group, store : Config.Store) : Propulsion.Feed.IFeedCheckpointStore =
             Args.Checkpoints.createCheckpointStore (group, checkpointInterval, store) 
-        member private _.TargetStoreArgs : TargetStoreArgs =
-            match p.GetSubCommand() with
-            | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
-            | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
-            | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `esdb`"
         member x.ConnectTarget(cache) : Config.Store =
-            TargetStoreArgs.connectTarget x.TargetStoreArgs cache
+            match p.GetSubCommand() with
+            | TargetStoreArgs.Cosmos a ->
+                let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+                Config.Store.Cosmos (context, cache)
+            | TargetStoreArgs.Dynamo a ->
+                let context = a.Connect() |> DynamoStoreContext.create
+                Config.Store.Dynamo (context, cache)
+            | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `esdb`"
 
 #endif // esdb
 #if sss
