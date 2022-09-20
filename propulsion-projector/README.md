@@ -139,7 +139,7 @@ This project was generated using:
         # (either add environment variables as per step 0 or use -c to specify them)
 
         # generate a SQL Table to store checkpoints in
-        propulsion init ms
+        propulsion init ~~~~ms
 //#endif // sss         
          
 2. To run an instance of the Projector:
@@ -174,8 +174,8 @@ This project was generated using:
 //#if   sss
         # `-g default` defines the Projector Group identity - each id has a separate checkpoint in the Checkpoints Table
         # `-t topic0` identifies the Kafka topic to which the Projector should write
-        # ms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
-        dotnet run -- -g default -t topic0 ms
+        # sqlms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
+        dotnet run -- -g default -t topic0 sqlms
 //#endif // kafka && sss
 
 3. To create a Consumer, use `dotnet new proConsumer` or `dotnet new proReactor --source kafkaEventSpans`
@@ -202,7 +202,7 @@ This project was generated using:
         # (either add environment variables as per step 0 or use -c/-p to specify them)
         
         # `-g default` defines the Projector Group identity - each id has a separate checkpoint in the Checkpoints Table
-        # ms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
-        dotnet run -- -g default ms
+        # sqlms specifies the source details (if you have specified SQLSTREAMSTORE_CONNECTION and/or SQLSTREAMSTORE_CONNECTION_CHECKPOINTS environment vars, no arguments are needed)
+        dotnet run -- -g default sqlms
 //#endif // !kafka && sss
 //#endif // !kafka

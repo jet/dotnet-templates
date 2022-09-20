@@ -29,18 +29,7 @@ type Configuration(tryGet : string -> string option) =
     member x.DynamoAccessKey =              x.get ACCESS_KEY
     member x.DynamoSecretKey =              x.get SECRET_KEY
     member x.DynamoTable =                  x.get TABLE
-    member x.DynamoRegion =                 x.tryGet REGION
-
-    member x.EventStoreConnection =         x.get "EQUINOX_ES_CONNECTION"
-    // member x.EventStoreCredentials =        x.get "EQUINOX_ES_CREDENTIALS"
-    member _.MaybeEventStoreConnection =    tryGet "EQUINOX_ES_CONNECTION"
-    member _.MaybeEventStoreCredentials =   tryGet "EQUINOX_ES_CREDENTIALS"
-
-    member x.SqlStreamStoreConnection =     x.get "SQLSTREAMSTORE_CONNECTION"
-    member x.SqlStreamStoreCredentials =    tryGet "SQLSTREAMSTORE_CREDENTIALS"
-    member x.SqlStreamStoreCredentialsCheckpoints = tryGet "SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS"
-    member x.SqlStreamStoreDatabase =       x.get "SQLSTREAMSTORE_DATABASE"
-    member x.SqlStreamStoreContainer =      x.get "SQLSTREAMSTORE_CONTAINER"
+    member _.DynamoRegion =                 tryGet REGION
 
 #endif
 //#if (kafka || sourceKafka)
@@ -48,60 +37,11 @@ type Configuration(tryGet : string -> string option) =
     member x.Topic =                        x.get "PROPULSION_KAFKA_TOPIC"
 //#endif
     
-    member x.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
+    member _.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
 
 #if !(sourceKafka && blank && kafka) 
-// Type used to represent where checkpoints (for either the FeedConsumer position, or for a Reactor's Event Store subscription position) will be stored
-// In a typical app you don't have anything like this as you'll simply use your primary Event Store (see)
-module Checkpoints =
-
-    [<RequireQualifiedAccess; NoComparison; NoEquality>]
-    type Store =
-        | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-        | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-        (*  Propulsion.EventStoreDb does not implement a native checkpoint storage mechanism,
-            perhaps port https://github.com/absolutejam/Propulsion.EventStoreDB ?
-            or fork/finish https://github.com/jet/dotnet-templates/pull/81
-            alternately one could use a SQL Server DB via Propulsion.SqlStreamStore
-
-            For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
-
-    let create (consumerGroup, checkpointInterval) storeLog : Store  -> Propulsion.Feed.IFeedCheckpointStore = function
-        | Store.Cosmos (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create storeLog (consumerGroup, checkpointInterval) (context, cache)
-        | Store.Dynamo (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create storeLog (consumerGroup, checkpointInterval) (context, cache)
-    let createCheckpointStore (group, checkpointInterval, store : Config.Store) : Propulsion.Feed.IFeedCheckpointStore =
-        let checkpointStore =
-            match store with
-            | Config.Store.Cosmos (context, cache) -> Store.Cosmos (context, cache)
-            | Config.Store.Dynamo (context, cache) -> Store.Dynamo (context, cache)
-#if !(sourceKafka && kafka)
-            | Config.Store.Esdb _
-            | Config.Store.Sss _ -> failwith "unexpected"
-#endif
-        create (group, checkpointInterval) Config.log checkpointStore
-#endif
-
 open Argu
 
-#if kafka
- type [<NoEquality; NoComparison>] KafkaSinkParameters =
-    | [<AltCommandLine "-b"; Unique>]   Broker of string
-    | [<AltCommandLine "-t"; Unique>]   Topic of string
-    interface IArgParserTemplate with
-        member p.Usage = p |> function
-            | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
-            | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
-            
-type KafkaSinkArguments(c : Configuration, p : ParseResults<KafkaSinkParameters>) =
-    member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
-    member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
-    member x.BuildTargetParams() =      x.Broker, x.Topic
-
-#endif
-
-#if !(sourceKafka && blank && kafka) 
 module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -113,9 +53,6 @@ module Cosmos =
         | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
-#if kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
-#endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose _ ->              "request verbose logging."
@@ -126,9 +63,7 @@ module Cosmos =
                 | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-#if kafka
-                | Kafka _ ->                "Kafka Sink parameters."
-#endif
+                
     type Arguments(c : Configuration, p : ParseResults<Parameters>) =
         let connection =                    p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection)
         let discovery =                     Equinox.CosmosStore.Discovery.ConnectionString connection
@@ -141,12 +76,6 @@ module Cosmos =
         let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Target", database, container)
-#if kafka
-        member val Kafka =
-            match p.GetSubCommand() with
-            | Parameters.Kafka kafka -> KafkaSinkArguments(c, kafka)
-            | _ -> missingArg "Must specify `kafka` arguments"
-#endif
 
 module Dynamo =
 
@@ -159,9 +88,6 @@ module Dynamo =
         | [<AltCommandLine "-t">]           Table of string
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesTimeoutS of float
-#if kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
-#endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "Include low level Store logging."
@@ -175,9 +101,7 @@ module Dynamo =
                 | Table _ ->                "specify a table name for the primary store. (optional if $" + TABLE + " specified)"
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesTimeoutS _ ->      "specify max wait-time including retries in seconds (default: 5)"
-#if kafka
-                | Kafka _ ->                "Kafka Sink parameters."
-#endif
+                
     type Arguments(c : Configuration, p : ParseResults<Parameters>) =
         let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
                                             | Some systemName ->
@@ -199,26 +123,4 @@ module Dynamo =
         member _.Connect() =                connector.LogConfiguration()
                                             let client = connector.CreateClient()
                                             client.ConnectStore("Main", table)
-#if kafka
-        member val Kafka =
-            match p.GetSubCommand() with
-            | Kafka kafka -> KafkaSinkArguments(c, kafka)
-            | _ -> missingArg "Must specify `kafka` arguments"
-#endif
-
-type [<RequireQualifiedAccess; NoComparison; NoEquality>]
-    TargetStoreArgs =
-    | Cosmos of Cosmos.Arguments
-    | Dynamo of Dynamo.Arguments
-
-module TargetStoreArgs =
-    
-    let connectTarget targetStore cache: Config.Store =
-        match targetStore with
-        | TargetStoreArgs.Cosmos a ->
-            let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-            Config.Store.Cosmos (context, cache)
-        | TargetStoreArgs.Dynamo a ->
-            let context = a.Connect() |> DynamoStoreContext.create
-            Config.Store.Dynamo (context, cache)
 #endif            
