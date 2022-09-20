@@ -66,6 +66,7 @@ module Checkpoints =
 open Argu
 
 //#if (esdb || sss || cosmos)
+
 module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -99,9 +100,10 @@ module Cosmos =
         let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Target", database, container)
+//#endif
 
-//#endif // cosmos
-//#if (esdb || sss || dynamo)
+// #if (esdb || sss || dynamo)
+
 module Dynamo =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -147,4 +149,4 @@ module Dynamo =
         member _.Connect() =                connector.LogConfiguration()
                                             let client = connector.CreateClient()
                                             client.ConnectStore("Main", table)
-//#endif // dynamo
+// #endif
