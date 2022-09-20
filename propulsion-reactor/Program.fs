@@ -249,7 +249,7 @@ let build (args : Args.Arguments) =
 
     (* ESTABLISH stats, handle *)
     
-#if kafka // kafka 
+#if kafka
     let broker, topic = sinkParams.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
     let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
