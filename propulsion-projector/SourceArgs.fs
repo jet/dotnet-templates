@@ -167,16 +167,10 @@ module Esdb =
 
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
     let private createCheckpointStore (consumerGroup, checkpointInterval) : _ -> Propulsion.Feed.IFeedCheckpointStore = function
-#if (!dynamo)
         | Config.Store.Cosmos (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
-#endif           
         | Config.Store.Dynamo (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
-#if !(sourceKafka && kafka)
-        | Config.Store.Esdb _
-        | Config.Store.Sss _ -> failwith "Unexpected store type"
-#endif
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]           Verbose
@@ -230,10 +224,10 @@ module Esdb =
         member x.ConnectTarget(cache) : Config.Store =
             match p.GetSubCommand() with
             | Cosmos a ->
-                let context = (Args.Cosmos.Arguments(c, a)).Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+                let context = Args.Cosmos.Arguments(c, a).Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
                 Config.Store.Cosmos (context, cache)
             | Dynamo a ->
-                let context = (Args.Dynamo.Arguments(c, a)).Connect() |> DynamoStoreContext.create
+                let context = Args.Dynamo.Arguments(c, a).Connect() |> DynamoStoreContext.create
                 Config.Store.Dynamo (context, cache)
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` checkpoint store when source is `esdb`"
 
