@@ -28,41 +28,6 @@ type Configuration(tryGet : string -> string option) =
     member x.DynamoTable =                  x.get TABLE
     member x.DynamoRegion =                 x.tryGet REGION
 
-#if esdb || sss || dynamo
-// Type used to represent where checkpoints (for either the FeedConsumer position, or for a Reactor's Event Store subscription position) will be stored
-// In a typical app you don't have anything like this as you'll simply use your primary Event Store (see)
-module Checkpoints =
-
-    [<RequireQualifiedAccess; NoComparison; NoEquality>]
-    type Store =
-#if (!dynamo)
-        | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-#endif           
-        | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-        (*  Propulsion.EventStoreDb does not implement a native checkpoint storage mechanism,
-            perhaps port https://github.com/absolutejam/Propulsion.EventStoreDB ?
-            or fork/finish https://github.com/jet/dotnet-templates/pull/81
-            alternately one could use a SQL Server DB via Propulsion.SqlStreamStore
-
-            For now, we store the Checkpoints in one of the above stores *)
-
-    let create (consumerGroup, checkpointInterval) storeLog : Store  -> Propulsion.Feed.IFeedCheckpointStore = function
-#if (!dynamo)
-        | Store.Cosmos (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create storeLog (consumerGroup, checkpointInterval) (context, cache)
-#endif            
-        | Store.Dynamo (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create storeLog (consumerGroup, checkpointInterval) (context, cache)
-    let createCheckpointStore (group, checkpointInterval, store : Config.Store) : Propulsion.Feed.IFeedCheckpointStore =
-        let checkpointStore =
-            match store with
-#if (!dynamo)
-            | Config.Store.Cosmos (context, cache) -> Store.Cosmos (context, cache)
-#endif           
-            | Config.Store.Dynamo (context, cache) -> Store.Dynamo (context, cache)
-        create (group, checkpointInterval) Config.log checkpointStore
-
-#endif
 open Argu
 
 //#if (esdb || sss || cosmos)
@@ -139,9 +104,9 @@ module Dynamo =
                                                 let accessKey =   p.TryGetResult AccessKey  |> Option.defaultWith (fun () -> c.DynamoAccessKey)
                                                 let secretKey =   p.TryGetResult SecretKey  |> Option.defaultWith (fun () -> c.DynamoSecretKey)
                                                 Choice2Of2 (serviceUrl, accessKey, secretKey)
-        let retries =                       p.GetResult(Retries, 1)
-        let timeout =                       p.GetResult(RetriesTimeoutS, 5.) |> TimeSpan.FromSeconds
-        let connector =                     match conn with
+        let connector =                     let timeout = p.GetResult(RetriesTimeoutS, 5.) |> TimeSpan.FromSeconds
+                                            let retries = p.GetResult(Retries, 1)
+                                            match conn with
                                             | Choice1Of2 systemName ->
                                                 Equinox.DynamoStore.DynamoStoreConnector(systemName, timeout, retries)
                                             | Choice2Of2 (serviceUrl, accessKey, secretKey) ->

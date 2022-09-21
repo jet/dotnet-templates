@@ -70,7 +70,8 @@ module Dynamo =
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]           Verbose
-        | [<AltCommandLine "-s">]           ServiceUrl of string
+        | [<AltCommandLine "-sr">]          RegionProfile of string
+        | [<AltCommandLine "-su">]          ServiceUrl of string
         | [<AltCommandLine "-sa">]          AccessKey of string
         | [<AltCommandLine "-ss">]          SecretKey of string
         | [<AltCommandLine "-t">]           Table of string
@@ -84,6 +85,10 @@ module Dynamo =
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "Include low level Store logging."
+                | RegionProfile _ ->        "specify an AWS Region (aka System Name, e.g. \"us-east-1\") to connect to using the implicit AWS SDK/tooling config and/or environment variables etc. Optional if:\n" +
+                                            "1) $" + Args.REGION + " specified OR\n" +
+                                            "2) Explicit `ServiceUrl`/$" + Args.SERVICE_URL + "+`AccessKey`/$" + Args.ACCESS_KEY + "+`Secret Key`/$" + Args.SECRET_KEY + " specified.\n" +
+                                            "See https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html for details"
                 | ServiceUrl _ ->           "specify a server endpoint for a Dynamo account. (optional if environment variable " + Args.SERVICE_URL + " specified)"
                 | AccessKey _ ->            "specify an access key id for a Dynamo account. (optional if environment variable " + Args.ACCESS_KEY + " specified)"
                 | SecretKey _ ->            "specify a secret access key for a Dynamo account. (optional if environment variable " + Args.SECRET_KEY + " specified)"
@@ -97,9 +102,21 @@ module Dynamo =
                 | StreamsDop _ ->           "parallelism when loading events from Store Feed Source. Default 4"
 
     type Arguments(c : Configuration, p : ParseResults<Parameters>) =
-        let serviceUrl =                    p.TryGetResult ServiceUrl |> Option.defaultWith (fun () -> c.DynamoServiceUrl)
-        let accessKey =                     p.TryGetResult AccessKey  |> Option.defaultWith (fun () -> c.DynamoAccessKey)
-        let secretKey =                     p.TryGetResult SecretKey  |> Option.defaultWith (fun () -> c.DynamoSecretKey)
+        let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
+                                            | Some systemName ->
+                                                Choice1Of2 systemName
+                                            | None ->
+                                                let serviceUrl =  p.TryGetResult ServiceUrl |> Option.defaultWith (fun () -> c.DynamoServiceUrl)
+                                                let accessKey =   p.TryGetResult AccessKey  |> Option.defaultWith (fun () -> c.DynamoAccessKey)
+                                                let secretKey =   p.TryGetResult SecretKey  |> Option.defaultWith (fun () -> c.DynamoSecretKey)
+                                                Choice2Of2 (serviceUrl, accessKey, secretKey)
+        let connector =                     let timeout = p.GetResult(RetriesTimeoutS, 60.) |> TimeSpan.FromSeconds
+                                            let retries = p.GetResult(Retries, 9)
+                                            match conn with
+                                            | Choice1Of2 systemName ->
+                                                Equinox.DynamoStore.DynamoStoreConnector(systemName, timeout, retries)
+                                            | Choice2Of2 (serviceUrl, accessKey, secretKey) ->
+                                                Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
         let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
         let indexSuffix =                   p.GetResult(IndexSuffix, "-index")
         let indexTable =                    p.TryGetResult IndexTable |> Option.orElseWith  (fun () -> c.DynamoIndexTable) |> Option.defaultWith (fun () -> table + indexSuffix)
@@ -107,9 +124,6 @@ module Dynamo =
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         let batchSizeCutoff =               p.GetResult(MaxItems, 100)
         let streamsDop =                    p.GetResult(StreamsDop, 4)
-        let timeout =                       p.GetResult(RetriesTimeoutS, 60.) |> TimeSpan.FromSeconds
-        let retries =                       p.GetResult(Retries, 9)
-        let connector =                     Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
         let client =                        connector.CreateClient()
         let indexStoreClient =              lazy client.ConnectStore("Index", indexTable)
         member val Verbose =                p.Contains Verbose
@@ -125,6 +139,19 @@ module Dynamo =
             indexTable.CreateCheckpointService(group, cache, Config.log)
 
 module Esdb =
+
+    (*  Propulsion.EventStoreDb does not implement a native checkpoint storage mechanism,
+        perhaps port https://github.com/absolutejam/Propulsion.EventStoreDB ?
+        or fork/finish https://github.com/jet/dotnet-templates/pull/81
+        alternately one could use a SQL Server DB via Propulsion.SqlStreamStore
+
+        For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
+    let private createCheckpointStore (consumerGroup, checkpointInterval) : _ -> Propulsion.Feed.IFeedCheckpointStore = function
+        | Config.Store.Cosmos (context, cache) ->
+            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
+        | Config.Store.Dynamo (context, cache) ->
+            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
+        | Config.Store.Memory _ | Config.Store.Esdb _ -> Args.missingArg "Unexpected store type"
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]           Verbose
@@ -182,5 +209,5 @@ module Esdb =
             startFromTail, maxItems, tailSleepInterval
         member x.ConnectTarget(cache) : Config.Store<_> =
             Args.TargetStoreArgs.connectTarget x.TargetStoreArgs cache
-        member _.CreateCheckpointStore(group, store : Config.Store<_>) : Propulsion.Feed.IFeedCheckpointStore =
-            Args.Checkpoints.createCheckpointStore (group, checkpointInterval, store) 
+        member _.CreateCheckpointStore(group, store) : Propulsion.Feed.IFeedCheckpointStore =
+            createCheckpointStore (group, checkpointInterval) store 

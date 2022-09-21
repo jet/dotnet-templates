@@ -2,16 +2,19 @@ namespace Shipping.Watchdog.Integration
 
 open Shipping.Infrastructure
 
-type DynamoConnector(serviceUrl, accessKey, secretKey, table, indexTable) =
+type DynamoConnector(connector : Equinox.DynamoStore.DynamoStoreConnector, table, indexTable) =
     
-    let requestTimeout, retries =       System.TimeSpan.FromSeconds 5., 5
-    let connector =                     Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, requestTimeout, retries)
     let client =                        connector.CreateClient()
     let storeClient =                   Equinox.DynamoStore.DynamoStoreClient(client, table)
     let storeContext =                  storeClient |> DynamoStoreContext.create
     let cache =                         Equinox.Cache("Tests", sizeMb = 10)
     
-    new (c : Shipping.Watchdog.SourceArgs.Configuration) = DynamoConnector(c.DynamoServiceUrl, c.DynamoAccessKey, c.DynamoSecretKey, c.DynamoTable, c.DynamoIndexTable)
+    new (c : Shipping.Watchdog.SourceArgs.Configuration) =
+        let timeout, retries =          System.TimeSpan.FromSeconds 5., 5
+        let connector =                 match c.DynamoRegion with
+                                        | Some systemName -> Equinox.DynamoStore.DynamoStoreConnector(systemName, timeout, retries)
+                                        | None -> Equinox.DynamoStore.DynamoStoreConnector(c.DynamoServiceUrl, c.DynamoAccessKey, c.DynamoSecretKey, timeout, retries)
+        DynamoConnector(connector, c.DynamoTable, c.DynamoIndexTable)
     new () =                            DynamoConnector(Shipping.Watchdog.SourceArgs.Configuration EnvVar.tryGet)
 
     member val DumpStats =              Equinox.DynamoStore.Core.Log.InternalMetrics.dump
