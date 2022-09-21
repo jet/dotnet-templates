@@ -44,9 +44,9 @@ module Sss =
         let cacheStrategy = Equinox.SqlStreamStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.SqlStreamStore.SqlStreamStoreCategory(context, codec, fold, initial, cacheStrategy)
 
+#if esdb
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Store =
-#if (esdb || sss || cosmos)
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-#endif    
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
+#endif
