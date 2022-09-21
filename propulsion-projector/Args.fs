@@ -28,9 +28,9 @@ type Configuration(tryGet : string -> string option) =
     member x.DynamoTable =                  x.get TABLE
     member x.DynamoRegion =                 x.tryGet REGION
 
+#if esdb
 open Argu
 
-#if (esdb || sss || cosmos)
 module Cosmos =
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -65,8 +65,6 @@ module Cosmos =
         let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.ConnectStore("Target", database, container)
-#endif
-#if (esdb || sss || dynamo)
 
 module Dynamo =
 
