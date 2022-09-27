@@ -95,9 +95,7 @@ type App(store : Store) =
         do! source.Monitor.AwaitCompletion(initialReaderTimeout)
 
         // force a final attempt to flush anything not checkpointed (normally checkpointing is at 5s intervals)
-        do! source.FlushProgress()
-
-        return source.Monitor.CompletedPositions() }
+        return! source.Checkpoint() }
 
 /// Each queued Notifier message conveyed to the Lambda represents a Target Position on an Index Tranche
 type RequestBatch(event : SQSEvent) =
