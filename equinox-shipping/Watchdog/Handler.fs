@@ -28,7 +28,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
 open Shipping.Domain
 
-let isReactionStream = function
+let private isReactionStream = function
     | FinalizationTransaction.Category -> true
     | _ -> false
 
@@ -69,3 +69,6 @@ type Config private () =
         
     static member StartSource(log, sink, sourceConfig) =
         SourceConfig.start (log, Config.log) sink isReactionStream sourceConfig
+        
+    static member CreateDynamoSource(log, sink, sourceArgs, trancheIds) =
+        SourceConfig.Dynamo.create (log, Config.log) sink isReactionStream sourceArgs (Some trancheIds)
