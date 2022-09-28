@@ -5,16 +5,16 @@ Given a pair of DynamoDB Tables (provisioned using the `eqx` tool; see below)
   - read/written via `Equinox.DynamoStore`
   - appends are streamed via DynamoDB Streams with a 24h retention period
 - Index table: holds an index for the table
-  - written by `Propulsion.DynamoStore.Lambda`
+  - written by `Propulsion.DynamoStore.Indexer`
   - read by `Propulsion.DynamoStore.DynamoStoreSource` in Reactor/Projector applications
   
   (internally the index is simply an `Equinox.DynamoStore`)
 
 This project Uses the [AWS Cloud Development Kit (CDK)](https://docs.aws.amazon.com/cdk/v2/guide/home.html) to reliably manage configuration/deployment of:
 
-1. The indexing logic in `Propulsion.DynamoStore.Lambda` (the NuGet package includes the published binaries internally)
+1. The indexing logic in `Propulsion.DynamoStore.Indexer` (the NuGet package includes the published binaries internally)
 2. Associated role and triggers that route from the DynamoDB Stream to the Lambda (the project references `Propulsion.DynamoStore.Constructs`
-   which has the relevant configuration logic for an associated version of `Propulsion.DynamoStore.Lambda`)
+   which has the relevant configuration logic for `Propulsion.DynamoStore.Indexer`)
 
 ## Prerequisites
 
@@ -38,8 +38,8 @@ This project Uses the [AWS Cloud Development Kit (CDK)](https://docs.aws.amazon.
 
 ## To deploy local build of the Lambda (vs the latest nuget package)
 
-    dotnet publish ../propulsion/Propulsion.DynamoStore.Lambda &&
-    cdk deploy -c code=../propulsion/Propulsion.DynamoStore.Lambda/bin/Debug/net6.0/linux-arm64/publish -c dev/streamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test/stream/2022-07-05T11:49:13.013 -c dev/indexTableName=equinox-test-index
+    dotnet publish ../propulsion/Propulsion.DynamoStore.Indexer &&
+    cdk deploy -c code=../propulsion/Propulsion.DynamoStore.Indexer/bin/Debug/net6.0/linux-arm64/publish -c dev/streamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test/stream/2022-07-05T11:49:13.013 -c dev/indexTableName=equinox-test-index
 
 ## To determine/verify the Streams ARN for a given index Table
 

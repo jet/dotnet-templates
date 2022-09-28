@@ -4,7 +4,7 @@ open Amazon.CDK
 
 let streamNameArg = "dev/streamArn"
 let indexTableNameArg = "dev/indexTableName"
-// See logic in .fsproj file, which copies content from `Propulsion.DynamoStore.Lambda`'s tools/ folder to this well known location
+// See logic in .fsproj file, which copies content from `Propulsion.DynamoStore.Indexer`'s tools/ folder to this well known location
 let lambdaCodePath = "obj/pub/net6.0/linux-arm64/"
 
 [<EntryPoint>]

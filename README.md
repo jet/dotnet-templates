@@ -39,7 +39,7 @@ The following templates focus specifically on the usage of `Propulsion` componen
 
 - [`proIndexer`](propulsion-indexer-cdk/README.md)
 
-    - AWS CDK Wiring for programmatic IaC deployment of `Propulsion.DynamoStore.Lambda`
+    - AWS CDK Wiring for programmatic IaC deployment of `Propulsion.DynamoStore.Indexer`
 
 ## Producer/Reactor Templates combining usage of Equinox and Propulsion
 

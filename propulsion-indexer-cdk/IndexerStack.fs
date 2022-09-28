@@ -11,7 +11,7 @@ type IndexerStackProps
         // DynamoDB Index Table Name
         tableName : string,
 
-        // Path for published binaries for Propulsion.DynamoStore.Lambda
+        // Path for published binaries for Propulsion.DynamoStore.Indexer
         lambdaCodePath : string,
 
         // Lambda memory allocation - default 128 MB
