@@ -1,11 +1,11 @@
 namespace IndexerCdkTemplate
 
-open Propulsion.DynamoStore.Constructs
 open Amazon.CDK
+open Propulsion.DynamoStore.Constructs
 open System
 
 type IndexerStackProps
-    (   // DynamoDB Streams Source ARN
+    (   // DynamoDB Streams Source ARN (for Store Table)
         streamArn : string,
 
         // DynamoDB Index Table Name
