@@ -76,7 +76,7 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
 
     let [<Fact>] proCosmosReactor ()            = run "proCosmosReactor" []
     
-    let [<Fact>] proIndexerCdk ()               = run "proIndexer" []
+    let [<Fact>] proIndexerCdk ()               = run "proDynamoStoreCdk" []
 
     interface IClassFixture<EquinoxTemplatesFixture>
 

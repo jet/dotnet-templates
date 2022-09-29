@@ -1,4 +1,4 @@
-module IndexerCdkTemplate.Program
+module DynamoStoreCdkTemplate.Program
 
 open Amazon.CDK
 

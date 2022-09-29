@@ -1,4 +1,4 @@
-namespace IndexerCdkTemplate
+namespace DynamoStoreCdkTemplate
 
 open Amazon.CDK
 open Propulsion.DynamoStore.Constructs

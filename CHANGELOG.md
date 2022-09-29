@@ -9,8 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proDynamoStoreCdk`: AWS CDK wiring for `Propulsion.DynamoStore.Indexer` and `Notifier` [#125](https://github.com/jet/dotnet-templates/pull/125)
+
 ### Changed
 ### Removed 
+
+- `proIndexer`: Generalized into `proDynamoStoreCdk` [#125](https://github.com/jet/dotnet-templates/pull/125)
+
 ### Fixed
 
 <a name="6.0.0"></a>

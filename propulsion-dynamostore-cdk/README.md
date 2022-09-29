@@ -1,4 +1,4 @@
-## IndexerCdkTemplate
+## DynamoStoreCdk template
 
 Given a pair of DynamoDB Tables (provisioned using the `eqx` tool; see below)
 - Store table: holds application events
