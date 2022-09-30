@@ -2,10 +2,10 @@ module Shipping.Watchdog.Lambda.Cdk.Program
 
 open Amazon.CDK
 
-let codePathArg = "code"
 let topicNameArg = "notifyTopicArn"
-let storeTableNameArg = "storeTableName"
 let indexTableNameArg = "indexTableName"
+let storeTableNameArg = "storeTableName"
+let codePathArg = "code"
 
 [<EntryPoint>]
 let main _ =
@@ -18,7 +18,7 @@ let main _ =
         | _ -> failwith $"Please supply -c {topicNameArg}=<SNS Topic Arn> -c {indexTableNameArg}=<Index Table Name> -c {storeTableNameArg}=<Store Table Name> and -c {codePathArg}=<Code Path>"
     let indexTableName = "equinox-test-index"
     let storeTableName = "equinox-test"
-    let _watchdogLambda = WatchdogLambdaStack(app, "MainIndexer", WatchdogLambdaStackProps(
+    let _watchdogLambda = WatchdogLambdaStack(app, "Watchdog", WatchdogLambdaStackProps(
         topicArn, indexTableName, storeTableName,
         codePath, "Shipping Watchdog", "Watchdog.Lambda::Shipping.Watchdog.Lambda.Function::Handle"))
 

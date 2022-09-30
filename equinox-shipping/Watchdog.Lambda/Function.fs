@@ -102,7 +102,7 @@ type RequestBatch(event : SQSEvent) =
     let inputs = [|
         for r in event.Records ->
             let trancheId = r.MessageAttributes["TrancheId"].StringValue |> TrancheId.parse
-            let position = r.MessageAttributes["Pos"].StringValue |> int64 |> Position.parse
+            let position = r.MessageAttributes["Position"].StringValue |> int64 |> Position.parse
             struct (trancheId, position, r.MessageId) |]
 
     /// Yields the set of Index Tranches on which we are anticipating there to be work available
@@ -121,7 +121,9 @@ type Function() =
     let config = Configuration()
     let store = Store(config, requestTimeout = TimeSpan.FromSeconds 120., retries = 10)
     // TOCONSIDER surface metrics from write activities to prometheus by wiring up Metrics Sink (for now we emit them to the log instead)
-    let removeMetrics (e : Serilog.Events.LogEvent) = e.RemovePropertyIfPresent(Equinox.DynamoStore.Core.Log.PropertyTag)
+    let removeMetrics (e : Serilog.Events.LogEvent) =
+        e.RemovePropertyIfPresent(Equinox.DynamoStore.Core.Log.PropertyTag)
+        e.RemovePropertyIfPresent(Propulsion.Streams.Log.PropertyTag)
     let template = "{Level:u1} {Message} {Properties}{NewLine}{Exception}"
     do Log.Logger <- LoggerConfiguration()
         .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())

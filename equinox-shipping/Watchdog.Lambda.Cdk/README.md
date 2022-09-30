@@ -35,17 +35,19 @@ This project uses the [AWS Cloud Development Kit (CDK)](https://docs.aws.amazon.
        mkdir dynamostore-cdk
        cd dynamostore-cdk
        dotnet new proDynamoStoreCdk
-       cdk deploy `
-           -c streamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test/stream/2022-07-05T11:49:13.013 `
-           -c indexTableName=equinox-test-index `
+       cdk deploy \
+           -c streamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test/stream/2022-07-05T11:49:13.013 \
+           -c indexTableName=equinox-test-index \
            -c indexStreamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test-index/stream/2022-09-28T15:39:09.003
         
 ## To deploy
 
     dotnet publish ../Watchdog.Lambda &&
-    cdk deploy `
-        -c code=../Watchdog.Lambda/bin/Debug/net6.0/linux-arm64/publish `
-        -c notifyTopicArn=arn:aws:sns:us-east-1:360627701182:DynamoStore-not
+    cdk deploy \
+        -c code=../Watchdog.Lambda/bin/Debug/net6.0/linux-arm64/publish \
+        -c notifyTopicArn=arn:aws:sns:us-east-1:111111111111:DynamoStore-not \
+        -c indexTableName=equinox-test-index \
+        -c storeTableName=equinox-test
 
 ## Useful commands
 
