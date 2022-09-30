@@ -1,4 +1,4 @@
-## DynamoStoreCdk template
+## Watchdog.Lambda CDK template
 
 Given a pair of DynamoDB Tables (provisioned using the `eqx` tool; see below)
 - Store table: holds application events
@@ -18,53 +18,34 @@ This project uses the [AWS Cloud Development Kit (CDK)](https://docs.aws.amazon.
 
 ## Prerequisites
 
-1. A source DynamoDB Table, with DDB Streams configured
-
-       eqx initaws -r 10 -w 10 dynamo -t equinox-test
-
-2. An index DynamoDB Table (with Notifier support)
-
-       eqx initaws -r 5 -w 5 dynamo -t equinox-test-index
-
-   *OR (without Notifier support)*
-
-       eqx initaws -r 5 -w 5 -s off dynamo -t equinox-test-index
-
-3. AWS CDK Toolkit installed
+0. AWS CDK Toolkit installed
 
        npm install -g aws-cdk
 
    See https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html#getting_started_install for more details/context
 
+
+1. a. Provisioned `equinox-test` and `equinox-test-index` DynamoStore Tables, both with DynamoDB Streams Configured
+   b. Provisioned `Propulsion.DynamoStore.Indexer` and `Propulsion.DynamoStore.Notifier` Lambdas
+   
+   [See `proDynamoStoreCdk` template](https://github.com/jet/dotnet-templates/blob/master/propulsion-dynamostore-cdk/README.md); TL;DR:
+
+       eqx initaws -r 10 -w 10 dynamo -t equinox-test
+       eqx initaws -r 5 -w 5 dynamo -t equinox-test-index
+       mkdir dynamostore-cdk
+       cd dynamostore-cdk
+       dotnet new proDynamoStoreCdk
+       cdk deploy `
+           -c streamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test/stream/2022-07-05T11:49:13.013 `
+           -c indexTableName=equinox-test-index `
+           -c indexStreamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test-index/stream/2022-09-28T15:39:09.003
+        
 ## To deploy
 
-    # see below to look up DDB Streams ARNs for streamArn and indexStreamArn respectively
+    dotnet publish ../Watchdog.Lambda &&
     cdk deploy `
-        -c streamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test/stream/2022-07-05T11:49:13.013 `
-        -c indexTableName=equinox-test-index `
-        -c indexStreamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test-index/stream/2022-09-28T15:39:09.003
-
-## To deploy local build of the Indexer Code (as opposed to extracting from the nuget package)
-
-    dotnet publish ../propulsion/Propulsion.DynamoStore.Indexer &&
-    cdk deploy `
-        -c indexerCode=../propulsion/src/Propulsion.DynamoStore.Indexer/bin/Debug/net6.0/linux-arm64/publish `
-        -c streamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test/stream/2022-07-05T11:49:13.013 `
-        -c indexTableName=equinox-test-index
-
-## To deploy local build of the Notifier Code (as opposed to extracting from the nuget package)
-
-    dotnet publish ../propulsion/Propulsion.DynamoStore.Notifier &&
-    cdk deploy `
-        -c notifierCode=../propulsion/src/Propulsion.DynamoStore.Notifier/bin/Debug/net6.0/linux-arm64/publish `
-        -c indexStreamArn=arn:aws:dynamodb:us-east-1:111111111111:table/equinox-test-index/stream/2022-09-28T15:39:09.003 `
-        -c notifyTopicArn=arn:aws:sns:us-east-1:111111111111:DynamoStore-not
-    # NOTE: notifyTopicArn is optional - default is to create a fresh SNS topic 
-
-## To determine/verify the Streams ARN for a given Table
-
-    eqx stats dynamo -t equinox-test
-    eqx stats dynamo -t equinox-test-index
+        -c code=../Watchdog.Lambda/bin/Debug/net6.0/linux-arm64/publish `
+        -c notifyTopicArn=arn:aws:sns:us-east-1:360627701182:DynamoStore-not
 
 ## Useful commands
 

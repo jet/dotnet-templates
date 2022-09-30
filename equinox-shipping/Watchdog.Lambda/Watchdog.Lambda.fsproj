@@ -9,6 +9,9 @@
         
         <!-- Generate ready to run images during publishing to improve cold start time. -->
         <!-- <PublishReadyToRun>true</PublishReadyToRun>-->
+
+        <!-- Needs to be explicitly managed here for raw dotnet publish to work cleanly -->
+        <RuntimeIdentifier>linux-arm64</RuntimeIdentifier>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Amazon.Lambda.Core" Version="2.1.0" />

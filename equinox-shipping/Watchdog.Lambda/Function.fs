@@ -131,7 +131,7 @@ type Function() =
     let app = App(store)
 
     /// Process for all tranches in the input batch; requeue any triggers that we've not yet fully completed the processing for
-    member _.NotificationHandler(event : SQSEvent, _context : ILambdaContext) : Task<SQSBatchResponse> = task {
+    member _.Handle(event : SQSEvent, _context : ILambdaContext) : Task<SQSBatchResponse> = task {
         let req = RequestBatch(event)
         let! updated = app.Handle(req.Tranches)
         return req.FailuresForPositionsNotReached(updated) }
