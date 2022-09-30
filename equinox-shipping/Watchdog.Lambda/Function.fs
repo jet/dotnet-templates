@@ -69,6 +69,12 @@ type Store internal (connector : DynamoStoreConnector, table, indexTable) =
 type App(store : Store) =
     
     let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2., verboseStore = false, logExternalStats = store.DumpMetrics)
+    let triggerStats () =
+        // The processing loops run on 1s timers, so we busy-wait until they wake
+        stats.StatsInterval.Trigger()
+        let timeout = IntervalTimer(TimeSpan.FromSeconds 2)
+        while stats.StatsInterval.IsTriggered && not timeout.IsDue do
+            System.Threading.Thread.Sleep 1
     let manager =
         let processManagerMaxDop = 4
         FinalizationProcess.Config.create processManagerMaxDop store.Config
@@ -78,21 +84,24 @@ type App(store : Store) =
         let maxConcurrentStreams = 8
         Handler.Config.StartSink(Log.Logger, stats, manager, processingTimeout, maxReadAhead, maxConcurrentStreams,
                                  wakeForResults = true, purgeInterval = stats.StateInterval.Period)
-    let initialReaderTimeout = TimeSpan.FromSeconds 3.
-    let lambdaTimeout = TimeSpan.FromMinutes 12.
-    let lambdaCutoffDuration = lambdaTimeout - initialReaderTimeout - processingTimeout
-    
-    member x.Handle(tranches) = task {
+        
+    member x.Handle(tranches, lambdaTimeout) = task {
         let source = store.CreateSource(tranches, sink)
         
         // Kick off reading from the source
-        let pipeline = source.Start()
+        let sourcePipeline = source.Start()
+        
+        let initialReaderTimeout = TimeSpan.FromMinutes 1.
+        let lambdaCutoffDuration = lambdaTimeout - initialReaderTimeout - processingTimeout
         
         // In the case of sustained activity, we want to proactively trigger an orderly shutdown of the Sink in advance of the Lambda being killed
-        Task.Delay(lambdaCutoffDuration).ContinueWith(fun _ -> pipeline.Stop(); stats.StatsInterval.Trigger()) |> ignore
+        Task.Delay(lambdaCutoffDuration).ContinueWith(fun _ -> sourcePipeline.Stop(); stats.StatsInterval.Trigger()) |> ignore
 
         // wait for processing to stop (we'll continually process as long as there's work available)
-        do! source.Monitor.AwaitCompletion(initialReaderTimeout)
+        let lingerTime allAtTail (_propagationTimeout : TimeSpan) (propagation : TimeSpan) (processing : TimeSpan) =
+            if allAtTail then TimeSpan.Zero else lambdaTimeout - propagation - processing
+        do! source.Monitor.AwaitCompletion(initialReaderTimeout, lingerTime = lingerTime, awaitTail = true)
+        triggerStats ()
 
         // force a final attempt to flush anything not checkpointed (normally checkpointing is at 5s intervals)
         return! source.Checkpoint() }
@@ -105,6 +114,7 @@ type RequestBatch(event : SQSEvent) =
             let position = r.MessageAttributes["Position"].StringValue |> int64 |> Position.parse
             struct (trancheId, position, r.MessageId) |]
 
+    member val Count = inputs.Length
     /// Yields the set of Index Tranches on which we are anticipating there to be work available
     member val Tranches = seq { for trancheId, _, _ in inputs -> trancheId } |> Seq.distinct |> Seq.toArray
     /// Correlates the achieved Tranche Positions with those that triggered the work; requeue any not yet acknowledged as processed
@@ -118,22 +128,26 @@ type RequestBatch(event : SQSEvent) =
 
 type Function() =
 
-    let config = Configuration()
-    let store = Store(config, requestTimeout = TimeSpan.FromSeconds 120., retries = 10)
     // TOCONSIDER surface metrics from write activities to prometheus by wiring up Metrics Sink (for now we emit them to the log instead)
     let removeMetrics (e : Serilog.Events.LogEvent) =
         e.RemovePropertyIfPresent(Equinox.DynamoStore.Core.Log.PropertyTag)
         e.RemovePropertyIfPresent(Propulsion.Streams.Log.PropertyTag)
+        e.RemovePropertyIfPresent(Propulsion.Feed.Core.Log.PropertyTag)
     let template = "{Level:u1} {Message} {Properties}{NewLine}{Exception}"
     do Log.Logger <- LoggerConfiguration()
         .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
         .Enrich.With({ new Serilog.Core.ILogEventEnricher with member _.Enrich(evt, _) = removeMetrics evt })
         .WriteTo.Console(outputTemplate = template)
         .CreateLogger()
+
+    let config = Configuration()
+    let store = Store(config, requestTimeout = TimeSpan.FromSeconds 120., retries = 10)
     let app = App(store)
 
     /// Process for all tranches in the input batch; requeue any triggers that we've not yet fully completed the processing for
-    member _.Handle(event : SQSEvent, _context : ILambdaContext) : Task<SQSBatchResponse> = task {
-        let req = RequestBatch(event)
-        let! updated = app.Handle(req.Tranches)
-        return req.FailuresForPositionsNotReached(updated) }
+    member _.Handle(event : SQSEvent, context : ILambdaContext) : Task<SQSBatchResponse> = task {
+        try let req = RequestBatch(event)
+            Log.Information("Batch {count} notifications, {tranches} tranches", req.Count, req.Tranches.Length)
+            let! updated = app.Handle(req.Tranches, context.RemainingTime)
+            return req.FailuresForPositionsNotReached(updated)
+        finally Equinox.DynamoStore.Core.Log.InternalMetrics.dump Log.Logger }
