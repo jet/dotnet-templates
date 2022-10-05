@@ -69,9 +69,8 @@ type Store internal (connector : DynamoStoreConnector, table, indexTable) =
 type App(store : Store) =
     
     let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2., verboseStore = false, logExternalStats = store.DumpMetrics)
-    let triggerStats () =
+    let awaitStatsOutput () =
         // The processing loops run on 1s timers, so we busy-wait until they wake
-        stats.StatsInterval.Trigger()
         let timeout = IntervalTimer(TimeSpan.FromSeconds 2)
         while stats.StatsInterval.IsTriggered && not timeout.IsDue do
             System.Threading.Thread.Sleep 1
@@ -89,6 +88,8 @@ type App(store : Store) =
                                  wakeForResults = true, purgeInterval = purgeInterval)
         
     member x.Handle(tranches, lambdaTimeout) = task {
+        let sw = Stopwatch.start ()
+        
         let src = store.CreateSource(tranches, sink)
         // Kick off reading from the source (Disposal will Stop it if we're exiting due to a timeout; we'll spin up a fresh one when re-triggered)
         use source = src.Start()
@@ -96,16 +97,19 @@ type App(store : Store) =
         // In the case of sustained activity and/or catch-up scenarios, proactively trigger an orderly shutdown of the Source
         // in advance of the Lambda being killed (no point starting new work or incurring DynamoDB CU consumption that won't finish)
         let lambdaCutoffDuration = lambdaTimeout - processingTimeout - TimeSpan.FromSeconds 5
-        Task.Delay(lambdaCutoffDuration).ContinueWith(fun _ -> source.Stop(); stats.StatsInterval.Trigger()) |> ignore
+        Task.Delay(lambdaCutoffDuration).ContinueWith(fun _ -> source.Stop()) |> ignore
 
         // If for some reason we're not provisioned well enough to read something within 1m, no point for paying for a full lambda timeout
         let initialReaderTimeout = TimeSpan.FromMinutes 1.
         do! source.Monitor.AwaitCompletion(initialReaderTimeout, awaitFullyCaughtUp = true, logInterval = TimeSpan.FromSeconds 30)
+        // Shut down all processing (we create a fresh Source per Lambda invocation)
         source.Stop()
-        triggerStats ()
-
-        // force a final attempt to flush anything not already checkpointed (normally checkpointing is at 5s intervals)
-        return! src.Checkpoint() }
+        
+        let isStatsWorthy = sw.ElapsedSeconds > 10
+        try if isStatsWorthy then stats.StatsInterval.Trigger()
+            // force a final attempt to flush anything not already checkpointed (normally checkpointing is at 5s intervals)
+            return! src.Checkpoint()
+        finally if isStatsWorthy then awaitStatsOutput () }
 
 /// Each queued Notifier message conveyed to the Lambda represents a Target Position on an Index Tranche
 type RequestBatch(event : SQSEvent) =
