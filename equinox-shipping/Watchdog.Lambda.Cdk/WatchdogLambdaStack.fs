@@ -6,8 +6,8 @@ open Propulsion.DynamoStore.Constructs
 open System
 
 type WatchdogLambdaStackProps
-    (   // Source Sns Topic Arn, serviced by Propulsion.DynamoStore.Notifier
-        notifierTopicArn : string,
+    (   // Source Sns FIFO Topic Arn, serviced by Propulsion.DynamoStore.Notifier
+        notifierFifoTopicArn : string,
         
         // DynamoDB Index Table Name, written by Propulsion.DynamoStore.Indexer
         indexTableName : string,
@@ -26,15 +26,15 @@ type WatchdogLambdaStackProps
         ?memorySize : int,
         // Lambda max batch size - default 10
         ?batchSize : int,
-        // Lambda timeout - default 5m
+        // Lambda timeout - default 3m
         ?timeout : TimeSpan) =
     inherit StackProps()
-    member val NotifierTopicArn = notifierTopicArn
+    member val NotifierFifoTopicArn = notifierFifoTopicArn
     member val StoreTableName = storeTableName
     member val IndexTableName = indexTableName
-    member val MemorySize = defaultArg memorySize 128
+    member val MemorySize = defaultArg memorySize 192
     member val BatchSize = defaultArg batchSize 10
-    member val Timeout = defaultArg timeout (TimeSpan.FromMinutes 5)
+    member val Timeout = defaultArg timeout (TimeSpan.FromMinutes 3)
     member val LambdaCodePath = lambdaCodePath
     member val LambdaDescription = lambdaDescription
     member val LambdaHandler = lambdaHandler
@@ -45,7 +45,7 @@ type WatchdogLambdaStack(scope, id, props : WatchdogLambdaStackProps) as stack =
     inherit Stack(scope, id, props)
 
     let props : DynamoStoreReactorLambdaProps =
-        {   updatesSource = UpdatesTopic props.NotifierTopicArn
+        {   updatesSource = UpdatesTopic props.NotifierFifoTopicArn
             regionName = stack.Region; storeTableName = props.StoreTableName; indexTableName = props.IndexTableName
             memorySize = props.MemorySize; batchSize = props.BatchSize; timeout = props.Timeout
             lambdaDescription = props.LambdaDescription

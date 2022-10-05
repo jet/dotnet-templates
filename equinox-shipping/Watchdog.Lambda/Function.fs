@@ -79,32 +79,33 @@ type App(store : Store) =
         let processManagerMaxDop = 4
         FinalizationProcess.Config.create processManagerMaxDop store.Config
     let processingTimeout = 10. |> TimeSpan.FromSeconds
+    // On paper, a 1m window should be fine, give the timeout for a single lifecycle
+    // We use a higher value to reduce redundant work in the (edge) case of multiple deliveries due to rate limiting of readers
+    let purgeInterval = TimeSpan.FromMinutes 5.
     let sink =
         let maxReadAhead = 2
         let maxConcurrentStreams = 8
         Handler.Config.StartSink(Log.Logger, stats, manager, processingTimeout, maxReadAhead, maxConcurrentStreams,
-                                 wakeForResults = true, purgeInterval = stats.StateInterval.Period)
+                                 wakeForResults = true, purgeInterval = purgeInterval)
         
     member x.Handle(tranches, lambdaTimeout) = task {
-        let source = store.CreateSource(tranches, sink)
+        let src = store.CreateSource(tranches, sink)
+        // Kick off reading from the source (Disposal will Stop it if we're exiting due to a timeout; we'll spin up a fresh one when re-triggered)
+        use source = src.Start()
         
-        // Kick off reading from the source
-        let sourcePipeline = source.Start()
-        
-        let initialReaderTimeout = TimeSpan.FromMinutes 1.
-        let lambdaCutoffDuration = lambdaTimeout - initialReaderTimeout - processingTimeout
-        
-        // In the case of sustained activity, we want to proactively trigger an orderly shutdown of the Sink in advance of the Lambda being killed
-        Task.Delay(lambdaCutoffDuration).ContinueWith(fun _ -> sourcePipeline.Stop(); stats.StatsInterval.Trigger()) |> ignore
+        // In the case of sustained activity and/or catch-up scenarios, proactively trigger an orderly shutdown of the Source
+        // in advance of the Lambda being killed (no point starting new work or incurring DynamoDB CU consumption that won't finish)
+        let lambdaCutoffDuration = lambdaTimeout - processingTimeout - TimeSpan.FromSeconds 5
+        Task.Delay(lambdaCutoffDuration).ContinueWith(fun _ -> source.Stop(); stats.StatsInterval.Trigger()) |> ignore
 
-        // wait for processing to stop (we'll continually process as long as there's work available)
-        let lingerTime allAtTail (_propagationTimeout : TimeSpan) (propagation : TimeSpan) (processing : TimeSpan) =
-            if allAtTail then TimeSpan.Zero else lambdaTimeout - propagation - processing
-        do! source.Monitor.AwaitCompletion(initialReaderTimeout, lingerTime = lingerTime, awaitTail = true)
+        // If for some reason we're not provisioned well enough to read something within 1m, no point for paying for a full lambda timeout
+        let initialReaderTimeout = TimeSpan.FromMinutes 1.
+        do! source.Monitor.AwaitCompletion(initialReaderTimeout, awaitFullyCaughtUp = true, logInterval = TimeSpan.FromSeconds 30)
+        source.Stop()
         triggerStats ()
 
-        // force a final attempt to flush anything not checkpointed (normally checkpointing is at 5s intervals)
-        return! source.Checkpoint() }
+        // force a final attempt to flush anything not already checkpointed (normally checkpointing is at 5s intervals)
+        return! src.Checkpoint() }
 
 /// Each queued Notifier message conveyed to the Lambda represents a Target Position on an Index Tranche
 type RequestBatch(event : SQSEvent) =
@@ -120,19 +121,23 @@ type RequestBatch(event : SQSEvent) =
     /// Correlates the achieved Tranche Positions with those that triggered the work; requeue any not yet acknowledged as processed
     member _.FailuresForPositionsNotReached(updated : IReadOnlyDictionary<_, _>) =
         let res = SQSBatchResponse()
+        let incomplete = ResizeArray()
         for trancheId, pos, messageId in inputs do
             match updated.TryGetValue trancheId with
             | true, pos' when pos' >= pos -> ()
-            | _ -> res.BatchItemFailures.Add(SQSBatchResponse.BatchItemFailure(ItemIdentifier = messageId))
-        res
+            | _ ->
+                res.BatchItemFailures.Add(SQSBatchResponse.BatchItemFailure(ItemIdentifier = messageId))
+                incomplete.Add(struct (trancheId, pos))
+        struct (res, incomplete.ToArray())
 
 type Function() =
 
-    // TOCONSIDER surface metrics from write activities to prometheus by wiring up Metrics Sink (for now we emit them to the log instead)
     let removeMetrics (e : Serilog.Events.LogEvent) =
         e.RemovePropertyIfPresent(Equinox.DynamoStore.Core.Log.PropertyTag)
         e.RemovePropertyIfPresent(Propulsion.Streams.Log.PropertyTag)
         e.RemovePropertyIfPresent(Propulsion.Feed.Core.Log.PropertyTag)
+        // TOCONSIDER surface metrics from write activities to prometheus by wiring up Metrics Sink (for now we emit them to the log instead)
+        e.RemovePropertyIfPresent "isMetric"
     let template = "{Level:u1} {Message} {Properties}{NewLine}{Exception}"
     do Log.Logger <- LoggerConfiguration()
         .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
@@ -149,5 +154,7 @@ type Function() =
         try let req = RequestBatch(event)
             Log.Information("Batch {count} notifications, {tranches} tranches", req.Count, req.Tranches.Length)
             let! updated = app.Handle(req.Tranches, context.RemainingTime)
-            return req.FailuresForPositionsNotReached(updated)
+            let struct (res, requeued) = req.FailuresForPositionsNotReached(updated)
+            if Array.any requeued then Log.Information("Batch requeued {requeued}", requeued)
+            return res
         finally Equinox.DynamoStore.Core.Log.InternalMetrics.dump Log.Logger }

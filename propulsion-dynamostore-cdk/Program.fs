@@ -33,8 +33,9 @@ let main _ =
     let notifierCodePath = match app.Node.TryGetContext "notifierCode" with :? string as path -> path | _ -> lambdaCodePath "Notifier"
     let indexStreamArn, notifyTopicArn =
         match app.Node.TryGetContext indexStreamArg, app.Node.TryGetContext topicNameArg with
+        | :? string as sa, null when sa <> null -> sa, None
         | :? string as sa, (:? string as tn) when sa <> null -> sa, Option.ofObj tn
-        | _ -> failwith $"Please supply DynamoDB Index Streams ARN and (optionally) SNS Topic ARN via -c {indexStreamArg}= and -c {topicNameArg}= respectively"
+        | _ -> failwith $"Please supply -c {indexStreamArg}=<DynamoDB Index Streams ARN> and (optionally) -c {topicNameArg}=<SNS Topic ARN>"
     let _mainNotifier = NotifierStack(app, "MainNotifier", NotifierStackProps(indexStreamArn, notifyTopicArn, notifierCodePath))
 
     app.Synth() |> ignore
