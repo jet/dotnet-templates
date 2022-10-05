@@ -20,11 +20,11 @@ This project uses the [AWS Cloud Development Kit (CDK)](https://docs.aws.amazon.
 
 1. A source DynamoDB Table, with DDB Streams configured
 
-       eqx initaws -r 10 -w 10 dynamo -t equinox-test
+       eqx initaws -r 10 -w 10 -s new dynamo -t equinox-test
 
 2. An index DynamoDB Table (with Notifier support)
 
-       eqx initaws -r 5 -w 5 dynamo -t equinox-test-index
+       eqx initaws -r 5 -w 5 -s new dynamo -t equinox-test-index
 
    *OR (without Notifier support)*
 

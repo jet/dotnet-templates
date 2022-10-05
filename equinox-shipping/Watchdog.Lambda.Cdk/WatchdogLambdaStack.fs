@@ -32,7 +32,7 @@ type WatchdogLambdaStackProps
     member val NotifierFifoTopicArn = notifierFifoTopicArn
     member val StoreTableName = storeTableName
     member val IndexTableName = indexTableName
-    member val MemorySize = defaultArg memorySize 192
+    member val MemorySize = defaultArg memorySize 128
     member val BatchSize = defaultArg batchSize 10
     member val Timeout = defaultArg timeout (TimeSpan.FromMinutes 3)
     member val LambdaCodePath = lambdaCodePath

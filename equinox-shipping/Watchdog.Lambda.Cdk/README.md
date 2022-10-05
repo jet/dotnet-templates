@@ -30,8 +30,8 @@ This project uses the [AWS Cloud Development Kit (CDK)](https://docs.aws.amazon.
    
    [See `proDynamoStoreCdk` template](https://github.com/jet/dotnet-templates/blob/master/propulsion-dynamostore-cdk/README.md); TL;DR:
 
-       eqx initaws -r 10 -w 10 dynamo -t equinox-test
-       eqx initaws -r 5 -w 5 dynamo -t equinox-test-index
+       eqx initaws -r 10 -w 10 -s new dynamo -t equinox-test
+       eqx initaws -r 5 -w 5 -s new dynamo -t equinox-test-index
        mkdir dynamostore-cdk
        cd dynamostore-cdk
        dotnet new proDynamoStoreCdk
