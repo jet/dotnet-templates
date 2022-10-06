@@ -10,7 +10,7 @@
   ],
   "tags": {
     "language": "F#",
-    "type": "project"
+    "type": "solution"
   },
   "identity": "Equinox.Shipping",
   "name": "Equinox Shipping Sample",

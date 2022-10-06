@@ -58,18 +58,21 @@ module SourceConfig =
             source, None
     module Dynamo =
         open Propulsion.DynamoStore
-        let start (log, storeLog) (sink : Propulsion.Streams.Default.Sink) categoryFilter
-            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
+        let create (log, storeLog) (sink : Propulsion.Streams.Default.Sink) categoryFilter
+            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) trancheIds =
             let loadMode =
                 match loadModeConfig with
                 | Hydrate (monitoredContext, hydrationConcurrency) -> LoadMode.Hydrated (categoryFilter, hydrationConcurrency, monitoredContext)
-            let source =
-                DynamoStoreSource(
-                    log, statsInterval,
-                    indexStore, batchSizeCutoff, tailSleepInterval,
-                    checkpoints, sink, loadMode,
-                    startFromTail = startFromTail, storeLog = storeLog)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            DynamoStoreSource(
+                log, statsInterval,
+                indexStore, batchSizeCutoff, tailSleepInterval,
+                checkpoints, sink, loadMode,
+                startFromTail = startFromTail, storeLog = storeLog, ?trancheIds = trancheIds)
+        let start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval)
+            : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
+            let source = create (log, storeLog) sink categoryFilter (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) None
+            let source = source.Start()
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
     module Esdb =
         open Propulsion.EventStoreDb
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
@@ -79,7 +82,8 @@ module SourceConfig =
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
                     checkpoints, sink, categoryFilter, hydrateBodies = hydrateBodies, startFromTail = startFromTail)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            let source = source.Start()
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 
     let start (log, storeLog) sink categoryFilter : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Async<unit>) option = function
         | SourceConfig.Memory volatileStore ->

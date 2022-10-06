@@ -5,7 +5,7 @@
     <Company>Jet.com</Company>
     <Description>Equinox and Propulsion templates: dotnet new eqxweb, eqxwebcs, eqxtestbed, proConsumer, proProjector, proReactor, proSync</Description>
     <PackageProjectUrl>https://github.com/jet/dotnet-templates</PackageProjectUrl>
-    <PackageTags>equinox fsharp eventsourcing cosmosdb eventstore changefeedprocessor kafka benchmark</PackageTags>
+    <PackageTags>equinox fsharp eventsourcing cosmosdb dynamodb eventstore changefeedprocessor kafka benchmark</PackageTags>
     <PackageLicense>Apache-2.0</PackageLicense>
     <Copyright>Copyright © 2018-22</Copyright>
 
@@ -17,7 +17,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="../../equinox-*/**/*.*;../../propulsion-*/**/*.*;../../feed-*/**/*.*;../../periodic-*/**/*.*;../../propulsion-indexer-cdk/.gitignore"
+    <None Include="../../equinox-*/**/*.*;../../propulsion-*/**/*.*;../../feed-*/**/*.*;../../periodic-*/**/*.*;../../propulsion-dynamostore-cdk/.gitignore;../../equinox-shipping/Watchdog.Lambda.Cdk/.gitignore"
           Exclude="**/bin/**/*;**/obj/**/*;**/.vs/**/*;**/.idea/**/*"
           Pack="true"
           PackagePath="content" />

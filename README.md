@@ -37,9 +37,9 @@ The following templates focus specifically on the usage of `Propulsion` componen
 
 - [`periodicIngester`](periodic-ingester/) - Boilerplate for a service that regularly walks the content of a source, feeding it into a propulsion projector in order to manage the ingestion process using [`Propulsion.Feed.PeriodicSource`](https://github.com/jet/propulsion)
 
-- [`proIndexer`](propulsion-indexer-cdk/README.md)
+- [`proDynamoStoreCdk`](propulsion-dynamostore-cdk/README.md)
 
-    - AWS CDK Wiring for programmatic IaC deployment of `Propulsion.DynamoStore.Lambda`
+    - AWS CDK Wiring for programmatic IaC deployment of `Propulsion.DynamoStore.Indexer` and `Propulsion.DynamoStore.Notifier`
 
 ## Producer/Reactor Templates combining usage of Equinox and Propulsion
 

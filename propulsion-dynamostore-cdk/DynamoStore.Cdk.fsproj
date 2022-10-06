@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+
+        <OutputType>Exe</OutputType>
+        <!-- Opt into Roll forward to future major versions as needed -->
+        <RollForward>Major</RollForward>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="IndexerStack.fs" />
+        <Compile Include="NotifierStack.fs" />
+        <Compile Include="Program.fs" />
+        <Content Include="README.md" />
+        <Content Include=".gitignore" />
+        <Content Include="cdk.json" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props-->
+        <!-- <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />-->
+
+        <PackageReference Include="Propulsion.DynamoStore.Indexer" Version="3.0.0-beta.4.3" PrivateAssets="all" />
+        <PackageReference Include="Propulsion.DynamoStore.Notifier" Version="3.0.0-beta.4.3" PrivateAssets="all" />
+        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0-beta.4.3" />
+    </ItemGroup>
+
+    <!-- The Propulsion.DynamoStore.Indexer NuGet package includes the publish folder as content under 'tools/pub' -->
+    <Target Name="_ExtractPropulsionDynamoStoreIndexerToolsContentToObjFolder" AfterTargets="Build">
+        <PropertyGroup>
+            <!-- PkgPropulsion_DynamoStore_Indexer is supplied via the PackageReference -->
+            <_SrcFolder>$(PkgPropulsion_DynamoStore_Indexer)\tools\pub</_SrcFolder>
+            <_DstFolder>$(BaseIntermediateOutputPath)pub\Indexer</_DstFolder>
+        </PropertyGroup>
+        <ItemGroup>
+            <PublishedFiles Include="$(_SrcFolder)\**\*.*" />
+        </ItemGroup>
+        <Message Importance="high" Text="Copying Propulsion.DynamoStore.Indexer publish Content from $(_SrcFolder) to holding folder $(_DstFolder)" />
+        <Copy SourceFiles="@(PublishedFiles)" DestinationFolder="$(_DstFolder)\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+    <!-- The Propulsion.DynamoStore.Notifier NuGet package includes the publish folder as content under 'tools/pub' -->
+    <Target Name="_ExtractPropulsionDynamoStoreNotifierToolsContentToObjFolder" AfterTargets="Build">
+        <PropertyGroup>
+            <!-- PkgPropulsion_DynamoStore_Notifier is supplied via the PackageReference -->
+            <_SrcFolder>$(PkgPropulsion_DynamoStore_Notifier)\tools\pub</_SrcFolder>
+            <_DstFolder>$(BaseIntermediateOutputPath)pub\Notifier</_DstFolder>
+        </PropertyGroup>
+        <ItemGroup>
+            <PublishedFiles Include="$(_SrcFolder)\**\*.*" />
+        </ItemGroup>
+        <Message Importance="high" Text="Copying Propulsion.DynamoStore.Notifier publish Content from $(_SrcFolder) to holding folder $(_DstFolder)" />
+        <Copy SourceFiles="@(PublishedFiles)" DestinationFolder="$(_DstFolder)\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+</Project>

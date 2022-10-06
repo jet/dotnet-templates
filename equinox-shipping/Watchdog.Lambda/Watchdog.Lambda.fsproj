@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        
+        <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+        <AWSProjectType>Lambda</AWSProjectType>
+        <!-- This property makes the build directory similar to a publish directory and helps the AWS .NET Lambda Mock Test Tool find project dependencies. -->
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+        
+        <!-- Generate ready to run images during publishing to improve cold start time. -->
+        <!-- <PublishReadyToRun>true</PublishReadyToRun>-->
+
+        <!-- Needs to be explicitly managed here for raw dotnet publish to work cleanly -->
+        <RuntimeIdentifier>linux-arm64</RuntimeIdentifier>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Amazon.Lambda.Core" Version="2.1.0" />
+        <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.3.0" />
+        <PackageReference Include="Propulsion.DynamoStore.Lambda" Version="3.0.0-beta.4.3" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\Watchdog\Watchdog.fsproj" />
+    </ItemGroup>
+    <ItemGroup>
+      <Compile Include="Function.fs" />
+    </ItemGroup>
+</Project>
