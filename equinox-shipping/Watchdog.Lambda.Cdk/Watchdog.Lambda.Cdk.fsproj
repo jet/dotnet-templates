@@ -21,7 +21,6 @@
         <!-- <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />-->
 
         <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0-beta.4.3" />
-<!--      <ProjectReference Include="..\..\..\propulsion\src\Propulsion.DynamoStore.Constructs\Propulsion.DynamoStore.Constructs.fsproj" />-->
     </ItemGroup>
 
 </Project>

@@ -26,7 +26,6 @@
     </ItemGroup>
 
     <ItemGroup>
-<!--      <ProjectReference Include="..\..\..\propulsion\src\Propulsion.DynamoStore\Propulsion.DynamoStore.fsproj" />-->
       <ProjectReference Include="..\Domain\Domain.fsproj" />
     </ItemGroup>
 </Project>
