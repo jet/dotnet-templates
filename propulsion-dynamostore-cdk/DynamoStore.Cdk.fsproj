@@ -21,12 +21,12 @@
         <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props-->
         <!-- <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />-->
 
-<!--        <PackageReference Include="Propulsion.DynamoStore.Indexer" Version="3.0.0-beta.5" PrivateAssets="all" />-->
-<!--        <PackageReference Include="Propulsion.DynamoStore.Notifier" Version="3.0.0-beta.5" PrivateAssets="all" />-->
-<!--        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0-beta.5" />-->
-      <ProjectReference Include="..\..\propulsion\src\Propulsion.DynamoStore.Indexer\Propulsion.DynamoStore.Indexer.fsproj" />
-      <ProjectReference Include="..\..\propulsion\src\Propulsion.DynamoStore.Notifier\Propulsion.DynamoStore.Notifier.fsproj" />
-      <ProjectReference Include="..\..\propulsion\src\Propulsion.DynamoStore.Constructs\Propulsion.DynamoStore.Constructs.fsproj" />
+        <PackageReference Include="Propulsion.DynamoStore.Indexer" Version="3.0.0-beta.4.3" PrivateAssets="all" />
+        <PackageReference Include="Propulsion.DynamoStore.Notifier" Version="3.0.0-beta.4.3" PrivateAssets="all" />
+        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0-beta.4.3" />
+<!--      <ProjectReference Include="..\..\propulsion\src\Propulsion.DynamoStore.Indexer\Propulsion.DynamoStore.Indexer.fsproj" />-->
+<!--      <ProjectReference Include="..\..\propulsion\src\Propulsion.DynamoStore.Notifier\Propulsion.DynamoStore.Notifier.fsproj" />-->
+<!--      <ProjectReference Include="..\..\propulsion\src\Propulsion.DynamoStore.Constructs\Propulsion.DynamoStore.Constructs.fsproj" />-->
     </ItemGroup>
 
     <!-- The Propulsion.DynamoStore.Indexer NuGet package includes the publish folder as content under 'tools/pub' -->

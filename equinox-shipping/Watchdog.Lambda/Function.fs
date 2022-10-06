@@ -3,15 +3,12 @@
 open Amazon.Lambda.Core
 open Amazon.Lambda.SQSEvents
 open Equinox.DynamoStore
-open Propulsion.Feed
-open Propulsion.Internal
+open Propulsion.DynamoStore.Lambda
 open Serilog
 open Shipping.Domain
 open Shipping.Infrastructure
 open Shipping.Watchdog
 open System
-open System.Collections.Generic
-open System.Threading.Tasks
 
 [<assembly: LambdaSerializer(typeof<Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer>)>] ()
 
@@ -69,96 +66,44 @@ type Store internal (connector : DynamoStoreConnector, table, indexTable) =
 type App(store : Store) =
     
     let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2., verboseStore = false, logExternalStats = store.DumpMetrics)
-    let awaitStatsOutput () =
-        // The processing loops run on 1s timers, so we busy-wait until they wake
-        let timeout = IntervalTimer(TimeSpan.FromSeconds 2)
-        while stats.StatsInterval.IsTriggered && not timeout.IsDue do
-            System.Threading.Thread.Sleep 1
-    let manager =
-        let processManagerMaxDop = 4
-        FinalizationProcess.Config.create processManagerMaxDop store.Config
     let processingTimeout = 10. |> TimeSpan.FromSeconds
-    // On paper, a 1m window should be fine, give the timeout for a single lifecycle
-    // We use a higher value to reduce redundant work in the (edge) case of multiple deliveries due to rate limiting of readers
-    let purgeInterval = TimeSpan.FromMinutes 5.
     let sink =
+        let manager =
+            let processManagerMaxDop = 4
+            FinalizationProcess.Config.create processManagerMaxDop store.Config
         let maxReadAhead = 2
         let maxConcurrentStreams = 8
+        // On paper, a 1m window should be fine, give the timeout for a single lifecycle
+        // We use a higher value to reduce redundant work in the (edge) case of multiple deliveries due to rate limiting of readers
+        let purgeInterval = TimeSpan.FromMinutes 5.
         Handler.Config.StartSink(Log.Logger, stats, manager, processingTimeout, maxReadAhead, maxConcurrentStreams,
                                  wakeForResults = true, purgeInterval = purgeInterval)
         
-    member x.Handle(tranches, lambdaTimeout) = task {
-        let sw = Stopwatch.start ()
-        
-        let src = store.CreateSource(tranches, sink)
-        // Kick off reading from the source (Disposal will Stop it if we're exiting due to a timeout; we'll spin up a fresh one when re-triggered)
-        use source = src.Start()
-        
-        // In the case of sustained activity and/or catch-up scenarios, proactively trigger an orderly shutdown of the Source
-        // in advance of the Lambda being killed (no point starting new work or incurring DynamoDB CU consumption that won't finish)
+    member x.RunUntilCaughtUp(tranches, lambdaTimeout) =
+        let source = store.CreateSource(tranches, sink)
         let lambdaCutoffDuration = lambdaTimeout - processingTimeout - TimeSpan.FromSeconds 5
-        Task.Delay(lambdaCutoffDuration).ContinueWith(fun _ -> source.Stop()) |> ignore
-
-        // If for some reason we're not provisioned well enough to read something within 1m, no point for paying for a full lambda timeout
-        let initialReaderTimeout = TimeSpan.FromMinutes 1.
-        do! source.Monitor.AwaitCompletion(initialReaderTimeout, awaitFullyCaughtUp = true, logInterval = TimeSpan.FromSeconds 30)
-        // Shut down all processing (we create a fresh Source per Lambda invocation)
-        source.Stop()
+        source.RunUntilCaughtUp(lambdaCutoffDuration, stats.StatsInterval)
         
-        let isStatsWorthy = sw.ElapsedSeconds > 10
-        try if isStatsWorthy then stats.StatsInterval.Trigger()
-            // force a final attempt to flush anything not already checkpointed (normally checkpointing is at 5s intervals)
-            return! src.Checkpoint()
-        finally if isStatsWorthy then awaitStatsOutput () }
-
-/// Each queued Notifier message conveyed to the Lambda represents a Target Position on an Index Tranche
-type RequestBatch(event : SQSEvent) =
-    let inputs = [|
-        for r in event.Records ->
-            let trancheId = r.MessageAttributes["TrancheId"].StringValue |> TrancheId.parse
-            let position = r.MessageAttributes["Position"].StringValue |> int64 |> Position.parse
-            struct (trancheId, position, r.MessageId) |]
-
-    member val Count = inputs.Length
-    /// Yields the set of Index Tranches on which we are anticipating there to be work available
-    member val Tranches = seq { for trancheId, _, _ in inputs -> trancheId } |> Seq.distinct |> Seq.toArray
-    /// Correlates the achieved Tranche Positions with those that triggered the work; requeue any not yet acknowledged as processed
-    member _.FailuresForPositionsNotReached(updated : IReadOnlyDictionary<_, _>) =
-        let res = SQSBatchResponse()
-        let incomplete = ResizeArray()
-        for trancheId, pos, messageId in inputs do
-            match updated.TryGetValue trancheId with
-            | true, pos' when pos' >= pos -> ()
-            | _ ->
-                res.BatchItemFailures.Add(SQSBatchResponse.BatchItemFailure(ItemIdentifier = messageId))
-                incomplete.Add(struct (trancheId, pos))
-        struct (res, incomplete.ToArray())
-
 type Function() =
 
-    let removeMetrics (e : Serilog.Events.LogEvent) =
-        e.RemovePropertyIfPresent(Equinox.DynamoStore.Core.Log.PropertyTag)
-        e.RemovePropertyIfPresent(Propulsion.Streams.Log.PropertyTag)
-        e.RemovePropertyIfPresent(Propulsion.Feed.Core.Log.PropertyTag)
-        // TOCONSIDER surface metrics from write activities to prometheus by wiring up Metrics Sink (for now we emit them to the log instead)
-        e.RemovePropertyIfPresent "isMetric"
-    let template = "{Level:u1} {Message} {Properties}{NewLine}{Exception}"
-    do Log.Logger <- LoggerConfiguration()
-        .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
-        .Enrich.With({ new Serilog.Core.ILogEventEnricher with member _.Enrich(evt, _) = removeMetrics evt })
-        .WriteTo.Console(outputTemplate = template)
-        .CreateLogger()
-
+    do  // TOCONSIDER surface metrics from write activities to prometheus by wiring up Metrics Sink (for now we emit them to the log instead)
+        let removeMetrics (e : Serilog.Events.LogEvent) =
+            e.RemovePropertyIfPresent(Equinox.DynamoStore.Core.Log.PropertyTag)
+            e.RemovePropertyIfPresent(Propulsion.Streams.Log.PropertyTag)
+            e.RemovePropertyIfPresent(Propulsion.Feed.Core.Log.PropertyTag)
+            e.RemovePropertyIfPresent "isMetric"        
+        Log.Logger <- LoggerConfiguration()
+            .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink()) // get them counted so we can dump at end of Handle
+            .WriteTo.Logger(fun l ->
+                l.Enrich.With({ new Serilog.Core.ILogEventEnricher with member _.Enrich(evt, _) = removeMetrics evt })
+                 .WriteTo.Console(outputTemplate = "{Level:u1} {Message:l} {Properties:j}{NewLine}{Exception}") |> ignore)
+            .CreateLogger()
     let config = Configuration()
     let store = Store(config, requestTimeout = TimeSpan.FromSeconds 120., retries = 10)
     let app = App(store)
 
     /// Process for all tranches in the input batch; requeue any triggers that we've not yet fully completed the processing for
-    member _.Handle(event : SQSEvent, context : ILambdaContext) : Task<SQSBatchResponse> = task {
-        try let req = RequestBatch(event)
-            Log.Information("Batch {count} notifications, {tranches} tranches", req.Count, req.Tranches.Length)
-            let! updated = app.Handle(req.Tranches, context.RemainingTime)
-            let struct (res, requeued) = req.FailuresForPositionsNotReached(updated)
-            if Array.any requeued then Log.Information("Batch requeued {requeued}", requeued)
-            return res
-        finally Equinox.DynamoStore.Core.Log.InternalMetrics.dump Log.Logger }
+    member _.Handle(event : SQSEvent, context : ILambdaContext) : System.Threading.Tasks.Task<SQSBatchResponse> = task {
+        let req = SqsNotificationBatch.parse event
+        let! updated = app.RunUntilCaughtUp(req.Tranches, context.RemainingTime)
+        return SqsNotificationBatch.batchResponseWithFailuresForPositionsNotReached req updated }

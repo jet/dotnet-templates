@@ -175,6 +175,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Propulsion.DynamoStore.Cons
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Watchdog.Lambda.Cdk", "equinox-shipping\Watchdog.Lambda.Cdk\Watchdog.Lambda.Cdk.fsproj", "{C9D85FFB-847F-407D-A76B-38C44A01D8EC}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Propulsion.DynamoStore.Lambda", "..\propulsion\src\Propulsion.DynamoStore.Lambda\Propulsion.DynamoStore.Lambda.fsproj", "{E5FECEFC-BBAF-4341-A5F4-79B0F8F00D6D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -317,6 +319,10 @@ Global
 		{C9D85FFB-847F-407D-A76B-38C44A01D8EC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C9D85FFB-847F-407D-A76B-38C44A01D8EC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C9D85FFB-847F-407D-A76B-38C44A01D8EC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5FECEFC-BBAF-4341-A5F4-79B0F8F00D6D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5FECEFC-BBAF-4341-A5F4-79B0F8F00D6D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5FECEFC-BBAF-4341-A5F4-79B0F8F00D6D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5FECEFC-BBAF-4341-A5F4-79B0F8F00D6D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -354,6 +360,7 @@ Global
 		{59654542-0A61-4F26-8531-BD52093EDF6A} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
 		{FA3300AD-C227-4184-B751-7416A6B3C3A1} = {A3A3AA9F-E039-4D1A-BA64-A8291A239861}
 		{C9D85FFB-847F-407D-A76B-38C44A01D8EC} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
+		{E5FECEFC-BBAF-4341-A5F4-79B0F8F00D6D} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D8B64643-4049-466D-BAFC-0437B8C1E508}

@@ -8,7 +8,7 @@ type NotifierStackProps
     (   // DynamoDB Streams Source ARN (for Index Table)
         indexStreamArn : string,
 
-        // Target Sns Topic Arn (Default: Create fresh topic)
+        // Target SNS FIFO Topic Arn (Default: Create fresh topic)
         updatesTopicArn : string option,
 
         // Path for published binaries for Propulsion.DynamoStore.Notifier
@@ -33,7 +33,7 @@ type NotifierStack(scope, id, props : NotifierStackProps) as stack =
 
     let props : DynamoStoreNotifierLambdaProps =
         {   indexStreamArn = props.IndexStreamArn
-            updatesTopicArn = props.UpdatesTopicArn
+            updatesTarget = match props.UpdatesTopicArn with Some ta -> UpdatesTarget.ExistingTopic ta | None -> UpdatesTarget.Default 
             memorySize = props.MemorySize; batchSize = props.BatchSize; timeout = props.Timeout
             codePath = props.LambdaCodePath }
     let _ = DynamoStoreNotifierLambda(stack, "Notifier", props = props)

@@ -19,14 +19,14 @@
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
         <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-beta.4" />
-<!--        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-beta.4" />-->
+        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-beta.4.3" />
         <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-beta.4" />
         <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-beta.4" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\..\propulsion\src\Propulsion.DynamoStore\Propulsion.DynamoStore.fsproj" />
+<!--      <ProjectReference Include="..\..\..\propulsion\src\Propulsion.DynamoStore\Propulsion.DynamoStore.fsproj" />-->
       <ProjectReference Include="..\Domain\Domain.fsproj" />
     </ItemGroup>
 </Project>
