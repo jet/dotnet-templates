@@ -64,7 +64,7 @@ type Logging() =
         |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
                      .MinimumLevel.Override(typeof<Propulsion.EventStore.Internal.Writer.Result>.FullName, generalLevel)
-        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {NewLine}{Exception}"
+        |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
                     let configure (a : Configuration.LoggerSinkConfiguration) : unit =
                         a.Logger(fun l ->
                             l.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())

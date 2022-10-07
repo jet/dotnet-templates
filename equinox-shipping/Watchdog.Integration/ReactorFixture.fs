@@ -35,11 +35,9 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     /// This enables us to tee the output that normally goes to the Test Runner Diagnostic Sink to the test output of the (by definition, single) current test
     member _.CaptureSerilogLog(testOutput) = serilogLog.CaptureSerilogLog testOutput
     member _.DumpStats() =
-        stats.StatsInterval.Trigger()
-        // The processing loops run on 1s timers, so we busy-wait until they wake
-        let wait = IntervalTimer(TimeSpan.FromSeconds 2)
-        while stats.StatsInterval.RemainingMs > 3000 && not (wait.IfDueRestart()) do
-            System.Threading.Thread.Sleep(5)
+        if stats.StatsInterval.RemainingMs > 3000 then
+            stats.StatsInterval.Trigger()
+            stats.StatsInterval.SleepUntilTriggerCleared()
     member _.Await(propagationDelay) =
         match awaitReactions with
         | Some f -> f propagationDelay

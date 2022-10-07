@@ -71,4 +71,5 @@ type Logging() =
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
-                    c.WriteTo.Console(theme=theme, outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}")
+                    let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
+                    c.WriteTo.Console(theme=theme, outputTemplate=t)

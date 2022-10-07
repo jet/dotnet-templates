@@ -69,8 +69,8 @@ module Sinks =
           |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
 
     let console verbose (configuration : LoggerConfiguration) =
-        let t = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties}{NewLine}{Exception}"
-        let t = if verbose then t else t.Replace("{Properties}", "")
+        let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
+        let t = if verbose then t else t.Replace("{Properties:j}", "")
         configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
 
 [<System.Runtime.CompilerServices.Extension>]

@@ -22,6 +22,7 @@
       <ProjectReference Include="..\Watchdog\Watchdog.fsproj" />
     </ItemGroup>
     <ItemGroup>
+      <Compile Include="Args.fs" />
       <Compile Include="Function.fs" />
     </ItemGroup>
 </Project>
