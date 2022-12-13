@@ -1,7 +1,7 @@
 ﻿module ConsumerTemplate.TodoSummary
 
 let [<Literal>] Category = "TodoSummary"
-let streamName (clientId: ClientId) = struct (Category, ClientId.toString clientId)
+let streamId = Equinox.StreamId.gen ClientId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -52,4 +52,4 @@ module Config =
 
     let private (|Category|) = function
         | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createRollingState Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
-    let create (Category cat) = Service(streamName >> Config.createDecider cat) 
+    let create (Category cat) = Service(streamId >> Config.createDecider cat Category) 

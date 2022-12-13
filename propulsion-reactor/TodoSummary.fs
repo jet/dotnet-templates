@@ -1,7 +1,7 @@
 ﻿module ReactorTemplate.TodoSummary
 
 let [<Literal>] Category = "TodoSummary"
-let streamName (clientId : ClientId) = struct (Category, ClientId.toString clientId)
+let streamId = Equinox.StreamId.gen ClientId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -58,4 +58,4 @@ module Config =
         | Config.Store.Esdb (context, cache) ->   Config.Esdb.create Events.codec Fold.initial Fold.fold (context, cache)
         | Config.Store.Sss (context, cache) ->    Config.Sss.create Events.codec Fold.initial Fold.fold (context, cache)
 #endif
-    let create (Category cat) = streamName >> Config.createDecider cat |> Service
+    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)

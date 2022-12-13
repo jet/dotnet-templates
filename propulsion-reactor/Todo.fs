@@ -3,7 +3,7 @@ module ReactorTemplate.Todo
 open Propulsion.Internal
 
 let [<Literal>] Category = "Todos"
-let streamName (clientId : ClientId) = struct (Category, ClientId.toString clientId)
+let streamId = Equinox.StreamId.gen ClientId.toString
 let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
@@ -73,4 +73,4 @@ module Config =
         | Config.Store.Esdb (context, cache) ->   Config.Esdb.create Events.codec Fold.initial Fold.fold (context, cache)
         | Config.Store.Sss (context, cache) ->    Config.Sss.create Events.codec Fold.initial Fold.fold (context, cache)
 #endif
-    let create (Category cat) = Service(streamName >> Config.createDecider cat)
+    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)

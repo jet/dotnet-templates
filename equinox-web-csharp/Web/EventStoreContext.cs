@@ -49,7 +49,7 @@ namespace TodoBackendTemplate
                 : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
             var cat = new EventStoreCategory<TEvent, TState, Unit>(_connection, codec, FuncConvert.FromFunc(fold),
                 initial, cacheStrategy, accessStrategy);
-            return cat.Resolve(log: handlerLog);
+            return args => cat.Resolve(handlerLog).Invoke(args.Item1, args.Item2);
         }
     }
 }

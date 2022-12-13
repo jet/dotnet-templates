@@ -1,16 +1,18 @@
 ﻿module TestbedTemplate.Services
 
 open System
+open Equinox
 
 module Domain =
     module Favorites =
 
-        let streamName (id : ClientId) = struct ("Favorites", ClientId.toString id)
+        let [<Literal>] Category = "Favorites"
+        let streamId = StreamId.gen ClientId.toString
 
         // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
         module Events =
 
-            type Favorited =                            { date: System.DateTimeOffset; skuId: SkuId }
+            type Favorited =                            { date: DateTimeOffset; skuId: SkuId }
             type Unfavorited =                          { skuId: SkuId }
             module Compaction =
                 type Snapshotted =                        { net: Favorited[] }
@@ -27,8 +29,8 @@ module Domain =
             type State = Events.Favorited []
 
             type private InternalState(input: State) =
-                let dict = new System.Collections.Generic.Dictionary<SkuId, Events.Favorited>()
-                let favorite (e : Events.Favorited) =   dict.[e.skuId] <- e
+                let dict = System.Collections.Generic.Dictionary<SkuId, Events.Favorited>()
+                let favorite (e : Events.Favorited) =   dict[e.skuId] <- e
                 let favoriteAll (xs: Events.Favorited seq) = for x in xs do favorite x
                 do favoriteAll input
                 member _.ReplaceAllWith xs =           dict.Clear(); favoriteAll xs
@@ -74,7 +76,7 @@ module Domain =
                 decider.Query id
 
         let create cat =
-            streamName >> Config.createDecider cat |> Service
+            streamId >> Config.createDecider cat Category |> Service
 
         module Config =
 
@@ -94,7 +96,7 @@ module Domain =
                     let accessStrategy = if unfolds then Equinox.EventStoreDb.AccessStrategy.RollingSnapshots snapshot |> Some else None
                     Config.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context
 //#endif
-            let create (Category cat) = streamName >> Config.createDecider cat |> Service
+            let create (Category cat) = streamId >> Config.createDecider cat Category |> Service
 
 open Microsoft.Extensions.DependencyInjection
 

@@ -1,7 +1,7 @@
 ﻿module Shipping.Domain.Shipment
 
 let [<Literal>] private Category = "Shipment"
-let streamName (shipmentId : ShipmentId) = struct (Category, ShipmentId.toString shipmentId)
+let streamId = Equinox.StreamId.gen ShipmentId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -65,4 +65,4 @@ module Config =
         | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
         | Config.Store.Dynamo (context, cache) -> Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
         | Config.Store.Esdb (context, cache) ->   Config.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(streamName >> Config.createDecider cat)
+    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)

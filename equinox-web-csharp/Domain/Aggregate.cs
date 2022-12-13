@@ -30,7 +30,8 @@ namespace TodoBackendTemplate
                 };
 
             public static (string, ReadOnlyMemory<byte>) Encode(Event e) => (e.GetType().Name, Codec.Encode(e));
-            public static (string, string) StreamIds(ClientId id) => ("Aggregate", id.ToString());
+            public const string Category = "Aggregate"; 
+            public static string StreamId(ClientId id) => id.ToString();
         }
         public class State
         {

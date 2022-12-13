@@ -1,8 +1,8 @@
 ﻿module TodoBackendTemplate.Todo
 
 let [<Literal>] Category = "Todos"
-/// Maps a ClientId to the StreamName where data for that client will be held
-let streamName (clientId: ClientId) = struct (Category, ClientId.toString clientId)
+/// Maps a ClientId to the StreamId portion of the StreamName where data for that client will be held
+let streamId = Equinox.StreamId.gen ClientId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -148,4 +148,4 @@ module Config =
         | Config.Store.Esdb (context, cache) ->
             Config.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
-    let create store = Service(fun id -> Config.resolveDecider (resolveCategory store) (streamName id))
+    let create store = Service(fun id -> Config.resolveDecider (resolveCategory store) Category (streamId id))

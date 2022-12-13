@@ -41,7 +41,6 @@ module Args =
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-c"; Unique>]   MaxConnections of int
-        | [<AltCommandLine "-s"; Unique>]   MaxSubmit of int
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
         | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] SrcEs of ParseResults<EsSourceParameters>
@@ -55,7 +54,6 @@ module Args =
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
                 | MaxWriters _ ->           "maximum number of concurrent writes to target permitted. Default: 512."
                 | MaxConnections _ ->       "size of Sink connection pool to maintain. Default: 1."
-                | MaxSubmit _ ->            "maximum number of batches to submit concurrently. Default: 8."
                 | CategoryBlacklist _ ->    "category whitelist"
                 | CategoryWhitelist _ ->    "category blacklist"
 
@@ -69,7 +67,6 @@ module Args =
         member val MaxReadAhead =           p.GetResult(MaxReadAhead, 2048)
         member val MaxWriters =             p.GetResult(MaxWriters, 512)
         member val MaxConnections =         p.GetResult(MaxConnections, 1)
-        member val MaxSubmit =              p.GetResult(MaxSubmit, 8)
 
         member val Source : Choice<CosmosSourceArguments, EsSourceArguments> =
             match p.GetSubCommand() with
@@ -475,7 +472,7 @@ module Checkpoints =
         let create groupName (context, cache) =
             let caching = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
             let cat = CosmosStoreCategory(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
-            let resolve log () = Equinox.Decider.resolve log cat 
+            let resolve log () struct (cn, sid) = Equinox.Decider.resolve log cat cn (Equinox.StreamId.ofRaw sid)
             Checkpoint.CheckpointSeries(groupName, resolve)
 
 type Stats(log, statsInterval, stateInterval) =
@@ -513,7 +510,7 @@ let build (args : Args.Arguments, log) =
 #endif
                 let context = CosmosStoreContext.create target
                 let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
-                Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit),
+                Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval),
                 args.CategoryFilterFunction(excludeLong=true)
             Some target, sink, streamFilter
         | Choice2Of2 es ->
@@ -522,7 +519,7 @@ let build (args : Args.Arguments, log) =
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, AppName, connIndex)
                 return EventStoreContext(c, batchSize = Int32.MaxValue) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            let sink = EventStoreSink.Start(log, Config.log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval, maxSubmissionsPerPartition=args.MaxSubmit)
+            let sink = EventStoreSink.Start(log, Config.log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval)
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->
@@ -567,7 +564,7 @@ let build (args : Args.Arguments, log) =
         [ runPipeline; sink.AwaitWithStopOnCancellation() ]
 
 let run (args : Args.Arguments) =
-    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Scheduling.StreamSchedulingEngine>()
+    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Default.Config>()
     build (args, log) |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]

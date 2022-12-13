@@ -69,7 +69,8 @@ module SourceConfig =
                     indexStore, batchSizeCutoff, tailSleepInterval,
                     checkpoints, sink, loadMode,
                     startFromTail = startFromTail, storeLog = storeLog)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            let source = source.Start()
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
     module Esdb =
         open Propulsion.EventStoreDb
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
@@ -79,7 +80,8 @@ module SourceConfig =
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
                     checkpoints, sink, categoryFilter, hydrateBodies = hydrateBodies, startFromTail = startFromTail)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            let source = source.Start()
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
     module Sss =
         open Propulsion.SqlStreamStore
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
@@ -89,7 +91,8 @@ module SourceConfig =
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
                     checkpoints, sink, categoryFilter, hydrateBodies = hydrateBodies, startFromTail = startFromTail)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            let source = source.Start()
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
             
     let start (log, storeLog) sink categoryFilter : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Async<unit>) option = function
         | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval) ->

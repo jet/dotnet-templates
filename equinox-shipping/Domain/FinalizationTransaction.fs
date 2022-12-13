@@ -1,7 +1,7 @@
 module Shipping.Domain.FinalizationTransaction
 
 let [<Literal>] Category = "FinalizationTransaction"
-let streamName (transactionId : TransactionId) = struct (Category, TransactionId.toString transactionId)
+let streamId = Equinox.StreamId.gen TransactionId.toString
 let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
@@ -109,4 +109,4 @@ module Config =
         | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
         | Config.Store.Dynamo (context, cache) -> Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
         | Config.Store.Esdb (context, cache) ->   Config.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(streamName >> Config.createDecider cat)
+    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)

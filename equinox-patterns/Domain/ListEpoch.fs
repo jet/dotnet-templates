@@ -1,7 +1,7 @@
 module Patterns.Domain.ListEpoch
 
 let [<Literal>] Category = "ListEpoch"
-let streamName id = struct (Category, ListEpochId.toString id)
+let streamId = Equinox.StreamId.gen ListEpochId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -72,4 +72,4 @@ module Config =
         | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create maxItemsPerEpoch (Category cat) =
         let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-        Service(shouldClose, streamName >> Config.resolveDecider cat)
+        Service(shouldClose, streamId >> Config.resolveDecider cat Category)

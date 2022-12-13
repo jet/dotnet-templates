@@ -1,7 +1,7 @@
 ﻿module TodoBackendTemplate.Aggregate
 
 let [<Literal>] Category = "Aggregate"
-let streamName (id: string) = struct (Category, id)
+let streamId = Equinox.StreamId.gen id
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -63,4 +63,4 @@ module Config =
         | Config.Store.Esdb (context, cache) ->
             Config.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
-    let create (Category cat) = Service(streamName >> Config.resolveDecider cat)
+    let create (Category cat) = Service(streamId >> Config.resolveDecider cat Category)

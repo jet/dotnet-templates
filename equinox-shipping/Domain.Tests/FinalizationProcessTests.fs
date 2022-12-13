@@ -29,7 +29,7 @@ type Properties(testOutput) =
         (   GuidStringN transId1, GuidStringN transId2, GuidStringN containerId1, GuidStringN containerId2,
             NonEmptyArray (Ids shipmentIds1), NonEmptyArray (Ids shipmentIds2), GuidStringN shipment3) = async {
         let buffer = EventAccumulator()
-        use _ = store.Committed.Subscribe(buffer.Record)
+        use _ = store.Committed.Subscribe(fun struct (c, sid, e) -> buffer.Record((c, sid, e)))
         let eventTypes = seq { for e in buffer.All() -> e.EventType }
         let manager = FinalizationProcess.Config.create 16 store.Config
 
@@ -42,7 +42,7 @@ type Properties(testOutput) =
                 nameof(Container.Events.Finalized)] // Container
         test <@ res1 && set eventTypes = set expectedEvents @>
         let containerEvents =
-            buffer.Queue(Container.streamName containerId1)
+            buffer.Queue((Container.Category, Container.streamId containerId1 |> Equinox.StreamId.toString))
             |> Seq.chooseV (FsCodec.Deflate.EncodeUncompressed Container.Events.codec).TryDecode 
             |> List.ofSeq
         test <@ match containerEvents with

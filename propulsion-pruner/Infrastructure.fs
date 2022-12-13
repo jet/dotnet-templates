@@ -96,7 +96,7 @@ type Logging() =
     static member Configure(configuration : LoggerConfiguration, appName, verbose, cfpVerbose) =
         configuration.Configure(verbose)
         |> fun c -> let ingesterLevel = if cfpVerbose then Events.LogEventLevel.Debug else Events.LogEventLevel.Information
-                    c.MinimumLevel.Override(typeof<Propulsion.Streams.Scheduling.StreamSchedulingEngine>.FullName, ingesterLevel)
+                    c.MinimumLevel.Override(typeof<Propulsion.Streams.Default.Config>.FullName, ingesterLevel)
         |> fun c -> let generalLevel = if verbose then Events.LogEventLevel.Information else Events.LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
         |> fun c -> let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke

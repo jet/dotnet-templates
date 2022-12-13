@@ -23,7 +23,7 @@ namespace TodoBackendTemplate
             Func<TState, TEvent> toSnapshot = null)
         {
             var cat = new MemoryStoreCategory<TEvent, TState, ReadOnlyMemory<byte>, Unit>(_store, codec, FuncConvert.FromFunc(fold), initial);
-            return cat.Resolve(log: handlerLog);
+            return args => cat.Resolve(handlerLog).Invoke(args.Item1, args.Item2);
         }
 
         internal override Task Connect() => Task.CompletedTask;

@@ -5,7 +5,7 @@
 module FeedSourceTemplate.Domain.TicketsSeries
 
 let [<Literal>] Category = "Tickets"
-let streamName seriesId = struct (Category, TicketsSeriesId.toString seriesId)
+let streamId = Equinox.StreamId.gen TicketsSeriesId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -68,8 +68,8 @@ module Config =
         // For now we have a single global sequence. This provides us an extension point should we ever need to reprocess
         // NOTE we use a custom id in order to isolate data for acceptance tests
         let seriesId = defaultArg seriesId TicketsSeriesId.wellKnownId
-        Service(seriesId, streamName >> resolve)
+        Service(seriesId, streamId >> resolve)
     let private (|Category|) = function
         | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
         | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create seriesOverride (Category cat) = create_ seriesOverride (Config.createDecider cat)
+    let create seriesOverride (Category cat) = create_ seriesOverride (Config.createDecider cat Category)
