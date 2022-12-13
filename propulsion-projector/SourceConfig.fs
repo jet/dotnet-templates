@@ -84,7 +84,8 @@ module SourceConfig =
                     indexStore, batchSizeCutoff, tailSleepInterval,
                     checkpoints, sink, loadMode,
                     startFromTail = startFromTail, storeLog = storeLog)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            let source = source.Start()
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
 #if esdb    
     module Esdb =
@@ -96,7 +97,8 @@ module SourceConfig =
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
                     checkpoints, sink, categoryFilter, hydrateBodies = hydrateBodies, startFromTail = startFromTail)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            let source = source.Start()
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
 #if sss    
     module Sss =
@@ -108,7 +110,8 @@ module SourceConfig =
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
                     checkpoints, sink, categoryFilter, hydrateBodies = hydrateBodies, startFromTail = startFromTail)
-            source.Start(), Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            let source = source.Start()
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
     let start (log, storeLog) sink categoryFilter : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Async<unit>) option = function
 // #if cosmos    
