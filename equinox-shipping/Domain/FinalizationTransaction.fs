@@ -85,22 +85,17 @@ module Flow =
         | Fold.State.Assigned _,    Events.Completed -> true
         | _ -> false
 
-    // If there are no events to apply to the state, it pushes the transaction manager to
-    // follow up on the next action from where it was.
-    let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
-        let events =
-            match update with
-            | Some e when isValidTransition e state -> [e]
-            | _ -> []
-
-        let state' = Fold.fold state events
-        nextAction state', events
+    // If there are no events to apply to the state, it pushes the transaction manager to follow up on the next action from where it was
+    let decide (update : Events.Event option) (state : Fold.State) : Events.Event list =
+        match update with
+        | Some e when isValidTransition e state -> [ e ]
+        | _ -> []
 
 type Service internal (resolve : TransactionId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.Step(transactionId, maybeUpdate) : Async<Flow.Action> =
         let decider = resolve transactionId
-        decider.Transact(Flow.decide maybeUpdate)
+        decider.Transact(Flow.decide maybeUpdate, Flow.nextAction)
 
 module Config =
 
