@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+        <IsPackable>false</IsPackable>
+        <OutputType>Library</OutputType>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="..\Domain.Tests\SerilogLogFixture.fs">
+            <Link>SerilogLogFixture.fs</Link>
+        </Compile>
+        <Compile Include="DynamoConnector.fs" />
+        <Compile Include="ReactorFixture.fs" />
+        <Compile Include="Generators.fs" />
+        <Compile Include="WatchdogIntegrationTests.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.2.0" />
+
+        <PackageReference Include="FsCheck.Xunit" Version="3.0.0-beta2" />
+        <PackageReference Include="xunit" Version="2.4.2" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Watchdog\Watchdog.fsproj" />
+    </ItemGroup>
+
+</Project>

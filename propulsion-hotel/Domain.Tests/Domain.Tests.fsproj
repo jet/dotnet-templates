@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+        <!-- TODO remove-->
+        <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.2.0" />
+
+        <PackageReference Include="FsCheck.Xunit" Version="3.0.0-beta2" />
+        <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-beta.7" />
+        <PackageReference Include="xunit" Version="2.4.2" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Domain\Domain.fsproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Include="Arbitraries.fs" />
+      <Compile Include="Test.fs" />
+    </ItemGroup>
+
+</Project>

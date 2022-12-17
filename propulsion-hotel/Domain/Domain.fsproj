@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- TODO remove-->
+        <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.6" />
+      <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.6" />
+      <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Include="Config.fs" />
+      <Compile Include="Types.fs" />
+      <Compile Include="GuestStayAccount.fs" />
+      <Compile Include="GroupCheckoutProcess.fs" />
+    </ItemGroup>
+
+</Project>

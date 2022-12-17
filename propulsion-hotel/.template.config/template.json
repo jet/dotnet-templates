@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "@bartelink",
+  "classifications": [
+    "Equinox",
+    "Propulsion",
+    "Event Sourcing",
+    "Process Manager"
+  ],
+  "tags": {
+    "language": "F#",
+    "type": "solution"
+  },
+  "identity": "Propulsion.Hotel",
+  "name": "Propulsion Hotel Sample",
+  "shortName": "proHotel",
+  "sourceName": "Hotel",
+  "preferNameDirectory": true,
+  "symbols": {
+    "skipIntegrationTests": {
+      "type": "parameter",
+      "datatype": "bool",
+      "isRequired": false,
+      "defaultValue": "false",
+      "description": "Add Skip attribute to integration tests"
+    }
+  }
+}
