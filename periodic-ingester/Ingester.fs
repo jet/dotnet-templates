@@ -40,7 +40,7 @@ module PipelineEvent =
     (* Each item per stream is represented as an event; if multiple events have been found for a given stream, they are delivered together *)
 
     let private dummyEventData = let dummyEventType, noBody = "eventType", Unchecked.defaultof<_> in FsCodec.Core.EventData.Create(dummyEventType, noBody)
-    let sourceItemOfTicketIdAndData (id : TicketId, data : TicketData) : Propulsion.Feed.SourceItem<Propulsion.Streams.Default.EventBody> =
+    let sourceItemOfTicketIdAndData struct (id : TicketId, data : TicketData) : Propulsion.Feed.SourceItem<Propulsion.Streams.Default.EventBody> =
         { streamName = streamName id; eventData = dummyEventData; context = box data }
     let [<return: Struct>] (|TicketEvents|_|) = function
         | StreamName ticketId, (s : Propulsion.Streams.StreamSpan<_>) ->

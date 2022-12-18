@@ -13,6 +13,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - `proDynamoStoreCdk`: AWS CDK wiring for `Propulsion.DynamoStore.Indexer` and `Notifier` [#125](https://github.com/jet/dotnet-templates/pull/125)
 
 ### Changed
+
+- Target `Equinox` v `4.0.0-rc.6`, `Propulsion` v `3.0.0-beta.7`, `FsCodec` v `3.0.0-rc.9`, `net6.0` [#126](https://github.com/jet/dotnet-templates/pull/126)
+
 ### Removed 
 
 - `proIndexer`: Generalized into `proDynamoStoreCdk` [#125](https://github.com/jet/dotnet-templates/pull/125)

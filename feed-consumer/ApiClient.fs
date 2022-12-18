@@ -69,13 +69,13 @@ type TicketsFeed(baseUri) =
     let tickets = Session(client).Tickets
 
     // TODO add retries - consumer loop will abort if this throws
-    member _.Poll(trancheId, pos) : Async<Propulsion.Feed.Page<Propulsion.Streams.Default.EventBody>> = async {
+    member _.Poll(trancheId, pos, ct) = task {
         let checkpoint = TicketsCheckpoint.ofPosition pos
         let! pg = tickets.Poll(TrancheId.toFcId trancheId, checkpoint)
         let baseIndex = TicketsCheckpoint.toStreamIndex pg.position
         let map (x : ItemDto) : Ingester.PipelineEvent.Item = { id = x.id; payload = x.payload }
         let items = pg.tickets |> Array.mapi (fun i x -> Ingester.PipelineEvent.ofIndexAndItem (baseIndex + int64 i) (map x))
-        return { checkpoint = TicketsCheckpoint.toPosition pg.checkpoint; items = items; isTail = not pg.closed }
+        return ({ checkpoint = TicketsCheckpoint.toPosition pg.checkpoint; items = items; isTail = not pg.closed } : Propulsion.Feed.Page<Propulsion.Streams.Default.EventBody>)
     }
 
     // TODO add retries - consumer loop will not commence if this emits an exception

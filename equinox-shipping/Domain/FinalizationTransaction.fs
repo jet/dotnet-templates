@@ -1,7 +1,7 @@
 module Shipping.Domain.FinalizationTransaction
 
 let [<Literal>] Category = "FinalizationTransaction"
-let streamName (transactionId : TransactionId) = struct (Category, TransactionId.toString transactionId)
+let streamId = Equinox.StreamId.gen TransactionId.toString
 let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
@@ -85,22 +85,17 @@ module Flow =
         | Fold.State.Assigned _,    Events.Completed -> true
         | _ -> false
 
-    // If there are no events to apply to the state, it pushes the transaction manager to
-    // follow up on the next action from where it was.
-    let decide (update : Events.Event option) (state : Fold.State) : Action * Events.Event list =
-        let events =
-            match update with
-            | Some e when isValidTransition e state -> [e]
-            | _ -> []
-
-        let state' = Fold.fold state events
-        nextAction state', events
+    // If there are no events to apply to the state, it pushes the transaction manager to follow up on the next action from where it was
+    let decide (update : Events.Event option) (state : Fold.State) : Events.Event list =
+        match update with
+        | Some e when isValidTransition e state -> [ e ]
+        | _ -> []
 
 type Service internal (resolve : TransactionId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.Step(transactionId, maybeUpdate) : Async<Flow.Action> =
         let decider = resolve transactionId
-        decider.Transact(Flow.decide maybeUpdate)
+        decider.Transact(Flow.decide maybeUpdate, Flow.nextAction)
 
 module Config =
 
@@ -109,4 +104,4 @@ module Config =
         | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
         | Config.Store.Dynamo (context, cache) -> Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
         | Config.Store.Esdb (context, cache) ->   Config.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(streamName >> Config.createDecider cat)
+    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)

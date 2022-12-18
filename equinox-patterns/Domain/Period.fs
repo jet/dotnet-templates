@@ -6,7 +6,7 @@
 module Patterns.Domain.Period
 
 let [<Literal>] Category = "Period"
-let streamName periodId = struct (Category, PeriodId.toString periodId)
+let streamId = Equinox.StreamId.gen PeriodId.toString
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -146,4 +146,4 @@ module Config =
             // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
             // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
             Config.Cosmos.createUnoptimized Events.codecJe Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(streamName >> Config.resolveDecider cat)
+    let create (Category cat) = Service(streamId >> Config.resolveDecider cat Category)

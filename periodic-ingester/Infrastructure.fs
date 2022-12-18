@@ -4,6 +4,8 @@ module PeriodicIngesterTemplate.Ingester.Infrastructure
 open Serilog
 open System
 open System.Text
+open System.Threading
+open System.Threading.Tasks
 
 module EnvVar =
 
@@ -147,11 +149,10 @@ type HttpClient with
     ///     Drop-in replacement for HttpClient.SendAsync which addresses known timeout issues
     /// </summary>
     /// <param name="msg">HttpRequestMessage to be submitted.</param>
-    member client.Send2(msg : HttpRequestMessage) = async {
-        let! ct = Async.CancellationToken
-        try return! client.SendAsync(msg, ct) |> Async.AwaitTask
+    member client.Send2(msg : HttpRequestMessage, ct : CancellationToken) = task {
+        try return! client.SendAsync(msg, ct)
         // address https://github.com/dotnet/corefx/issues/20296
-        with :? System.Threading.Tasks.TaskCanceledException ->
+        with :? TaskCanceledException ->
             let message =
                 match client.BaseAddress with
                 | null -> "HTTP request timeout"
@@ -232,7 +233,7 @@ type HttpResponseMessage with
 
     /// <summary>Asynchronously deserializes the json response content using the supplied `deserializer`, without validating the `StatusCode`</summary>
     /// <param name="deserializer">The decoder routine to apply to the body content. Exceptions are wrapped in exceptions containing the offending content.</param>
-    member response.InterpretContent<'Decoded>(deserializer : string -> 'Decoded) : Async<'Decoded> = async {
+    member response.InterpretContent<'Decoded>(deserializer : string -> 'Decoded) : Task<'Decoded> = task {
         let! content = response.Content.ReadAsString()
         try return deserializer content
         with e ->
@@ -243,14 +244,14 @@ type HttpResponseMessage with
     /// <summary>Asynchronously deserializes the json response content using the supplied `deserializer`, validating the `StatusCode` is `expectedStatusCode`</summary>
     /// <param name="expectedStatusCode">check that status code matches supplied code or raise a <c>InvalidHttpResponseException</c> if it doesn't.</param>
     /// <param name="deserializer">The decoder routine to apply to the body content. Exceptions are wrapped in exceptions containing the offending content.</param>
-    member response.Interpret<'Decoded>(expectedStatusCode : HttpStatusCode, deserializer : string -> 'Decoded) : Async<'Decoded> = async {
+    member response.Interpret<'Decoded>(expectedStatusCode : HttpStatusCode, deserializer : string -> 'Decoded) : Task<'Decoded> = task {
         do! response.EnsureStatusCode expectedStatusCode
         return! response.InterpretContent deserializer
     }
 
 module HttpRes =
 
-    let serdes = FsCodec.SystemTextJson.Options.Create() |> FsCodec.SystemTextJson.Serdes
+    let serdes = FsCodec.SystemTextJson.Options.Default |> FsCodec.SystemTextJson.Serdes
     /// Deserialize body using default Json.Net profile - throw with content details if StatusCode is unexpected or decoding fails
     let deserializeExpectedStj<'t> expectedStatusCode (res : HttpResponseMessage) =
         res.Interpret(expectedStatusCode, serdes.Deserialize<'t>)

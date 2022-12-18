@@ -13,7 +13,7 @@ let categoryFilter _ = true
 #if     (cosmos && parallelOnly) // kafka && cosmos && parallelOnly
 type ExampleOutput = { id : string }
 
-let serdes = FsCodec.SystemTextJson.Options.Create() |> FsCodec.SystemTextJson.Serdes
+let serdes = FsCodec.SystemTextJson.Options.Default |> FsCodec.SystemTextJson.Serdes
 let render (doc : System.Text.Json.JsonDocument) =
     let r = doc.RootElement
     let gs (name : string) = let x = r.GetProperty name in x.GetString()

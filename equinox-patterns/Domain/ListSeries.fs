@@ -6,7 +6,7 @@ module Patterns.Domain.ListSeries
 let [<Literal>] Category = "ListSeries"
 // TOCONSIDER: if you need multiple lists series/epochs in a single system, the Series and Epoch streams should have a SeriesId in the stream name
 // See also the implementation in the feedSource template, where the Series aggregate also functions as an index of series held in the system
-let streamName () = struct (Category, ListSeriesId.toString ListSeriesId.wellKnownId)
+let streamId () = Equinox.StreamId.gen ListSeriesId.toString ListSeriesId.wellKnownId
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -54,4 +54,4 @@ module Config =
         | Config.Store.Memory store -> Config.Memory.create Events.codec Fold.initial Fold.fold store
         | Config.Store.Cosmos (context, cache) ->
             Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create (Category cat) = Service(streamName >> Config.resolveDecider cat)
+    let create (Category cat) = Service(streamId >> Config.resolveDecider cat Category)
