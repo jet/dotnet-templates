@@ -253,7 +253,7 @@ let build (args : Args.Arguments) =
     let broker, topic = sinkParams.BuildTargetParams()
     let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic)
     let produceSummary (x : Propulsion.Codec.NewtonsoftJson.RenderedSummary) =
-        producer.Produce(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x)
+        producer.Produce(x.s, Propulsion.Codec.NewtonsoftJson.Serdes.Serialize x) |> Propulsion.Internal.Async.ofTask
     let dumpMetrics log =
         dumpMetrics log
         producer.DumpStats log
