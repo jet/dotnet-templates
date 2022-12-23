@@ -26,8 +26,8 @@ type ProductionStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
-    override _.HandleOk(()) =
-        log.Warning("Produced")
+//     override _.HandleOk(()) =
+//         log.Warning("Produced")
     // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
@@ -38,7 +38,7 @@ type ProductionStats(log, statsInterval, stateInterval) =
 ///   to preserve ordering at stream (key) level for messages produced to the topic)
 // TODO NOTE: The bulk of any manipulation should take place before events enter the scheduler, i.e. in program.fs
 // TODO NOTE: While filtering out entire categories is appropriate, you should not filter within a given stream (i.e., by event type)
-let render struct (stream : FsCodec.StreamName, span : Propulsion.Streams.Default.StreamSpan) = async {
+let render (stream : FsCodec.StreamName) (span : Propulsion.Streams.Default.StreamSpan) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     let value =
         span
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream

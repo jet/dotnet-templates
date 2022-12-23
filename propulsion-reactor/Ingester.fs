@@ -43,7 +43,7 @@ let categoryFilter = function
     | sn when sn = "Todos" -> true
     | _ -> false
     
-let handle struct (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
+let handle stream (span : Propulsion.Streams.StreamSpan<_>) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     match stream, span with
     | FsCodec.StreamName.CategoryAndId ("Todos", id), _ ->
         let ok = true

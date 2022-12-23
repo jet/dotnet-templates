@@ -55,7 +55,7 @@ let categoryFilter = function
     
 let handle
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
-        struct (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
+        stream span ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     match stream, span with
     | Contract.Input.Parse (_clientId, events) ->
         for version, event in events do
