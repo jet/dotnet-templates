@@ -47,7 +47,7 @@ module PipelineEvent =
             ValueSome (ticketId, s |> Seq.map (fun e -> Unchecked.unbox<TicketData> e.Context))
         | _ -> ValueNone
 
-let handle struct (stream, span) = async {
+let handle stream span ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     match stream, span with
     | PipelineEvent.TicketEvents (ticketId, items) ->
         // TODO : Ingest the data

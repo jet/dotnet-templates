@@ -2,6 +2,8 @@
 /// Compared to the Ingester in the `proReactor` template, each event is potentially relevant
 module ConsumerTemplate.Ingester
 
+open Propulsion.Internal
+
 /// Defines the shape of input messages on the topic we're consuming
 module Contract =
 
@@ -40,7 +42,7 @@ type Stats(log, statsInterval, stateInterval) =
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
 let ingest
         (service : SkuSummary.Service)
-        struct (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId), span : Propulsion.Streams.StreamSpan<_>) = async {
+        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId)) (span : Propulsion.Streams.StreamSpan<_>) ct = Async.startImmediateAsTask ct <| async {
     let items =
         [ for e in span do
             let x = Contract.parse e.Data

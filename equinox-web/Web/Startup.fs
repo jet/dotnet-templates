@@ -75,7 +75,7 @@ module Storage =
 
         let connect (region, table) (timeout, retries) =
             let c = DynamoStoreConnector(region, timeout, retries)
-            DynamoStoreClient.Connect(c.CreateClient(), table) |> Async.RunSynchronously |> DynamoStoreContext.create
+            DynamoStoreClient.Establish(c.CreateClient(), table) |> Async.RunSynchronously |> DynamoStoreContext.create
 
 //#endif
     /// Creates and/or connects to a specific store as dictated by the specified config

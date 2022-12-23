@@ -34,7 +34,7 @@ let categoryFilter = Todo.Reactions.categoryFilter
 let handle
         (sourceService : Todo.Service)
         (summaryService : TodoSummary.Service)
-        struct (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
+        stream (span : Propulsion.Streams.StreamSpan<_>) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     match stream, span with
     | Todo.Reactions.Parse (clientId, events) when events |> Seq.exists Todo.Reactions.impliesStateChange ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)

@@ -14,7 +14,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- Target `Equinox` v `4.0.0-rc.6`, `Propulsion` v `3.0.0-beta.7`, `FsCodec` v `3.0.0-rc.9`, `net6.0` [#126](https://github.com/jet/dotnet-templates/pull/126)
+- Target `Equinox` v `4.0.0-rc.7`, `Propulsion` v `3.0.0-rc.1`, `FsCodec` v `3.0.0-rc.9`, `net6.0` [#126](https://github.com/jet/dotnet-templates/pull/126) [#127](https://github.com/jet/dotnet-templates/pull/127)
 
 ### Removed 
 

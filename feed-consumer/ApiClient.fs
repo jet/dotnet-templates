@@ -1,6 +1,7 @@
 module FeedConsumerTemplate.ApiClient
 
 open FSharp.UMX
+open Propulsion.Internal
 open System.Net.Http
 
 open FeedConsumerTemplate.Domain
@@ -79,7 +80,7 @@ type TicketsFeed(baseUri) =
     }
 
     // TODO add retries - consumer loop will not commence if this emits an exception
-    member _.ReadTranches() : Async<Propulsion.Feed.TrancheId[]> = async {
-        let! activeFcs = tickets.ActiveFcs()
+    member _.ReadTranches(ct) = task {
+        let! activeFcs = tickets.ActiveFcs() |> Async.startImmediateAsTask ct
         return [| for f in activeFcs -> TrancheId.ofFcId f |]
     }
