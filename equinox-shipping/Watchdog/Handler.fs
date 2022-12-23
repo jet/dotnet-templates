@@ -12,6 +12,10 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
     let mutable completed, deferred, failed, succeeded = 0, 0, 0, 0
 
+    override _.HandleOk res = res |> function
+        | Outcome.Completed -> completed <- completed + 1
+        | Outcome.Deferred -> deferred <- deferred + 1
+        | Outcome.Resolved successfully -> if successfully then succeeded <- succeeded + 1 else failed <- failed + 1
     override _.DumpStats() =
         base.DumpStats()
         if completed <> 0 || deferred <> 0 || failed <> 0 || succeeded <> 0 then
@@ -19,12 +23,16 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
             completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0
         match logExternalStats with None -> () | Some f -> f Serilog.Log.Logger
 
-    override _.HandleOk res = res |> function
-        | Outcome.Completed -> completed <- completed + 1
-        | Outcome.Deferred -> deferred <- deferred + 1
-        | Outcome.Resolved successfully -> if successfully then succeeded <- succeeded + 1 else failed <- failed + 1
+    override _.Classify(exn) =
+        match exn with
+        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited
+        | :? Microsoft.Azure.Cosmos.CosmosException as e
+            when (e.StatusCode = System.Net.HttpStatusCode.TooManyRequests
+                  || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
+                 && not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
+        | x -> base.Classify x
     override _.HandleExn(log, exn) =
-        Exception.dump verboseStore log exn
+        log.Information(exn, "Unhandled")
 
 open Shipping.Domain
 
@@ -35,7 +43,7 @@ let private isReactionStream = function
 let handle
         (processingTimeout : TimeSpan)
         (driveTransaction : Shipping.Domain.TransactionId -> Async<bool>)
-        struct (stream, span) = async {
+        stream span ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     let processingStuckCutoff = let now = DateTimeOffset.UtcNow in now.Add(-processingTimeout)
     match stream, span with
     | TransactionWatchdog.Finalization.MatchStatus (transId, state) ->
@@ -55,8 +63,8 @@ let handle
 type Config private () =
     
     static member private StartSink(log : Serilog.ILogger, stats : Stats,
-                            handle : struct (FsCodec.StreamName * Propulsion.Streams.Default.StreamSpan)
-                                     -> Async<struct (Propulsion.Streams.SpanResult * Outcome)>,
+                            handle : System.Func<FsCodec.StreamName, Propulsion.Streams.Default.StreamSpan, _,
+                                     System.Threading.Tasks.Task<struct (Propulsion.Streams.SpanResult * Outcome)>>,
                             maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)

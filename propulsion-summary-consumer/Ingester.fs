@@ -66,7 +66,7 @@ let map : Contract.Message -> TodoSummary.Events.SummaryData = function
                 { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
 
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : TodoSummary.Service) struct (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
+let ingest (service : TodoSummary.Service) stream (span : Propulsion.Streams.StreamSpan<_>) ct = Async.startImmediateAsTask ct <| async {
     match stream, span with
     | Contract.MatchNewest (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with

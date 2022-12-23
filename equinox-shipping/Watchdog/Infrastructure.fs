@@ -8,21 +8,6 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module Exception =
-
-    let dump verboseStore (log : ILogger) (exn : exn) =
-        match exn with // TODO provide override option?
-        | :? Microsoft.Azure.Cosmos.CosmosException as e
-            when (e.StatusCode = System.Net.HttpStatusCode.TooManyRequests
-                  || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
-                 && not verboseStore -> ()
-        
-        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded
-        | :? TimeoutException when not verboseStore -> ()
-        
-        | _ ->
-            log.Information(exn, "Unhandled")
-
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =

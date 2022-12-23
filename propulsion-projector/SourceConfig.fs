@@ -1,6 +1,7 @@
 namespace ProjectorTemplate
 
 open System
+open System.Threading.Tasks
 
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type SourceConfig =
@@ -52,7 +53,7 @@ module SourceConfig =
     module Cosmos =
         open Propulsion.CosmosStore
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
-            (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval) : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
+            (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let parseFeedDoc = EquinoxSystemTextJsonParser.enumStreamEvents categoryFilter
             let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect parseFeedDoc)
             let source =
@@ -74,7 +75,7 @@ module SourceConfig =
     module Dynamo =
         open Propulsion.DynamoStore
         let start (log, storeLog) (sink : Propulsion.Streams.Default.Sink) categoryFilter
-            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
+            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let loadMode =
                 match loadModeConfig with
                 | Hydrate (monitoredContext, hydrationConcurrency) -> LoadMode.Hydrated (categoryFilter, hydrationConcurrency, monitoredContext)
@@ -91,7 +92,7 @@ module SourceConfig =
     module Esdb =
         open Propulsion.EventStoreDb
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
-            (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
+            (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 EventStoreSource(
                     log, statsInterval,
@@ -104,7 +105,7 @@ module SourceConfig =
     module Sss =
         open Propulsion.SqlStreamStore
         let start log (sink : Propulsion.Streams.Default.Sink) categoryFilter
-            (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Async<unit>) option =
+            (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 SqlStreamStoreSource(
                     log, statsInterval,
@@ -113,7 +114,7 @@ module SourceConfig =
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
-    let start (log, storeLog) sink categoryFilter : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Async<unit>) option = function
+    let start (log, storeLog) sink categoryFilter : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) option = function
 // #if cosmos    
         | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval) ->
             Cosmos.start log sink categoryFilter (monitored, leases, checkpointConfig, tailSleepInterval)

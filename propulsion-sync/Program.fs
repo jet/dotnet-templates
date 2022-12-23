@@ -7,6 +7,7 @@ open Propulsion.Kafka
 #endif
 open Serilog
 open System
+open System.Threading
 
 exception MissingArg of message : string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
@@ -472,13 +473,12 @@ module Checkpoints =
         let create groupName (context, cache) =
             let caching = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
             let cat = CosmosStoreCategory(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
-            let resolve log () struct (cn, sid) = Equinox.Decider.resolve log cat cn (Equinox.StreamId.ofRaw sid)
+            let resolve log = Equinox.Decider.resolve log cat
             Checkpoint.CheckpointSeries(groupName, resolve)
 
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
-    override _.HandleOk(()) = ()
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 
@@ -557,11 +557,11 @@ let build (args : Args.Arguments, log) =
         let connect () =
             let c = srcE.Connect(log, log, AppName, ConnectionStrategy.ClusterSingle NodePreference.PreferSlave) |> Async.RunSynchronously
             c.ReadConnection
-        let runPipeline =
-            EventStoreSource.Run(
+        let runPipeline ct =
+            EventStoreSource.Pump(
                 log, sink, checkpoints, connect, spec, tryMapEvent streamFilter,
-                args.MaxReadAhead, args.StatsInterval)
-        [ runPipeline; sink.AwaitWithStopOnCancellation() ]
+                args.MaxReadAhead, args.StatsInterval, ct)
+        [ runPipeline CancellationToken.None |> Async.ofTask; sink.AwaitWithStopOnCancellation() ]
 
 let run (args : Args.Arguments) =
     let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Default.Config>()

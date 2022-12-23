@@ -40,7 +40,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
             stats.StatsInterval.SleepUntilTriggerCleared()
     member _.Await(propagationDelay) =
         match awaitReactions with
-        | Some f -> f propagationDelay
+        | Some f -> f propagationDelay |> Async.ofTask
         | None -> async { ()  }
 
     interface IDisposable with

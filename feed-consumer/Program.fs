@@ -106,19 +106,21 @@ let build (args : Args.Arguments) =
         let handle = Ingester.handle args.TicketsDop
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         Propulsion.Streams.Default.Config.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
-    let pumpSource =
+    let source =
         let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (args.GroupId, args.CheckpointInterval) (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri
         let source =
             Propulsion.Feed.FeedSource(
                 Log.Logger, args.StatsInterval, args.SourceId, args.TailSleepInterval,
                 checkpoints, sink, feed.Poll)
-        source.Pump feed.ReadTranches
-    sink, pumpSource
+        source.Start(fun ct -> source.Pump(feed.ReadTranches, ct))
+    sink, source
 
 let run args = async {
-    let sink, pumpSource = build args
-    do! Async.Parallel [ pumpSource; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
+    let sink, source = build args
+    use _ = sink
+    use _ = source
+    do! Async.Parallel [ source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]>
     return if sink.RanToCompletion then 0 else 3
 }
 

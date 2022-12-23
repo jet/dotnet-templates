@@ -20,12 +20,22 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
     let mutable ok, skipped, na = 0, 0, 0
 
+#if (blank || sourceKafka)
     override _.HandleOk res = res |> function
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
+#endif        
+    override _.Classify(exn) =
+        match exn with
+        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited
+        | :? Microsoft.Azure.Cosmos.CosmosException as e
+            when (e.StatusCode = System.Net.HttpStatusCode.TooManyRequests
+                  || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
+                 && not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
+        | x -> base.Classify x
     override _.HandleExn(log, exn) =
-        Exception.dump verboseStore log exn
+        log.Information(exn, "Unhandled")
 
     override _.DumpStats() =
         base.DumpStats()
@@ -45,7 +55,7 @@ let categoryFilter = function
     
 let handle
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
-        struct (stream, span : Propulsion.Streams.StreamSpan<_>) = async {
+        stream span ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     match stream, span with
     | Contract.Input.Parse (_clientId, events) ->
         for version, event in events do
@@ -65,7 +75,7 @@ let categoryFilter = function
 let handle
         (service : Todo.Service)
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
-        struct (stream, span) = async {
+        stream span ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     match stream, span with
     | Todo.Reactions.Parse (clientId, events) ->
         if events |> Seq.exists Todo.Reactions.impliesStateChange then
@@ -81,8 +91,8 @@ let handle
 type Config private () =
     
     static member StartSink(log : Serilog.ILogger, stats,
-                            handle : struct (FsCodec.StreamName * Propulsion.Streams.Default.StreamSpan)
-                                     -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
+                            handle : System.Func<FsCodec.StreamName, Propulsion.Streams.Default.StreamSpan, _,
+                                     System.Threading.Tasks.Task<struct (Propulsion.Streams.SpanResult * 'Outcome)>>,
                             maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)

@@ -90,7 +90,7 @@ module MultiStreams =
             | StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
-        member _.Handle(struct (streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>)) = async {
+        member _.Handle(streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>, ct) = task {
             match streamName, span with
             | OtherCategory (cat, count) ->
                 return struct (Propulsion.Streams.SpanResult.AllProcessed, OtherCategory (cat, count))
@@ -150,7 +150,7 @@ module MultiStreams =
         let log, handler = Log.ForContext<InMemoryHandler>(), InMemoryHandler()
         let stats = Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
         Propulsion.Kafka.StreamsConsumer.Start(
-            log, config, parseStreamEvents, handler.Handle, degreeOfParallelism,
+            log, config, parseStreamEvents, (fun s ss ct -> handler.Handle(s, ss, ct)), degreeOfParallelism,
             stats, TimeSpan.FromMinutes 10.,
             logExternalState=handler.DumpState)
 
@@ -204,7 +204,7 @@ module MultiMessages =
         /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
         static member Start(config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
             let log, processor = Log.ForContext<Parallel>(), Processor()
-            let handleMessage (KeyValue (streamName, eventsSpan)) = async { processor.Handle(StreamName.parse streamName, eventsSpan) }
+            let handleMessage (KeyValue (streamName, eventsSpan)) _ct = task { processor.Handle(StreamName.parse streamName, eventsSpan) }
             Propulsion.Kafka.ParallelConsumer.Start(
                 log, config, degreeOfParallelism, handleMessage,
                 statsInterval=TimeSpan.FromSeconds 30., logExternalStats=processor.DumpStats)

@@ -118,7 +118,7 @@ let build (args : Args.Arguments) =
     let sink =
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         Propulsion.Streams.Default.Config.Start(Log.Logger, args.MaxReadAhead, args.TicketsDop, Ingester.handle, stats, args.StatsInterval)
-    let pumpSource =
+    let source =
         let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (args.GroupId, args.CheckpointInterval) (context, cache)
         let client = ApiClient.TicketsFeed feed.BaseUri
         let source =
@@ -126,8 +126,8 @@ let build (args : Args.Arguments) =
                 Log.Logger, args.StatsInterval, feed.SourceId,
                 client.Crawl, feed.RefreshInterval, checkpoints,
                 sink)
-        source.Pump()
-    sink, pumpSource
+        source.Start()
+    sink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
 let startMetricsServer port : IDisposable =
@@ -137,9 +137,11 @@ let startMetricsServer port : IDisposable =
     { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
 
 let run args = async {
-    let sink, pumpSource = build args
+    let sink, source = build args
+    use _ = source
+    use _ = sink
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
-    return! Async.Parallel [ pumpSource; sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]> }
+    return! Async.Parallel [ source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]> }
 
 [<EntryPoint>]
 let main argv =

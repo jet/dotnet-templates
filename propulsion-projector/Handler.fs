@@ -26,8 +26,8 @@ type ProductionStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
-    override _.HandleOk(()) =
-        log.Warning("Produced")
+//     override _.HandleOk(()) =
+//         log.Warning("Produced")
     // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
@@ -74,7 +74,7 @@ let categoryFilter = function
     | "categoryA"
     | _ -> true
 
-let handle struct (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
+let handle _stream (span: Propulsion.Streams.StreamSpan<_>) _ct = task {
     let r = System.Random()
     let ms = r.Next(1, span.Length)
     do! Async.Sleep ms
@@ -84,8 +84,8 @@ let handle struct (_stream, span: Propulsion.Streams.StreamSpan<_>) = async {
 type Config private () =
     
     static member StartSink(log : Serilog.ILogger, stats,
-                            handle : struct (FsCodec.StreamName * Propulsion.Streams.Default.StreamSpan)
-                                     -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
+                            handle : System.Func<FsCodec.StreamName, Propulsion.Streams.Default.StreamSpan, _,
+                                     System.Threading.Tasks.Task<struct (Propulsion.Streams.SpanResult * 'Outcome)>>,
                             maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
