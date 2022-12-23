@@ -1,6 +1,5 @@
 ﻿module SyncTemplate.Program
 
-open System.Threading
 open Equinox.EventStore
 open Propulsion.EventStore
 #if kafka
@@ -8,6 +7,7 @@ open Propulsion.Kafka
 #endif
 open Serilog
 open System
+open System.Threading
 
 exception MissingArg of message : string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
@@ -495,7 +495,7 @@ let build (args : Args.Arguments, log) =
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let broker, topic, producers = kafka.BuildTargetParams()
-                    let render (stream: FsCodec.StreamName) (span: Propulsion.Streams.Default.StreamSpan) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
+                    let render struct (stream: FsCodec.StreamName, span: Propulsion.Streams.Default.StreamSpan) = async {
                         let value =
                             span
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream

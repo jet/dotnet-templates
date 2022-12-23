@@ -38,7 +38,7 @@ type ProductionStats(log, statsInterval, stateInterval) =
 ///   to preserve ordering at stream (key) level for messages produced to the topic)
 // TODO NOTE: The bulk of any manipulation should take place before events enter the scheduler, i.e. in program.fs
 // TODO NOTE: While filtering out entire categories is appropriate, you should not filter within a given stream (i.e., by event type)
-let render (stream : FsCodec.StreamName) (span : Propulsion.Streams.Default.StreamSpan) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
+let render struct (stream : FsCodec.StreamName, span : Propulsion.Streams.Default.StreamSpan) = async {
     let value =
         span
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
