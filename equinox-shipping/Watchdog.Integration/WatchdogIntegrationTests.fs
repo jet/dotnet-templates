@@ -9,7 +9,7 @@ let run (log: Serilog.ILogger) (processManager : Shipping.Domain.FinalizationPro
 
     let counts = System.Collections.Generic.Stack()
     let mutable timeouts = 0
-    for GuidStringN tid, GuidStringN cid, IdsAtLeastOne shipmentIds in batches do
+    for GuidStringN tid, GuidStringN cid, NonEmptyArray shipmentIds in batches do
         counts.Push shipmentIds.Length
         try let! _ = processManager.TryFinalizeContainer(tid, cid, shipmentIds)
                      |> Async.timeoutAfter runTimeout

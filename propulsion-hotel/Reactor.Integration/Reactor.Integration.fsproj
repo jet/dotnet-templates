@@ -8,13 +8,11 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="..\Domain.Tests\SerilogLogFixture.fs">
-            <Link>SerilogLogFixture.fs</Link>
-        </Compile>
+        <Compile Include="SerilogLogFixture.fs" />
         <Compile Include="DynamoConnector.fs" />
         <Compile Include="ReactorFixture.fs" />
-        <Compile Include="Generators.fs" />
-        <Compile Include="WatchdogIntegrationTests.fs" />
+        <Compile Include="Arbitraries.fs" />
+        <Compile Include="ReactorIntegrationTests.fs" />
     </ItemGroup>
 
     <ItemGroup>
@@ -26,7 +24,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Watchdog\Watchdog.fsproj" />
+      <ProjectReference Include="..\Reactor\Reactor.fsproj" />
     </ItemGroup>
 
 </Project>

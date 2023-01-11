@@ -7,10 +7,10 @@ let streamId = Equinox.StreamId.gen GuestStayId.toString
 module Events =
 
     type Event =
-        | CheckedIn of {| at : DateTimeOffset |}
-        | Charged of {| chargeId : ChargeId; at : DateTimeOffset; amount : decimal |}
-        | Paid of {| paymentId : PaymentId; at : DateTimeOffset; amount : decimal |}
-        | CheckedOut of {| at : DateTimeOffset |}
+        | CheckedIn of          {| at : DateTimeOffset |}
+        | Charged of            {| chargeId : ChargeId; at : DateTimeOffset; amount : decimal |}
+        | Paid of               {| paymentId : PaymentId; at : DateTimeOffset; amount : decimal |}
+        | CheckedOut of         {| at : DateTimeOffset |}
         | TransferredToGroup of {| at : DateTimeOffset; groupId : GroupCheckoutId; residualBalance : decimal |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = Config.EventCodec.gen<Event>
@@ -31,9 +31,9 @@ module Fold =
         | Open bal ->
             match event with
             | Events.CheckedIn e -> Open { bal with checkedInAt = Some e.at }
-            | Events.Charged e -> Open { bal with balance = bal.balance + e.amount; charges = [| yield! bal.charges; e.chargeId |] }
-            | Events.Paid e -> Open { bal with balance = bal.balance - e.amount; charges = [| yield! bal.payments; e.paymentId |] }
-            | Events.CheckedOut e -> Closed
+            | Events.Charged e ->   Open { bal with balance = bal.balance + e.amount; charges = [| yield! bal.charges; e.chargeId |] }
+            | Events.Paid e ->      Open { bal with balance = bal.balance - e.amount; charges = [| yield! bal.payments; e.paymentId |] }
+            | Events.CheckedOut _ -> Closed
             | Events.TransferredToGroup e -> TransferredToGroup {| groupId = e.groupId; amount = e.residualBalance |}
         | Closed _ | TransferredToGroup _ -> invalidOp "No events allowed after CheckedOut/TransferredToGroup"
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
@@ -71,25 +71,30 @@ module Decide =
     let groupCheckout at groupId : State -> GroupCheckoutResult * Events.Event list = function
         | Closed -> GroupCheckoutResult.AlreadyCheckedOut, []
         | TransferredToGroup s when s.groupId = groupId -> GroupCheckoutResult.Ok s.amount, []
-        | TransferredToGroup s -> GroupCheckoutResult.AlreadyCheckedOut, []
+        | TransferredToGroup _ -> GroupCheckoutResult.AlreadyCheckedOut, []
         | Open { balance = residual } -> GroupCheckoutResult.Ok residual, [ Events.TransferredToGroup {| at = at; groupId = groupId; residualBalance = residual |} ]
 
 type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    member _.GroupCheckout(id, groupId, at) : Async<Decide.GroupCheckoutResult> =
+    member _.Charge(id, chargeId, amount) =
         let decider = resolve id
-        decider.Transact(Decide.groupCheckout (defaultArg at DateTimeOffset.UtcNow) groupId)
-
+        decider.Transact(Decide.charge DateTimeOffset.UtcNow chargeId amount)
+ 
     member _.Checkout(id, at) : Async<Decide.CheckoutResult> =
         let decider = resolve id
         decider.Transact(Decide.checkout (defaultArg at DateTimeOffset.UtcNow))
 
+    // Driven exclusively by GroupCheckoutProcess
+    member _.GroupCheckout(id, groupId, ?at) : Async<Decide.GroupCheckoutResult> =
+        let decider = resolve id
+        decider.Transact(Decide.groupCheckout (defaultArg at DateTimeOffset.UtcNow) groupId)
+
 module Config =
 
-    let private (|Category|) = function
+    let private (|StoreCat|) = function
         | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
         | Config.Store.Dynamo (context, cache) ->
             // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
             // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
             Config.Dynamo.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create store = streamId >> Config.resolve ((|Category|) store) Category |> Service
+    let create (StoreCat cat) = Service(streamId >> Config.resolve cat Category)

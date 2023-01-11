@@ -8,6 +8,7 @@ module Guid =
 type GroupCheckoutId = Guid
 module GroupCheckoutId =
     let toString = Guid.toString
+    let (|Parse|) : string -> GroupCheckoutId = Guid.Parse
 
 type GuestStayId = Guid
 module GuestStayId =

@@ -22,7 +22,7 @@
 
     <ItemGroup>
       <Compile Include="Arbitraries.fs" />
-      <Compile Include="Test.fs" />
+      <Compile Include="GroupCheckoutProcess.fs" />
     </ItemGroup>
 
 </Project>

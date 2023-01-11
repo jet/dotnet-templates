@@ -1,3 +1,4 @@
+[<Microsoft.FSharp.Core.AutoOpen>]
 module Domain.Tests.Arbitraries
 
 open FsCheck

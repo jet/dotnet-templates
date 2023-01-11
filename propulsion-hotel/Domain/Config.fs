@@ -2,7 +2,7 @@ module Domain.Config
 
 [<RequireQualifiedAccess; NoComparison; NoEquality>]
 type Store =
-    | Memory of Equinox.MemoryStore.VolatileStore<obj>
+    | Memory of Equinox.MemoryStore.VolatileStore<struct (int * System.ReadOnlyMemory<byte>)>
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
 
 let log = Serilog.Log.ForContext("isMetric", true)
@@ -18,10 +18,8 @@ module EventCodec =
 
 module Memory =
 
-    let create _codec initial fold store : Equinox.Category<_, _, _> =
-        // While the actual prod codec can be used, the Box codec allows one to stub out the decoding on the basis that
-        // nothing will be proved beyond what a complete roundtripping test per `module Aggregate` would already cover
-        Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), fold, initial)
+    let create codec initial fold store : Equinox.Category<_, _, _> =
+        Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
 
 module Dynamo =
 
