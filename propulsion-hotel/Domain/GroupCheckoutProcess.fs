@@ -31,14 +31,18 @@ module Fold =
     let private removePending xs state = { state with pending = state.pending |> Array.except xs  }
     let evolve state = function
         | StaysAdded e ->       { state with pending = Array.append state.pending e.stays }
-        | GuestsMerged e ->     { removePending (seq { for s in e.residuals -> s.stay }) state with
-                                             checkedOut = Array.append state.checkedOut e.residuals
-                                             balance = state.balance + (e.residuals |> Seq.sumBy (fun x -> x.residual)) }
-        | GuestsFailed e ->     { removePending e.stays state with
-                                             failed = Array.append state.failed e.stays }
-        | Paid e ->             { state with balance = state.balance - e.amount
-                                             payments = [| yield! state.payments; e.paymentId |] }
-        | Confirmed _ ->        { state with completed = true }
+        | GuestsMerged e ->
+            { removePending (seq { for s in e.residuals -> s.stay }) state with
+                checkedOut = Array.append state.checkedOut e.residuals
+                balance = state.balance + (e.residuals |> Seq.sumBy (fun x -> x.residual)) }
+        | GuestsFailed e ->
+            { removePending e.stays state with
+                failed = Array.append state.failed e.stays }
+        | Paid e ->
+            { state with
+                balance = state.balance - e.amount
+                payments = [| yield! state.payments; e.paymentId |] }
+        | Confirmed _ -> { state with completed = true }
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
 module Flow =
