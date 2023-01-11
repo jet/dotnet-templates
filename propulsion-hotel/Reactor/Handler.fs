@@ -43,7 +43,7 @@ let private handleAction (guestStays : GuestStayAccount.Service) groupCheckoutId
             match! guestStays.GroupCheckout(stayId, groupCheckoutId) with
             | GuestStayAccount.Decide.GroupCheckoutResult.Ok r -> return Choice1Of2 (stayId, r) 
             | GuestStayAccount.Decide.GroupCheckoutResult.AlreadyCheckedOut -> return Choice2Of2 stayId } 
-        let! outcomes = seq { for x in pendingStays do attempt x groupCheckoutId } |> Async.parallelThrottled 5
+        let! outcomes = pendIngStays |> Seq.map (attempt groupCheckoutId) |> Async.parallelThrottled 5
         let residuals, fails = outcomes |> Choice.partition id
         return [ 
             match residuals with
