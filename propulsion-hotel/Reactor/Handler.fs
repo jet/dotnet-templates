@@ -17,7 +17,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
         if completed <> 0 || deferred <> 0 || failed <> 0 || succeeded <> 0 then
             log.Information(" Completed {completed} Deferred {deferred} Failed {failed} Succeeded {succeeded}", completed, deferred, failed, succeeded)
             completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0
-        match logExternalStats with None -> () | Some f -> f Serilog.Log.Logger
+        match logExternalStats with None -> () | Some f -> f log
 
     override _.HandleOk res = res |> function
         | Outcome.Completed -> completed <- completed + 1
