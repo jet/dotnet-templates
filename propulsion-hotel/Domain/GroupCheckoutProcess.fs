@@ -87,7 +87,7 @@ module Decide =
 
 type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    member _.Pump(id, handleAction) : Async<int64> =
+    member _.React(id, handleAction) : Async<int64> =
         let decider = resolve id
         decider.TransactExAsync((fun c -> Flow.decide handleAction c.State), fun () c -> c.Version)
 

@@ -43,7 +43,7 @@ let private handleAction (guestStays : GuestStayAccount.Service) groupCheckoutId
             match! guestStays.GroupCheckout(stayId, groupCheckoutId) with
             | GuestStayAccount.Decide.GroupCheckoutResult.Ok r -> return Choice1Of2 (stayId, r) 
             | GuestStayAccount.Decide.GroupCheckoutResult.AlreadyCheckedOut -> return Choice2Of2 stayId } 
-        let! outcomes = pendIngStays |> Seq.map (attempt groupCheckoutId) |> Async.parallelThrottled 5
+        let! outcomes = pendingStays |> Seq.map (attempt groupCheckoutId) |> Async.parallelThrottled 5
         let residuals, fails = outcomes |> Choice.partition id
         return [ 
             match residuals with
@@ -62,7 +62,7 @@ let private handleAction (guestStays : GuestStayAccount.Service) groupCheckoutId
 let private handle handleAction (flow : GroupCheckoutProcess.Service) stream = async {
     match stream with
     | GroupCheckoutProcess.StreamName groupCheckoutId ->
-        let! ver' = flow.Pump(groupCheckoutId, handleAction groupCheckoutId)
+        let! ver' = flow.React(groupCheckoutId, handleAction groupCheckoutId)
         return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', Outcome.Deferred)
     | other ->
         return failwithf "Span from unexpected category %A" other }
