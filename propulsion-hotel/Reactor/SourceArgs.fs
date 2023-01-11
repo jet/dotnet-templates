@@ -14,7 +14,6 @@ type Configuration(tryGet) =
 module Dynamo =
 
     type [<NoEquality; NoComparison>] Parameters =
-        // | [<AltCommandLine "-V">]           Verbose
         | [<AltCommandLine "-sr">]          RegionProfile of string
         | [<AltCommandLine "-su">]          ServiceUrl of string
         | [<AltCommandLine "-sa">]          AccessKey of string
@@ -29,7 +28,6 @@ module Dynamo =
         | [<AltCommandLine "-d">]           StreamsDop of int
         interface IArgParserTemplate with
             member p.Usage = p |> function
-                // | Verbose ->                "Include low level Store logging."
                 | RegionProfile _ ->        "specify an AWS Region (aka System Name, e.g. \"us-east-1\") to connect to using the implicit AWS SDK/tooling config and/or environment variables etc. Optional if:\n" +
                                             "1) $" + Args.REGION + " specified OR\n" +
                                             "2) Explicit `ServiceUrl`/$" + Args.SERVICE_URL + "+`AccessKey`/$" + Args.ACCESS_KEY + "+`Secret Key`/$" + Args.SECRET_KEY + " specified.\n" +
@@ -71,7 +69,6 @@ module Dynamo =
         let streamsDop =                    p.GetResult(StreamsDop, 4)
         let client =                        connector.CreateClient()
         let indexStoreClient =              lazy client.ConnectStore("Index", indexTable)
-        // member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.LogConfiguration()
                                             client.ConnectStore("Main", table) |> DynamoStoreContext.create
         member _.MonitoringParams(log : ILogger) =

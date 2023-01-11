@@ -3,7 +3,6 @@ module Domain.GuestStayAccount
 let [<Literal>] Category = "GuestStayAccount"
 let streamId = Equinox.StreamId.gen GuestStayId.toString
 
-[<AutoOpen>]
 module Events =
 
     type Event =
@@ -15,7 +14,6 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = Config.EventCodec.gen<Event>
 
-[<AutoOpen>]
 module Fold =
 
     [<NoComparison; NoEquality>]
@@ -40,6 +38,8 @@ module Fold =
 
 module Decide =
 
+    open Fold
+    
     let checkin at = function
         | Open { checkedInAt = None } -> [ Events.CheckedIn {| at = at |}  ]
         | Open { checkedInAt = Some t } when t = at -> []

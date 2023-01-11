@@ -53,9 +53,6 @@ module Args =
                                             match p.GetSubCommand() with
                                             | Dynamo a -> Choice1Of2 <| SourceArgs.Dynamo.Arguments(c, a)
                                             | a ->        Args.missingArg $"Unexpected Store subcommand %A{a}"
-        // member x.VerboseStore =             match x.Store with
-        //                                     | Choice1Of2 s -> s.Verbose
-        //                                     | Choice2Of2 () -> false
         member x.ConnectStoreAndSource(appName) : Config.Store * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with

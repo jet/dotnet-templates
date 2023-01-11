@@ -4,7 +4,7 @@ open Domain.GroupCheckoutProcess
 open FsCheck.Xunit
 
 [<Property>]
-let ``Merging stays should drive Checkout Reaction`` (sut : Service) id stays = async {
+let ``Merging stays should trigger Checkout Reaction`` (sut : Service) id stays = async {
     let! act = sut.Merge(id, stays)
     return act |> function
         // If any stays have been added, they should be recorded

@@ -6,7 +6,6 @@ let [<return: Struct>] (|StreamName|_|) = function
     | FsCodec.StreamName.CategoryAndId (Category, GroupCheckoutId.Parse id) -> ValueSome id
     | _ -> ValueNone
 
-[<AutoOpen>]
 module Events =
 
     type CheckoutResidual =     { stay :  GuestStayId; residual : decimal }
@@ -20,9 +19,10 @@ module Events =
         interface TypeShape.UnionContract.IUnionContract
     let codec = Config.EventCodec.gen<Event>
 
-[<AutoOpen>]
 module Fold =
 
+    open Events
+    
     [<NoComparison; NoEquality>]
     type State = { pending : GuestStayId[]; checkedOut : CheckoutResidual[]; failed : GuestStayId[]; balance : decimal; payments : PaymentId[]; completed : bool }
 
@@ -60,6 +60,8 @@ module Flow =
 
 module Decide =
 
+    open Fold
+    
     let add at stays state =
         let registered = HashSet(seq { yield! state.pending; yield! state.failed; for x in state.checkedOut do yield x.stay })
         match stays |> Array.except registered with

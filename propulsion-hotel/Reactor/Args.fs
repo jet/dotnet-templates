@@ -1,9 +1,9 @@
 /// Commandline arguments and/or secrets loading specifications
 module Infrastructure.Args
 
-module Config = Domain.Config
+open Argu
 
-open System
+module Config = Domain.Config
 
 exception MissingArg of message : string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
@@ -28,12 +28,9 @@ type Configuration(tryGet : string -> string option) =
 
     member x.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
 
-open Argu
-
 module Dynamo =
 
     type [<NoEquality; NoComparison>] Parameters =
-        // | [<AltCommandLine "-V">]           Verbose
         | [<AltCommandLine "-sr">]          RegionProfile of string
         | [<AltCommandLine "-su">]          ServiceUrl of string
         | [<AltCommandLine "-sa">]          AccessKey of string
@@ -64,7 +61,7 @@ module Dynamo =
                                                 let accessKey =   p.TryGetResult AccessKey  |> Option.defaultWith (fun () -> c.DynamoAccessKey)
                                                 let secretKey =   p.TryGetResult SecretKey  |> Option.defaultWith (fun () -> c.DynamoSecretKey)
                                                 Choice2Of2 (serviceUrl, accessKey, secretKey)
-        let connector =                     let timeout = p.GetResult(RetriesTimeoutS, 5.) |> TimeSpan.FromSeconds
+        let connector =                     let timeout = p.GetResult(RetriesTimeoutS, 5.) |> System.TimeSpan.FromSeconds
                                             let retries = p.GetResult(Retries, 1)
                                             match conn with
                                             | Choice1Of2 systemName ->
@@ -72,7 +69,6 @@ module Dynamo =
                                             | Choice2Of2 (serviceUrl, accessKey, secretKey) ->
                                                 Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
         let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
-        // member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.LogConfiguration()
                                             let client = connector.CreateClient()
                                             client.ConnectStore("Main", table)
