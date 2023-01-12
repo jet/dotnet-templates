@@ -38,11 +38,11 @@ let private isReactionStream = function
 let private handleReaction (guestStays : GuestStay.Service) groupCheckoutId (act : GroupCheckout.Flow.Action) = async {
     match act with
     | GroupCheckout.Flow.MergeStays pendingStays ->
-        let attempt groupCheckoutId stayId = async {
+        let attempt stayId = async {
             match! guestStays.GroupCheckout(stayId, groupCheckoutId) with
             | GuestStay.Decide.GroupCheckoutResult.Ok r -> return Choice1Of2 (stayId, r) 
             | GuestStay.Decide.GroupCheckoutResult.AlreadyCheckedOut -> return Choice2Of2 stayId } 
-        let! outcomes = pendingStays |> Seq.map (attempt groupCheckoutId) |> Async.parallelThrottled 5
+        let! outcomes = pendingStays |> Seq.map attempt |> Async.parallelThrottled 5
         let residuals, fails = outcomes |> Choice.partition id
         let outcome = Outcome.Merged (residuals.Length, fails.Length)
         return outcome, [ 
