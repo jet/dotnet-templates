@@ -15,8 +15,8 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
     override _.DumpStats() =
         base.DumpStats()
         if completed <> 0 || ignored <> 0 || failed <> 0 || succeeded <> 0 then
-            log.Information(" Merged {completed} Ignored {ignored} Failed {failed} Succeeded {succeeded}", completed, ignored, failed, succeeded)
-            completed <- 0; ignored <- 0; failed <- 0; succeeded <- 0
+            log.Information(" Merged {completed} failed {failed} succeeded {succeeded} Ignored {ignored} ", completed, failed, succeeded, ignored)
+            completed <- 0; failed <- 0; succeeded <- 0; ignored <- 0
         match logExternalStats with None -> () | Some f -> let logWithoutContext = Serilog.Log.Logger in f logWithoutContext
 
     override _.HandleOk res = res |> function
