@@ -48,10 +48,10 @@ let private handleAction (guestStays : GuestStayAccount.Service) groupCheckoutId
         return [ 
             match residuals with
             | [||] -> ()
-            | xs -> GroupCheckoutProcess.Events.GuestsMerged {| residuals = [| for stayId, amount in xs -> { stay = stayId; residual = amount } |] |}
+            | xs -> GroupCheckoutProcess.Events.StaysMerged {| residuals = [| for stayId, amount in xs -> { stay = stayId; residual = amount } |] |}
             match fails with
             | [||] -> ()
-            | stayIds -> GroupCheckoutProcess.Events.GuestsFailed {| stays = stayIds |} ]
+            | stayIds -> GroupCheckoutProcess.Events.MergesFailed {| stays = stayIds |} ]
     
     | GroupCheckoutProcess.Flow.Ready _
         // Nothing we can do other than wait for the Confirm to Come

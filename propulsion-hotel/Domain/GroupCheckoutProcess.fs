@@ -11,9 +11,9 @@ module Events =
     type CheckoutResidual =     { stay :  GuestStayId; residual : decimal }
     type Event =
         | StaysAdded of         {| at : DateTimeOffset; stays : GuestStayId[] |}
-        | GuestsMerged of       {| residuals : CheckoutResidual[] |}
+        | StaysMerged of       {| residuals : CheckoutResidual[] |}
         /// Guest was checked out via another group, or independently, prior to being able to grab it
-        | GuestsFailed of       {| stays : GuestStayId[] |}
+        | MergesFailed of       {| stays : GuestStayId[] |}
         | Paid of               {| at : DateTimeOffset; paymentId : PaymentId; amount : decimal |}
         | Confirmed of          {| at : DateTimeOffset |}
         interface TypeShape.UnionContract.IUnionContract
@@ -31,11 +31,11 @@ module Fold =
     let private removePending xs state = { state with pending = state.pending |> Array.except xs  }
     let evolve state = function
         | StaysAdded e ->       { state with pending = Array.append state.pending e.stays }
-        | GuestsMerged e ->
+        | StaysMerged e ->
             { removePending (seq { for s in e.residuals -> s.stay }) state with
                 checkedOut = Array.append state.checkedOut e.residuals
                 balance = state.balance + (e.residuals |> Seq.sumBy (fun x -> x.residual)) }
-        | GuestsFailed e ->
+        | MergesFailed e ->
             { removePending e.stays state with
                 failed = Array.append state.failed e.stays }
         | Paid e ->
