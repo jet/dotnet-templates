@@ -30,7 +30,7 @@ module Fold =
             match event with
             | Events.CheckedIn e -> Open { bal with checkedInAt = Some e.at }
             | Events.Charged e ->   Open { bal with balance = bal.balance + e.amount; charges = [| yield! bal.charges; e.chargeId |] }
-            | Events.Paid e ->      Open { bal with balance = bal.balance - e.amount; charges = [| yield! bal.payments; e.paymentId |] }
+            | Events.Paid e ->      Open { bal with balance = bal.balance - e.amount; payments = [| yield! bal.payments; e.paymentId |] }
             | Events.CheckedOut _ -> Closed
             | Events.TransferredToGroup e -> TransferredToGroup {| groupId = e.groupId; amount = e.residualBalance |}
         | Closed _ | TransferredToGroup _ -> invalidOp "No events allowed after CheckedOut/TransferredToGroup"
@@ -74,7 +74,7 @@ module Decide =
         | TransferredToGroup _ -> GroupCheckoutResult.AlreadyCheckedOut, []
         | Open { balance = residual } -> GroupCheckoutResult.Ok residual, [ Events.TransferredToGroup {| at = at; groupId = groupId; residualBalance = residual |} ]
 
-type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve : GuestStayId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.Charge(id, chargeId, amount) =
         let decider = resolve id
