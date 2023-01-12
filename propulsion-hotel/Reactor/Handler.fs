@@ -36,9 +36,9 @@ let private isReactionStream = function
     | GroupCheckout.Category -> true
     | _ -> false
 
-let private handleAction (guestStays : GuestStay.Service) groupCheckoutId (act : GroupCheckout.Flow.Action) = async {
+let private handleReaction (guestStays : GuestStay.Service) groupCheckoutId (act : GroupCheckout.Flow.Action) = async {
     match act with
-    | GroupCheckout.Flow.Checkout pendingStays ->
+    | GroupCheckout.Flow.MergeStays pendingStays ->
         let attempt stayId groupCheckoutId = async {
             match! guestStays.GroupCheckout(stayId, groupCheckoutId) with
             | GuestStay.Decide.GroupCheckoutResult.Ok r -> return Choice1Of2 (stayId, r) 
@@ -59,10 +59,10 @@ let private handleAction (guestStays : GuestStay.Service) groupCheckoutId (act :
         // No processing of any kind can happen after we reach this phase
         return [] }
 
-let private handle handleAction (flow : GroupCheckout.Service) stream = async {
+let private handle handleReaction (flow : GroupCheckout.Service) stream = async {
     match stream with
     | GroupCheckout.StreamName groupCheckoutId ->
-        let! ver' = flow.React(groupCheckoutId, handleAction groupCheckoutId)
+        let! ver' = flow.React(groupCheckoutId, handleReaction groupCheckoutId)
         return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', Outcome.Deferred)
     | other ->
         return failwithf "Span from unexpected category %A" other }
@@ -70,7 +70,7 @@ let private handle handleAction (flow : GroupCheckout.Service) stream = async {
 let create store =
     let handleReaction =
         let stays = GuestStay.Config.create store
-        handleAction stays
+        handleReaction stays
     let checkout = GroupCheckout.Config.create store
     handle handleReaction checkout
             
@@ -85,4 +85,3 @@ type Config private () =
 
     static member StartSource(log, sink, sourceConfig) =
         SourceConfig.start (log, Config.log) sink isReactionStream sourceConfig
-        

@@ -50,13 +50,13 @@ module Fold =
 module Flow =
 
     type Action =
-        | Checkout of           GuestStayId[]
+        | MergeStays of           GuestStayId[]
         | Ready of              balance : decimal
         | Finished
 
     let nextAction : Fold.State -> Action = function
         | { completed = true } -> Finished
-        | { pending = xs } when not (Array.isEmpty xs) -> Checkout xs
+        | { pending = xs } when not (Array.isEmpty xs) -> MergeStays xs
         | { balance = bal } -> Ready bal
         
     let decide handleAction (state : Fold.State) : Async<unit * Events.Event list> = async {
@@ -81,7 +81,7 @@ module Decide =
         | Flow.Finished -> ConfirmResult.Ok, []
         | Flow.Ready 0m -> ConfirmResult.Ok, [ Events.Confirmed {| at = at |} ]
         | Flow.Ready amount -> ConfirmResult.BalanceOutstanding amount, []
-        | Flow.Checkout _ -> ConfirmResult.Processing, []
+        | Flow.MergeStays _ -> ConfirmResult.Processing, []
 
     let pay paymentId amount at = function
         | { payments = paymentIds } when paymentIds |> Array.contains paymentId -> []
