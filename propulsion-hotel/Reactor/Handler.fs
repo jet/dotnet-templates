@@ -3,8 +3,7 @@ module Reactor.Handler
 open Infrastructure
 open Propulsion.Internal
 
-[<RequireQualifiedAccess>]
-type Outcome = Merged of ok : int * failed : int | Noop
+type Outcome = GroupCheckoutProcess.Outcome
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
 type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
@@ -35,44 +34,20 @@ let private isReactionStream = function
     | GroupCheckout.Category -> true
     | _ -> false
 
-let private handleReaction (guestStays : GuestStay.Service) groupCheckoutId (act : GroupCheckout.Flow.Action) = async {
-    match act with
-    | GroupCheckout.Flow.MergeStays pendingStays ->
-        let attempt stayId = async {
-            match! guestStays.GroupCheckout(stayId, groupCheckoutId) with
-            | GuestStay.Decide.GroupCheckoutResult.Ok r -> return Choice1Of2 (stayId, r) 
-            | GuestStay.Decide.GroupCheckoutResult.AlreadyCheckedOut -> return Choice2Of2 stayId } 
-        let! outcomes = pendingStays |> Seq.map attempt |> Async.parallelThrottled 5
-        let residuals, fails = outcomes |> Choice.partition id
-        let outcome = Outcome.Merged (residuals.Length, fails.Length)
-        return outcome, [ 
-            match residuals with
-            | [||] -> ()
-            | xs -> GroupCheckout.Events.StaysMerged {| residuals = [| for stayId, amount in xs -> { stay = stayId; residual = amount } |] |}
-            match fails with
-            | [||] -> ()
-            | stayIds -> GroupCheckout.Events.MergesFailed {| stays = stayIds |} ]
-    
-    | GroupCheckout.Flow.Ready _
-        // Nothing we can do other than wait for the Confirm to Come
-    | GroupCheckout.Flow.Finished ->
-        // No processing of any kind can happen after we reach this phase
-        return Outcome.Noop, [] }
-
-let private handle handleReaction (flow : GroupCheckout.Service) stream = async {
+let private handle (processor : GroupCheckoutProcess.Service) stream = async {
     match stream with
     | GroupCheckout.StreamName groupCheckoutId ->
-        let! outcome, ver' = flow.React(groupCheckoutId, handleReaction groupCheckoutId)
+        let! outcome, ver' = processor.React(groupCheckoutId)
         return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', outcome)
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
 let create store =
-    let handleReaction =
+    let processor =
         let stays = GuestStay.Config.create store
-        handleReaction stays
-    let checkout = GroupCheckout.Config.create store
-    handle handleReaction checkout
+        let checkouts = GroupCheckout.Config.create store
+        GroupCheckoutProcess.Service(stays, checkouts)
+    handle processor
             
 type Config private () =
     

@@ -20,7 +20,7 @@ module Choice =
 
 module Async =
     
-    let parallelThrottled dop computations =
+    let parallelLimit dop computations =
         Async.Parallel(computations, maxDegreeOfParallelism = dop)
     
 type Equinox.DynamoStore.DynamoStoreConnector with

@@ -11,6 +11,7 @@
     <ItemGroup>
         <Compile Include="Infrastructure.fs" />
         <Compile Include="SourceConfig.fs" />
+        <Compile Include="GroupCheckoutProcess.fs" />
         <Compile Include="Handler.fs" />
         <Compile Include="Args.fs" />
         <Compile Include="SourceArgs.fs" />
