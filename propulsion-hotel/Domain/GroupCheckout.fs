@@ -59,10 +59,8 @@ module Flow =
         | { pending = xs } when not (Array.isEmpty xs) -> MergeStays xs
         | { balance = bal } -> Ready bal
         
-    let decide handleAction (state : Fold.State) : Async<unit * Events.Event list> = async {
-        let next = nextAction state
-        let! events = handleAction next
-        return (), events }
+    let decide handleAction (state : Fold.State) : Async<'R * Events.Event list> =
+        nextAction state |> handleAction
 
 module Decide =
 
@@ -90,9 +88,9 @@ module Decide =
 type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Called within Reactor host to Dispatch any relevant Reaction activities
-    member _.React(id, handleReaction) : Async<int64> =
+    member _.React(id, handleReaction) : Async<'R * int64> =
         let decider = resolve id
-        decider.TransactExAsync((fun c -> Flow.decide handleReaction c.State), fun () c -> c.Version)
+        decider.TransactExAsync((fun c -> Flow.decide handleReaction c.State), fun r c -> r, c.Version)
 
     member _.Merge(id, stays, ?at) : Async<Flow.Action>=
         let decider = resolve id

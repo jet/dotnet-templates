@@ -4,25 +4,24 @@ open Infrastructure
 open Propulsion.Internal
 
 [<RequireQualifiedAccess>]
-type Outcome = Completed | Deferred | Resolved of successfully : bool
+type Outcome = Merged of ok : int * failed : int | Noop
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
 type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
-    let mutable completed, deferred, failed, succeeded = 0, 0, 0, 0
+    let mutable completed, ignored, failed, succeeded = 0, 0, 0, 0
 
     override _.DumpStats() =
         base.DumpStats()
-        if completed <> 0 || deferred <> 0 || failed <> 0 || succeeded <> 0 then
-            log.Information(" Completed {completed} Deferred {deferred} Failed {failed} Succeeded {succeeded}", completed, deferred, failed, succeeded)
-            completed <- 0; deferred <- 0; failed <- 0; succeeded <- 0
+        if completed <> 0 || ignored <> 0 || failed <> 0 || succeeded <> 0 then
+            log.Information(" Merged {completed} Ignored {ignored} Failed {failed} Succeeded {succeeded}", completed, ignored, failed, succeeded)
+            completed <- 0; ignored <- 0; failed <- 0; succeeded <- 0
         match logExternalStats with None -> () | Some f -> let logWithoutContext = Serilog.Log.Logger in f logWithoutContext
 
     override _.HandleOk res = res |> function
-        | Outcome.Completed -> completed <- completed + 1
-        | Outcome.Deferred -> deferred <- deferred + 1
-        | Outcome.Resolved successfully -> if successfully then succeeded <- succeeded + 1 else failed <- failed + 1
+        | Outcome.Merged (ok, denied)-> completed <- completed + 1; succeeded <- succeeded + ok; failed <- failed + denied
+        | Outcome.Noop -> ignored <- ignored + 1
     override _.Classify(exn) =
         match exn with
         | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited
@@ -39,13 +38,14 @@ let private isReactionStream = function
 let private handleReaction (guestStays : GuestStay.Service) groupCheckoutId (act : GroupCheckout.Flow.Action) = async {
     match act with
     | GroupCheckout.Flow.MergeStays pendingStays ->
-        let attempt stayId groupCheckoutId = async {
+        let attempt groupCheckoutId stayId = async {
             match! guestStays.GroupCheckout(stayId, groupCheckoutId) with
             | GuestStay.Decide.GroupCheckoutResult.Ok r -> return Choice1Of2 (stayId, r) 
             | GuestStay.Decide.GroupCheckoutResult.AlreadyCheckedOut -> return Choice2Of2 stayId } 
         let! outcomes = pendingStays |> Seq.map (attempt groupCheckoutId) |> Async.parallelThrottled 5
         let residuals, fails = outcomes |> Choice.partition id
-        return [ 
+        let outcome = Outcome.Merged (residuals.Length, fails.Length)
+        return outcome, [ 
             match residuals with
             | [||] -> ()
             | xs -> GroupCheckout.Events.StaysMerged {| residuals = [| for stayId, amount in xs -> { stay = stayId; residual = amount } |] |}
@@ -57,13 +57,13 @@ let private handleReaction (guestStays : GuestStay.Service) groupCheckoutId (act
         // Nothing we can do other than wait for the Confirm to Come
     | GroupCheckout.Flow.Finished ->
         // No processing of any kind can happen after we reach this phase
-        return [] }
+        return Outcome.Noop, [] }
 
 let private handle handleReaction (flow : GroupCheckout.Service) stream = async {
     match stream with
     | GroupCheckout.StreamName groupCheckoutId ->
-        let! ver' = flow.React(groupCheckoutId, handleReaction groupCheckoutId)
-        return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', Outcome.Deferred)
+        let! outcome, ver' = flow.React(groupCheckoutId, handleReaction groupCheckoutId)
+        return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', outcome)
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
