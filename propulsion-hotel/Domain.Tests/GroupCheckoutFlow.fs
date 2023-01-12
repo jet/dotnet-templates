@@ -1,10 +1,10 @@
-module Domain.Tests.GroupCheckoutProcess
+module Domain.Tests.GroupCheckoutFlow
 
 open Domain.GroupCheckout
 open FsCheck.Xunit
 
 [<Property>]
-let ``Merging stays should trigger Merge Reaction`` (sut : Service) id stays = async {
+let ``Merging stays should pend Merge Reaction`` (sut : Service) id stays = async {
     let! act = sut.Merge(id, stays)
     return act |> function
         // If any stays have been added, they should be recorded
