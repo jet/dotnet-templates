@@ -1,6 +1,6 @@
 module Domain.Tests.GroupCheckoutProcess
 
-open Domain.GroupCheckoutProcess
+open Domain.GroupCheckout
 open FsCheck.Xunit
 
 [<Property>]

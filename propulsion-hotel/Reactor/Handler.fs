@@ -33,46 +33,46 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 open Domain
 
 let private isReactionStream = function
-    | GroupCheckoutProcess.Category -> true
+    | GroupCheckout.Category -> true
     | _ -> false
 
-let private handleAction (guestStays : GuestStayAccount.Service) groupCheckoutId (act : GroupCheckoutProcess.Flow.Action) = async {
+let private handleAction (guestStays : GuestStay.Service) groupCheckoutId (act : GroupCheckout.Flow.Action) = async {
     match act with
-    | GroupCheckoutProcess.Flow.Checkout pendingStays ->
+    | GroupCheckout.Flow.Checkout pendingStays ->
         let attempt stayId groupCheckoutId = async {
             match! guestStays.GroupCheckout(stayId, groupCheckoutId) with
-            | GuestStayAccount.Decide.GroupCheckoutResult.Ok r -> return Choice1Of2 (stayId, r) 
-            | GuestStayAccount.Decide.GroupCheckoutResult.AlreadyCheckedOut -> return Choice2Of2 stayId } 
+            | GuestStay.Decide.GroupCheckoutResult.Ok r -> return Choice1Of2 (stayId, r) 
+            | GuestStay.Decide.GroupCheckoutResult.AlreadyCheckedOut -> return Choice2Of2 stayId } 
         let! outcomes = pendingStays |> Seq.map (attempt groupCheckoutId) |> Async.parallelThrottled 5
         let residuals, fails = outcomes |> Choice.partition id
         return [ 
             match residuals with
             | [||] -> ()
-            | xs -> GroupCheckoutProcess.Events.StaysMerged {| residuals = [| for stayId, amount in xs -> { stay = stayId; residual = amount } |] |}
+            | xs -> GroupCheckout.Events.StaysMerged {| residuals = [| for stayId, amount in xs -> { stay = stayId; residual = amount } |] |}
             match fails with
             | [||] -> ()
-            | stayIds -> GroupCheckoutProcess.Events.MergesFailed {| stays = stayIds |} ]
+            | stayIds -> GroupCheckout.Events.MergesFailed {| stays = stayIds |} ]
     
-    | GroupCheckoutProcess.Flow.Ready _
+    | GroupCheckout.Flow.Ready _
         // Nothing we can do other than wait for the Confirm to Come
-    | GroupCheckoutProcess.Flow.Finished ->
+    | GroupCheckout.Flow.Finished ->
         // No processing of any kind can happen after we reach this phase
         return [] }
 
-let private handle handleAction (flow : GroupCheckoutProcess.Service) stream = async {
+let private handle handleAction (flow : GroupCheckout.Service) stream = async {
     match stream with
-    | GroupCheckoutProcess.StreamName groupCheckoutId ->
+    | GroupCheckout.StreamName groupCheckoutId ->
         let! ver' = flow.React(groupCheckoutId, handleAction groupCheckoutId)
         return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', Outcome.Deferred)
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
 let create store =
-    let handleAction =
-        let gs = GuestStayAccount.Config.create store
-        handleAction gs
-    let gcp = GroupCheckoutProcess.Config.create store
-    handle handleAction gcp
+    let handleReaction =
+        let stays = GuestStay.Config.create store
+        handleAction stays
+    let checkout = GroupCheckout.Config.create store
+    handle handleReaction checkout
             
 type Config private () =
     

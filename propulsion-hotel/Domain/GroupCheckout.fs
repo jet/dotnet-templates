@@ -1,4 +1,4 @@
-module Domain.GroupCheckoutProcess
+module Domain.GroupCheckout
 
 let [<Literal>] Category = "GroupCheckout"
 let streamId = Equinox.StreamId.gen GroupCheckoutId.toString
@@ -11,7 +11,7 @@ module Events =
     type CheckoutResidual =     { stay :  GuestStayId; residual : decimal }
     type Event =
         | StaysAdded of         {| at : DateTimeOffset; stays : GuestStayId[] |}
-        | StaysMerged of       {| residuals : CheckoutResidual[] |}
+        | StaysMerged of        {| residuals : CheckoutResidual[] |}
         /// Guest was checked out via another group, or independently, prior to being able to grab it
         | MergesFailed of       {| stays : GuestStayId[] |}
         | Paid of               {| at : DateTimeOffset; paymentId : PaymentId; amount : decimal |}
@@ -30,7 +30,8 @@ module Fold =
 
     let private removePending xs state = { state with pending = state.pending |> Array.except xs  }
     let evolve state = function
-        | StaysAdded e ->       { state with pending = Array.append state.pending e.stays }
+        | StaysAdded e ->
+            { state with pending = Array.append state.pending e.stays }
         | StaysMerged e ->
             { removePending (seq { for s in e.residuals -> s.stay }) state with
                 checkedOut = Array.append state.checkedOut e.residuals
@@ -42,7 +43,8 @@ module Fold =
             { state with
                 balance = state.balance - e.amount
                 payments = [| yield! state.payments; e.paymentId |] }
-        | Confirmed _ -> { state with completed = true }
+        | Confirmed _ ->
+            { state with completed = true }
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
 module Flow =
@@ -72,14 +74,14 @@ module Decide =
         | [||] -> []
         | xs -> [ Events.StaysAdded {| at = at; stays = xs |} ]
 
-    [<RequireQualifiedAccess; NoComparison; NoEquality>]
+    [<NoComparison; NoEquality>]
     type ConfirmResult = Processing | Ok | BalanceOutstanding of decimal
     let confirm at state =
         match Flow.nextAction state with
-        | Flow.Action.Finished -> ConfirmResult.Ok, []
-        | Flow.Action.Ready 0m -> ConfirmResult.Ok, [ Events.Confirmed {| at = at |} ]
-        | Flow.Action.Ready amount -> ConfirmResult.BalanceOutstanding amount, []
-        | Flow.Action.Checkout _ -> ConfirmResult.Processing, []
+        | Flow.Finished -> ConfirmResult.Ok, []
+        | Flow.Ready 0m -> ConfirmResult.Ok, [ Events.Confirmed {| at = at |} ]
+        | Flow.Ready amount -> ConfirmResult.BalanceOutstanding amount, []
+        | Flow.Checkout _ -> ConfirmResult.Processing, []
 
     let pay paymentId amount at = function
         | { payments = paymentIds } when paymentIds |> Array.contains paymentId -> []
@@ -88,9 +90,9 @@ module Decide =
 type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Called within Reactor host to Dispatch any relevant Reaction activities
-    member _.React(id, handleAction) : Async<int64> =
+    member _.React(id, handleReaction) : Async<int64> =
         let decider = resolve id
-        decider.TransactExAsync((fun c -> Flow.decide handleAction c.State), fun () c -> c.Version)
+        decider.TransactExAsync((fun c -> Flow.decide handleReaction c.State), fun () c -> c.Version)
 
     member _.Merge(id, stays, ?at) : Async<Flow.Action>=
         let decider = resolve id

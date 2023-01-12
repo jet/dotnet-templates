@@ -17,8 +17,8 @@
     <ItemGroup>
       <Compile Include="Config.fs" />
       <Compile Include="Types.fs" />
-      <Compile Include="GuestStayAccount.fs" />
-      <Compile Include="GroupCheckoutProcess.fs" />
+      <Compile Include="GuestStay.fs" />
+      <Compile Include="GroupCheckout.fs" />
     </ItemGroup>
 
 </Project>

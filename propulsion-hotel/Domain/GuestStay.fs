@@ -1,6 +1,6 @@
-module Domain.GuestStayAccount
+module Domain.GuestStay
 
-let [<Literal>] Category = "GuestStayAccount"
+let [<Literal>] Category = "GuestStay"
 let streamId = Equinox.StreamId.gen GuestStayId.toString
 
 module Events =
@@ -80,11 +80,15 @@ type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event
         let decider = resolve id
         decider.Transact(Decide.charge DateTimeOffset.UtcNow chargeId amount)
  
+    member _.Pay(id, paymentId, amount) =
+        let decider = resolve id
+        decider.Transact(Decide.payment DateTimeOffset.UtcNow paymentId amount)
+ 
     member _.Checkout(id, at) : Async<Decide.CheckoutResult> =
         let decider = resolve id
         decider.Transact(Decide.checkout (defaultArg at DateTimeOffset.UtcNow))
 
-    // Driven exclusively by GroupCheckoutProcess
+    // Driven exclusively by GroupCheckout
     member _.GroupCheckout(id, groupId, ?at) : Async<Decide.GroupCheckoutResult> =
         let decider = resolve id
         decider.Transact(Decide.groupCheckout (defaultArg at DateTimeOffset.UtcNow) groupId)

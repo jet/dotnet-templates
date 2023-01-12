@@ -5,9 +5,9 @@ open FsCheck
 open FsCheck.Xunit
 open System
 
-let run store (paymentId, id, NonEmptyArray stays, payBefore) check = async {
-    let staysService = GuestStayAccount.Config.create store
-    let checkoutService = GroupCheckoutProcess.Config.create store            
+let runCheckoutScenario store (paymentId, id, NonEmptyArray stays, payBefore) check = async {
+    let staysService = GuestStay.Config.create store
+    let checkoutService = GroupCheckout.Config.create store            
     let mutable charged = 0
     for stayId, chargeId, PositiveInt amount in stays do
         charged <- charged + amount
@@ -18,18 +18,18 @@ let run store (paymentId, id, NonEmptyArray stays, payBefore) check = async {
     do! check "awaiting Group Checkout action" <| fun wait -> async {
         do! wait ()
         match! checkoutService.Confirm(id) with
-        | GroupCheckoutProcess.Decide.ConfirmResult.Ok -> ()
-        | GroupCheckoutProcess.Decide.ConfirmResult.Processing -> failwith "still busy" // Wait for processing to complete
-        | GroupCheckoutProcess.Decide.ConfirmResult.BalanceOutstanding _ -> if payBefore then failwith "Should have been paid" 
+        | GroupCheckout.Decide.Ok -> ()
+        | GroupCheckout.Decide.Processing -> failwith "still busy" // Wait for processing to complete
+        | GroupCheckout.Decide.BalanceOutstanding _ -> if payBefore then failwith "Should have been paid" 
     }
     if payBefore then
         return true
     else
         do! checkoutService.Pay(id, paymentId, charged)
         match! checkoutService.Confirm(id) with
-        | GroupCheckoutProcess.Decide.ConfirmResult.Ok -> return true
-        | GroupCheckoutProcess.Decide.ConfirmResult.Processing
-        | GroupCheckoutProcess.Decide.ConfirmResult.BalanceOutstanding _ -> return false }
+        | GroupCheckout.Decide.Ok -> return true
+        | GroupCheckout.Decide.Processing
+        | GroupCheckout.Decide.BalanceOutstanding _ -> return false }
 
 [<AbstractClass>]
 type ReactorPropertiesBase(reactor : FixtureBase, testOutput) =
@@ -52,7 +52,7 @@ type MemoryProperties (reactor : MemoryReactor.Fixture, testOutput) =
 
     [<Property(EndSize = 1000, MaxTest = 10)>]
     let run args : Async<bool> =
-        run reactor.Store args reactor.CheckReactions
+        runCheckoutScenario reactor.Store args reactor.CheckReactions
    
     override _.DisposeAsync() =
         // Validate nothing is left hanging; This is deterministic and quick with a MemoryStoreSource
@@ -73,7 +73,7 @@ type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
     [<Property(MaxTest = 2)>]
 #endif    
     let run args : Async<bool> = async {
-        try return! run reactor.Store args reactor.CheckReactions
+        try return! runCheckoutScenario reactor.Store args reactor.CheckReactions
         // Dump the stats after each and every iteration of the test
         finally reactor.DumpStats() }
     

@@ -13,7 +13,7 @@ type Generators =
     static member MemoryStore = Gen.constant (Config.Store.Memory <| Equinox.MemoryStore.VolatileStore())
     static member Store = Arb.fromGen Generators.MemoryStore
 
-    static member GroupCheckoutProcess : Arbitrary<GroupCheckoutProcess.Service> =
-        Generators.MemoryStore |> Gen.map GroupCheckoutProcess.Config.create |> Arb.fromGen
+    static member GroupCheckout : Arbitrary<GroupCheckout.Service> =
+        Generators.MemoryStore |> Gen.map GroupCheckout.Config.create |> Arb.fromGen
 
 [<assembly: FsCheck.Xunit.Properties(Arbitrary = [| typeof<Generators> |])>] do ()
