@@ -10,11 +10,18 @@ module Events =
 
     type CheckoutResidual =     { stay :  GuestStayId; residual : decimal }
     type Event =
-        | StaysAdded of         {| at : DateTimeOffset; stays : GuestStayId[] |}
+        /// There may be more than one of these; each represents the user requesting the adding a group of Stays into group checkout
+        /// NOTE in the case where >=1 of the nominated Stays has already been checked out, the pending stay will be taken off the list via
+        /// a MergesFailed event rather than the typical StaysMerged outcome
+        | StaysSelected of      {| at : DateTimeOffset; stays : GuestStayId[] |}
+        /// Represents the workflow's record of a) confirming checkout of the Stay has been completed and b) the balance to be paid, if any
         | StaysMerged of        {| residuals : CheckoutResidual[] |}
-        /// Guest was checked out via another group, or independently, prior to being able to grab it
+        /// Indicates that it was not possible for the the Selected stay to be transferred to the group as requested
+        /// i.e. Guest was checked out via another group, or independently, prior to being able to grab it.
         | MergesFailed of       {| stays : GuestStayId[] |}
+        /// Records payments for this group (a group cannot be confirmed until all outstanding charges for all Merged stays have Paid)
         | Paid of               {| at : DateTimeOffset; paymentId : PaymentId; amount : decimal |}
+        /// Records confirmation of completion of the group checkout. No further Stays can be Selected, nor should any balance be outstanding
         | Confirmed of          {| at : DateTimeOffset |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = Config.EventCodec.gen<Event>
@@ -30,7 +37,7 @@ module Fold =
 
     let private removePending xs state = { state with pending = state.pending |> Array.except xs  }
     let evolve state = function
-        | StaysAdded e ->
+        | StaysSelected e ->
             { state with pending = Array.append state.pending e.stays }
         | StaysMerged e ->
             { removePending (seq { for s in e.residuals -> s.stay }) state with
@@ -70,7 +77,7 @@ module Decide =
         let registered = HashSet(seq { yield! state.pending; yield! state.failed; for x in state.checkedOut do yield x.stay })
         match stays |> Array.except registered with
         | [||] -> []
-        | xs -> [ Events.StaysAdded {| at = at; stays = xs |} ]
+        | xs -> [ Events.StaysSelected {| at = at; stays = xs |} ]
 
     [<NoComparison; NoEquality>]
     type ConfirmResult = Processing | Ok | BalanceOutstanding of decimal

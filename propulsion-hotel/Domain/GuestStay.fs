@@ -6,10 +6,15 @@ let streamId = Equinox.StreamId.gen GuestStayId.toString
 module Events =
 
     type Event =
+        /// Notes time of of checkin of the guest (does not affect whether charges can be levied against the stay)
         | CheckedIn of          {| at : DateTimeOffset |}
+        /// Notes addition of a charge against the stay
         | Charged of            {| chargeId : ChargeId; at : DateTimeOffset; amount : decimal |}
+        /// Notes a payment against this stay
         | Paid of               {| paymentId : PaymentId; at : DateTimeOffset; amount : decimal |}
+        /// Notes an ordinary checkout by the Guest (requires prior payment of all outstanding charges)
         | CheckedOut of         {| at : DateTimeOffset |}
+        /// Notes checkout is being effected via a GroupCheckout. Marks stay complete equivalent to typical CheckedOut event
         | TransferredToGroup of {| at : DateTimeOffset; groupId : GroupCheckoutId; residualBalance : decimal |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = Config.EventCodec.gen<Event>

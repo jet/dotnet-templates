@@ -48,7 +48,6 @@ type Service(guestStays : GuestStay.Service, groupCheckouts : GroupCheckout.Serv
             return Outcome.Noop, [] }
             
     /// Handles Reactions based on the state of the Group Checkout's workflow
-    /// NOTE We use the version of the stream, as loaded, to decide the checkpoint position
-    ///      in order to avoid having to guarantee being able to read our writes
-    member _.React(groupCheckoutId) = 
+    /// NOTE result includes the post-version of the stream after processing has concluded
+    member _.React(groupCheckoutId) : Async<Outcome * int64> = 
         groupCheckouts.React(groupCheckoutId, handleReaction groupCheckoutId)
