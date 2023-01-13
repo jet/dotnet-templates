@@ -38,6 +38,9 @@ let private handle (processor : GroupCheckoutProcess.Service) stream = async {
     match stream with
     | GroupCheckout.StreamName groupCheckoutId ->
         let! outcome, ver' = processor.React(groupCheckoutId)
+        // Checkpointing happens asynchronously. When the process is started up we might reprocess
+        // already handled messages. The service returns the version of the process manager stream
+        // so we can use that to fast-forward our processing and avoid re-triggering actions unnecessarily
         return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', outcome)
     | other ->
         return failwithf "Span from unexpected category %A" other }
