@@ -97,7 +97,7 @@ type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event
     /// Called within Reactor host to Dispatch any relevant Reaction activities
     member _.React(id, handleReaction) : Async<'R * int64> =
         let decider = resolve id
-        decider.TransactExAsync((fun c -> Flow.decide handleReaction c.State), fun r c -> (r, c.Version))
+        decider.TransactAsyncWithPostVersion(Flow.decide handleReaction)
 
     member _.Merge(id, stays, ?at) : Async<Flow.Action>=
         let decider = resolve id

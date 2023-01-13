@@ -31,3 +31,11 @@ type PaymentId = Guid<paymentId>
 
 type DateTimeOffset = System.DateTimeOffset
 type HashSet<'t> = System.Collections.Generic.HashSet<'t>
+
+[<AutoOpen>]
+module DeciderExtensions =
+ 
+    type Equinox.Decider<'S, 'E> with
+  
+        member x.TransactAsyncWithPostVersion(decide) : Async<'R * int64> =
+            x.TransactExAsync((fun c -> decide c.State), (fun r c -> (r, c.Version)))
