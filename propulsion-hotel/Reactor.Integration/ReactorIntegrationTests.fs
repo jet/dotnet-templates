@@ -5,7 +5,7 @@ open FsCheck
 open FsCheck.Xunit
 open System
 
-let runCheckoutScenario store (paymentId, id, NonEmptyArray stays, payBefore) check = async {
+let runCheckoutScenario store (paymentId, id, NonEmptyArray stays, payBefore) checkWithRetry = async {
     let staysService = GuestStay.Config.create store
     let checkoutService = GroupCheckout.Config.create store            
     let mutable charged = 0
@@ -15,12 +15,22 @@ let runCheckoutScenario store (paymentId, id, NonEmptyArray stays, payBefore) ch
     let stays = [| for stayId, _, _ in stays -> stayId |]
     if payBefore then do! checkoutService.Pay(id, paymentId, charged)
     let! _ = checkoutService.Merge(id, stays)
-    do! check "awaiting Group Checkout action" <| fun wait -> async {
+    // Each part of a scenario that is reliant on the triggering and completion of a reaction is wrapped in this manner
+    // to cover cases where the reaction work has not been processed by the time the `wait ()` has timed out
+    do! checkWithRetry "awaiting Group Checkout action" <| fun wait -> async {
         do! wait ()
         match! checkoutService.Confirm(id) with
         | GroupCheckout.Decide.Ok -> ()
-        | GroupCheckout.Decide.Processing -> failwith "still busy" // Wait for processing to complete
-        | GroupCheckout.Decide.BalanceOutstanding _ -> if payBefore then failwith "Should have been paid" 
+        | GroupCheckout.Decide.Processing ->
+            failwith "still busy" // Trigger the retry to wait for processing to complete
+            // NOTE when testing with the MemoryStoreProjector, the `wait` should be deterministic in nature, i.e.
+            //      after the `wait` call, we know that all reactions have been processed, so assertions like this,
+            //      that are intended to confirm that required effects have been achieved should always succeed.
+            //      For concrete stores, or or more retries may be necessary 
+        | GroupCheckout.Decide.BalanceOutstanding _ ->
+            if payBefore then
+                // This state should not arise, unless there's a logic bug somewhere; throw to make the test fail 
+                failwith "Should have been paid" 
     }
     if payBefore then
         return true
