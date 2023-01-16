@@ -60,12 +60,13 @@ let private handle (processor : GroupCheckoutProcess.Service) stream = async {
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
+let private createService store =
+    let stays = GuestStay.Config.create store
+    let checkouts = GroupCheckout.Config.create store
+    GroupCheckoutProcess.Service(stays, checkouts, checkoutParallelism = 5)
+        
 let create store =
-    let processor =
-        let stays = GuestStay.Config.create store
-        let checkouts = GroupCheckout.Config.create store
-        GroupCheckoutProcess.Service(stays, checkouts)
-    handle processor
+    createService store |> handle
             
 type Config private () =
     

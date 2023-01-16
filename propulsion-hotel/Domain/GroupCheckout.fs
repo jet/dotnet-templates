@@ -57,7 +57,7 @@ module Fold =
 module Flow =
 
     type Action =
-        | MergeStays of           GuestStayId[]
+        | MergeStays of         GuestStayId[]
         | Ready of              balance : decimal
         | Finished
 
@@ -95,26 +95,31 @@ module Decide =
 type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Called within Reactor host to Dispatch any relevant Reaction activities
-    member _.React(id, handleReaction) : Async<'R * int64> =
+    member _.React(id, handleReaction : Flow.Action -> Async<'R * Events.Event list>) : Async<'R * int64> =
         let decider = resolve id
         decider.TransactAsyncWithPostVersion(Flow.decide handleReaction)
-
-    member _.Merge(id, stays, ?at) : Async<Flow.Action>=
-        let decider = resolve id
-        decider.Transact(Decide.add (defaultArg at DateTimeOffset.UtcNow) stays, Flow.nextAction)
 
     member _.Pay(id, paymentId, amount, ?at) : Async<unit> =
         let decider = resolve id
         decider.Transact(Decide.pay paymentId amount (defaultArg at DateTimeOffset.UtcNow))
 
+    member _.Merge(id, stays, ?at) : Async<Flow.Action>=
+        let decider = resolve id
+        decider.Transact(Decide.add (defaultArg at DateTimeOffset.UtcNow) stays, Flow.nextAction)
+
     member _.Confirm(id, ?at) : Async<Decide.ConfirmResult>=
         let decider = resolve id
         decider.Transact(Decide.confirm (defaultArg at DateTimeOffset.UtcNow))
 
+    member _.Read(groupCheckoutId) : Async<Flow.Action>=
+        let decider = resolve groupCheckoutId
+        decider.Query(Flow.nextAction)
+
 module Config =
 
     let private (|StoreCat|) = function
-        | Config.Store.Memory store ->            Config.Memory.create Events.codec Fold.initial Fold.fold store
+        | Config.Store.Memory store ->
+            Config.Memory.create Events.codec Fold.initial Fold.fold store
         | Config.Store.Dynamo (context, cache) ->
             // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
             // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot

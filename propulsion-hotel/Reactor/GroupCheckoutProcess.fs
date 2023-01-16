@@ -1,14 +1,12 @@
 module Reactor.GroupCheckoutProcess
 
-open Infrastructure
 open Domain
+open Infrastructure
 
 [<RequireQualifiedAccess>]
 type Outcome = Merged of ok : int * failed : int | Noop
 
-type Service(guestStays : GuestStay.Service, groupCheckouts : GroupCheckout.Service, ?checkoutParallelism) =
-    
-    let checkoutDop = defaultArg checkoutParallelism 5
+type Service(guestStays : GuestStay.Service, groupCheckouts : GroupCheckout.Service, checkoutParallelism) =
     
     // Attempts a single merge for the specified stay
     let attemptMerge groupCheckoutId stayId = async {
@@ -20,7 +18,7 @@ type Service(guestStays : GuestStay.Service, groupCheckouts : GroupCheckout.Serv
     // Yields residual charges for ones that succeeded,
     // along with the ids of any that have already been checked out and hence cannot proceed as part of the group checkout
     let executeMergeStayAttempts groupCheckoutId stayIds = async {
-        let! outcomes = stayIds |> Seq.map (attemptMerge groupCheckoutId) |> Async.parallelLimit checkoutDop
+        let! outcomes = stayIds |> Seq.map (attemptMerge groupCheckoutId) |> Async.parallelLimit checkoutParallelism
         return outcomes |> Choice.partition id }
                 
     // Attempts to merge the specified stays into the specified Group Checkout

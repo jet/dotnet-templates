@@ -32,11 +32,3 @@ module Dynamo =
     let createUnoptimized codec initial fold (context, cache) =
         let accessStrategy = AccessStrategy.Unoptimized
         create codec initial fold accessStrategy (context, cache)
-    //
-    // let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
-    //     let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
-    //     create codec initial fold accessStrategy (context, cache)
-
-    // let createRollingState codec initial fold toSnapshot (context, cache) =
-    //     let accessStrategy = AccessStrategy.RollingState toSnapshot
-    //     create codec initial fold accessStrategy (context, cache)
