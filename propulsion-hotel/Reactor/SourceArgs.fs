@@ -25,7 +25,6 @@ module Dynamo =
         | [<AltCommandLine "-is">]          IndexSuffix of string
         | [<AltCommandLine "-b"; Unique>]   MaxItems of int
         | [<AltCommandLine "-Z"; Unique>]   FromTail
-        | [<AltCommandLine "-d">]           StreamsDop of int
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | RegionProfile _ ->        "specify an AWS Region (aka System Name, e.g. \"us-east-1\") to connect to using the implicit AWS SDK/tooling config and/or environment variables etc. Optional if:\n" +
@@ -42,7 +41,6 @@ module Dynamo =
                 | IndexSuffix _ ->          "specify a suffix for the index store. (optional if environment variable " + Args.INDEX_TABLE + " specified. default: \"-index\")"
                 | MaxItems _ ->             "maximum events to load in a batch. Default: 100"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-                | StreamsDop _ ->           "parallelism when loading events from Store Feed Source. Default 4"
 
     type Arguments(c : Configuration, p : ParseResults<Parameters>) =
         let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
@@ -66,16 +64,15 @@ module Dynamo =
         let fromTail =                      p.Contains FromTail
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         let batchSizeCutoff =               p.GetResult(MaxItems, 100)
-        let streamsDop =                    p.GetResult(StreamsDop, 4)
         let client =                        connector.CreateClient()
         let indexStoreClient =              lazy client.ConnectStore("Index", indexTable)
         member _.Connect() =                connector.LogConfiguration()
                                             client.ConnectStore("Main", table) |> DynamoStoreContext.create
         member _.MonitoringParams(log : ILogger) =
-            log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} Hydrater parallelism {streamsDop}", batchSizeCutoff, streamsDop)
+            log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} No event hydration", batchSizeCutoff)
             let indexStoreClient = indexStoreClient.Value
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
-            indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval, streamsDop
+            indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval
         member _.CreateCheckpointStore(group, cache) =
             let indexTable = indexStoreClient.Value
             indexTable.CreateCheckpointService(group, cache, Config.log)

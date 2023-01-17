@@ -75,7 +75,7 @@ module DynamoReactor =
         new (messageSink) =
             let conn = DynamoConnector()
             let createSourceConfig consumerGroupName =
-                let loadMode = DynamoLoadModeConfig.Hydrate (conn.StoreContext, 4)
+                let loadMode = DynamoLoadModeConfig.NoBodies
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
                 SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
                                      tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)

@@ -15,6 +15,7 @@ type SourceConfig =
         * statsInterval : TimeSpan
 and [<NoEquality; NoComparison>] DynamoLoadModeConfig =
     | Hydrate of monitoredContext : Equinox.DynamoStore.DynamoStoreContext * hydrationConcurrency : int
+    | NoBodies
 
 module SourceConfig =
     module Memory =
@@ -30,6 +31,7 @@ module SourceConfig =
             let loadMode =
                 match loadModeConfig with
                 | Hydrate (monitoredContext, hydrationConcurrency) -> LoadMode.Hydrated (categoryFilter, hydrationConcurrency, monitoredContext)
+                | NoBodies -> LoadMode.WithoutEventBodies categoryFilter
             DynamoStoreSource(
                 log, statsInterval,
                 indexStore, batchSizeCutoff, tailSleepInterval,
