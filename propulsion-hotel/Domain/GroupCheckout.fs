@@ -94,22 +94,22 @@ module Decide =
 
 type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    /// Called within Reactor host to Dispatch any relevant Reaction activities
-    member _.React(id, handleReaction : Flow.Action -> Async<'R * Events.Event list>) : Async<'R * int64> =
-        let decider = resolve id
-        decider.TransactAsyncWithPostVersion(Flow.decide handleReaction)
-
-    member _.Pay(id, paymentId, amount, ?at) : Async<unit> =
-        let decider = resolve id
-        decider.Transact(Decide.pay paymentId amount (defaultArg at DateTimeOffset.UtcNow))
-
     member _.Merge(id, stays, ?at) : Async<Flow.Action>=
         let decider = resolve id
         decider.Transact(Decide.add (defaultArg at DateTimeOffset.UtcNow) stays, Flow.nextAction)
 
+    member _.Pay(id, paymentId, amount, ?at) : Async<unit> =
+        let decider = resolve id
+        decider.Transact(Decide.pay paymentId amount (defaultArg at DateTimeOffset.UtcNow))
+        
     member _.Confirm(id, ?at) : Async<Decide.ConfirmResult>=
         let decider = resolve id
         decider.Transact(Decide.confirm (defaultArg at DateTimeOffset.UtcNow))
+
+    /// Called within Reactor host to Dispatch any relevant Reaction activities
+    member _.React(id, handleReaction : Flow.Action -> Async<'R * Events.Event list>) : Async<'R * int64> =
+        let decider = resolve id
+        decider.TransactAsyncWithPostVersion(Flow.decide handleReaction)
 
     member _.Read(groupCheckoutId) : Async<Flow.Action>=
         let decider = resolve groupCheckoutId

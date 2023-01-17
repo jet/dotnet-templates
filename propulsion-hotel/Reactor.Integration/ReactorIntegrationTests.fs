@@ -23,7 +23,7 @@ let runCheckoutScenario store (paymentId, id, NonEmptyArray stays, payBefore) ch
         | GroupCheckout.Decide.Ok -> ()
         | GroupCheckout.Decide.Processing ->
             failwith "still busy" // Trigger the retry to wait for processing to complete
-            // NOTE when testing with the MemoryStoreProjector, the `wait` should be deterministic in nature, i.e.
+            // NOTE when testing with the MemoryStoreSource, the `wait` should be deterministic in nature, i.e.
             //      after the `wait` call, we know that all reactions have been processed, so assertions like this,
             //      that are intended to confirm that required effects have been achieved should always succeed.
             //      For concrete stores, or or more retries may be necessary 
