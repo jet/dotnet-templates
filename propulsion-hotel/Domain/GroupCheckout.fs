@@ -54,14 +54,15 @@ module Fold =
             { state with completed = true }
     let fold : State -> Events.Event seq -> State = Seq.fold evolve
 
+/// Manages the Workflow aspect, mapping Fold.State to an Action surfacing information relevant for reactions processing
 module Flow =
 
-    type Action =
+    type State =
         | MergeStays of         GuestStayId[]
         | Ready of              balance : decimal
         | Finished
 
-    let nextAction : Fold.State -> Action = function
+    let nextAction : Fold.State -> State = function
         | { completed = true } -> Finished
         | { pending = xs } when not (Array.isEmpty xs) -> MergeStays xs
         | { balance = bal } -> Ready bal
@@ -94,7 +95,7 @@ module Decide =
 
 type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    member _.Merge(id, stays, ?at) : Async<Flow.Action>=
+    member _.Merge(id, stays, ?at) : Async<Flow.State>=
         let decider = resolve id
         decider.Transact(Decide.add (defaultArg at DateTimeOffset.UtcNow) stays, Flow.nextAction)
 
@@ -106,12 +107,12 @@ type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event
         let decider = resolve id
         decider.Transact(Decide.confirm (defaultArg at DateTimeOffset.UtcNow))
 
-    /// Called within Reactor host to Dispatch any relevant Reaction activities
-    member _.React(id, handleReaction : Flow.Action -> Async<'R * Events.Event list>) : Async<'R * int64> =
+    /// Used by GroupCheckOutProcess to run any relevant Reaction activities
+    member _.React(id, handleReaction : Flow.State -> Async<'R * Events.Event list>) : Async<'R * int64> =
         let decider = resolve id
         decider.TransactAsyncWithPostVersion(Flow.decide handleReaction)
 
-    member _.Read(groupCheckoutId) : Async<Flow.Action>=
+    member _.Read(groupCheckoutId) : Async<Flow.State>=
         let decider = resolve groupCheckoutId
         decider.Query(Flow.nextAction)
 

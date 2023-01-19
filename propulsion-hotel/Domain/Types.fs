@@ -17,12 +17,6 @@ type GuestStayId = Guid<guestStayId>
 module GuestStayId =
     let toString : GuestStayId -> string = UMX.untag >> Guid.toString
 
-type ClerkId = Guid<clerkId>
- and [<Measure>] clerkId
- 
-type RequestId = Guid<requestId>
- and [<Measure>] requestId
-
 type ChargeId = Guid<chargeId>
  and [<Measure>] chargeId
 
