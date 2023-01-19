@@ -86,26 +86,27 @@ module Mdb =
         | [<AltCommandLine "-c">]           ConnectionString of string
         | [<AltCommandLine "-r"; Unique>]   ReadConnectionString of string
         | [<AltCommandLine "-cp">]          CheckpointConnectionString of string
-        | [<AltCommandLine "-s">]           Schema of string
+        | [<AltCommandLine "-cs">]          CheckpointSchema of string
         | [<AltCommandLine "-b"; Unique>]   BatchSize of int
+        | [<AltCommandLine "-t"; Unique>]   TailSleepIntervalMs of int
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         interface IArgParserTemplate with
             member a.Usage = a |> function
                 | ConnectionString _ ->     $"Connection string for the postgres database housing message-db when writing. (Optional if environment variable {CONNECTION_STRING} is defined)"
                 | ReadConnectionString _ -> $"Connection string for the postgres database housing message-db when reading. (Defaults to the (write) Connection String; Optional if environment variable {READ_CONN_STRING} is defined)"
                 | CheckpointConnectionString _ -> "Connection string used for the checkpoint store. If not specified, defaults to the connection string argument"
-                | Schema _ ->               $"Schema that should contain the checkpoints table Optional if environment variable {SCHEMA} is defined"
+                | CheckpointSchema _ ->     $"Schema that should contain the checkpoints table. Optional if environment variable {SCHEMA} is defined"
                 | BatchSize _ ->            "maximum events to load in a batch. Default: 1000"
+                | TailSleepIntervalMs _ ->  "How long to sleep in ms once the consumer has hit the tail (default: 100ms)"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-
     type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
         let writeConnStr =                  p.TryGetResult ConnectionString |> Option.defaultWith (fun () -> c.MdbConnectionString)
         let readConnStr =                   p.TryGetResult ReadConnectionString |> Option.orElseWith (fun () -> c.MdbReadConnectionString) |> Option.defaultValue writeConnStr
         let checkpointConnStr =             p.TryGetResult CheckpointConnectionString |> Option.defaultValue writeConnStr
-        let schema =                        p.TryGetResult Schema |> Option.defaultWith (fun () -> c.MdbSchema)
+        let schema =                        p.TryGetResult CheckpointSchema |> Option.defaultWith (fun () -> c.MdbSchema)
         let fromTail =                      p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 1000)
-        let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
+        let tailSleepInterval =             p.GetResult(TailSleepIntervalMs, 100) |> TimeSpan.FromMilliseconds
         member _.Connect() =
                                             let sanitize (cs : string) = Npgsql.NpgsqlConnectionStringBuilder(cs, Password = null)
                                             Log.Information("Npgsql checkpoint connection {connectionString}", sanitize checkpointConnStr)
