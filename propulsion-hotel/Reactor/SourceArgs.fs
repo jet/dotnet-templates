@@ -84,32 +84,35 @@ module Mdb =
     open Args.Configuration.Mdb
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-c">]           ConnectionString of string
+        | [<AltCommandLine "-r"; Unique>]   ReadConnectionString of string
         | [<AltCommandLine "-cp">]          CheckpointConnectionString of string
         | [<AltCommandLine "-s">]           Schema of string
         | [<AltCommandLine "-b"; Unique>]   BatchSize of int
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | ConnectionString _ ->     $"Connection string for the postgres database housing message-db. (Optional if environment variable {CONNECTION_STRING} is defined)"
+                | ConnectionString _ ->     $"Connection string for the postgres database housing message-db when writing. (Optional if environment variable {CONNECTION_STRING} is defined)"
+                | ReadConnectionString _ -> $"Connection string for the postgres database housing message-db when reading. (Defaults to the (write) Connection String; Optional if environment variable {READ_CONN_STRING} is defined)"
                 | CheckpointConnectionString _ -> "Connection string used for the checkpoint store. If not specified, defaults to the connection string argument"
                 | Schema _ ->               $"Schema that should contain the checkpoints table Optional if environment variable {SCHEMA} is defined"
                 | BatchSize _ ->            "maximum events to load in a batch. Default: 100"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
 
     type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
-        let connStr =                       p.TryGetResult ConnectionString |> Option.defaultWith (fun () -> c.MdbConnectionString)
-        let checkpointConnStr =             p.TryGetResult CheckpointConnectionString |> Option.defaultValue connStr
+        let writeConnStr =                  p.TryGetResult ConnectionString |> Option.defaultWith (fun () -> c.MdbConnectionString)
+        let readConnStr =                   p.TryGetResult ReadConnectionString |> Option.defaultValue writeConnStr
+        let checkpointConnStr =             p.TryGetResult CheckpointConnectionString |> Option.defaultValue writeConnStr
         let schema =                        p.TryGetResult Schema |> Option.defaultWith (fun () -> c.MdbSchema)
         let fromTail =                      p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 100)
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         member _.Connect() =
                                             let connStrWithoutPassword = Npgsql.NpgsqlConnectionStringBuilder(checkpointConnStr, Password = null)
-                                            Log.Information("MessageDb Connection {connectionString}", connStrWithoutPassword.ToString())
-                                            connStr |> Equinox.MessageDb.MessageDbClient |> Equinox.MessageDb.MessageDbContext
+                                            Log.Information("MessageDb connection {connectionString}", connStrWithoutPassword.ToString())
+                                            Equinox.MessageDb.MessageDbClient(writeConnStr, readConnStr) |> Equinox.MessageDb.MessageDbContext
         member _.MonitoringParams(log : ILogger) =
             log.Information("MessageDbSource batchSize {batchSize} Checkpoints schema {schema}", batchSize, schema)
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
-            connStr, fromTail, batchSize, tailSleepInterval
+            readConnStr, fromTail, batchSize, tailSleepInterval
         member _.CreateCheckpointStore(group) =
             Propulsion.MessageDb.ReaderCheckpoint.CheckpointStore(checkpointConnStr, schema, group, TimeSpan.FromSeconds 5.)

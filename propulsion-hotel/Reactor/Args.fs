@@ -20,6 +20,7 @@ module Configuration =
     module Mdb =
         
         let [<Literal>] CONNECTION_STRING = "MDB_CONNECTION_STRING"
+        let [<Literal>] READ_CONN_STRING =  "MDB_CONNECTION_STRING_READ"
         let [<Literal>] SCHEMA =            "MDB_SCHEMA"
 
 type Configuration(tryGet : string -> string option) =
