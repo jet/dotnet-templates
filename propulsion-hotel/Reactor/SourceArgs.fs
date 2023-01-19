@@ -108,7 +108,13 @@ module Mdb =
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         member _.Connect() =
                                             let connStrWithoutPassword = Npgsql.NpgsqlConnectionStringBuilder(checkpointConnStr, Password = null)
-                                            Log.Information("MessageDb connection {connectionString}", connStrWithoutPassword.ToString())
+                                            let sanitize s = Npgsql.NpgsqlConnectionStringBuilder(s, Password = null)
+                                            Log.Information("Npgsql checkpoint connection {connectionString}", sanitize checkpointConnStr)
+                                            if writeConnStr = readConnStr then
+                                                Log.Information("MessageDB connection {connectionString}", sanitize writeConnStr)
+                                            else
+                                                Log.Information("MessageDB write connection {connectionString}", sanitize writeConnStr)
+                                                Log.Information("MessageDB read connection {connectionString}", sanitize readConnStr)
                                             let client = Equinox.MessageDb.MessageDbClient(writeConnStr, readConnStr)
                                             Equinox.MessageDb.MessageDbContext(client, batchSize)
         member _.MonitoringParams(log : ILogger) =
