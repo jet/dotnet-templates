@@ -109,7 +109,8 @@ module Mdb =
         member _.Connect() =
                                             let connStrWithoutPassword = Npgsql.NpgsqlConnectionStringBuilder(checkpointConnStr, Password = null)
                                             Log.Information("MessageDb connection {connectionString}", connStrWithoutPassword.ToString())
-                                            Equinox.MessageDb.MessageDbClient(writeConnStr, readConnStr) |> Equinox.MessageDb.MessageDbContext
+                                            let client = Equinox.MessageDb.MessageDbClient(writeConnStr, readConnStr)
+                                            Equinox.MessageDb.MessageDbContext(client, batchSize)
         member _.MonitoringParams(log : ILogger) =
             log.Information("MessageDbSource batchSize {batchSize} Checkpoints schema {schema}", batchSize, schema)
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
