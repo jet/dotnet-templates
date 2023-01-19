@@ -95,7 +95,7 @@ module Mdb =
                 | ReadConnectionString _ -> $"Connection string for the postgres database housing message-db when reading. (Defaults to the (write) Connection String; Optional if environment variable {READ_CONN_STRING} is defined)"
                 | CheckpointConnectionString _ -> "Connection string used for the checkpoint store. If not specified, defaults to the connection string argument"
                 | Schema _ ->               $"Schema that should contain the checkpoints table Optional if environment variable {SCHEMA} is defined"
-                | BatchSize _ ->            "maximum events to load in a batch. Default: 100"
+                | BatchSize _ ->            "maximum events to load in a batch. Default: 1000"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
 
     type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
@@ -104,11 +104,10 @@ module Mdb =
         let checkpointConnStr =             p.TryGetResult CheckpointConnectionString |> Option.defaultValue writeConnStr
         let schema =                        p.TryGetResult Schema |> Option.defaultWith (fun () -> c.MdbSchema)
         let fromTail =                      p.Contains FromTail
-        let batchSize =                     p.GetResult(BatchSize, 100)
+        let batchSize =                     p.GetResult(BatchSize, 1000)
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         member _.Connect() =
-                                            let connStrWithoutPassword = Npgsql.NpgsqlConnectionStringBuilder(checkpointConnStr, Password = null)
-                                            let sanitize s = Npgsql.NpgsqlConnectionStringBuilder(s, Password = null)
+                                            let sanitize (cs : string) = Npgsql.NpgsqlConnectionStringBuilder(cs, Password = null)
                                             Log.Information("Npgsql checkpoint connection {connectionString}", sanitize checkpointConnStr)
                                             if writeConnStr = readConnStr then
                                                 Log.Information("MessageDB connection {connectionString}", sanitize writeConnStr)
