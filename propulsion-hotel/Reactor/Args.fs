@@ -1,74 +1,41 @@
 /// Commandline arguments and/or secrets loading specifications
 module Infrastructure.Args
 
-open Argu
-
 module Config = Domain.Config
 
 exception MissingArg of message : string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
-let [<Literal>] REGION =                    "EQUINOX_DYNAMO_REGION"
-let [<Literal>] SERVICE_URL =               "EQUINOX_DYNAMO_SERVICE_URL"
-let [<Literal>] ACCESS_KEY =                "EQUINOX_DYNAMO_ACCESS_KEY_ID"
-let [<Literal>] SECRET_KEY =                "EQUINOX_DYNAMO_SECRET_ACCESS_KEY"
-let [<Literal>] TABLE =                     "EQUINOX_DYNAMO_TABLE"
-let [<Literal>] INDEX_TABLE =               "EQUINOX_DYNAMO_TABLE_INDEX"
+module Configuration =
+
+    module Dynamo =
+
+        let [<Literal>] REGION =            "EQUINOX_DYNAMO_REGION"
+        let [<Literal>] SERVICE_URL =       "EQUINOX_DYNAMO_SERVICE_URL"
+        let [<Literal>] ACCESS_KEY =        "EQUINOX_DYNAMO_ACCESS_KEY_ID"
+        let [<Literal>] SECRET_KEY =        "EQUINOX_DYNAMO_SECRET_ACCESS_KEY"
+        let [<Literal>] TABLE =             "EQUINOX_DYNAMO_TABLE"
+        let [<Literal>] INDEX_TABLE =       "EQUINOX_DYNAMO_TABLE_INDEX"
+        
+    module Mdb =
+        
+        let [<Literal>] CONNECTION_STRING = "MDB_CONNECTION_STRING"
+        let [<Literal>] SCHEMA =            "MDB_SCHEMA"
 
 type Configuration(tryGet : string -> string option) =
 
     member val tryGet =                     tryGet
     member _.get key =                      match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
-    member x.DynamoServiceUrl =             x.get SERVICE_URL
-    member x.DynamoAccessKey =              x.get ACCESS_KEY
-    member x.DynamoSecretKey =              x.get SECRET_KEY
-    member x.DynamoTable =                  x.get TABLE
-    member x.DynamoRegion =                 x.tryGet REGION
 
+    member x.DynamoRegion =                 tryGet Configuration.Dynamo.REGION
+    member x.DynamoServiceUrl =             x.get Configuration.Dynamo.SERVICE_URL
+    member x.DynamoAccessKey =              x.get Configuration.Dynamo.ACCESS_KEY
+    member x.DynamoSecretKey =              x.get Configuration.Dynamo.SECRET_KEY
+    member x.DynamoTable =                  x.get Configuration.Dynamo.TABLE
+    member x.DynamoIndexTable =             tryGet Configuration.Dynamo.INDEX_TABLE
+
+    member x.MdbConnectionString =          x.get Configuration.Mdb.CONNECTION_STRING
+    member x.MdbSchema =                    x.get Configuration.Mdb.SCHEMA
+    
     member x.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
-
-module Dynamo =
-
-    type [<NoEquality; NoComparison>] Parameters =
-        | [<AltCommandLine "-sr">]          RegionProfile of string
-        | [<AltCommandLine "-su">]          ServiceUrl of string
-        | [<AltCommandLine "-sa">]          AccessKey of string
-        | [<AltCommandLine "-ss">]          SecretKey of string
-        | [<AltCommandLine "-t">]           Table of string
-        | [<AltCommandLine "-r">]           Retries of int
-        | [<AltCommandLine "-rt">]          RetriesTimeoutS of float
-        interface IArgParserTemplate with
-            member p.Usage = p |> function
-                // | Verbose ->                "Include low level Store logging."
-                | RegionProfile _ ->        "specify an AWS Region (aka System Name, e.g. \"us-east-1\") to connect to using the implicit AWS SDK/tooling config and/or environment variables etc. Optional if:\n" +
-                                            "1) $" + REGION + " specified OR\n" +
-                                            "2) Explicit `ServiceUrl`/$" + SERVICE_URL + "+`AccessKey`/$" + ACCESS_KEY + "+`Secret Key`/$" + SECRET_KEY + " specified.\n" +
-                                            "See https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html for details"
-                | ServiceUrl _ ->           "specify a server endpoint for a Dynamo account. (Not applicable if `ServiceRegion`/$" + REGION + " specified; Optional if $" + SERVICE_URL + " specified)"
-                | AccessKey _ ->            "specify an access key id for a Dynamo account. (Not applicable if `ServiceRegion`/$" + REGION + " specified; Optional if $" + ACCESS_KEY + " specified)"
-                | SecretKey _ ->            "specify a secret access key for a Dynamo account. (Not applicable if `ServiceRegion`/$" + REGION + " specified; Optional if $" + SECRET_KEY + " specified)"
-                | Table _ ->                "specify a table name for the primary store. (optional if $" + TABLE + " specified)"
-                | Retries _ ->              "specify operation retries (default: 1)."
-                | RetriesTimeoutS _ ->      "specify max wait-time including retries in seconds (default: 5)"
-
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
-        let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
-                                            | Some systemName ->
-                                                Choice1Of2 systemName
-                                            | None ->
-                                                let serviceUrl =  p.TryGetResult ServiceUrl |> Option.defaultWith (fun () -> c.DynamoServiceUrl)
-                                                let accessKey =   p.TryGetResult AccessKey  |> Option.defaultWith (fun () -> c.DynamoAccessKey)
-                                                let secretKey =   p.TryGetResult SecretKey  |> Option.defaultWith (fun () -> c.DynamoSecretKey)
-                                                Choice2Of2 (serviceUrl, accessKey, secretKey)
-        let connector =                     let timeout = p.GetResult(RetriesTimeoutS, 5.) |> System.TimeSpan.FromSeconds
-                                            let retries = p.GetResult(Retries, 1)
-                                            match conn with
-                                            | Choice1Of2 systemName ->
-                                                Equinox.DynamoStore.DynamoStoreConnector(systemName, timeout, retries)
-                                            | Choice2Of2 (serviceUrl, accessKey, secretKey) ->
-                                                Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
-        let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
-        member _.Connect() =                connector.LogConfiguration()
-                                            let client = connector.CreateClient()
-                                            client.ConnectStore("Main", table)

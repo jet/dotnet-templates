@@ -30,9 +30,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 
 open Domain
 
-let private isReactionStream = function
-    | GroupCheckout.Category -> true
-    | _ -> false
+let private reactionCategories = [| GroupCheckout.Category |]
 
 // Invocation of the handler is prompted by event notifications from the event store's feed.
 // Wherever possible, multiple events get processed together (e.g. in catchup scenarios or where the async checkpointing
@@ -72,10 +70,10 @@ type Config private () =
     
     static member StartSink(log : Serilog.ILogger, stats : Stats, handle,
                             maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams,
-                                                (fun stream _events ct -> Async.startImmediateAsTask ct (handle stream)),
+        let handle stream _events ct = Async.startImmediateAsTask ct (handle stream)
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle,
                                                 stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink isReactionStream sourceConfig
+        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig

@@ -104,7 +104,7 @@ module Config =
         | Config.Store.Memory store ->
             Config.Memory.create Events.codec Fold.initial Fold.fold store
         | Config.Store.Dynamo (context, cache) ->
-            // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
-            // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
             Config.Dynamo.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+        | Config.Store.Mdb (context, cache) ->
+            Config.Mdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
     let create (StoreCat cat) = Service(streamId >> Config.resolve cat Category)

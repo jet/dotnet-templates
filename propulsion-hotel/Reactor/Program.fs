@@ -21,6 +21,7 @@ module Args =
         | [<AltCommandLine "-W"; Unique>]   WakeForResults
 
         | [<CliPrefix(CliPrefix.None); Unique; Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
+        | [<CliPrefix(CliPrefix.None); Unique; Last>] Mdb of ParseResults<SourceArgs.Mdb.Parameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off."
@@ -33,6 +34,7 @@ module Args =
                 | WakeForResults _ ->       "Wake for all results to provide optimal throughput"
 
                 | Dynamo _ ->               "specify DynamoDB input parameters"
+                | Mdb _ ->                  "specify MessageDb input parameters"
     and Arguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
         let processorName =                 p.GetResult ProcessorName
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 16)
@@ -49,9 +51,10 @@ module Args =
                                                             processorName, maxReadAhead, maxConcurrentProcessors)
                                             (processorName, maxReadAhead, maxConcurrentProcessors)
         member val ProcessingTimeout =      p.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
-        member val Store : Choice<SourceArgs.Dynamo.Arguments, unit> =
+        member val Store : Choice<SourceArgs.Dynamo.Arguments, SourceArgs.Mdb.Arguments> =
                                             match p.GetSubCommand() with
                                             | Dynamo a -> Choice1Of2 <| SourceArgs.Dynamo.Arguments(c, a)
+                                            | Mdb a ->    Choice2Of2 <| SourceArgs.Mdb.Arguments(c, a)
                                             | a ->        Args.missingArg $"Unexpected Store subcommand %A{a}"
         member x.ConnectStoreAndSource(appName) : Config.Store * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
@@ -65,7 +68,14 @@ module Args =
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 let store = Config.Store.Dynamo (context, cache)
                 store, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
-            | Choice2Of2 a -> invalidOp "unexpected"
+            | Choice2Of2 a ->
+                let context = a.Connect()
+                let buildSourceConfig log groupName =
+                    let connectionString, startFromTail, batchSize, tailSleepInterval = a.MonitoringParams(log)
+                    let checkpoints = a.CreateCheckpointStore(groupName)
+                    SourceConfig.Mdb (connectionString, checkpoints, startFromTail, batchSize, tailSleepInterval, x.StatsInterval)
+                let store = Config.Store.Mdb (context, cache)
+                store, buildSourceConfig, Equinox.MessageDb.Log.InternalMetrics.dump
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv : Arguments =

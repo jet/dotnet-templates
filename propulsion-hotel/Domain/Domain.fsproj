@@ -11,6 +11,7 @@
     <ItemGroup>
       <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.7" />
       <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.7" />
+      <PackageReference Include="Equinox.MessageDb" Version="4.0.0-rc.7" />
       <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
     </ItemGroup>
 
