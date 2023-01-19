@@ -37,6 +37,7 @@ type Configuration(tryGet : string -> string option) =
     member x.DynamoIndexTable =             tryGet Configuration.Dynamo.INDEX_TABLE
 
     member x.MdbConnectionString =          x.get Configuration.Mdb.CONNECTION_STRING
+    member x.MdbReadConnectionString =      tryGet Configuration.Mdb.READ_CONN_STRING
     member x.MdbSchema =                    x.get Configuration.Mdb.SCHEMA
     
     member x.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int

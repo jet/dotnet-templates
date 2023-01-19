@@ -100,7 +100,7 @@ module Mdb =
 
     type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
         let writeConnStr =                  p.TryGetResult ConnectionString |> Option.defaultWith (fun () -> c.MdbConnectionString)
-        let readConnStr =                   p.TryGetResult ReadConnectionString |> Option.defaultValue writeConnStr
+        let readConnStr =                   p.TryGetResult ReadConnectionString |> Option.orElseWith (fun () -> c.MdbReadConnectionString) |> Option.defaultValue writeConnStr
         let checkpointConnStr =             p.TryGetResult CheckpointConnectionString |> Option.defaultValue writeConnStr
         let schema =                        p.TryGetResult Schema |> Option.defaultWith (fun () -> c.MdbSchema)
         let fromTail =                      p.Contains FromTail
