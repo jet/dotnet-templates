@@ -10,8 +10,8 @@
     <ItemGroup>
         <Compile Include="SerilogLogFixture.fs" />
         <Compile Include="DynamoConnector.fs" />
+        <Compile Include="MessageDbConnector.fs" />
         <Compile Include="ReactorFixture.fs" />
-        <Compile Include="Arbitraries.fs" />
         <Compile Include="ReactorIntegrationTests.fs" />
     </ItemGroup>
 

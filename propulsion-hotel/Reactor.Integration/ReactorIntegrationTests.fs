@@ -92,3 +92,26 @@ type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
     // NOTE we do this wait exactly once after we've run all the tests - doing it every time would entail waiting for a long period after each run of the property
     override _.DisposeAsync() =
         reactor.Wait()
+
+
+[<Xunit.Collection(MessageDbReactor.CollectionName)>]
+type MessageDbProperties(reactor : MessageDbReactor.Fixture, testOutput) =
+    // Failsafe to emit the Remaining stats even in the case of a Test/Property failing (in success case, it's redundant)
+    inherit ReactorPropertiesBase(reactor, testOutput)
+
+#if skipIntegrationTests
+    // TODO remove the Skip= so you can run the tests
+    [<Property(MaxTest = 1, Skip="Cannot run in Equinox.Templates CI environment")>]
+#else
+    [<Property(MaxTest = 2)>]
+#endif    
+    let run args : Async<bool> = async {
+        try return! runCheckoutScenario reactor.Store args reactor.CheckReactions
+        // Dump the stats after each and every iteration of the test
+        finally reactor.DumpStats() }
+    
+    // Verify all Committed events submitted to the projector have been processed cleanly, and nothing remains stuck
+    // The fact the MemoryStore test exits cleanly every time gives us confidence that no straggler events remain after ANY case
+    // NOTE we do this wait exactly once after we've run all the tests - doing it every time would entail waiting for a long period after each run of the property
+    override _.DisposeAsync() =
+        reactor.Wait()

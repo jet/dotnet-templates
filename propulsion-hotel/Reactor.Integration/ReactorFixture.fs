@@ -94,3 +94,31 @@ module DynamoReactor =
     [<Xunit.CollectionDefinition(CollectionName)>]
     type Collection() =
         interface Xunit.ICollectionFixture<Fixture>
+
+module MessageDbReactor =
+
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50
+
+    /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.MessageDbSource Feed
+    type Fixture private (messageSink, store, dumpStats, createSource) =
+        inherit FixtureBase(messageSink, store, dumpStats, createSource)
+        new (messageSink) =
+            let conn = MessageDbConnector()
+            let createSourceConfig consumerGroupName =
+                let checkpoints = conn.CreateCheckpointService(consumerGroupName)
+                SourceConfig.Mdb (conn.ConnectionString, checkpoints, startFromTail = true, batchSize = 100,
+                                  tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
+            new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
+        member val private PropagationDelay = tailSleepInterval * 2.
+        member x.Backoff = tailSleepInterval * 2. 
+        // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
+        member val private WarnThreshold = TimeSpan.Zero
+        member x.Wait() = base.Await(x.PropagationDelay)
+        member x.CheckReactions label = Propulsion.Reactor.Monitor.check x.Wait x.Backoff x.Timeout x.WarnThreshold label
+
+    let [<Literal>] CollectionName = "MessageDbReactor"
+
+    [<Xunit.CollectionDefinition(CollectionName)>]
+    type Collection() =
+        interface Xunit.ICollectionFixture<Fixture>
