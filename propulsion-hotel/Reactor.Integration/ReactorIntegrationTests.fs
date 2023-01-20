@@ -93,7 +93,6 @@ type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
     override _.DisposeAsync() =
         reactor.Wait()
 
-
 [<Xunit.Collection(MessageDbReactor.CollectionName)>]
 type MessageDbProperties(reactor : MessageDbReactor.Fixture, testOutput) =
     // Failsafe to emit the Remaining stats even in the case of a Test/Property failing (in success case, it's redundant)

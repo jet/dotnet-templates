@@ -1,4 +1,4 @@
-# Hotel / Process Manager / Reactor Example
+# Group Checkout / Process Manager / Reactor Example
 
 NOTE: In general, this is not intended to be the first example you touch
 when exploring Equinox (see https://github.com/jet/equinox#quickstart for a
@@ -136,7 +136,8 @@ Depending on the concrete store you choose you'll need some setup.
 
 ## Message DB
 
-See the [MessageDb section](https://github.com/jet/equinox#use-messagedb) in the [Equinox QuickStart](https://github.com/jet/equinox#quickstart)
+See the [MessageDb section](https://github.com/jet/equinox#use-messagedb) in
+the [Equinox QuickStart](https://github.com/jet/equinox#quickstart)
 
 The following steps can establish a local dev test environment for exploration purposes:
 
@@ -173,14 +174,16 @@ $ CONNSTR="Host=localhost; Username=message_store; Password=" \
 
 ## DynamoDb
 
-See the [DynamoDB section](https://github.com/jet/equinox#use-amazon-dynamodb) in the [Equinox QuickStart](https://github.com/jet/equinox#quickstart)
+See the [DynamoDB section](https://github.com/jet/equinox#use-amazon-dynamodb)
+in the [Equinox QuickStart](https://github.com/jet/equinox#quickstart)
 
 The following steps can establish a local dev test environment for exploration purposes:
 
 1. Create a docker-compose file
 
 (If you want to use a local simulator;
-if you have an AWS DynamoDB environment available, you can of course use that too; see the QuickStart)
+if you have an AWS DynamoDB environment available, you can of course use that too;
+see the QuickStart)
 
 ```yaml
 version: '3.7'

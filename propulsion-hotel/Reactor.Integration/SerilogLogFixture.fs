@@ -1,10 +1,7 @@
 namespace Reactor.Integration
 
-module Log =
+open Infrastructure // isStoreMetrics
 
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Serilog.Filters.Matching.WithProperty("isMetric").Invoke e
-    
 type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel : Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =
@@ -14,12 +11,9 @@ type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel :
     let mutable currentTestOutput : Xunit.Abstractions.ITestOutputHelper option = None
     let writeSerilogEvent (logEvent : Serilog.Events.LogEvent) =
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
-        logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
-//-:cnd:noEmit
-#if !NO_CONCRETE_STORES // In Domain.Tests, we don't reference Propulsion.CosmosStore/DynamoStore etc        
+        logEvent.RemovePropertyIfPresent Equinox.MessageDb.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Feed.Core.Log.PropertyTag
-#endif
-//+:cnd:noEmit
+        logEvent.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
         use writer = new System.IO.StringWriter()
         formatter.Format(logEvent, writer)
         let message = writer |> string |> fun s -> s.TrimEnd('\n')
