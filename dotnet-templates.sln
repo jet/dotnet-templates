@@ -170,6 +170,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proHotel", "proHotel", "{C76DEE36-C648-4351-9BB6-F4470D72D473}"
 	ProjectSection(SolutionItems) = preProject
 		propulsion-hotel\README.md = propulsion-hotel\README.md
+		propulsion-hotel\.template.config\template.json = propulsion-hotel\.template.config\template.json
 	EndProjectSection
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "propulsion-hotel\Domain\Domain.fsproj", "{E195C57D-8B64-4B71-88AC-AAACF4F7F5A5}"
