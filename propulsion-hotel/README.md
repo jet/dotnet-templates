@@ -129,3 +129,87 @@ Examples:
       and/or 2 have already been read and buffered ready for dispatch. In
       this case, the events are removed from the buffer immediately (and no
       further handler invocations take place)
+
+# Getting started
+
+Depending on the concrete store you choose you'll need some setup.
+
+## Message DB
+
+See the [MessageDb section](https://github.com/jet/equinox#use-messagedb) in the [Equinox QuickStart](https://github.com/jet/equinox#quickstart)
+
+The following steps can establish a local dev test environment for exploration purposes:
+
+1. Create a docker-compose file
+
+```yaml
+version: '3.7'
+
+services:
+  messagedb:
+    image: ethangarofolo/message-db
+    ports:
+      - "5432:5432"
+```
+
+2. Create the checkpoints table
+
+```sh
+$ docker-compose up -d # starts the message-db
+$ dotnet new tool-manifest # So we can install the propulsion tool
+$ dotnet tool install Propulsion.Tool --prerelease
+$ dotnet propulsion initpg -cs public -cc "Host=localhost; Username=postgres; Password=postgres" # creates the checkpoint table
+```
+
+3. Run the reactor
+
+```sh
+$ CONNSTR="Host=localhost; Username=message_store; Password=" \
+  CPCONNSTR="Host=localhost; Username=postgres; Password=postgres" \
+  dotnet run --project Reactor -- \
+  --processorname MyProcessor \
+  mdb -c $CONNSTR -r $CONNSTR -cp $CPCONNSTR -cs public
+```
+
+## DynamoDb
+
+See the [DynamoDB section](https://github.com/jet/equinox#use-amazon-dynamodb) in the [Equinox QuickStart](https://github.com/jet/equinox#quickstart)
+
+The following steps can establish a local dev test environment for exploration purposes:
+
+1. Create a docker-compose file
+
+(If you want to use a local simulator;
+if you have an AWS DynamoDB environment available, you can of course use that too; see the QuickStart)
+
+```yaml
+version: '3.7'
+
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local
+    container_name: dynamodb-local
+    hostname: dynamodb-local
+    restart: always
+    volumes:
+      - ./docker-dynamodblocal-data:/home/dynamodblocal/data
+    ports:
+      - 8000:8000
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath /home/dynamodblocal/data/"
+
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin
+    ports:
+      - "8001:8001"
+    environment:
+      DYNAMO_ENDPOINT: "http://dynamodb-local:8000"
+      AWS_REGION: "us-west-2"
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    depends_on:
+      - dynamodb-local
+```
+
+2. Set up the table, indexer, ....
+
+(see the Equinox QuickStart for the steps to initialize the tables)
