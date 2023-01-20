@@ -11,7 +11,6 @@
 ///           deterministic in nature
 module FeedSourceTemplate.Domain.TicketsIngester
 
-open System.Threading
 open Equinox.Core
 open FSharp.UMX
 

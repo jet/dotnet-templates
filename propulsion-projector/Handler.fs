@@ -26,8 +26,8 @@ type ProductionStats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
-//     override _.HandleOk(()) =
-//         log.Warning("Produced")
+    override _.HandleOk(()) =
+        log.Warning("Produced")
     // TODO consider whether to log cause of every individual produce failure in full (Failure counts are emitted periodically)
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")

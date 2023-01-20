@@ -3,6 +3,7 @@ module ArchiverTemplate.Handler
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
+    override _.HandleOk(()) = ()
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
 

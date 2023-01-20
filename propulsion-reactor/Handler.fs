@@ -20,12 +20,10 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
     let mutable ok, skipped, na = 0, 0, 0
 
-#if (blank || sourceKafka)
     override _.HandleOk res = res |> function
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
-#endif        
     override _.Classify(exn) =
         match exn with
         | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited
@@ -34,8 +32,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
                   || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
                  && not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
         | x -> base.Classify x
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
+    override _.HandleExn(log, exn) = log.Information(exn, "Unhandled")
 
     override _.DumpStats() =
         base.DumpStats()

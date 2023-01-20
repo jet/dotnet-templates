@@ -479,8 +479,8 @@ module Checkpoints =
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
+    override _.HandleOk(()) = ()
+    override _.HandleExn(log, exn) = log.Information(exn, "Unhandled")
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
