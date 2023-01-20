@@ -45,11 +45,11 @@ type Store internal (connector : DynamoStoreConnector, table, indexTable, cacheN
     member x.CreateSource(trancheIds, sink) =
         let batchSizeCutoff =           100
         let fromTail =                  false
-        let tailSleep =                 TimeSpan.FromMilliseconds 500.
+        let tailSleepInterval =         TimeSpan.FromMilliseconds 500.
         let statsInterval =             TimeSpan.FromMinutes 1.
         let streamsDop =                2
         let loadMode =                  DynamoLoadModeConfig.Hydrate (context, streamsDop)
-        Handler.Config.CreateDynamoSource(Log.Logger, sink, (indexClient, checkpoints, loadMode, fromTail, tailSleep, batchSizeCutoff, statsInterval), trancheIds)
+        Handler.Config.CreateDynamoSource(Log.Logger, sink, (indexClient, checkpoints, loadMode, fromTail, batchSizeCutoff, tailSleepInterval, statsInterval), trancheIds)
 
 /// Wiring for Source and Sink running the Watchdog.Handler
 type App(store : Store) =

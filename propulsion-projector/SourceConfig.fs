@@ -75,7 +75,7 @@ module SourceConfig =
     module Dynamo =
         open Propulsion.DynamoStore
         let start (log, storeLog) (sink : Propulsion.Streams.Default.Sink) categoryFilter
-            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+            (indexStore, checkpoints, loadModeConfig, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let loadMode =
                 match loadModeConfig with
                 | Hydrate (monitoredContext, hydrationConcurrency) -> LoadMode.Hydrated (categoryFilter, hydrationConcurrency, monitoredContext)
@@ -121,7 +121,7 @@ module SourceConfig =
 // #endif
 #if dynamo    
         | SourceConfig.Dynamo (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
-            Dynamo.start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loading, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval)
+            Dynamo.start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
 #endif
 #if esdb    
         | SourceConfig.Esdb (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval) ->

@@ -60,7 +60,7 @@ module SourceConfig =
     module Dynamo =
         open Propulsion.DynamoStore
         let create (log, storeLog) (sink : Propulsion.Streams.Default.Sink) categoryFilter
-            (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) trancheIds =
+            (indexStore, checkpoints, loadModeConfig, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) trancheIds =
             let loadMode =
                 match loadModeConfig with
                 | Hydrate (monitoredContext, hydrationConcurrency) -> LoadMode.Hydrated (categoryFilter, hydrationConcurrency, monitoredContext)
@@ -69,9 +69,9 @@ module SourceConfig =
                 indexStore, batchSizeCutoff, tailSleepInterval,
                 checkpoints, sink, loadMode,
                 startFromTail = startFromTail, storeLog = storeLog, ?trancheIds = trancheIds)
-        let start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval)
+        let start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loadModeConfig, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
             : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
-            let source = create (log, storeLog) sink categoryFilter (indexStore, checkpoints, loadModeConfig, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval) None
+            let source = create (log, storeLog) sink categoryFilter (indexStore, checkpoints, loadModeConfig, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) None
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
     module Esdb =
@@ -92,6 +92,6 @@ module SourceConfig =
         | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval) ->
             Cosmos.start log sink categoryFilter (monitored, leases, checkpointConfig, tailSleepInterval)
         | SourceConfig.Dynamo (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
-            Dynamo.start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loading, startFromTail, tailSleepInterval, batchSizeCutoff, statsInterval)
+            Dynamo.start (log, storeLog) sink categoryFilter (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
         | SourceConfig.Esdb (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval) ->
             Esdb.start log sink categoryFilter (client, checkpoints, hydrateBodies, startFromTail, batchSize, tailSleepInterval, statsInterval)
