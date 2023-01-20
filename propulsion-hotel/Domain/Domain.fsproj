@@ -4,7 +4,7 @@
         <TargetFramework>net6.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <!-- TODO remove-->
+        <!-- TODO remove, only required if you have a very old SDK -->
         <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     </PropertyGroup>
 

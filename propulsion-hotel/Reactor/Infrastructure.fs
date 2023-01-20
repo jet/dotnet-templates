@@ -4,6 +4,11 @@ module Infrastructure.Helpers
 open Serilog
 open System
 
+module Log =
+    
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
+    
 module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
@@ -57,6 +62,28 @@ module DynamoStoreContext =
     let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
         Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
 
+/// Equinox and Propulsion provide metrics as properties in log emissions
+/// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
+module Sinks =
+
+    let tags appName = ["app", appName]
+
+    let private equinoxMetricsOnly tags (l : LoggerConfiguration) =
+        l.WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
+         .WriteTo.Sink(Equinox.DynamoStore.Prometheus.LogSink(tags))
+
+    let private equinoxAndPropulsionMetrics tags group (l : LoggerConfiguration) =
+        l |> equinoxMetricsOnly tags
+          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+
+    let equinoxAndPropulsionFeedMetrics tags group (l : LoggerConfiguration) =
+        l |> equinoxAndPropulsionMetrics tags group
+          |> fun l -> l.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
+
+    let console (configuration : LoggerConfiguration) =
+        let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
+        configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
@@ -65,5 +92,17 @@ type Logging() =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
-        |> fun c -> let t = "{Timestamp:HH:mm:ss} {Level:u1} {Message:lj} {SourceContext} {Properties}{NewLine}{Exception}"
-                    c.WriteTo.Console(theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate = t)
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member private Sinks(configuration : LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
+        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+            a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
+            a.Logger(fun l -> // but filter what gets emitted to the console sink
+                let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
+                configureConsoleSink l |> ignore)
+            |> ignore
+        configuration.WriteTo.Async(bufferSize = 65536, blockWhenFull = true, configure = System.Action<_> configure)
+
+    [<System.Runtime.CompilerServices.Extension>]
+    static member Sinks(configuration : LoggerConfiguration, configureMetricsSinks, verboseStore) =
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)

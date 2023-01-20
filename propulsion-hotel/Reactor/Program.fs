@@ -13,6 +13,7 @@ module Args =
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
+        | [<AltCommandLine "-p"; Unique>]   PrometheusPort of int
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-t"; Unique>]   TimeoutS of float
@@ -26,6 +27,7 @@ module Args =
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | ProcessorName _ ->        "Projector consumer group name."
+                | PrometheusPort _ ->       "port from which to expose a Prometheus /metrics endpoint. Default: off."
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 16."
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
                 | TimeoutS _ ->             "Timeout (in seconds) before Watchdog should step in to process transactions. Default: 10."
@@ -36,21 +38,20 @@ module Args =
                 | Dynamo _ ->               "specify DynamoDB input parameters"
                 | Mdb _ ->                  "specify MessageDb input parameters"
     and Arguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
-        let processorName =                 p.GetResult ProcessorName
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 16)
         let maxConcurrentProcessors =       p.GetResult(MaxWriters, 8)
+        member val ProcessorName =          p.GetResult ProcessorName
+        member val PrometheusPort =         p.TryGetResult PrometheusPort
         member val Verbose =                p.Contains Parameters.Verbose
-        member val ProcessManagerMaxDop =   4
         member val CacheSizeMb =            10
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 10.
         member val PurgeInterval =          TimeSpan.FromHours 1.
         member val IdleDelay =              p.GetResult(IdleDelayMs, 1000) |> TimeSpan.FromMilliseconds
         member val WakeForResults =         p.Contains WakeForResults
-        member x.ProcessorParams() =        Log.Information("Watching... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
-                                                            processorName, maxReadAhead, maxConcurrentProcessors)
-                                            (processorName, maxReadAhead, maxConcurrentProcessors)
-        member val ProcessingTimeout =      p.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
+        member x.ProcessorParams() =        Log.Information("Reacting... {processorName}, reading {maxReadAhead} ahead, {dop} streams",
+                                                            x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
+                                            (x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
         member val Store : Choice<SourceArgs.Dynamo.Arguments, SourceArgs.Mdb.Arguments> =
                                             match p.GetSubCommand() with
                                             | Dynamo a -> Choice1Of2 <| SourceArgs.Dynamo.Arguments(c, a)
@@ -101,17 +102,27 @@ let build (args : Args.Arguments) =
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
-let run args =
+// A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
+let startMetricsServer port : IDisposable =
+    let metricsServer = new Prometheus.KestrelMetricServer(port = port)
+    let ms = metricsServer.Start()
+    Log.Information("Prometheus /metrics endpoint on port {port}", port)
+    { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
+
+let run args = async {
     let sink, source = build args
-    [|   Async.AwaitKeyboardInterruptAsTaskCanceledException()
-         source.AwaitWithStopOnCancellation()
-         sink.AwaitWithStopOnCancellation()
-    |] |> Async.Parallel |> Async.Ignore<unit array>
+    use _ = source
+    use _ = sink
+    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
+    return! Async.Parallel [ Async.AwaitKeyboardInterruptAsTaskCanceledException()
+                             source.AwaitWithStopOnCancellation()
+                             sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]> }
 
 [<EntryPoint>]
 let main argv =
     try let args = Args.parse EnvVar.tryGet argv
-        try Log.Logger <- LoggerConfiguration().Configure(verbose = args.Verbose).CreateLogger()
+        try let metrics = Sinks.equinoxAndPropulsionFeedMetrics (Sinks.tags AppName) args.ProcessorName
+            Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
             with e when not (e :? Args.MissingArg) && not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
