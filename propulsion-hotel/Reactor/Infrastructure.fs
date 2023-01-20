@@ -71,6 +71,7 @@ module Sinks =
     let private equinoxMetricsOnly tags (l : LoggerConfiguration) =
         l.WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
          .WriteTo.Sink(Equinox.DynamoStore.Prometheus.LogSink(tags))
+         .WriteTo.Sink(Equinox.MessageDb.Log.InternalMetrics.Stats.LogSink())
 
     let private equinoxAndPropulsionMetrics tags group (l : LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
