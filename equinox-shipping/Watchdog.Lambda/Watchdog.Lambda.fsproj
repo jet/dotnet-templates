@@ -16,13 +16,12 @@
     <ItemGroup>
         <PackageReference Include="Amazon.Lambda.Core" Version="2.1.0" />
         <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.3.0" />
-        <PackageReference Include="Propulsion.DynamoStore.Lambda" Version="3.0.0-rc.1" />
+        <PackageReference Include="Propulsion.DynamoStore.Lambda" Version="3.0.0-rc.2" />
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Watchdog\Watchdog.fsproj" />
     </ItemGroup>
     <ItemGroup>
-      <Compile Include="Args.fs" />
       <Compile Include="Function.fs" />
     </ItemGroup>
 </Project>

@@ -4,9 +4,6 @@ open Microsoft.AspNetCore.Mvc
 
 open FeedSourceTemplate.Domain
 
-// TODO if you want to use Options etc in your Dto types here, you need to either apply https://github.com/jet/FsCodec/#aspnet-core-with-newtonsoftjson
-//      or target to STJ version >= 5 to have the default response rendering apply the correct conversions
-
 type TicketsTranchesDto = { activeEpochs : TrancheReferenceDto[] }
  and TrancheReferenceDto = { fc : FcId; epochId : TicketsEpochId }
 

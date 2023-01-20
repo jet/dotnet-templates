@@ -479,8 +479,8 @@ module Checkpoints =
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
+    override _.HandleOk(()) = ()
+    override _.HandleExn(log, exn) = log.Information(exn, "Unhandled")
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
@@ -495,7 +495,7 @@ let build (args : Args.Arguments, log) =
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let broker, topic, producers = kafka.BuildTargetParams()
-                    let render struct (stream: FsCodec.StreamName, span: Propulsion.Streams.Default.StreamSpan) = async {
+                    let render (stream: FsCodec.StreamName) (span: Propulsion.Streams.Default.StreamSpan) ct = Async.startImmediateAsTask ct <| async {
                         let value =
                             span
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream

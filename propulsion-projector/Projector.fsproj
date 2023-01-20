@@ -25,14 +25,14 @@
     <!--#endif-->
     <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
     <!--#if (cosmos || sss || esdb) -->
-    <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.1" />
+    <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.2" />
     <!--#endif-->
-    <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.1" />
-    <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.1" />
+    <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.2" />
+    <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.2" />
     <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.7" />
-    <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.1" />
+    <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.2" />
     <!--#if kafka-->
-    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.1" />
+    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.2" />
     <!--#endif-->
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
   </ItemGroup>

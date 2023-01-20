@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Target `Propulsion` v `3.0.0-rc.2` [#129](https://github.com/jet/dotnet-templates/pull/129)
+
 ### Removed 
 ### Fixed
 
