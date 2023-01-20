@@ -33,9 +33,7 @@ module PipelineEvent =
 
     let [<Literal>] Category = "Ticket"
     let streamName = TicketId.toString >> FsCodec.StreamName.create Category
-    let [<return: Struct>] (|StreamName|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, TicketId.Parse id) -> ValueSome id
-        | _ -> ValueNone
+    let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TicketId.Parse id) -> ValueSome id | _ -> ValueNone
 
     (* Each item per stream is represented as an event; if multiple events have been found for a given stream, they are delivered together *)
 

@@ -79,5 +79,3 @@ type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
     let [<Fact>] proIndexerCdk ()               = run "proDynamoStoreCdk" []
 
     interface IClassFixture<EquinoxTemplatesFixture>
-
-module Dummy = let [<EntryPoint>] main _argv = 0

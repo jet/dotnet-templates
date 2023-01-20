@@ -57,6 +57,7 @@ module Fold =
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot state = Events.Snapshotted {| state = state |}
 
+/// Manages the Workflow aspect, mapping Fold.State to an Action surfacing information relevant to reactions processing
 module Flow =
 
     type Action =
@@ -85,7 +86,6 @@ module Flow =
         | Fold.State.Assigned _,    Events.Completed -> true
         | _ -> false
 
-    // If there are no events to apply to the state, it pushes the transaction manager to follow up on the next action from where it was
     let decide (update : Events.Event option) (state : Fold.State) : Events.Event list =
         match update with
         | Some e when isValidTransition e state -> [ e ]
