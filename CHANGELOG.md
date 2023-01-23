@@ -9,6 +9,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+
+- `proHotel`: Process Manager based Reactor with Unit and Integration tests wired for MemoryStore, DynamoStore and MessageDb [#127](https://github.com/jet/dotnet-templates/pull/127)
+
 ### Changed
 
 - Target `Propulsion` v `3.0.0-rc.2` [#129](https://github.com/jet/dotnet-templates/pull/129)

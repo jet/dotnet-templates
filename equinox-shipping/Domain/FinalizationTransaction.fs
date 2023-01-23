@@ -93,6 +93,9 @@ module Flow =
 
 type Service internal (resolve : TransactionId -> Equinox.Decider<Events.Event, Fold.State>) =
 
+    /// (Optionally) idempotently applies an event representing progress achieved in some aspect of the workflow
+    /// Yields a `Flow.Action` representing the next activity to be performed as implied by the workflow's State afterwards
+    /// The workflow concludes when the action returned is `Action.Completed`
     member _.Step(transactionId, maybeUpdate) : Async<Flow.Action> =
         let decider = resolve transactionId
         decider.Transact(Flow.decide maybeUpdate, Flow.nextAction)

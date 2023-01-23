@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <!-- Could be netstandard2.1 but EventStore.Client forces net6.0-->
         <TargetFramework>net6.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -10,21 +9,17 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Config.fs" />
-        <Compile Include="Types.fs" />
-        <Compile Include="Shipment.fs" />
-        <Compile Include="Container.fs" />
-        <Compile Include="FinalizationTransaction.fs" />
-        <Compile Include="FinalizationProcess.fs" />
-        <Compile Include="TransactionWatchdog.fs" />
+      <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.7" />
+      <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.7" />
+      <PackageReference Include="Equinox.MessageDb" Version="4.0.0-rc.7" />
+      <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.7" />
-      <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.7" />
-      <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.7" />
-      <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.7" />
-      <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
+      <Compile Include="Config.fs" />
+      <Compile Include="Types.fs" />
+      <Compile Include="GuestStay.fs" />
+      <Compile Include="GroupCheckout.fs" />
     </ItemGroup>
 
 </Project>
