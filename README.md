@@ -97,6 +97,16 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
    - processing is fully idempotent; retries, concurrent or overlapping transactions are intended to be handled thoroughly and correctly
    - if any `Shipment`s cannot be `Reserved`, those that have been get `Revoked`, and the failure is reported to the caller
    - includes a `Watchdog` console app (based on `dotnet new proReactor --blank`) responsible for concluding abandoned transaction instances (e.g., where processing is carried out in response to a HTTP request and the Clients fails to retry after a transient failure leaves processing in a non-terminal state).
+   - Does not include wiring for Prometheus metrics (see `proHotel`)
+
+<a name="proHotel"></a>
+- [`proHotel`](propulsion-hotel/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that coordinates the merging of a set of `GuestStay`s in a Hotel as a single `GroupCheckout` activity that coves the payment for each of the stays selected.
+
+    - illustrates correct idempotent logic such that concurrent group checkouts that are competing to cover the same stay work correctly, even when commands are retried.
+    - Reactor program is wired to support consuming from `MessageDb` or `DynamoDb`.
+    - Unit tests validate correct processing of reactions without the use of projection support mechanisms from the Propulsion library.
+    - Integration tests establish a Reactor an xUnit.net Collection Fixture (for MessageDb or DynamoDb) or Class Fixtures (for MemoryStore) to enable running scenarios that are reliant on processing that's managed by the Reactor program, without having to run that concurrently.
+    - Includes wiring for Prometheus metrics.
 
 ## Walkthrough
 
@@ -181,6 +191,10 @@ To use from the command line, the outline is:
     # ... to add a Reactor against a Cosmos container for both listening and writing
     md -p ../CosmosReactor | Set-Location
     dotnet new proCosmosReactor
+
+    # ... to add a Hotel Sample for use with MessageDb or DynamoDb
+    md -p ../ProGotel | Set-Location
+    dotnet new proHotel
 
 ## TESTING
 
