@@ -9,15 +9,20 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed 
+### Fixed
+
+<a name="6.2.0"></a>
+## [6.2.0] - 2023-01-23
+
+### Added
 
 - `proHotel`: Process Manager based Reactor with Unit and Integration tests wired for MemoryStore, DynamoStore and MessageDb [#127](https://github.com/jet/dotnet-templates/pull/127)
 
 ### Changed
 
 - Target `Propulsion` v `3.0.0-rc.2` [#129](https://github.com/jet/dotnet-templates/pull/129)
-
-### Removed 
-### Fixed
 
 <a name="6.1.0"></a>
 ## [6.1.0] - 2022-12-23
@@ -611,7 +616,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/6.1.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/6.2.0...HEAD
+[6.2.0]: https://github.com/jet/dotnet-templates/compare/6.1.0...6.2.0
 [6.1.0]: https://github.com/jet/dotnet-templates/compare/6.0.0...6.1.0
 [6.0.0]: https://github.com/jet/dotnet-templates/compare/5.3.0...6.0.0
 [5.3.0]: https://github.com/jet/dotnet-templates/compare/5.2.1...5.3.0
