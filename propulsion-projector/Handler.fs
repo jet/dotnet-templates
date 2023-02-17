@@ -5,7 +5,7 @@ open Propulsion.Internal
 #if     parallelOnly
 // Here we pass the items directly through to the handler without parsing them
 let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : seq<'a> = upcast x
-let categoryFilter _ = true
+let categories = [||] // TODO add category names
 #else // cosmos && !parallelOnly
 #endif // !parallelOnly
 //#endif // cosmos
@@ -46,8 +46,7 @@ let render (stream : FsCodec.StreamName) (span : Propulsion.Streams.Default.Stre
         |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
     return struct (FsCodec.StreamName.toString stream, value) }
 
-let categoryFilter = function
-    | _ -> true // TODO filter categories to be rendered
+let categories = [||] // TODO add category names to render
 
 #endif // kafka && !(cosmos && parallelOnly)
 #else // !kafka
@@ -71,9 +70,7 @@ type Stats(log, statsInterval, stateInterval) =
         log.Information(" Total events processed {total}", totalCount)
         totalCount <- 0
 
-let categoryFilter = function
-    | "categoryA"
-    | _ -> true
+let categories = [| "categoryA" |]
 
 let handle _stream (span: Propulsion.Streams.StreamSpan<_>) _ct = task {
     let r = System.Random()
@@ -92,4 +89,4 @@ type Config private () =
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink categoryFilter sourceConfig
+        SourceConfig.start (log, Config.log) sink categories sourceConfig

@@ -39,9 +39,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
         logExternalStats |> Option.iter (fun dumpTo -> dumpTo log)
 
 #if blank
-let categoryFilter = function
-    | sn when sn = "Todos" -> true
-    | _ -> false
+let reactionCategories = [| "Todos" |]
     
 let handle stream (span : Propulsion.Streams.StreamSpan<_>) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
     match stream, span with
@@ -59,9 +57,7 @@ let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryD
         [| for x in x.items ->
             { id = x.id; order = x.order; title = x.title; completed = x.completed } |] }
 
-let categoryFilter = function
-    | Todo.Reactions.Category -> true
-    | _ -> false
+let reactionCategories = [| Todo.Reactions.Category |]
 
 let handle
         (sourceService : Todo.Service)
@@ -86,4 +82,4 @@ type Config private () =
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink categoryFilter sourceConfig
+        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig

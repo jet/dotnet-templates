@@ -65,7 +65,7 @@ module Args =
                 let buildSourceConfig log groupName =
                     let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, cache)
-                    let load = DynamoLoadModeConfig.NoBodies
+                    let load = Propulsion.DynamoStore.EventLoadMode.IndexOnly
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 let store = Config.Store.Dynamo (context, cache)
                 store, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump

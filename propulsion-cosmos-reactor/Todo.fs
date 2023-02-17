@@ -24,7 +24,7 @@ module Events =
 
 module Reactions =
 
-    let categoryFilter = function Category -> true | _ -> false
+    let categories = [| Category |]
     let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
         span |> Array.chooseV (EventCodec.tryDecode Events.codec stream)
     let [<return: Struct>] (|Parse|_|) = function

@@ -80,7 +80,7 @@ module Args =
                 let buildSourceConfig log groupName =
                     let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, cache)
-                    let load = DynamoLoadModeConfig.Hydrate (context, streamsDop)
+                    let load = Propulsion.DynamoStore.WithData (streamsDop, context)
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 let store = Config.Store.Dynamo (context, cache)
                 store, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
@@ -92,8 +92,8 @@ module Args =
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, targetStore)
-                    let hydrateBodies = true
-                    SourceConfig.Esdb (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
+                    let withData = true
+                    SourceConfig.Esdb (connection.ReadConnection, checkpoints, withData, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
                 store, buildSourceConfig, Equinox.EventStoreDb.Log.InternalMetrics.dump
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args

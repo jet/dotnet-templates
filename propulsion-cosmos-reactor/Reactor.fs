@@ -29,7 +29,7 @@ let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryD
         [| for x in x.items ->
             { id = x.id; order = x.order; title = x.title; completed = x.completed } |] }
 
-let categoryFilter = Todo.Reactions.categoryFilter
+let reactionCategories = Todo.Reactions.categories
 
 let handle
         (sourceService : Todo.Service)

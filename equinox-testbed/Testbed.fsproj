@@ -17,10 +17,10 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.7" />
-    <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.7" />
-    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.7" />
-    <PackageReference Include="Equinox.Tools.TestHarness" Version="4.0.0-rc.7" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.8" />
+    <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.8" />
+    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.8" />
+    <PackageReference Include="Equinox.Tools.TestHarness" Version="4.0.0-rc.8" />
     <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.2" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />

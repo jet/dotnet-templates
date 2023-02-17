@@ -106,7 +106,7 @@ module DynamoReactor =
         new (messageSink) =
             let conn = DynamoConnector()
             let createSourceConfig consumerGroupName =
-                let loadMode = DynamoLoadModeConfig.Hydrate (conn.StoreContext, 4)
+                let loadMode = Propulsion.DynamoStore.WithData (4, conn.StoreContext)
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
                 SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
                                      tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
@@ -137,7 +137,7 @@ module EsdbReactor =
             let conn = EsdbConnector()
             let createSourceConfig consumerGroupName =
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
-                SourceConfig.Esdb (conn.EventStoreClient, checkpoints, hydrateBodies = true, startFromTail = true, batchSize = 100,
+                SourceConfig.Esdb (conn.EventStoreClient, checkpoints, withData = true, startFromTail = true, batchSize = 100,
                                    tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
         override _.RunTimeout = TimeSpan.FromSeconds 0.1

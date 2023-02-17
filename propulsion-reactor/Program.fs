@@ -120,7 +120,7 @@ module Args =
                 let buildSourceConfig log groupName =
                     let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, cache)
-                    let load = DynamoLoadModeConfig.Hydrate (context, streamsDop)
+                    let load = Propulsion.DynamoStore.WithData (streamsDop, context)
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 let store = Config.Store.Dynamo (context, cache)
 #if blank
@@ -141,8 +141,8 @@ module Args =
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, targetStore)
-                    let hydrateBodies = true
-                    SourceConfig.Esdb (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
+                    let withData = true
+                    SourceConfig.Esdb (connection.ReadConnection, checkpoints, withData, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
                 store, targetStore, x.Sink, buildSourceConfig, fun log ->
                     Equinox.EventStoreDb.Log.InternalMetrics.dump log
                     Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
@@ -154,8 +154,8 @@ module Args =
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStoreSql(groupName)
-                    let hydrateBodies = true
-                    SourceConfig.Sss (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
+                    let withData = true
+                    SourceConfig.Sss (connection.ReadConnection, checkpoints, withData, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
 #if blank
                 let targetStore = store
 #else                

@@ -36,9 +36,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
 open Shipping.Domain
 
-let private isReactionStream = function
-    | FinalizationTransaction.Category -> true
-    | _ -> false
+let private reactionCategories = [| FinalizationTransaction.Category |]
 
 let handle
         (processingTimeout : TimeSpan)
@@ -76,7 +74,7 @@ type Config private () =
                          ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
         
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink isReactionStream sourceConfig
+        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig
         
     static member CreateDynamoSource(log, sink, sourceArgs, trancheIds) =
-        SourceConfig.Dynamo.create (log, Config.log) sink isReactionStream sourceArgs (Some trancheIds)
+        SourceConfig.Dynamo.create (log, Config.log) sink reactionCategories sourceArgs (Some trancheIds)

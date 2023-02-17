@@ -46,9 +46,7 @@ let generate stream version summary =
     Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version event
 
 #if blank
-let categoryFilter = function
-    | Contract.Input.Category -> true
-    | _ -> false
+let reactionCategories = [| Contract.Input.Category |]
     
 let handle
         (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
@@ -65,9 +63,7 @@ let handle
         return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (events.Length, 0))
     | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
 #else
-let categoryFilter = function
-    | Todo.Reactions.Category -> true
-    | _ -> false
+let reactionCategories = [| Todo.Reactions.Category |]
     
 let handle
         (service : Todo.Service)
@@ -95,5 +91,5 @@ type Config private () =
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink categoryFilter sourceConfig
+        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig
 //#endif
