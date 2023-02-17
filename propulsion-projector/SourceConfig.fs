@@ -90,7 +90,7 @@ module SourceConfig =
                 EventStoreSource(
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
-                    checkpoints, sink, categories, withData = withData, startFromTail = startFromTail)
+                    checkpoints, sink, (fun x -> Array.contains x categories), withData = withData, startFromTail = startFromTail)
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
@@ -103,7 +103,7 @@ module SourceConfig =
                 SqlStreamStoreSource(
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
-                    checkpoints, sink, categories, withData = withData, startFromTail = startFromTail)
+                    checkpoints, sink, (fun x -> Array.contains x categories), withData = withData, startFromTail = startFromTail)
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
