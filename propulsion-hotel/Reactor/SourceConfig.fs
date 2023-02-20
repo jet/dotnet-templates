@@ -23,9 +23,9 @@ type SourceConfig =
 module SourceConfig =
     module Memory =
         open Propulsion.MemoryStore
-        let start log (sink : Propulsion.Streams.Default.Sink) categories
+        let start log (sink : Propulsion.Streams.Default.Sink) (categories : string array)
             (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
-            let source = MemoryStoreSource(log, store, (fun x -> Array.contains x categories), sink)
+            let source = MemoryStoreSource(log, store, categories, sink)
             source.Start(), Some (fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false))
     module Dynamo =
         open Propulsion.DynamoStore

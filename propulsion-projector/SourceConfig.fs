@@ -84,26 +84,26 @@ module SourceConfig =
 #if esdb    
     module Esdb =
         open Propulsion.EventStoreDb
-        let start log (sink : Propulsion.Streams.Default.Sink) categories
+        let start log (sink : Propulsion.Streams.Default.Sink) (categories : string array)
             (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 EventStoreSource(
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
-                    checkpoints, sink, (fun x -> Array.contains x categories), withData = withData, startFromTail = startFromTail)
+                    checkpoints, sink, categories, withData = withData, startFromTail = startFromTail)
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
 #if sss    
     module Sss =
         open Propulsion.SqlStreamStore
-        let start log (sink : Propulsion.Streams.Default.Sink) categories
+        let start log (sink : Propulsion.Streams.Default.Sink) (categories : string array)
             (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 SqlStreamStoreSource(
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
-                    checkpoints, sink, (fun x -> Array.contains x categories), withData = withData, startFromTail = startFromTail)
+                    checkpoints, sink, categories, withData = withData, startFromTail = startFromTail)
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 #endif            
