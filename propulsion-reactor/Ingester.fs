@@ -41,7 +41,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 #if blank
 let reactionCategories = [| "Todos" |]
     
-let handle stream (span : Propulsion.Streams.StreamSpan<_>) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
+let handle stream (span : Propulsion.Streams.StreamSpan<_>) = async {
     match stream, span with
     | FsCodec.StreamName.CategoryAndId ("Todos", id), _ ->
         let ok = true
@@ -59,10 +59,7 @@ let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryD
 
 let reactionCategories = [| Todo.Reactions.Category |]
 
-let handle
-        (sourceService : Todo.Service)
-        (summaryService : TodoSummary.Service)
-        stream (span : Propulsion.Streams.StreamSpan<_>) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
+let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service) stream span = async {
     match stream, span with
     | Todo.Reactions.Parse (clientId, events) when events |> Seq.exists Todo.Reactions.impliesStateChange ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
@@ -74,9 +71,8 @@ let handle
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats,
-                            handle : System.Func<FsCodec.StreamName, Propulsion.Streams.Default.StreamSpan, _,
-                                     System.Threading.Tasks.Task<struct (Propulsion.Streams.SpanResult * 'Outcome)>>,
+    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>,
+                            handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct (Propulsion.Streams.SpanResult * Outcome)>,
                             maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)

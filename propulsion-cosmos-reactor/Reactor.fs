@@ -31,10 +31,7 @@ let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryD
 
 let reactionCategories = Todo.Reactions.categories
 
-let handle
-        (sourceService : Todo.Service)
-        (summaryService : TodoSummary.Service)
-        stream (span : Propulsion.Streams.StreamSpan<_>) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
+let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service) stream span = async {
     match stream, span with
     | Todo.Reactions.Parse (clientId, events) when events |> Seq.exists Todo.Reactions.impliesStateChange ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)

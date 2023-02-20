@@ -39,7 +39,7 @@ module SourceConfig =
         open Propulsion.CosmosStore
         let start log (sink : Propulsion.Streams.Default.Sink) categories
             (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
-            let parseFeedDoc = EquinoxSystemTextJsonParser.enumStreamEvents (fun x -> Array.contains x categories)
+            let parseFeedDoc = EquinoxSystemTextJsonParser.enumCategoryEvents categories
             let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect parseFeedDoc)
             let source =
                 match checkpointConfig with
@@ -77,7 +77,7 @@ module SourceConfig =
                 EventStoreSource(
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
-                    checkpoints, sink, (fun x -> Array.contains x categories), withData = withData, startFromTail = startFromTail)
+                    checkpoints, sink, categories, withData = withData, startFromTail = startFromTail)
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 

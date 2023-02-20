@@ -39,7 +39,7 @@ type ProductionStats(log, statsInterval, stateInterval) =
 ///   to preserve ordering at stream (key) level for messages produced to the topic)
 // TODO NOTE: The bulk of any manipulation should take place before events enter the scheduler, i.e. in program.fs
 // TODO NOTE: While filtering out entire categories is appropriate, you should not filter within a given stream (i.e., by event type)
-let render (stream : FsCodec.StreamName) (span : Propulsion.Streams.Default.StreamSpan) ct = Async.startImmediateAsTask ct <| async {
+let render (stream : FsCodec.StreamName) (span : Propulsion.Streams.Default.StreamSpan) = async {
     let value =
         span
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
@@ -81,9 +81,8 @@ let handle _stream (span: Propulsion.Streams.StreamSpan<_>) _ct = task {
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats,
-                            handle : System.Func<FsCodec.StreamName, Propulsion.Streams.Default.StreamSpan, _,
-                                     System.Threading.Tasks.Task<struct (Propulsion.Streams.SpanResult * 'Outcome)>>,
+    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>,
+                            handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
                             maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)

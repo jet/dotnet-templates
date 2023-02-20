@@ -40,7 +40,7 @@ let private reactionCategories = [| GroupCheckout.Category |]
 // NOTE while Propulsion supplies the handler with the full set of outstanding events since the last successful checkpoint,
 //   the nature of the reaction processing we are performing here can also be reliant on state that's inferred based on events 
 //   prior to those that will have arrived on the feed. For that reason, the caller does not forward the `events` argument here.
-let private handle (processor : GroupCheckoutProcess.Service) stream = async {
+let private handle (processor : GroupCheckoutProcess.Service) stream _events = async {
     match stream with
     | GroupCheckout.StreamName groupCheckoutId ->
         let! outcome, ver' = processor.React(groupCheckoutId)
@@ -68,11 +68,10 @@ let create store =
             
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Stats, handle,
+    static member StartSink(log : Serilog.ILogger, stats : Stats,
+                            handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct(Propulsion.Streams.SpanResult * Outcome)>,
                             maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        let handle stream _events ct = Async.startImmediateAsTask ct (handle stream)
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle,
-                                                stats, stats.StatsInterval.Period,
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =

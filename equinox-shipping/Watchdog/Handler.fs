@@ -41,7 +41,7 @@ let private reactionCategories = [| FinalizationTransaction.Category |]
 let handle
         (processingTimeout : TimeSpan)
         (driveTransaction : Shipping.Domain.TransactionId -> Async<bool>)
-        stream span ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
+        stream span = async {
     let processingStuckCutoff = let now = DateTimeOffset.UtcNow in now.Add(-processingTimeout)
     match stream, span with
     | TransactionWatchdog.Finalization.MatchStatus (transId, state) ->
@@ -60,10 +60,9 @@ let handle
 
 type Config private () =
     
-    static member private StartSink(log : Serilog.ILogger, stats : Stats,
-                            handle : System.Func<FsCodec.StreamName, Propulsion.Streams.Default.StreamSpan, _,
-                                     System.Threading.Tasks.Task<struct (Propulsion.Streams.SpanResult * Outcome)>>,
-                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+    static member private StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>,
+                                    handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
+                                    maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 

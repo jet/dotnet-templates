@@ -118,7 +118,7 @@ let build (args : Args.Arguments) =
         let handle = Reactor.Config.createHandler store
         Propulsion.Streams.Default.Config.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, handle, stats, args.StatsInterval)
     let source =
-        let parseFeedDoc = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents (fun x -> Array.contains x Reactor.reactionCategories)
+        let parseFeedDoc = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumCategoryEvents Reactor.reactionCategories
         let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect parseFeedDoc)
         let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
         Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer,
