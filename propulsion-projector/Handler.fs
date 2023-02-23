@@ -19,7 +19,7 @@ let render (doc : System.Text.Json.JsonDocument) =
     let r = doc.RootElement
     let gs (name : string) = let x = r.GetProperty name in x.GetString()
     let equinoxPartition, itemId = gs "p", gs "id"
-    equinoxPartition, serdes.Serialize { id = itemId }
+    struct (equinoxPartition, serdes.Serialize { id = itemId })
 #else // kafka && !(cosmos && parallelOnly)
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
 // The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls
