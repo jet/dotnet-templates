@@ -285,7 +285,7 @@ let build (args : Args.Arguments) =
     let consumerConfig = createConsumerConfig consumerGroupName
     let pipeline = 
         Propulsion.Kafka.StreamsConsumer.Start
-            (   Log.Logger, consumerConfig, parseStreamEvents, handle, maxConcurrentStreams,
+            (   Log.Logger, consumerConfig, parseStreamEvents, (fun sn ss ct -> Async.startImmediateAsTask ct (handle sn ss)), maxConcurrentStreams,
                 stats = stats, statsInterval = args.StateInterval)
     [|  pipeline.AwaitWithStopOnCancellation()
 #else // !sourceKafka
