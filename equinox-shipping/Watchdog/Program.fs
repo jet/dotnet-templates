@@ -111,7 +111,7 @@ let build (args : Args.Arguments) =
     let sink =
         let stats = Handler.Stats(log, args.StatsInterval, args.StateInterval, args.VerboseStore, dumpMetrics)
         let manager = Shipping.Domain.FinalizationProcess.Config.create args.ProcessManagerMaxDop store
-        Handler.Config.StartSink(log, stats, manager, args.ProcessingTimeout, maxReadAhead, maxConcurrentStreams,
+        Handler.Config.StartSink(log, stats, maxConcurrentStreams, manager, args.ProcessingTimeout, maxReadAhead, 
                                  wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig log consumerGroupName

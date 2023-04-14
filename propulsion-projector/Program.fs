@@ -160,7 +160,7 @@ let build (args : Args.Arguments) =
 #endif // kafka && !parallelOnly
 #else // !kafka
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-    let sink = Propulsion.Streams.Default.Config.Start(Log.Logger, maxReadAhead, maxConcurrentProcessors, Handler.handle, stats, args.StatsInterval)
+    let sink = Handler.Config.StartSink(Log.Logger, stats, maxConcurrentProcessors, Handler.handle, maxReadAhead)
 #endif // !kafka
 #if (cosmos && parallelOnly)
     // Custom logic for establishing the source, as we're not projecting StreamEvents - TODO could probably be generalized

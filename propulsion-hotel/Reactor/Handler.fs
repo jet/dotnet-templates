@@ -68,10 +68,10 @@ let create store =
             
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Stats,
-                            handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct(Propulsion.Streams.SpanResult * Outcome)>,
-                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
+    static member StartSink(log : Serilog.ILogger, stats : Stats, maxConcurrentStreams : int, handle : _ -> _ -> Async<_>,
+                            maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle,
+                                                stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =

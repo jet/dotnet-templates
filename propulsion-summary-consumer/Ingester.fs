@@ -39,7 +39,7 @@ type Outcome =
     /// Handler determined the events were not relevant to its duties and performed no decoding or processing
     | NotApplicable of count : int
 
-/// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
+/// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 

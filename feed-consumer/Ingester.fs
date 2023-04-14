@@ -61,3 +61,8 @@ let handle maxDop stream span = async {
         return struct (Propulsion.Streams.SpanResult.PartiallyProcessed ticketIds.Length, outcome)
     | x -> return failwithf "Unexpected stream %O" x
 }
+
+type Config private () =
+
+    static member StartSink(log, stats : Stats, dop, handle : _ -> _ -> Async<_>, maxReadAhead) =
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, dop, handle, stats, stats.StatsInterval.Period)

@@ -52,3 +52,8 @@ let handle stream span = async {
         return struct (Propulsion.Streams.SpanResult.AllProcessed, IngestionOutcome.Unchanged)
     | x -> return failwithf "Unexpected stream %O" x
 }
+
+type Config private () =
+    
+    static member StartSink(log : Serilog.ILogger, stats : Stats, maxConcurrentStreams : int, handle : _ -> _ -> Async<_>, maxReadAhead : int) =
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period)

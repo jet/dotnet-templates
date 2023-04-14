@@ -93,7 +93,7 @@ let build (args : Args.Arguments) =
     let sink =
         let stats = Handler.Stats(log, args.StatsInterval, args.StateInterval, dumpMetrics)
         let handle = Handler.create store
-        Handler.Config.StartSink(log, stats, handle, maxReadAhead, maxConcurrentStreams,
+        Handler.Config.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, 
                                  wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig log consumerGroupName

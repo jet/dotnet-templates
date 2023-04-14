@@ -10,7 +10,7 @@ type Outcome =
     /// e.g. wrong category, events that dont imply a state change
     | NotApplicable of count : int
 
-/// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
+/// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
@@ -71,9 +71,9 @@ let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service)
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>,
+    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>, maxConcurrentStreams : int,
                             handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct (Propulsion.Streams.SpanResult * Outcome)>,
-                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+                            maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     

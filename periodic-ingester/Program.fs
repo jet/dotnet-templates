@@ -117,7 +117,7 @@ let build (args : Args.Arguments) =
 
     let sink =
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-        Propulsion.Streams.Default.Config.Start(Log.Logger, args.MaxReadAhead, args.TicketsDop, Ingester.handle, stats, args.StatsInterval)
+        Ingester.Config.StartSink(Log.Logger, stats, args.TicketsDop, Ingester.handle, args.MaxReadAhead)
     let source =
         let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (args.GroupId, args.CheckpointInterval) (context, cache)
         let client = ApiClient.TicketsFeed feed.BaseUri

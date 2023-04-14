@@ -22,7 +22,7 @@ module Contract =
 
 type Outcome = Completed of used : int * unused : int
 
-/// Gathers stats based on the outcome of each Span processed for emission at intervals controlled by `StreamsConsumer`
+/// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 

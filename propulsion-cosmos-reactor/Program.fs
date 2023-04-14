@@ -116,13 +116,13 @@ let build (args : Args.Arguments) =
             Config.Store.Cosmos (context, cache)
         let stats = Reactor.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         let handle = Reactor.Config.createHandler store
-        Propulsion.Streams.Default.Config.Start(Log.Logger, maxReadAhead, maxConcurrentStreams, handle, stats, args.StatsInterval)
+        Reactor.Config.StartSink(Log.Logger, stats, maxConcurrentStreams, handle, maxReadAhead)
     let source =
         let parseFeedDoc = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumCategoryEvents Reactor.reactionCategories
         let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect parseFeedDoc)
         let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
         Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer,
-                                                       startFromTail = startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+                                                       startFromTail = startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
     sink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly

@@ -103,9 +103,9 @@ let build (args : Args.Arguments) =
     let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 
     let sink =
-        let handle = Ingester.handle args.TicketsDop
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-        Propulsion.Streams.Default.Config.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
+        let handle = Ingester.handle args.TicketsDop
+        Ingester.Config.StartSink(Log.Logger, stats, args.FcsDop, handle, args.MaxReadAhead)
     let source =
         let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (args.GroupId, args.CheckpointInterval) (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri

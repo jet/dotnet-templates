@@ -72,7 +72,7 @@ type Stats(log, statsInterval, stateInterval) =
 
 let categories = [| "categoryA" |]
 
-let handle _stream (span: Propulsion.Streams.StreamSpan<_>) _ct = task {
+let handle _stream (span: Propulsion.Streams.StreamSpan<_>) = async {
     let r = System.Random()
     let ms = r.Next(1, span.Length)
     do! Async.Sleep ms
@@ -81,9 +81,9 @@ let handle _stream (span: Propulsion.Streams.StreamSpan<_>) _ct = task {
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>,
-                            handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
-                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+    static member StartSink(log : Serilog.ILogger, stats : Stats, maxConcurrentStreams : int,
+                            handle : _ -> _ -> Async<_>,
+                            maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 

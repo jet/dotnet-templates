@@ -2,7 +2,7 @@ module ReactorTemplate.Reactor
 
 type Outcome = Metrics.Outcome
 
-/// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
+/// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
@@ -46,3 +46,8 @@ module Config =
         let srcService = Todo.Config.create store
         let dstService = TodoSummary.Config.create store
         handle srcService dstService
+
+type Config private () =
+    
+    static member StartSink(log : Serilog.ILogger, stats : Stats, maxConcurrentStreams : int, handle : _ -> _ -> Async<_>, maxReadAhead : int) =
+        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period)

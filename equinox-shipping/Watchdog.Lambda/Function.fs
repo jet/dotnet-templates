@@ -65,7 +65,7 @@ type App(store : Store) =
         // On paper, a 1m window should be fine, give the timeout for a single lifecycle
         // We use a higher value to reduce redundant work in the (edge) case of multiple deliveries due to rate limiting of readers
         let purgeInterval = TimeSpan.FromMinutes 5.
-        Handler.Config.StartSink(Log.Logger, stats, manager, processingTimeout, maxReadAhead, maxConcurrentStreams,
+        Handler.Config.StartSink(Log.Logger, stats, maxConcurrentStreams, manager, processingTimeout, maxReadAhead, 
                                  wakeForResults = true, purgeInterval = purgeInterval)
         
     member x.RunUntilCaughtUp(tranches, lambdaTimeout) =

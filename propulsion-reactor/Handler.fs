@@ -10,7 +10,7 @@ type Outcome =
     /// Handler determined the events were not relevant to its duties and performed no decoding or processing
     | NotApplicable of count : int
 
-/// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
+/// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 #if (blank || sourceKafka)
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
@@ -63,7 +63,7 @@ let handle
         return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (events.Length, 0))
     | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
 #else
-let reactionCategories = [| Todo.Reactions.Category |]
+let categories = [| Todo.Reactions.Category |]
     
 let handle
         (service : Todo.Service)
@@ -83,12 +83,12 @@ let handle
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>,
-                            handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
-                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>, maxConcurrentStreams : int,
+                            handle : _ -> _ -> Async<_>,
+                            maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig
+        SourceConfig.start (log, Config.log) sink categories sourceConfig
 //#endif

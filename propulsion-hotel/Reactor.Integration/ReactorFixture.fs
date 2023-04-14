@@ -18,7 +18,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     let log = Serilog.Log.Logger
     let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1, stateInterval = TimeSpan.FromMinutes 2,
                               logExternalStats = dumpStats)
-    let sink = Handler.Config.StartSink(log, stats, handler, maxReadAhead = 1024, maxConcurrentStreams = 4,
+    let sink = Handler.Config.StartSink(log, stats, 4, handler, maxReadAhead = 1024, 
                                         // Ensure batches are completed ASAP so waits in the tests are minimal
                                         wakeForResults = true)
     let source, awaitReactions =

@@ -29,7 +29,7 @@ type Properties(testOutput) =
         (   GuidStringN transId1, GuidStringN transId2, GuidStringN containerId1, GuidStringN containerId2,
             NonEmptyArray (Ids shipmentIds1), NonEmptyArray (Ids shipmentIds2), GuidStringN shipment3) = async {
         let buffer = EventAccumulator()
-        use _ = store.Committed.Subscribe(fun struct (c, sid, e) -> buffer.Record((c, sid, e)))
+        use _ = store.Committed.Subscribe buffer.Record
         let eventTypes = seq { for e in buffer.All() -> e.EventType }
         let manager = FinalizationProcess.Config.create 16 store.Config
 

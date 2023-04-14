@@ -18,5 +18,4 @@ type EventAccumulator<'E>() =
 
     member _.All() = seq { for KeyValue (_, xs) in messages do yield! xs }
 
-    member _.Clear() =
-        messages.Clear()
+    member _.Clear() = messages.Clear()
