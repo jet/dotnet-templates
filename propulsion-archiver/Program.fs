@@ -200,7 +200,7 @@ let startMetricsServer port : IDisposable =
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
 let run (args : Args.Arguments) = async {
-    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Default.Config>()
+    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Sinks.Factory>()
     let sink, source = build (args, log)
     use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     return! [|  Async.AwaitKeyboardInterruptAsTaskCanceledException()

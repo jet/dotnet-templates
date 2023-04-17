@@ -41,14 +41,14 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 #if blank
 let reactionCategories = [| "Todos" |]
     
-let handle stream (span : Propulsion.Streams.StreamSpan<_>) = async {
+let handle stream (span : Propulsion.Sinks.Event[]) = async {
     match stream, span with
     | FsCodec.StreamName.CategoryAndId ("Todos", id), _ ->
         let ok = true
         // "TODO: add handler code"
         match ok with
-        | true -> return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (1, span.Length - 1))
-        | false -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped span.Length
+        | true -> return struct (Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, span.Length - 1))
+        | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped span.Length
     | _ -> return Propulsion.Streams.AllProcessed, Outcome.NotApplicable span.Length }
 #else
 // map from external contract to internal contract defined by the aggregate
@@ -64,18 +64,17 @@ let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service)
     | Todo.Reactions.Parse (clientId, events) when events |> Seq.exists Todo.Reactions.impliesStateChange ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
-        | true -> return struct (Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Ok (1, span.Length - 1))
-        | false -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Skipped span.Length
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
+        | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, span.Length - 1)
+        | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped span.Length
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
 #endif
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>, maxConcurrentStreams : int,
-                            handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct (Propulsion.Streams.SpanResult * Outcome)>,
-                            maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
-                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+    static member StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
+                            ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
+                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
         SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig

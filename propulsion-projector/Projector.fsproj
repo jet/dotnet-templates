@@ -20,19 +20,19 @@
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
     <!--#if (esdb)-->
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.8" />
-    <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.8" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.9" />
+    <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.9" />
     <!--#endif-->
     <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
     <!--#if (cosmos || sss || esdb) -->
-    <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.3.1" />
+    <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.4" />
     <!--#endif-->
-    <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.3.1" />
-    <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.3.1" />
-    <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.8" />
-    <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.3.1" />
+    <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.4" />
+    <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.4" />
+    <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.9" />
+    <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.4" />
     <!--#if kafka-->
-    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.3.1" />
+    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.4" />
     <!--#endif-->
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
   </ItemGroup>

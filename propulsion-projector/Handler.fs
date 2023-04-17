@@ -24,7 +24,7 @@ let render (doc : System.Text.Json.JsonDocument) =
 // Each outcome from `handle` is passed to `HandleOk` or `HandleExn` by the scheduler, DumpStats is called at `statsInterval`
 // The incoming calls are all sequential - the logic does not need to consider concurrent incoming calls
 type ProductionStats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+    inherit Propulsion.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     // TODO consider whether it's warranted to log every time a message is produced given the stats will periodically emit counts
     override _.HandleOk(()) =
@@ -39,7 +39,7 @@ type ProductionStats(log, statsInterval, stateInterval) =
 ///   to preserve ordering at stream (key) level for messages produced to the topic)
 // TODO NOTE: The bulk of any manipulation should take place before events enter the scheduler, i.e. in program.fs
 // TODO NOTE: While filtering out entire categories is appropriate, you should not filter within a given stream (i.e., by event type)
-let render (stream : FsCodec.StreamName) (span : Propulsion.Streams.Default.StreamSpan) ct = Async.startImmediateAsTask ct <| async {
+let render (stream : FsCodec.StreamName) (span : Propulsion.Sinks.Event[]) ct = Async.startImmediateAsTask ct <| async {
     let value =
         span
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
@@ -72,20 +72,19 @@ type Stats(log, statsInterval, stateInterval) =
 
 let categories = [| "categoryA" |]
 
-let handle _stream (span: Propulsion.Streams.StreamSpan<_>) = async {
+let handle _stream (span: Propulsion.Sinks.Event[]) = async {
     let r = System.Random()
     let ms = r.Next(1, span.Length)
     do! Async.Sleep ms
-    return struct (Propulsion.Streams.SpanResult.AllProcessed, span.Length) }
+    return Propulsion.Sinks.StreamResult.AllProcessed, span.Length }
 #endif // !kafka
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Stats, maxConcurrentStreams : int,
-                            handle : _ -> _ -> Async<_>,
-                            maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
-                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+    static member StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
+                            ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
+                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
         SourceConfig.start (log, Config.log) sink categories sourceConfig

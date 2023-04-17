@@ -21,7 +21,7 @@ module Contract =
     type VersionAndMessage = int64*Message
     // We also want the index (which is the Version of the Summary) whenever we're handling an event
     let private codec : FsCodec.IEventCodec<VersionAndMessage, _, _> = Config.EventCodec.withIndex<Message>
-    let [<return: Struct>] (|DecodeNewest|_|) (stream, span : Propulsion.Streams.StreamSpan<_>) : VersionAndMessage voption =
+    let [<return: Struct>] (|DecodeNewest|_|) (stream, span : Propulsion.Sinks.Event[]) : VersionAndMessage voption =
         span |> Seq.rev |> Seq.tryPickV (EventCodec.tryDecode codec stream)
     let [<return: Struct>] (|StreamName|_|) = function
         | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId
@@ -66,10 +66,10 @@ let map : Contract.Message -> TodoSummary.Events.SummaryData = function
                 { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
 
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : TodoSummary.Service) stream (span : Propulsion.Streams.StreamSpan<_>) ct = Async.startImmediateAsTask ct <| async {
+let ingest (service : TodoSummary.Service) stream (span : Propulsion.Sinks.Event[]) ct = Async.startImmediateAsTask ct <| async {
     match stream, span with
     | Contract.MatchNewest (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with
-        | true -> return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (1, span.Length - 1))
-        | false -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped span.Length
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
+        | true -> return struct (Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, span.Length - 1))
+        | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped span.Length
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }

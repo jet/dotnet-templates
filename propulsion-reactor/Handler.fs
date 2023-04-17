@@ -15,7 +15,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 #if (blank || sourceKafka)
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 #else
-    inherit Propulsion.Streams.Sync.Stats<Outcome>(log, statsInterval, stateInterval)
+    inherit Propulsion.Sync.Stats<Outcome>(log, statsInterval, stateInterval)
 #endif
 
     let mutable ok, skipped, na = 0, 0, 0
@@ -60,8 +60,8 @@ let handle
                 | Contract.Input.EventB { field = x } -> Contract.EventB { value = x }
             let wrapped = generate stream version summary
             let! _ = produceSummary wrapped in ()
-        return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (events.Length, 0))
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
+        return struct (Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (events.Length, 0))
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
 #else
 let categories = [| Todo.Reactions.Category |]
     
@@ -75,10 +75,10 @@ let handle
             let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
             let wrapped = generate stream version' (Contract.Summary summary)
             let! _ = produceSummary wrapped
-            return struct (Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Ok (1, events.Length - 1))
+            return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, events.Length - 1)
         else
-            return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped events.Length
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
+            return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped events.Length
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
 #endif
 
 type Config private () =
@@ -86,8 +86,8 @@ type Config private () =
     static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>, maxConcurrentStreams : int,
                             handle : _ -> _ -> Async<_>,
                             maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
-                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
+                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
         SourceConfig.start (log, Config.log) sink categories sourceConfig

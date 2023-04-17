@@ -28,7 +28,7 @@ module Input =
     let private codec : FsCodec.IEventCodec<_, _, _> = Config.EventCodec.withIndex<Event>
 
     open Propulsion.Internal
-    let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
+    let (|Decode|) (stream, span : Propulsion.Sinks.Event[]) =
         span |> Array.chooseV (EventCodec.tryDecode codec stream)
     let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
     let [<return: Struct>] (|Parse|_|) = function

@@ -24,7 +24,7 @@ module EnvVar =
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x : FsCodec.ITimelineEvent<Propulsion.Streams.Default.EventBody>) =
+    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x: Propulsion.Sinks.Event) =
         match codec.TryDecode x with
         | ValueNone ->
             if Log.IsEnabled Serilog.Events.LogEventLevel.Debug then

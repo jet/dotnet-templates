@@ -25,7 +25,7 @@ module Events =
 module Reactions =
 
     let categories = [| Category |]
-    let (|Decode|) (stream, span : Propulsion.Streams.StreamSpan<_>) =
+    let (|Decode|) (stream, span : Propulsion.Sinks.Event[]) =
         span |> Array.chooseV (EventCodec.tryDecode Events.codec stream)
     let [<return: Struct>] (|Parse|_|) = function
         | (StreamName clientId, _) & Decode events -> ValueSome struct (clientId, events)

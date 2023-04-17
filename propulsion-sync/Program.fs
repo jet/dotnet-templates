@@ -367,7 +367,7 @@ module Args =
         member val Retries =                p.GetResult(Retries, 3)
         member val Timeout =                p.GetResult(Timeout, 20.) |> TimeSpan.FromSeconds
         member val Heartbeat =              p.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
-        member x.Connect(log: ILogger, storeLog: ILogger, connectionStrategy, appName, connIndex) =
+        member x.Connect(log: ILogger, storeLog: ILogger, connectionStrategy, appName) =
             let discovery = x.Discovery
             let s (x : TimeSpan) = x.TotalSeconds
             log.ForContext("host", x.Host).ForContext("port", x.Port)
@@ -441,7 +441,7 @@ module EventV0Parser =
             System.Text.Json.JsonSerializer.Deserialize<'T>(document.RootElement)
 
     /// We assume all Documents represent Events laid out as above
-    let parse (d : System.Text.Json.JsonDocument) : Propulsion.Streams.Default.StreamEvent =
+    let parse (d : System.Text.Json.JsonDocument) : Propulsion.Sinks.StreamEvent =
         let e = d.Cast<EventV0>()
         FsCodec.StreamName.parse e.s, e |> FsCodec.Core.TimelineEvent.Map ReadOnlyMemory 
 
@@ -451,7 +451,7 @@ let transformV0 catFilter v0SchemaDocument : Propulsion.Streams.StreamEvent<_> s
     if catFilter cat then
         yield parsed }
 //#else
-let transformOrFilter catFilter changeFeedDocument : Propulsion.Streams.Default.StreamEvent seq = seq {
+let transformOrFilter catFilter changeFeedDocument : Propulsion.Sinks.StreamEvent seq = seq {
     for FsCodec.StreamName.Category cat, _ as x in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents catFilter changeFeedDocument do
         // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
         if catFilter cat then
@@ -477,7 +477,7 @@ module Checkpoints =
             Checkpoint.CheckpointSeries(groupName, resolve)
 
 type Stats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+    inherit Propulsion.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     override _.HandleOk(()) = ()
     override _.HandleExn(log, exn) = log.Information(exn, "Unhandled")
@@ -495,7 +495,7 @@ let build (args : Args.Arguments, log) =
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let broker, topic, producers = kafka.BuildTargetParams()
-                    let render (stream: FsCodec.StreamName) (span: Propulsion.Streams.Default.StreamSpan) = async {
+                    let render (stream: FsCodec.StreamName) (span: Propulsion.Sinks.Event[]) = async {
                         let value =
                             span
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
@@ -516,7 +516,7 @@ let build (args : Args.Arguments, log) =
         | Choice2Of2 es ->
             let connect connIndex = async {
                 let lfc = Config.log.ForContext("ConnId", connIndex)
-                let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, AppName, connIndex)
+                let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, AppName)
                 return EventStoreContext(c, batchSize = Int32.MaxValue) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
             let sink = EventStoreSink.Start(log, Config.log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval)
@@ -564,7 +564,7 @@ let build (args : Args.Arguments, log) =
         [ runPipeline CancellationToken.None |> Async.ofTask; sink.AwaitWithStopOnCancellation() ]
 
 let run (args : Args.Arguments) =
-    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Default.Config>()
+    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Sinks.Factory>()
     build (args, log) |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]

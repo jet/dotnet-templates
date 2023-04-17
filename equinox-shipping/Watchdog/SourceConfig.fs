@@ -31,13 +31,13 @@ and [<NoEquality; NoComparison>] CosmosFeedConfig =
 module SourceConfig =
     module Memory =
         open Propulsion.MemoryStore
-        let start log (sink : Propulsion.Streams.Default.Sink) (categories : string array)
+        let start log (sink: Propulsion.Sinks.Sink) (categories : string array)
             (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source = MemoryStoreSource(log, store, categories, sink)
             source.Start(), Some (fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false))
     module Cosmos =
         open Propulsion.CosmosStore
-        let start log (sink : Propulsion.Streams.Default.Sink) categories
+        let start log (sink: Propulsion.Sinks.Sink) categories
             (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let parseFeedDoc = EquinoxSystemTextJsonParser.enumCategoryEvents categories
             let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect parseFeedDoc)
@@ -57,7 +57,7 @@ module SourceConfig =
             source, None
     module Dynamo =
         open Propulsion.DynamoStore
-        let create (log, storeLog) (sink : Propulsion.Streams.Default.Sink) categories
+        let create (log, storeLog) (sink: Propulsion.Sinks.Sink) categories
             (indexStore, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) trancheIds =
             DynamoStoreSource(
                 log, statsInterval,
@@ -71,7 +71,7 @@ module SourceConfig =
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
     module Esdb =
         open Propulsion.EventStoreDb
-        let start log (sink : Propulsion.Streams.Default.Sink) categories
+        let start log (sink: Propulsion.Sinks.Sink) categories
             (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 EventStoreSource(

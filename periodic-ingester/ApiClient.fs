@@ -18,7 +18,7 @@ type TicketsClient(client : HttpClient) =
 
     let basePath = "api/tickets"
 
-    member _.Crawl(ct : CancellationToken) : IAsyncEnumerable<struct (TimeSpan * Propulsion.Feed.SourceItem<Propulsion.Streams.Default.EventBody> array)> = taskSeq {
+    member _.Crawl(ct : CancellationToken) : IAsyncEnumerable<struct (TimeSpan * Propulsion.Feed.SourceItem<Propulsion.Sinks.EventBody> array)> = taskSeq {
         let request = HttpReq.get () |> HttpReq.withPath basePath
         let ts = System.Diagnostics.Stopwatch.StartNew()
         let! response = client.Send2(request, ct)

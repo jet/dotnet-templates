@@ -76,7 +76,7 @@ type TicketsFeed(baseUri) =
         let baseIndex = TicketsCheckpoint.toStreamIndex pg.position
         let map (x : ItemDto) : Ingester.PipelineEvent.Item = { id = x.id; payload = x.payload }
         let items = pg.tickets |> Array.mapi (fun i x -> Ingester.PipelineEvent.ofIndexAndItem (baseIndex + int64 i) (map x))
-        return ({ checkpoint = TicketsCheckpoint.toPosition pg.checkpoint; items = items; isTail = not pg.closed } : Propulsion.Feed.Page<Propulsion.Streams.Default.EventBody>)
+        return ({ checkpoint = TicketsCheckpoint.toPosition pg.checkpoint; items = items; isTail = not pg.closed } : Propulsion.Feed.Page<Propulsion.Sinks.EventBody>)
     }
 
     // TODO add retries - consumer loop will not commence if this emits an exception

@@ -48,7 +48,7 @@ module SourceConfig =
 // #if cosmos    
     module Cosmos =
         open Propulsion.CosmosStore
-        let start log (sink : Propulsion.Streams.Default.Sink) categories
+        let start log (sink: Propulsion.Sinks.Sink) categories
             (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let parseFeedDoc = EquinoxSystemTextJsonParser.enumCategoryEvents categories
             let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect parseFeedDoc)
@@ -70,7 +70,7 @@ module SourceConfig =
 #if dynamo    
     module Dynamo =
         open Propulsion.DynamoStore
-        let start (log, storeLog) (sink : Propulsion.Streams.Default.Sink) categories
+        let start (log, storeLog) (sink: Propulsion.Sinks.Sink) categories
             (indexStore, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 DynamoStoreSource(
@@ -84,7 +84,7 @@ module SourceConfig =
 #if esdb    
     module Esdb =
         open Propulsion.EventStoreDb
-        let start log (sink : Propulsion.Streams.Default.Sink) (categories : string array)
+        let start log (sink: Propulsion.Sinks.Sink) (categories : string array)
             (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 EventStoreSource(
@@ -97,7 +97,7 @@ module SourceConfig =
 #if sss    
     module Sss =
         open Propulsion.SqlStreamStore
-        let start log (sink : Propulsion.Streams.Default.Sink) (categories : string array)
+        let start log (sink: Propulsion.Sinks.Sink) (categories : string array)
             (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 SqlStreamStoreSource(

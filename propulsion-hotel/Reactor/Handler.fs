@@ -1,8 +1,5 @@
 module Reactor.Handler
 
-open Infrastructure
-open Propulsion.Internal
-
 type Outcome = GroupCheckoutProcess.Outcome
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
@@ -54,7 +51,7 @@ let private handle (processor : GroupCheckoutProcess.Service) stream _events = a
         // NOTE also that in some cases, the observed position on the stream can be beyond that which has been notified via
         //   the change feed. In those cases, Propulsion will drop any incoming events that would represent duplication of processing,
         //   (and not even invoke the Handler unless one or more of the feed events are beyond the write position)
-        return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', outcome)
+        return Propulsion.Sinks.StreamResult.OverrideNextIndex ver', outcome
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
@@ -68,11 +65,10 @@ let create store =
             
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Stats, maxConcurrentStreams : int, handle : _ -> _ -> Async<_>,
-                            maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle,
-                                                stats, stats.StatsInterval.Period,
-                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+    static member StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead : int,
+                            ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
+                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig
+        Infrastructure.SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig

@@ -294,9 +294,9 @@ let build (args : Args.Arguments) =
 #if blank // !sourceKafka && kafka && blank
         Handler.Config.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, purgeInterval = args.PurgeInterval)
 #else // !sourceKafka && kafka && !blank
-        Propulsion.Streams.Sync.StreamsSync.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, (fun sn ss ct -> Async.startImmediateAsTask ct (handle sn ss)), stats, args.StatsInterval,
-            Propulsion.Streams.Default.jsonSize, Propulsion.Streams.Default.eventSize)
+        Propulsion.Sync.Factory.Start(
+            Log.Logger, maxReadAhead, maxConcurrentStreams, (fun sn ss ct -> Async.startImmediateAsTask ct (handle sn ss)), stats,
+            Propulsion.Sinks.Event.renderedSize, Propulsion.Sinks.Event.eventSize)
 #endif // !sourceKafka && kafka && !blank
 #else // !sourceKafka && !kafka (i.e., ingester)
         Ingester.Config.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, purgeInterval = args.PurgeInterval)

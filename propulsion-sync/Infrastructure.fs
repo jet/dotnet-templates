@@ -60,7 +60,7 @@ type Logging() =
             .Enrich.FromLogContext()
         |> fun c -> if verbose then c.MinimumLevel.Debug() else c
         |> fun c -> let ingesterLevel = if verboseStore then LogEventLevel.Debug else LogEventLevel.Information
-                    c.MinimumLevel.Override(typeof<Propulsion.Streams.Default.Config>.FullName, ingesterLevel)
+                    c.MinimumLevel.Override(typeof<Propulsion.Sinks.Factory>.FullName, ingesterLevel)
         |> fun c -> let generalLevel = if verbose then LogEventLevel.Information else LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
                      .MinimumLevel.Override(typeof<Propulsion.EventStore.Internal.Writer.Result>.FullName, generalLevel)

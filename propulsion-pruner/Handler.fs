@@ -4,8 +4,8 @@ open System
 
 // As we're not looking at the bodies of the events in the course of the shouldPrune decision, we remove them
 //   from the Event immediately in order to avoid consuming lots of memory without purpose while they're queued
-let removeDataAndMeta (x : FsCodec.ITimelineEvent<Propulsion.Streams.Default.EventBody>) : FsCodec.ITimelineEvent<_> =
-    FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, Unchecked.defaultof<Propulsion.Streams.Default.EventBody>, timestamp = x.Timestamp)
+let removeDataAndMeta (x: Propulsion.Sinks.Event) : FsCodec.ITimelineEvent<_> =
+    FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, Unchecked.defaultof<Propulsion.Sinks.EventBody>, timestamp = x.Timestamp)
 
 let categoryFilter = function
     | "CategoryName" -> true

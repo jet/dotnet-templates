@@ -47,24 +47,23 @@ let handle
     | TransactionWatchdog.Finalization.MatchStatus (transId, state) ->
         match TransactionWatchdog.toStatus processingStuckCutoff state with
         | TransactionWatchdog.Complete ->
-            return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Completed)
+            return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Completed
         | TransactionWatchdog.Active ->
             // We don't want to be warming the data center for no purpose; visiting every second is not too expensive
             do! Async.Sleep 1000 // ms
-            return Propulsion.Streams.SpanResult.PartiallyProcessed 0, Outcome.Deferred
+            return Propulsion.Sinks.StreamResult.NoneProcessed, Outcome.Deferred
         | TransactionWatchdog.Stuck ->
             let! success = driveTransaction transId
-            return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Resolved success
+            return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Resolved success
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
 type Config private () =
     
-    static member private StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>, maxConcurrentStreams : int,
-                                    handle : FsCodec.StreamName -> Propulsion.Streams.Default.StreamSpan -> Async<struct (Propulsion.Streams.SpanResult * 'Outcome)>,
-                                    maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
-                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+    static member private StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
+                                    ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
+                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSink(log, stats, maxConcurrentStreams, manager : FinalizationProcess.Manager, processingTimeout,
                             maxReadAhead, ?wakeForResults, ?idleDelay, ?purgeInterval) =

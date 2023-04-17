@@ -11,7 +11,7 @@ open System.Threading
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : IEventCodec<_, _, _>) (log : ILogger) streamName (x : ITimelineEvent<Propulsion.Streams.Default.EventBody>) =
+    let tryDecode (codec : IEventCodec<_, _, _>) (log : ILogger) streamName (x: Propulsion.Sinks.Event) =
         match codec.TryDecode x with
         | ValueNone ->
             if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
@@ -78,7 +78,7 @@ module MultiStreams =
         let faves, saves = ConcurrentDictionary<string, HashSet<SkuId>>(), ConcurrentDictionary<string, SkuId list>()
 
         // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
-        let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) (streamName, span : Propulsion.Streams.StreamSpan<Propulsion.Streams.Default.EventBody>) =
+        let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) (streamName, span) =
             let decode tryDecode = span |> Seq.chooseV (tryDecode log streamName) |> Array.ofSeq
             match streamName with
             | StreamName.CategoryAndId (Favorites.Category, id) ->
@@ -90,16 +90,16 @@ module MultiStreams =
             | StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
-        member _.Handle(streamName : StreamName, span : Propulsion.Streams.StreamSpan<_>, ct) = task {
+        member _.Handle(streamName : StreamName, span : Propulsion.Sinks.Event[], _ct) = task {
             match streamName, span with
             | OtherCategory (cat, count) ->
-                return struct (Propulsion.Streams.SpanResult.AllProcessed, OtherCategory (cat, count))
+                return struct (Propulsion.Sinks.StreamResult.AllProcessed, OtherCategory (cat, count))
             | FavoritesEvents (id, s, xs) ->
                 let folder (s : HashSet<_>) = function
                     | Favorites.Favorited e -> s.Add(e.skuId) |> ignore; s
                     | Favorites.Unfavorited e -> s.Remove(e.skuId) |> ignore; s
                 faves.[id] <- Array.fold folder s xs
-                return Propulsion.Streams.SpanResult.AllProcessed, Faves xs.Length
+                return Propulsion.Sinks.StreamResult.AllProcessed, Faves xs.Length
             | SavedForLaterEvents (id, s, xs) ->
                 let remove (skus : SkuId seq) (s : _ list) =
                     let removing = (HashSet skus).Contains
@@ -112,7 +112,7 @@ module MultiStreams =
                     | SavedForLater.Removed e -> remove e.skus s
                     | SavedForLater.Merged e -> s |> remove [| for x in e.items -> x.skuId |] |> add [| for x in e.items -> x.skuId |]
                 saves.[id] <- (s, xs) ||> Array.fold folder
-                return Propulsion.Streams.SpanResult.AllProcessed, Saves xs.Length
+                return Propulsion.Sinks.StreamResult.AllProcessed, Saves xs.Length
         }
 
         // Dump stats relating to how much information is being held - note it's likely for requests to be in flighht during the call
@@ -143,7 +143,7 @@ module MultiStreams =
                 log.Information(" Ignored Categories {ignoredCats}", Seq.truncate 5 otherCats.StatsDescending)
                 otherCats.Clear()
 
-    let private parseStreamEvents(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.Default.StreamEvent> =
+    let private parseStreamEvents(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Sinks.StreamEvent> =
         Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse res.Message.Value
 
     let start (config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
