@@ -23,18 +23,10 @@ namespace TodoBackendTemplate
     {
         public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(
             Func<TEvent, (string, ReadOnlyMemory<byte>)> encode,
-            Func<(string, ReadOnlyMemory<byte>), FSharpValueOption<TEvent>> tryDecode) where TEvent: class =>
+            Func<string, ReadOnlyMemory<byte>, FSharpValueOption<TEvent>> tryDecode) where TEvent: class =>
             
-            FsCodec.Codec.Create(
-                FuncConvert.FromFunc(encode),
-                FuncConvert.FromFunc(tryDecode));
+            FsCodec.Codec.Create(encode, tryDecode);
 
-        public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(
-            Func<TEvent, (string, ReadOnlyMemory<byte>)> encode,
-            Func<string, ReadOnlyMemory<byte>, FSharpValueOption<TEvent>> tryDecode) where TEvent : class =>
-
-            Create(encode, tb => tryDecode(tb.Item1, tb.Item2));
-        
         public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(JsonSerializerOptions options = null) where TEvent: TypeShape.UnionContract.IUnionContract =>
             FsCodec.SystemTextJson.Codec.Create<TEvent>(options);
     }

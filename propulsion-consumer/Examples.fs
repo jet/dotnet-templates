@@ -90,10 +90,10 @@ module MultiStreams =
             | StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
-        member _.Handle(streamName : StreamName, span : Propulsion.Sinks.Event[], _ct) = task {
+        member _.Handle(streamName : StreamName, span : Propulsion.Sinks.Event[]) = async {
             match streamName, span with
             | OtherCategory (cat, count) ->
-                return struct (Propulsion.Sinks.StreamResult.AllProcessed, OtherCategory (cat, count))
+                return Propulsion.Sinks.StreamResult.AllProcessed, OtherCategory (cat, count)
             | FavoritesEvents (id, s, xs) ->
                 let folder (s : HashSet<_>) = function
                     | Favorites.Favorited e -> s.Add(e.skuId) |> ignore; s
@@ -149,10 +149,9 @@ module MultiStreams =
     let start (config : FsKafka.KafkaConsumerConfig, degreeOfParallelism : int) =
         let log, handler = Log.ForContext<InMemoryHandler>(), InMemoryHandler()
         let stats = Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
-        Propulsion.Kafka.StreamsConsumer.Start(
-            log, config, parseStreamEvents, (fun s ss ct -> handler.Handle(s, ss, ct)), degreeOfParallelism,
-            stats, TimeSpan.FromMinutes 10.,
-            logExternalState=handler.DumpState)
+        Propulsion.Kafka.Factory.StartConcurrent(
+            log, config, parseStreamEvents,
+            degreeOfParallelism, (fun s ss -> handler.Handle(s, ss)), stats, logExternalState = handler.DumpState)
 
 /// When using parallel or batch processing, items are not grouped by stream but there are no constraints on the concurrency
 module MultiMessages =

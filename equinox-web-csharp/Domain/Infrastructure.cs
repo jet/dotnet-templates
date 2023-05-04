@@ -8,7 +8,7 @@ namespace TodoBackendTemplate
         readonly TypeShape.UnionContract.IEncoder<ReadOnlyMemory<byte>> _codec; 
 
         public SystemTextJsonUtf8Codec(System.Text.Json.JsonSerializerOptions options) =>
-            _codec = new FsCodec.SystemTextJson.Core.ReadOnlyMemoryEncoder(options);
+            _codec = new FsCodec.SystemTextJson.Core.ReadOnlyMemoryEncoder(new FsCodec.SystemTextJson.Serdes(options));
 
         public ReadOnlyMemory<byte> Encode<T>(T value) => _codec.Encode(value);
 

@@ -283,10 +283,7 @@ let build (args : Args.Arguments) =
     let parseStreamEvents (res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse res.Message.Value
     let consumerConfig = createConsumerConfig consumerGroupName
-    let pipeline = 
-        Propulsion.Kafka.StreamsConsumer.Start
-            (   Log.Logger, consumerConfig, parseStreamEvents, (fun sn ss ct -> Async.startImmediateAsTask ct (handle sn ss)), maxConcurrentStreams,
-                stats = stats, statsInterval = args.StateInterval)
+    let pipeline = Propulsion.Kafka.Factory.StartConcurrent(Log.Logger, consumerConfig, parseStreamEvents, maxConcurrentStreams, handle, stats)
     [|  pipeline.AwaitWithStopOnCancellation()
 #else // !sourceKafka
     let sink =

@@ -2,8 +2,6 @@
 /// Compared to the Ingester in the `proReactor` template, each event is potentially relevant
 module ConsumerTemplate.Ingester
 
-open Propulsion.Internal
-
 /// Defines the shape of input messages on the topic we're consuming
 module Contract =
 
@@ -14,11 +12,9 @@ module Contract =
            messageIndex : int64
            pickTicketId : string
            purchaseOrderInfo : OrderInfo[] }
-    let serdes = FsCodec.SystemTextJson.Options.Default |> FsCodec.SystemTextJson.Serdes
-    let parse (utf8 : Propulsion.Sinks.EventBody) : Message =
-        // NB see https://github.com/jet/FsCodec for details of the default serialization profile (TL;DR only has an `OptionConverter`)
-        System.Text.Encoding.UTF8.GetString(utf8.Span)
-        |> serdes.Deserialize<Message>
+    let serdes = FsCodec.SystemTextJson.Serdes.Default
+    // TODO remove .Span
+    let parse (utf8 : Propulsion.Sinks.EventBody) : Message = serdes.Deserialize<Message>(utf8.Span)
 
 type Outcome = Completed of used : int * unused : int
 
@@ -42,7 +38,7 @@ type Stats(log, statsInterval, stateInterval) =
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
 let ingest
         (service : SkuSummary.Service)
-        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId)) (events : Propulsion.Sinks.Event[]) ct = Async.startImmediateAsTask ct <| async {
+        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId)) (events : Propulsion.Sinks.Event[]) = async {
     let items =
         [ for e in events do
             let x = Contract.parse e.Data
@@ -55,4 +51,4 @@ let ingest
                         reservedQuantity = o.reservedUnitQuantity }
                 yield x ]
     let! used = service.Ingest(skuId, items)
-    return struct (Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Completed(used, items.Length - used)) }
+    return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Completed(used, items.Length - used) }

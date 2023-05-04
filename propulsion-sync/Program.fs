@@ -443,7 +443,7 @@ module EventV0Parser =
     /// We assume all Documents represent Events laid out as above
     let parse (d : System.Text.Json.JsonDocument) : Propulsion.Sinks.StreamEvent =
         let e = d.Cast<EventV0>()
-        FsCodec.StreamName.parse e.s, e |> FsCodec.Core.TimelineEvent.Map ReadOnlyMemory 
+        FsCodec.StreamName.parse e.s, e |> FsCodec.Core.TimelineEvent.Map(Func<_, _> ReadOnlyMemory) 
 
 let transformV0 catFilter v0SchemaDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument

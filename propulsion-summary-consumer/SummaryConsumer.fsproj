@@ -17,9 +17,9 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.9" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
-    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.4" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.9.2" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9.6" />
+    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.4.2" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
   </ItemGroup>
 

@@ -15,8 +15,8 @@ module Events =
         let tryDecode (encoded : FsCodec.ITimelineEvent<ReadOnlyMemory<byte>>) =
             ValueSome (if isTerminalEvent encoded then Terminal else NonTerminal encoded.Timestamp)
         let encode _ = failwith "Not Implemented"
-        let mapCausation _ = failwith "Not Implemented"
-        FsCodec.Codec.Create<Categorization, _, obj>(encode, tryDecode, mapCausation)
+        let mapCausation () _ = failwith "Not Implemented"
+        FsCodec.Codec.Create<Categorization, _, unit>(encode, tryDecode, mapCausation)
 
 module Fold =
 

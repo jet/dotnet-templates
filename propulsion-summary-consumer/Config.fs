@@ -14,7 +14,7 @@ module EventCodec =
         let down (_ : 'e) = failwith "Unexpected"
         Codec.Create<'e, 'c, _>(up, down, options = defaultOptions)
     let withIndex<'c when 'c :> TypeShape.UnionContract.IUnionContract> : FsCodec.IEventCodec<int64 * 'c, _, _> =
-        let up struct (raw : FsCodec.ITimelineEvent<_>, e) = raw.Index, e
+        let up (raw : FsCodec.ITimelineEvent<_>) e = raw.Index, e
         withUpconverter<'c, int64 * 'c> up
 
 module Cosmos =

@@ -106,9 +106,7 @@ let start (args : Args.Arguments) =
     // The StreamNameSequenceGenerator maintains an Index per stream with which the messages are tagged in order to be able to
     //   represent them as a sequence of indexed messages per stream
     let sequencer = Propulsion.Kafka.StreamNameSequenceGenerator()
-    Propulsion.Kafka.StreamsConsumer.Start
-        (   Log.Logger, config, sequencer.ConsumeResultToStreamEvent(), Ingester.ingest service, args.MaxConcurrentStreams,
-            stats, args.StateInterval)
+    Propulsion.Kafka.Factory.StartConcurrent(Log.Logger, config, sequencer.ConsumeResultToStreamEvent(), args.MaxConcurrentStreams, Ingester.ingest service, stats)
 
 let run args = async {
     use consumer = start args
