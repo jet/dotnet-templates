@@ -3,7 +3,7 @@
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -93,8 +93,8 @@ let start (args : Args.Arguments) =
         let store =
             let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
             let cache = Equinox.Cache(AppName, sizeMb = 10)
-            Config.Store.Cosmos (context, cache)
-        SkuSummary.Config.create store
+            Store.Context.Cosmos (context, cache)
+        SkuSummary.Factory.create store
     let config =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,

@@ -6,7 +6,7 @@ open System
 
 type NotifierStackProps
     (   // DynamoDB Streams Source ARN (for Index Table)
-        indexStreamArn : string,
+        indexStreamArn: string,
 
         // Target SNS FIFO Topic Arn (Default: Create fresh topic)
         updatesTopicArn : string option,

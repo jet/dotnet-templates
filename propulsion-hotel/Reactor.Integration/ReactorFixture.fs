@@ -18,13 +18,13 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     let log = Serilog.Log.Logger
     let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1, stateInterval = TimeSpan.FromMinutes 2,
                               logExternalStats = dumpStats)
-    let sink = Handler.Config.StartSink(log, stats, 4, handler, maxReadAhead = 1024, 
-                                        // Ensure batches are completed ASAP so waits in the tests are minimal
-                                        wakeForResults = true)
+    let sink = Handler.Factory.StartSink(log, stats, 4, handler, maxReadAhead = 1024, 
+                                         // Ensure batches are completed ASAP so waits in the tests are minimal
+                                         wakeForResults = true)
     let source, awaitReactions =
         let consumerGroupName = $"ReactorFixture/{contextId}"
         let sourceConfig = createSourceConfig consumerGroupName
-        Handler.Config.StartSource(log, sink, sourceConfig)
+        Handler.Factory.StartSource(log, sink, sourceConfig)
 
     member val Store = store
 
@@ -56,7 +56,7 @@ module MemoryReactor =
         new(messageSink) =
             let store = Equinox.MemoryStore.VolatileStore()
             let createSourceConfig _groupName = SourceConfig.Memory store
-            new Fixture(messageSink, Domain.Config.Store.Memory store, createSourceConfig)
+            new Fixture(messageSink, Domain.Store.Context.Memory store, createSourceConfig)
         // override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member _.Wait() = base.Await(TimeSpan.MaxValue) // Propagation delay is not applicable for MemoryStore
         member val private Backoff = TimeSpan.FromMilliseconds 1

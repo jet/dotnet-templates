@@ -1,9 +1,7 @@
 /// Commandline arguments and/or secrets loading specifications
 module Infrastructure.Args
 
-module Config = Domain.Config
-
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 module Configuration =
@@ -23,7 +21,7 @@ module Configuration =
         let [<Literal>] READ_CONN_STRING =  "MDB_CONNECTION_STRING_READ"
         let [<Literal>] SCHEMA =            "MDB_SCHEMA"
 
-type Configuration(tryGet : string -> string option) =
+type Configuration(tryGet: string -> string option) =
 
     member val tryGet =                     tryGet
     member _.get key =                      match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"

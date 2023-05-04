@@ -3,7 +3,7 @@ module FeedSourceTemplate.Program
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -82,8 +82,8 @@ type AppDependenciesExtensions() =
     [<System.Runtime.CompilerServices.Extension>]
     static member AddTickets(services : IServiceCollection, store) : unit = Async.RunSynchronously <| async {
 
-        let ticketsSeries = Domain.TicketsSeries.Config.create None store
-        let ticketsEpochs = Domain.TicketsEpoch.Reader.Config.create store
+        let ticketsSeries = Domain.TicketsSeries.Factory.create None store
+        let ticketsEpochs = Domain.TicketsEpoch.Reader.Factory.create store
         let tickets = Domain.TicketsIngester.Config.Create store
 
         ticketsSeries |> registerSingleton services
@@ -104,7 +104,7 @@ let run (args : Args.Arguments) =
     let cosmos = args.Cosmos
     let context = cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
     let cache = Equinox.Cache(AppName, sizeMb = 2)
-    let store = FeedSourceTemplate.Domain.Config.Store.Cosmos (context, cache)
+    let store = FeedSourceTemplate.Domain.Store.Context.Cosmos (context, cache)
 
     Hosting.createHostBuilder()
         .ConfigureServices(fun s ->

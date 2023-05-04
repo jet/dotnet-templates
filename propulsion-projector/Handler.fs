@@ -4,7 +4,7 @@ open Propulsion.Internal
 //#if cosmos
 #if     parallelOnly
 // Here we pass the items directly through to the handler without parsing them
-let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : seq<'a> = upcast x
+let mapToStreamItems (x: System.Collections.Generic.IReadOnlyCollection<'a>): seq<'a> = upcast x
 let categories = [||] // TODO add category names
 #else // cosmos && !parallelOnly
 #endif // !parallelOnly
@@ -12,12 +12,12 @@ let categories = [||] // TODO add category names
 
 #if kafka
 #if     (cosmos && parallelOnly) // kafka && cosmos && parallelOnly
-type ExampleOutput = { id : string }
+type ExampleOutput = { id: string }
 
 let serdes = FsCodec.SystemTextJson.Options.Default |> FsCodec.SystemTextJson.Serdes
-let render (doc : System.Text.Json.JsonDocument) =
+let render (doc: System.Text.Json.JsonDocument) =
     let r = doc.RootElement
-    let gs (name : string) = let x = r.GetProperty name in x.GetString()
+    let gs (name: string) = let x = r.GetProperty name in x.GetString()
     let equinoxPartition, itemId = gs "p", gs "id"
     struct (equinoxPartition, serdes.Serialize { id = itemId })
 #else // kafka && !(cosmos && parallelOnly)
@@ -39,7 +39,7 @@ type ProductionStats(log, statsInterval, stateInterval) =
 ///   to preserve ordering at stream (key) level for messages produced to the topic)
 // TODO NOTE: The bulk of any manipulation should take place before events enter the scheduler, i.e. in program.fs
 // TODO NOTE: While filtering out entire categories is appropriate, you should not filter within a given stream (i.e., by event type)
-let render (stream : FsCodec.StreamName) (span : Propulsion.Sinks.Event[]) ct = Async.startImmediateAsTask ct <| async {
+let render (stream: FsCodec.StreamName) (span: Propulsion.Sinks.Event[]) ct = Async.startImmediateAsTask ct <| async {
     let value =
         span
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
@@ -79,12 +79,12 @@ let handle _stream (span: Propulsion.Sinks.Event[]) = async {
     return Propulsion.Sinks.StreamResult.AllProcessed, span.Length }
 #endif // !kafka
 
-type Config private () =
+type Factory private () =
     
-    static member StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
+    static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead,
                             ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink categories sourceConfig
+        SourceConfig.start (log, Store.log) sink categories sourceConfig

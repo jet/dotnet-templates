@@ -11,7 +11,7 @@ let linger, maxItemsPerEpoch = System.TimeSpan.FromMilliseconds 1., 5
 
 let createSut =
     // While we use ~ 200ms when hitting Cosmos, there's no value in doing so in the context of these property based tests
-    ListIngester.Config.create_ linger maxItemsPerEpoch
+    ListIngester.Factory.create_ linger maxItemsPerEpoch
 
 type GuidStringN<[<Measure>]'m> = GuidStringN of string<'m> with static member op_Explicit(GuidStringN x) = x
 let (|Ids|) = Array.map (function GuidStringN x -> x)
@@ -28,7 +28,7 @@ type Custom =
 
 let [<Property>] properties shouldUseSameSut (Gap gap) (initialEpochId, NonEmptyArray (Ids initialItems)) (NonEmptyArray (Ids items)) = async {
 
-    let store = Equinox.MemoryStore.VolatileStore() |> Config.Store.Memory
+    let store = Equinox.MemoryStore.VolatileStore() |> Store.Context.Memory
 
     let mutable nextEpochId = initialEpochId
     for _ in 1 .. gap do nextEpochId <- ExactlyOnceIngester.Internal.next nextEpochId

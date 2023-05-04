@@ -8,8 +8,8 @@ open Swensen.Unquote
 
 [<Property>]
 let ``Happy path including Reaction`` (store, groupCheckoutId, paymentId, stays : _ []) = async {
-    let staysService = GuestStay.Config.create store
-    let sut = GroupCheckout.Config.create store
+    let staysService = GuestStay.Factory.create store
+    let sut = GroupCheckout.Factory.create store
     let processor = GroupCheckoutProcess.Service(staysService, sut, 2)
     let mutable charged = 0
     for stayId, chargeId, PositiveInt amount in stays do

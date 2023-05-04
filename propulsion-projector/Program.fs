@@ -52,7 +52,7 @@ module Args =
 #if sss
                 | SqlMs _ ->                "specify SqlStreamStore input parameters."
 #endif
-    and Arguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: SourceArgs.Configuration, p: ParseResults<Parameters>) =
         let processorName =                 p.GetResult ProcessorName
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 64)
         let maxConcurrentProcessors =       p.GetResult(MaxWriters, 1024)
@@ -83,7 +83,7 @@ module Args =
 #else
         member val Sink =                   ()
 #endif        
-        member x.ConnectSource(appName) : (ILogger -> string -> SourceConfig) * _ * (ILogger -> unit) =
+        member x.ConnectSource(appName): (ILogger -> string -> SourceConfig) * _ * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | a ->
@@ -130,14 +130,14 @@ module Args =
 #endif
 #if kafka
     
-    and KafkaSinkArguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
+    and KafkaSinkArguments(c: SourceArgs.Configuration, p: ParseResults<Parameters>) =
         member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
         member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
         member x.BuildTargetParams() =      x.Broker, x.Topic
 #endif
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         Arguments(SourceArgs.Configuration tryGetConfigValue, parser.ParseCommandLine argv)
@@ -146,7 +146,7 @@ let [<Literal>] AppName = "ProjectorTemplate"
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
-let build (args : Args.Arguments) =
+let build (args: Args.Arguments) =
     let consumerGroupName, maxReadAhead, maxConcurrentProcessors = args.ProcessorParams()
     let buildSourceConfig, target, dumpMetrics = args.ConnectSource(AppName)
 #if kafka // kafka
@@ -160,14 +160,14 @@ let build (args : Args.Arguments) =
 #endif // kafka && !parallelOnly
 #else // !kafka
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-    let sink = Handler.Config.StartSink(Log.Logger, stats, maxConcurrentProcessors, Handler.handle, maxReadAhead)
+    let sink = Handler.Factory.StartSink(Log.Logger, stats, maxConcurrentProcessors, Handler.handle, maxReadAhead)
 #endif // !kafka
 #if (cosmos && parallelOnly)
     // Custom logic for establishing the source, as we're not projecting StreamEvents - TODO could probably be generalized
     let source =
-        let mapToStreamItems (x : System.Collections.Generic.IReadOnlyCollection<'a>) : seq<'a> = upcast x
+        let mapToStreamItems (x: System.Collections.Generic.IReadOnlyCollection<'a>): seq<'a> = upcast x
         let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
-        match buildSourceConfig Log.Logger consumerGroupName with SourceConfig.Cosmos (monitoredContainer, leasesContainer, checkpoints, tailSleepInterval : TimeSpan) ->
+        match buildSourceConfig Log.Logger consumerGroupName with SourceConfig.Cosmos (monitoredContainer, leasesContainer, checkpoints, tailSleepInterval: TimeSpan) ->
         match checkpoints with
         | Ephemeral _ -> failwith "Unexpected"
         | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
@@ -177,7 +177,7 @@ let build (args : Args.Arguments) =
 #else
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig Log.Logger consumerGroupName
-        Handler.Config.StartSource(Log.Logger, sink, sourceConfig)
+        Handler.Factory.StartSource(Log.Logger, sink, sourceConfig)
 #endif        
     [|  Async.AwaitKeyboardInterruptAsTaskCanceledException()
         source.AwaitWithStopOnCancellation()

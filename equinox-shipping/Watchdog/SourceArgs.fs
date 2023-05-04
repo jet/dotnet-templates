@@ -136,7 +136,7 @@ module Dynamo =
             indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval, streamsDop
         member _.CreateCheckpointStore(group, cache) =
             let indexTable = indexStoreClient.Value
-            indexTable.CreateCheckpointService(group, cache, Config.log)
+            indexTable.CreateCheckpointService(group, cache, Store.log)
 
 module Esdb =
 
@@ -147,11 +147,11 @@ module Esdb =
 
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
     let private createCheckpointStore (consumerGroup, checkpointInterval) : _ -> Propulsion.Feed.IFeedCheckpointStore = function
-        | Config.Store.Cosmos (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
-        | Config.Store.Dynamo (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
-        | Config.Store.Memory _ | Config.Store.Esdb _ -> Args.missingArg "Unexpected store type"
+        | Store.Context.Cosmos (context, cache) ->
+            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
+        | Store.Context.Dynamo (context, cache) ->
+            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
+        | Store.Context.Memory _ | Store.Context.Esdb _ -> Args.missingArg "Unexpected store type"
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]           Verbose
@@ -207,7 +207,7 @@ module Esdb =
         member _.MonitoringParams(log : ILogger) =
             log.Information("EventStoreSource MaxItems {maxItems} ", maxItems)
             startFromTail, maxItems, tailSleepInterval
-        member x.ConnectTarget(cache) : Config.Store<_> =
+        member x.ConnectTarget(cache) : Store.Context<_> =
             Args.TargetStoreArgs.connectTarget x.TargetStoreArgs cache
         member _.CreateCheckpointStore(group, store) : Propulsion.Feed.IFeedCheckpointStore =
             createCheckpointStore (group, checkpointInterval) store 

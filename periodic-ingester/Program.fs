@@ -3,7 +3,7 @@
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -40,7 +40,7 @@ module Args =
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 8."
                 | TicketsDop _ ->           "maximum number of Tickets to process in parallel. Default: 4"
                 | Feed _ ->                 "Feed parameters."
-    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val GroupId =                p.GetResult(GroupId, "default")
 
         member val Verbose =                p.Contains Parameters.Verbose
@@ -50,7 +50,7 @@ module Args =
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val CheckpointInterval =     TimeSpan.FromHours 1.
-        member val Feed : FeedArguments =
+        member val Feed: FeedArguments =
             match p.GetSubCommand() with
             | Feed feed -> FeedArguments(c, feed)
             | _ -> missingArg "Must specify feed"
@@ -63,11 +63,11 @@ module Args =
                 | Group _ ->                "specify Api Consumer Group Id. (optional if environment variable API_CONSUMER_GROUP specified)"
                 | BaseUri _ ->              "specify Api endpoint. (optional if environment variable API_BASE_URI specified)"
                 | Cosmos _ ->               "Cosmos Store parameters."
-    and FeedArguments(c : Configuration, p : ParseResults<FeedParameters>) =
+    and FeedArguments(c: Configuration, p: ParseResults<FeedParameters>) =
         member val SourceId =               p.TryGetResult Group   |> Option.defaultWith (fun () -> c.Group)   |> Propulsion.Feed.SourceId.parse
         member val BaseUri =                p.TryGetResult BaseUri |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
         member val RefreshInterval =        TimeSpan.FromHours 1.
-        member val Cosmos : CosmosArguments =
+        member val Cosmos: CosmosArguments =
             match p.GetSubCommand() with
             | Cosmos cosmos -> CosmosArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos"
@@ -90,7 +90,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds (default: 30)."
                 | Retries _ ->              "specify operation retries (default: 9)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 30)"
-    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+    and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 30.) |> TimeSpan.FromSeconds
@@ -110,14 +110,14 @@ module Args =
 
 let [<Literal>] AppName = "PeriodicIngesterTemplate"
 
-let build (args : Args.Arguments) =
+let build (args: Args.Arguments) =
     let cache = Equinox.Cache(AppName, sizeMb = 10)
     let feed = args.Feed
     let context = feed.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 
     let sink =
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-        Ingester.Config.StartSink(Log.Logger, stats, args.TicketsDop, Ingester.handle, args.MaxReadAhead)
+        Ingester.Factory.StartSink(Log.Logger, stats, args.TicketsDop, Ingester.handle, args.MaxReadAhead)
     let source =
         let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Log.Logger (args.GroupId, args.CheckpointInterval) (context, cache)
         let client = ApiClient.TicketsFeed feed.BaseUri
@@ -130,7 +130,7 @@ let build (args : Args.Arguments) =
     sink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
-let startMetricsServer port : IDisposable =
+let startMetricsServer port: IDisposable =
     let metricsServer = new Prometheus.KestrelMetricServer(port = port)
     let ms = metricsServer.Start()
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
@@ -140,7 +140,7 @@ let run args = async {
     let sink, source = build args
     use _ = source
     use _ = sink
-    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
+    use _metricsServer: IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     return! Async.Parallel [ source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]> }
 
 [<EntryPoint>]

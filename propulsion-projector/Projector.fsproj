@@ -9,7 +9,7 @@
   <ItemGroup>
     <None Include="README.md" />
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="Config.fs" />
+    <Compile Include="Store.fs" />
     <Compile Include="SourceConfig.fs" />
     <Compile Include="Handler.fs" />
     <Compile Include="Args.fs" />

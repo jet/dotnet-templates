@@ -8,7 +8,7 @@ type TicketsTranchesDto = { activeEpochs : TrancheReferenceDto[] }
  and TrancheReferenceDto = { fc : FcId; epochId : TicketsEpochId }
 
 type SliceDto = { closed : bool; tickets : ItemDto[]; position : TicketsCheckpoint; checkpoint : TicketsCheckpoint }
- and ItemDto = { id : TicketId; payload : string }
+ and ItemDto = { id : TicketId; payload: string }
 module ItemDto =
 
     let ofDto (x : TicketsEpoch.Events.Item) : ItemDto =

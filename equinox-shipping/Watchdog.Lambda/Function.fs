@@ -25,13 +25,13 @@ type Configuration(appName, ?tryGet) =
     member val ConsumerGroupName =      appName
     member val CacheName =              appName
 
-type Store internal (connector : DynamoStoreConnector, table, indexTable, cacheName, consumerGroupName) =
+type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheName, consumerGroupName) =
     let dynamo =                        connector.CreateClient()
     let indexClient =                   DynamoStoreClient(dynamo, indexTable)
     let client =                        DynamoStoreClient(dynamo, table)
     let context =                       DynamoStoreContext(client)
     let cache =                         Equinox.Cache(cacheName, sizeMb = 1)
-    let checkpoints =                   indexClient.CreateCheckpointService(consumerGroupName, cache, Config.log)
+    let checkpoints =                   indexClient.CreateCheckpointService(consumerGroupName, cache, Store.log)
 
     new (c : Configuration, requestTimeout, retries) =
         let conn =
@@ -40,7 +40,7 @@ type Store internal (connector : DynamoStoreConnector, table, indexTable, cacheN
             | None -> DynamoStoreConnector(c.DynamoServiceUrl, c.DynamoAccessKey, c.DynamoSecretKey, requestTimeout, retries)
         Store(conn, c.DynamoTable, c.DynamoIndexTable, c.CacheName, c.ConsumerGroupName)
 
-    member val Config =                 Config.Store.Dynamo (context, cache)
+    member val Config =                 Store.Context.Dynamo (context, cache)
     member val DumpMetrics =            Equinox.DynamoStore.Core.Log.InternalMetrics.dump
     member x.CreateSource(trancheIds, sink) =
         let batchSizeCutoff =           100
@@ -49,7 +49,7 @@ type Store internal (connector : DynamoStoreConnector, table, indexTable, cacheN
         let statsInterval =             TimeSpan.FromMinutes 1.
         let streamsDop =                2
         let loadMode =                  Propulsion.DynamoStore.WithData (streamsDop, context)
-        Handler.Config.CreateDynamoSource(Log.Logger, sink, (indexClient, checkpoints, loadMode, fromTail, batchSizeCutoff, tailSleepInterval, statsInterval), trancheIds)
+        Handler.Factory.CreateDynamoSource(Log.Logger, sink, (indexClient, checkpoints, loadMode, fromTail, batchSizeCutoff, tailSleepInterval, statsInterval), trancheIds)
 
 /// Wiring for Source and Sink running the Watchdog.Handler
 type App(store : Store) =
@@ -59,13 +59,13 @@ type App(store : Store) =
     let sink =
         let manager =
             let processManagerMaxDop = 4
-            FinalizationProcess.Config.create processManagerMaxDop store.Config
+            FinalizationProcess.Factory.create processManagerMaxDop store.Config
         let maxReadAhead = 2
         let maxConcurrentStreams = 8
         // On paper, a 1m window should be fine, give the timeout for a single lifecycle
         // We use a higher value to reduce redundant work in the (edge) case of multiple deliveries due to rate limiting of readers
         let purgeInterval = TimeSpan.FromMinutes 5.
-        Handler.Config.StartSink(Log.Logger, stats, maxConcurrentStreams, manager, processingTimeout, maxReadAhead, 
+        Handler.Factory.StartSink(Log.Logger, stats, maxConcurrentStreams, manager, processingTimeout, maxReadAhead, 
                                  wakeForResults = true, purgeInterval = purgeInterval)
         
     member x.RunUntilCaughtUp(tranches, lambdaTimeout) =

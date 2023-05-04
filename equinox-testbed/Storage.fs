@@ -3,10 +3,10 @@
 open Argu
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
-type Configuration(tryGet : string -> string option) =
+type Configuration(tryGet: string -> string option) =
 
     let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
@@ -22,7 +22,7 @@ module MemoryStore =
             member p.Usage = p |> function
                 | Verbose ->       "Include low level Store logging."
     let config () =
-        Config.Store.Memory (Equinox.MemoryStore.VolatileStore())
+        Store.Context.Memory (Equinox.MemoryStore.VolatileStore())
 
 //#endif
 //#if cosmos
@@ -73,7 +73,7 @@ module Cosmos =
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else CachingStrategy.NoCaching
-        Config.Store.Cosmos (createContext storeClient maxItems, cacheStrategy, unfolds)
+        Store.Context.Cosmos (createContext storeClient maxItems, cacheStrategy, unfolds)
 
 //#endif
 //#if eventStore
@@ -119,5 +119,5 @@ module EventStore =
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
                 CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
             else None
-        Config.Store.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)
+        Store.Context.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)
 //#endif

@@ -7,10 +7,10 @@ let streamId = Equinox.StreamId.gen SkuId.toString
 module Events =
 
     type ItemData =
-        {   locationId : string
+        {   locationId: string
             messageIndex : int64
-            picketTicketId : string
-            poNumber : string
+            picketTicketId: string
+            poNumber: string
             reservedQuantity : int }
     type Event =
         | Ingested of ItemData
@@ -59,8 +59,8 @@ type Service internal (resolve : SkuId -> Equinox.Decider<Events.Event, Fold.Sta
         let decider = resolve skuId
         decider.Query id
 
-module Config =
+module Factory =
 
     let private (|Category|) = function
-        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat Category)

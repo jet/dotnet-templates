@@ -4,7 +4,7 @@ open Propulsion.CosmosStore
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -180,7 +180,7 @@ module CosmosStoreContext =
 let build (args : Args.Arguments, log) =
     let archiverSink =
         let context = args.DestinationArchive.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
+        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
         CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval,
                               purgeInterval=TimeSpan.FromMinutes 10., maxBytes = args.MaxBytes)
     let source =
@@ -206,7 +206,7 @@ let run (args : Args.Arguments) = async {
     return! [|  Async.AwaitKeyboardInterruptAsTaskCanceledException()
                 source.AwaitWithStopOnCancellation()
                 sink.AwaitWithStopOnCancellation()
-            |] |> Async.Parallel |> Async.Ignore<unit array> }
+            |] |> Async.Parallel |> Async.Ignore<unit[]> }
 
 [<EntryPoint>]
 let main argv =

@@ -13,13 +13,13 @@ module Guid =
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =
-    let toString (value : ClientId) : string = Guid.toStringN %value
-    let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
+    let toString (value : ClientId): string = Guid.toStringN %value
+    let parse (value: string) : ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 module EventCodec =
 

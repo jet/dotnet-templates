@@ -31,7 +31,7 @@ type Properties(testOutput) =
         let buffer = EventAccumulator()
         use _ = store.Committed.Subscribe buffer.Record
         let eventTypes = seq { for e in buffer.All() -> e.EventType }
-        let manager = FinalizationProcess.Config.create 16 store.Config
+        let manager = FinalizationProcess.Factory.create 16 store.Config
 
         (* First, run the happy path - should pass through all stages of the lifecycle *)
         let requestedShipmentIds = Array.append shipmentIds1 shipmentIds2

@@ -4,7 +4,7 @@ open Infrastructure
 open Serilog
 open System
 
-module Config = Domain.Config
+module Store = Domain.Store
 
 module Args =
 
@@ -57,7 +57,7 @@ module Args =
                                             | Dynamo a -> Choice1Of2 <| SourceArgs.Dynamo.Arguments(c, a)
                                             | Mdb a ->    Choice2Of2 <| SourceArgs.Mdb.Arguments(c, a)
                                             | a ->        Args.missingArg $"Unexpected Store subcommand %A{a}"
-        member x.ConnectStoreAndSource(appName) : Config.Store * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
+        member x.ConnectStoreAndSource(appName) : Store.Context * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | Choice1Of2 a ->
@@ -67,7 +67,7 @@ module Args =
                     let checkpoints = a.CreateCheckpointStore(groupName, cache)
                     let load = Propulsion.DynamoStore.EventLoadMode.IndexOnly
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
-                let store = Config.Store.Dynamo (context, cache)
+                let store = Store.Context.Dynamo (context, cache)
                 store, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
             | Choice2Of2 a ->
                 let context = a.Connect()
@@ -75,7 +75,7 @@ module Args =
                     let connectionString, startFromTail, batchSize, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName)
                     SourceConfig.Mdb (connectionString, checkpoints, startFromTail, batchSize, tailSleepInterval, x.StatsInterval)
-                let store = Config.Store.Mdb (context, cache)
+                let store = Store.Context.Mdb (context, cache)
                 store, buildSourceConfig, Equinox.MessageDb.Log.InternalMetrics.dump
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -93,11 +93,11 @@ let build (args : Args.Arguments) =
     let sink =
         let stats = Handler.Stats(log, args.StatsInterval, args.StateInterval, dumpMetrics)
         let handle = Handler.create store
-        Handler.Config.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, 
+        Handler.Factory.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, 
                                  wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig log consumerGroupName
-        Handler.Config.StartSource(log, sink, sourceConfig)
+        Handler.Factory.StartSource(log, sink, sourceConfig)
     sink, source
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException

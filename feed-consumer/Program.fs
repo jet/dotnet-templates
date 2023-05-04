@@ -3,7 +3,7 @@
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -105,9 +105,9 @@ let build (args : Args.Arguments) =
     let sink =
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         let handle = Ingester.handle args.TicketsDop
-        Ingester.Config.StartSink(Log.Logger, stats, args.FcsDop, handle, args.MaxReadAhead)
+        Ingester.Factory.StartSink(Log.Logger, stats, args.FcsDop, handle, args.MaxReadAhead)
     let source =
-        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (args.GroupId, args.CheckpointInterval) (context, cache)
+        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.log (args.GroupId, args.CheckpointInterval) (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri
         let source =
             Propulsion.Feed.FeedSource(

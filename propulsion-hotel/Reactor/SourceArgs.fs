@@ -5,7 +5,7 @@ open Infrastructure // Args etc
 open Serilog
 open System
 
-module Config = Domain.Config
+module Store = Domain.Store
 
 type Configuration(tryGet) =
     inherit Args.Configuration(tryGet)
@@ -77,7 +77,7 @@ module Dynamo =
             indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval
         member _.CreateCheckpointStore(group, cache) =
             let indexTable = indexStoreClient.Value
-            indexTable.CreateCheckpointService(group, cache, Config.log)
+            indexTable.CreateCheckpointService(group, cache, Domain.Store.log)
 
 module Mdb =
     

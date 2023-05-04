@@ -28,7 +28,7 @@ type Stats(log, statsInterval, stateInterval) =
 
 module PipelineEvent =
 
-    type Item = { id : TicketId; payload : string }
+    type Item = { id : TicketId; payload: string }
     let ofIndexAndItem index (item : Item) =
         FsCodec.Core.TimelineEvent.Create(
             index,
@@ -62,7 +62,7 @@ let handle maxDop stream span = async {
     | x -> return failwithf "Unexpected stream %O" x
 }
 
-type Config private () =
+type Factory private () =
 
     static member StartSink(log, stats, dop, handle, maxReadAhead) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, dop, handle, stats)

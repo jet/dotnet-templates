@@ -9,13 +9,13 @@ open System.Runtime.CompilerServices
 type SkuId = string<skuId>
 and [<Measure>] skuId
 module SkuId =
-    let toString (value : SkuId) : string = % value
-    let parse (value : string) : SkuId = let raw = value in % raw
+    let toString (value : SkuId): string = % value
+    let parse (value: string) : SkuId = let raw = value in % raw
     let (|Parse|) = parse
 
 module EnvVar =
 
-    let tryGet varName : string option = System.Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = System.Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 module EventCodec =
 

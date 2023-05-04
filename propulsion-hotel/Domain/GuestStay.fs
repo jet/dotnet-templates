@@ -17,7 +17,7 @@ module Events =
         /// Notes checkout is being effected via a GroupCheckout. Marks stay complete equivalent to typical CheckedOut event
         | TransferredToGroup of {| at : DateTimeOffset; groupId : GroupCheckoutId; residualBalance : decimal |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.gen<Event>
+    let codec = Store.EventCodec.gen<Event>
 
 module Fold =
 
@@ -98,13 +98,13 @@ type Service internal (resolve : GuestStayId -> Equinox.Decider<Events.Event, Fo
         let decider = resolve id
         decider.Transact(Decide.groupCheckout (defaultArg at DateTimeOffset.UtcNow) groupId)
 
-module Config =
+module Factory =
 
-    let private (|StoreCat|) = function
-        | Config.Store.Memory store ->
-            Config.Memory.create Events.codec Fold.initial Fold.fold store
-        | Config.Store.Dynamo (context, cache) ->
-            Config.Dynamo.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-        | Config.Store.Mdb (context, cache) ->
-            Config.Mdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (StoreCat cat) = Service(streamId >> Config.resolve cat Category)
+    let private (|Category|) = function
+        | Store.Context.Memory store ->
+            Store.Memory.create Events.codec Fold.initial Fold.fold store
+        | Store.Context.Dynamo (context, cache) ->
+            Store.Dynamo.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+        | Store.Context.Mdb (context, cache) ->
+            Store.Mdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(streamId >> Store.resolve cat Category)

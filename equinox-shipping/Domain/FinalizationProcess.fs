@@ -2,7 +2,7 @@ module Shipping.Domain.FinalizationProcess
 
 open FinalizationTransaction
 
-type internal Service internal (transactions : FinalizationTransaction.Service, containers : Container.Service, shipments : Shipment.Service) =
+type internal Service internal (transactions: FinalizationTransaction.Service, containers: Container.Service, shipments: Shipment.Service) =
 
     member internal _.TryReserveShipment(shipmentId, transactionId) =
         shipments.TryReserve(shipmentId, transactionId)
@@ -19,7 +19,7 @@ type internal Service internal (transactions : FinalizationTransaction.Service, 
     member internal _.Step(transactionId, update) =
         transactions.Step(transactionId, update)
 
-type Manager internal (service : Service, maxDop) =
+type Manager internal (service: Service, maxDop) =
 
     let rec run transactionId update = async {
         let loop updateEvent = run transactionId (Some updateEvent)
@@ -56,21 +56,21 @@ type Manager internal (service : Service, maxDop) =
         }
 
     /// Used by watchdog service to drive processing to a conclusion where a given request was orphaned
-    member _.Pump(transactionId : TransactionId) =
+    member _.Pump(transactionId: TransactionId) =
         run transactionId None
 
     // Caller should generate the TransactionId via a deterministic hash of the shipmentIds in order to ensure idempotency (and sharing of fate) of identical requests
-    member _.TryFinalizeContainer(transactionId, containerId, shipmentIds) : Async<bool> =
+    member _.TryFinalizeContainer(transactionId, containerId, shipmentIds): Async<bool> =
         if Array.isEmpty shipmentIds then invalidArg "shipmentIds" "must not be empty"
         let initialRequest = Events.FinalizationRequested {| container = containerId; shipments = shipmentIds |}
         run transactionId (Some initialRequest)
 
-module Config =
+module Factory =
 
     let private createService store =
-        let transactions = Config.create store
-        let containers = Container.Config.create store
-        let shipments = Shipment.Config.create store
+        let transactions = Factory.create store
+        let containers = Container.Factory.create store
+        let shipments = Shipment.Factory.create store
         Service(transactions, containers, shipments)
     let create maxDop store =
         Manager(createService store, maxDop = maxDop)

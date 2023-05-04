@@ -40,14 +40,14 @@ let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service)
         | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped events.Length
     | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
 
-module Config =
+module Factory =
 
     let createHandler store =
-        let srcService = Todo.Config.create store
-        let dstService = TodoSummary.Config.create store
+        let srcService = Todo.Factory.create store
+        let dstService = TodoSummary.Factory.create store
         handle srcService dstService
 
-type Config private () =
+type Factory private () =
     
-    static member StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead) =
+    static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats)

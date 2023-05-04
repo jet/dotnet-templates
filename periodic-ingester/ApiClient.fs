@@ -11,21 +11,21 @@ open System.Threading
 open PeriodicIngesterTemplate.Domain
 
 [<NoComparison; NoEquality>]
-type TicketsDto = { tickets : TicketDto[] }
- and TicketDto = { id : TicketId; lastUpdated : DateTimeOffset; body : string; }
+type TicketsDto = { tickets: TicketDto[] }
+ and TicketDto = { id: TicketId; lastUpdated: DateTimeOffset; body: string; }
 
-type TicketsClient(client : HttpClient) =
+type TicketsClient(client: HttpClient) =
 
     let basePath = "api/tickets"
 
-    member _.Crawl(ct : CancellationToken) : IAsyncEnumerable<struct (TimeSpan * Propulsion.Feed.SourceItem<Propulsion.Sinks.EventBody> array)> = taskSeq {
+    member _.Crawl(ct: CancellationToken): IAsyncEnumerable<struct (TimeSpan * Propulsion.Feed.SourceItem<Propulsion.Sinks.EventBody> array)> = taskSeq {
         let request = HttpReq.get () |> HttpReq.withPath basePath
         let ts = System.Diagnostics.Stopwatch.StartNew()
         let! response = client.Send2(request, ct)
         let! basePage = response |> HttpRes.deserializeOkStj<TicketsDto>
         yield struct (ts.Elapsed,
             [| for t in basePage.tickets ->
-                let data : Ingester.TicketData = { lastUpdated = t.lastUpdated; body = t.body }
+                let data: Ingester.TicketData = { lastUpdated = t.lastUpdated; body = t.body }
                 Ingester.PipelineEvent.sourceItemOfTicketIdAndData (t.id, data) |])
     }
 

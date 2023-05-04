@@ -10,11 +10,11 @@ open System
 open TodoBackendTemplate
 
 /// Equinox store bindings
-module Storage =
+module Store =
 
     /// Specifies the store to be used, together with any relevant custom parameters
     [<RequireQualifiedAccess>]
-    type Store =
+    type Context =
 //#if (memoryStore || (!cosmos && !dynamo && !eventStore))
         | Memory
 //#endif
@@ -81,31 +81,31 @@ module Storage =
     /// Creates and/or connects to a specific store as dictated by the specified config
     let connect = function
 //#if (memoryStore || (!cosmos && !dynamo && !eventStore))
-        | Store.Memory ->
+        | Context.Memory ->
             let store = Memory.connect()
-            Config.Store.Memory store
+            Store.Context.Memory store
 //#endif
 //#if eventStore
-        | Store.Esdb (connectionString, cache) ->
+        | Context.Esdb (connectionString, cache) ->
             let cache = Equinox.Cache("ES", sizeMb = cache)
             let conn = ES.connect connectionString
-            Config.Store.Esdb (conn, cache)
+            Store.Context.Esdb (conn, cache)
 //#endif
 //#if cosmos
-        | Store.Cosmos (mode, connectionString, database, container, cache) ->
+        | Context.Cosmos (mode, connectionString, database, container, cache) ->
             let cache = Equinox.Cache("Cosmos", sizeMb = cache)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
             let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (timeout, retriesOn429Throttling, timeout)
-            Config.Store.Cosmos (context, cache)
+            Store.Context.Cosmos (context, cache)
 //#endif
 //#if dynamo
-        | Store.Dynamo (region, table, cache) ->
+        | Context.Dynamo (region, table, cache) ->
             let cache = Equinox.Cache("Dynamo", sizeMb = cache)
             let retries = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request, including retry attempts
             let context = Dynamo.connect (region, table) (timeout, retries)
-            Config.Store.Dynamo (context, cache)
+            Store.Context.Dynamo (context, cache)
 //#endif
 
 /// Dependency Injection wiring for services using Equinox
@@ -113,12 +113,12 @@ module Services =
 
     /// Registers the Equinox Store, Stream Resolver, Service Builder and the Service
     let register (services : IServiceCollection, storeCfg) =
-        let store = Storage.connect storeCfg
+        let store = Store.connect storeCfg
 //#if todos
-        services.AddSingleton(Todo.Config.create store) |> ignore
+        services.AddSingleton(Todo.Factory.create store) |> ignore
 //#endif
 //#if aggregate
-        services.AddSingleton(Aggregate.Config.create store) |> ignore
+        services.AddSingleton(Aggregate.Factory.create store) |> ignore
 //#else
         //services.AddSingleton(Thing.Config.create store) |> ignore
 //#endif
@@ -145,7 +145,7 @@ type Startup() =
 //#if eventStore
         // EVENTSTORE: See https://github.com/jet/equinox/blob/master/docker-compose.yml for the associated docker-compose configuration
         
-        let storeConfig = Storage.Store.Esdb ("esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?tls=true&tlsVerifyCert=false", cacheMb)
+        let storeConfig = Store.Context.Esdb ("esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?tls=true&tlsVerifyCert=false", cacheMb)
 
 //#endif
 //#if cosmos
@@ -161,13 +161,13 @@ type Startup() =
             match read connectionVar, read databaseVar, read containerVar with
             | Some connection, Some database, Some container ->
                 let connMode = Microsoft.Azure.Cosmos.ConnectionMode.Direct // Best perf - select one of the others iff using .NETCore on linux or encounter firewall issues
-                Storage.Store.Cosmos (connMode, connection, database, container, cacheMb)
+                Store.Context.Cosmos (connMode, connection, database, container, cacheMb)
 //#if cosmosSimulator
             | None, Some database, Some container ->
                 // alternately, you can feed in this connection string in as a parameter externally and remove this special casing
                 let wellKnownConnectionStringForCosmosDbSimulator =
                     "AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
-                Storage.Store.Cosmos (Microsoft.Azure.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
+                Store.Context.Cosmos (Microsoft.Azure.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
 //#endif
             | _ ->
                 failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar containerVar
@@ -179,7 +179,7 @@ type Startup() =
             let read key = Environment.GetEnvironmentVariable key |> Option.ofObj
             match read regionVar, read tableVar with
             | Some region, Some table ->
-                Storage.Store.Dynamo (region, table, cacheMb)
+                Store.Context.Dynamo (region, table, cacheMb)
             | _ ->
                 failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s" regionVar tableVar
 

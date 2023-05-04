@@ -57,7 +57,7 @@ module Cosmos =
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to supply for the Change Feed query. Default: use response size limit"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
-    type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -73,8 +73,8 @@ module Cosmos =
         let lagFrequency =                  p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member _.Verbose =                  p.Contains Verbose
         member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
-        member x.MonitoringParams(log : ILogger) =
-            let leases : Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
+        member x.MonitoringParams(log: ILogger) =
+            let leases: Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
             log.Information("ChangeFeed Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
                 leases.Database.Id, leases.Id, Option.toNullable maxItems)
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
@@ -119,7 +119,7 @@ module Dynamo =
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | StreamsDop _ ->           "parallelism when loading events from Store Feed Source. Default 4"
 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
                                             | Some systemName ->
                                                 Choice1Of2 systemName
@@ -147,14 +147,14 @@ module Dynamo =
         member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.LogConfiguration()
                                             client.ConnectStore("Main", table) |> DynamoStoreContext.create
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log: ILogger) =
             log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} Hydrater parallelism {streamsDop}", batchSizeCutoff, streamsDop)
             let indexStoreClient = indexStoreClient.Value
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
             indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval, streamsDop
         member _.CreateCheckpointStore(group, cache) =
             let indexTable = indexStoreClient.Value
-            indexTable.CreateCheckpointService(group, cache, Config.log)
+            indexTable.CreateCheckpointService(group, cache, Store.log)
 
 // #endif // dynamo
 #if esdb
@@ -166,10 +166,10 @@ module Esdb =
         alternately one could use a SQL Server DB via Propulsion.SqlStreamStore
 
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
-    let private createCheckpointStore (consumerGroup, checkpointInterval) : _ -> Propulsion.Feed.IFeedCheckpointStore = function
-        | Config.Store.Cosmos (context, cache) ->
+    let private createCheckpointStore (consumerGroup, checkpointInterval): _ -> Propulsion.Feed.IFeedCheckpointStore = function
+        | Store.Context.Cosmos (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
-        | Config.Store.Dynamo (context, cache) ->
+        | Store.Context.Dynamo (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -198,7 +198,7 @@ module Esdb =
                 | Cosmos _ ->               "CosmosDB Target Store parameters (also used for checkpoint storage)."
                 | Dynamo _ ->               "DynamoDB Target Store parameters (also used for checkpoint storage)."
                 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let startFromTail =                 p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 100)
         let tailSleepInterval =             TimeSpan.FromSeconds 0.5
@@ -211,24 +211,24 @@ module Esdb =
         let checkpointInterval =            TimeSpan.FromHours 1.
         member val Verbose =                p.Contains Verbose
 
-        member _.Connect(appName, nodePreference) : Equinox.EventStoreDb.EventStoreConnection =
+        member _.Connect(appName, nodePreference): Equinox.EventStoreDb.EventStoreConnection =
             Log.Information("EventStore {discovery}", connectionStringLoggable)
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Equinox.EventStoreDb.EventStoreConnector(timeout, retries, tags = tags)
                 .Establish(appName, discovery, Equinox.EventStoreDb.ConnectionStrategy.ClusterSingle nodePreference)
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log: ILogger) =
             log.Information("EventStoreSource BatchSize {batchSize} ", batchSize)
             startFromTail, batchSize, tailSleepInterval
-        member _.CreateCheckpointStore(group, store) : Propulsion.Feed.IFeedCheckpointStore =
+        member _.CreateCheckpointStore(group, store): Propulsion.Feed.IFeedCheckpointStore =
             createCheckpointStore (group, checkpointInterval) store 
-        member x.ConnectTarget(cache) : Config.Store =
+        member x.ConnectTarget(cache): Store.Context =
             match p.GetSubCommand() with
             | Cosmos a ->
                 let context = Args.Cosmos.Arguments(c, a).Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-                Config.Store.Cosmos (context, cache)
+                Store.Context.Cosmos (context, cache)
             | Dynamo a ->
                 let context = Args.Dynamo.Arguments(c, a).Connect() |> DynamoStoreContext.create
-                Config.Store.Dynamo (context, cache)
+                Store.Context.Dynamo (context, cache)
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` checkpoint store when source is `esdb`"
 
 #endif // esdb
@@ -258,7 +258,7 @@ module Sss =
                 | CheckpointsConnection _ ->"Connection string for Checkpoints sql db. Optional if SQLSTREAMSTORE_CONNECTION_CHECKPOINTS specified. Default: same as `Connection`"
                 | CheckpointsCredentials _ ->"Credentials string for Checkpoints sql db. (used as part of checkpoints connection string, but NOT logged). Default (when no `CheckpointsConnection`: use `Credentials. Default (when `CheckpointsConnection` specified): use SQLSTREAMSTORE_CREDENTIALS_CHECKPOINTS environment variable (or assume no credentials)"
 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let startFromTail =                 p.Contains FromTail
         let tailSleepInterval =             p.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
         let checkpointEventInterval =       TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint
@@ -284,10 +284,10 @@ module Sss =
             Log.Information("SqlStreamStore MsSql Connection {connectionString} Schema {schema} AutoCreate {autoCreate}", conn, schema, autoCreate)
             let rawStore = Equinox.SqlStreamStore.MsSql.Connector(sssConnectionString, schema, autoCreate=autoCreate).Connect() |> Async.RunSynchronously
             Equinox.SqlStreamStore.SqlStreamStoreConnection rawStore
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log: ILogger) =
             log.Information("SqlStreamStoreSource BatchSize {batchSize} ", batchSize)
             startFromTail, batchSize, tailSleepInterval
-        member x.CreateCheckpointStoreSql(groupName) : Propulsion.Feed.IFeedCheckpointStore =
+        member x.CreateCheckpointStoreSql(groupName): Propulsion.Feed.IFeedCheckpointStore =
             let connectionString = x.BuildCheckpointsConnectionString()
             Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString, groupName, checkpointEventInterval)
             

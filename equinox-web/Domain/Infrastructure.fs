@@ -10,4 +10,4 @@ module Guid =
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =
-    let toString (value : ClientId) : string = Guid.toStringN %value
+    let toString (value : ClientId): string = Guid.toStringN %value

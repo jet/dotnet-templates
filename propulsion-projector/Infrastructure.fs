@@ -6,13 +6,13 @@ open System
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 // #if (cosmos || esdb || sss)
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
@@ -78,7 +78,7 @@ type Equinox.DynamoStore.DynamoStoreClient with
 
 type Equinox.DynamoStore.DynamoStoreContext with
 
-    member internal x.LogConfiguration(log : ILogger) =
+    member internal x.LogConfiguration(log: ILogger) =
         log.Information("DynamoStore Tip thresholds: {maxTipBytes}b {maxTipEvents}e Query Paging {queryMaxItems} items",
                         x.TipOptions.MaxBytes, Option.toNullable x.TipOptions.MaxEvents, x.QueryOptions.MaxItems)
 
@@ -92,7 +92,7 @@ type Amazon.DynamoDBv2.IAmazonDynamoDB with
 module DynamoStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
-    let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
+    let create (storeClient: Equinox.DynamoStore.DynamoStoreClient) =
         Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
 
 // #endif
@@ -100,7 +100,7 @@ module DynamoStoreContext =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+    static member Configure(configuration: LoggerConfiguration, ?verbose) =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c

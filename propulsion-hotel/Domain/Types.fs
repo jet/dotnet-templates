@@ -4,13 +4,13 @@ open FSharp.UMX
 open System
 
 module Guid =
-    let toString (x : Guid) : string = x.ToString "N"
+    let toString (x : Guid): string = x.ToString "N"
 
 type GroupCheckoutId = Guid<groupCheckoutId>
  and [<Measure>] groupCheckoutId
 module GroupCheckoutId =
     let toString : GroupCheckoutId -> string = UMX.untag >> Guid.toString
-    let (|Parse|) : string -> GroupCheckoutId = Guid.Parse >> UMX.tag
+    let (|Parse|): string -> GroupCheckoutId = Guid.Parse >> UMX.tag
 
 type GuestStayId = Guid<guestStayId>
  and [<Measure>] guestStayId

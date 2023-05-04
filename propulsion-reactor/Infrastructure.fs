@@ -10,26 +10,26 @@ open System
 // #if (kafka || !blank)
 module Guid =
 
-    let inline toStringN (x : Guid) = x.ToString "N"
+    let inline toStringN (x: Guid) = x.ToString "N"
 
 /// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =
-    let toString (value : ClientId) : string = Guid.toStringN %value
-    let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
+    let toString (value: ClientId): string = Guid.toStringN %value
+    let parse (value: string): ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
 
 // #endif
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 // #if (kafka || !blank)
 module EventCodec =
 
     /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x: Propulsion.Sinks.Event) =
+    let tryDecode (codec: FsCodec.IEventCodec<_, _, _>) streamName (x: Propulsion.Sinks.Event) =
         match codec.TryDecode x with
         | ValueNone ->
             if Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
@@ -72,7 +72,7 @@ type Equinox.CosmosStore.CosmosStoreConnector with
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
         
@@ -108,7 +108,7 @@ type Equinox.DynamoStore.DynamoStoreClient with
 #endif
 type Equinox.DynamoStore.DynamoStoreContext with
 
-    member internal x.LogConfiguration(log : ILogger) =
+    member internal x.LogConfiguration(log: ILogger) =
         log.Information("DynamoStore Tip thresholds: {maxTipBytes}b {maxTipEvents}e Query Paging {queryMaxItems} items",
                         x.TipOptions.MaxBytes, Option.toNullable x.TipOptions.MaxEvents, x.QueryOptions.MaxItems)
 
@@ -122,14 +122,14 @@ type Amazon.DynamoDBv2.IAmazonDynamoDB with
 module DynamoStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
-    let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
+    let create (storeClient: Equinox.DynamoStore.DynamoStoreClient) =
         Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+    static member Configure(configuration: LoggerConfiguration, ?verbose) =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c

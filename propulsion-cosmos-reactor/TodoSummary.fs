@@ -12,7 +12,7 @@ module Events =
     type Event =
         | Ingested of IngestedData
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJe<Event>
+    let codec = Store.EventCodec.genJe<Event>
 
 module Fold =
 
@@ -49,8 +49,8 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         let decider = resolve clientId
         decider.Query render
 
-module Config =
+module Factory =
 
     let private (|Category|) = function
-        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createRollingState Events.codecJe Fold.initial Fold.fold Fold.toSnapshot (context, cache)
-    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createRollingState Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat Category)

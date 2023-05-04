@@ -5,12 +5,12 @@ module ConsumerTemplate.Ingester
 /// Defines the shape of input messages on the topic we're consuming
 module Contract =
 
-    type OrderInfo = { poNumber : string; reservedUnitQuantity : int }
+    type OrderInfo = { poNumber: string; reservedUnitQuantity : int }
     type Message =
         {  skuId : SkuId // primary key for the aggregate
-           locationId : string
+           locationId: string
            messageIndex : int64
-           pickTicketId : string
+           pickTicketId: string
            purchaseOrderInfo : OrderInfo[] }
     let serdes = FsCodec.SystemTextJson.Serdes.Default
     // TODO remove .Span

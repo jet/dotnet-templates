@@ -12,7 +12,7 @@ module Events =
         | Happened
         | Snapshotted of SnapshottedData
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Store.EventCodec.gen<Event>, Store.EventCodec.genJsonElement<Event>
 
 module Fold =
 
@@ -30,7 +30,7 @@ let interpretMarkDone (state : Fold.State) =
 
 type View = { sorted : bool }
 
-type Service internal (resolve : string -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve: string -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Read the present state
     // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
@@ -43,24 +43,24 @@ type Service internal (resolve : string -> Equinox.Decider<Events.Event, Fold.St
         let decider = resolve clientId
         decider.Transact(interpretMarkDone)
 
-module Config =
+module Factory =
 
     let private (|Category|) = function
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
-        | Config.Store.Memory store ->
-            Config.Memory.create Events.codec Fold.initial Fold.fold store
+        | Store.Context.Memory store ->
+            Store.Memory.create Events.codec Fold.initial Fold.fold store
 #endif
 //#endif
 //#if cosmos
-        | Config.Store.Cosmos (context, cache) ->
-            Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Context.Cosmos (context, cache) ->
+            Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if dynamo
-        | Config.Store.Dynamo (context, cache) ->
-            Config.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Context.Dynamo (context, cache) ->
+            Store.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if eventStore
-        | Config.Store.Esdb (context, cache) ->
-            Config.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Context.Esdb (context, cache) ->
+            Store.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
-    let create (Category cat) = Service(streamId >> Config.resolveDecider cat Category)
+    let create (Category cat) = Service(streamId >> Store.resolveDecider cat Category)

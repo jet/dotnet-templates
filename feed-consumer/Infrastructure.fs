@@ -5,13 +5,13 @@ open Serilog
 open System
 open System.Text
 
-module Config =
+module Store =
 
     let log = Log.ForContext("isMetric", true)
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 module Log =
 
@@ -94,7 +94,7 @@ type StringBuilder with
     member sb.Appendf fmt = Printf.ksprintf (ignore << sb.Append) fmt
     member sb.Appendfn fmt = Printf.ksprintf (ignore << sb.AppendLine) fmt
 
-    static member inline Build(builder : StringBuilder -> unit) =
+    static member inline Build(builder: StringBuilder -> unit) =
         let instance = StringBuilder() // TOCONSIDER PooledStringBuilder.GetInstance()
         builder instance
         instance.ToString()
@@ -126,7 +126,7 @@ module HttpReq =
         req
 
     /// Assigns a path to an HTTP request.
-    let inline withPath (p : string) (req : HttpRequestMessage) =
+    let inline withPath (p: string) (req : HttpRequestMessage) =
         req |> withUri (Uri(p, UriKind.Relative))
 
     /// Assigns a path to a Http request using printf-like formatting.
@@ -169,8 +169,8 @@ type InvalidHttpResponseException =
     inherit Exception
 
     // TODO: include headers
-    val private userMessage : string
-    val private requestMethod : string
+    val private userMessage: string
+    val private requestMethod: string
     val RequestUri : Uri
     val RequestBody : string
     val StatusCode : HttpStatusCode

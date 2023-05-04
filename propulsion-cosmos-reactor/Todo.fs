@@ -20,13 +20,14 @@ module Events =
         | Cleared       of ClearedData
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJe<Event>
+    let codec = Store.EventCodec.genJe<Event>
 
 module Reactions =
 
+    let codec = Store.EventCodec.gen<Events.Event>
     let categories = [| Category |]
     let (|Decode|) (stream, span : Propulsion.Sinks.Event[]) =
-        span |> Array.chooseV (EventCodec.tryDecode Events.codec stream)
+        span |> Array.chooseV (EventCodec.tryDecode codec stream)
     let [<return: Struct>] (|Parse|_|) = function
         | (StreamName clientId, _) & Decode events -> ValueSome struct (clientId, events)
         | _ -> ValueNone
@@ -63,9 +64,9 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         // Establish the present state of the Stream, project from that (using QueryEx so we can determine the version in effect)
         decider.QueryEx(fun c -> c.Version, render c.State)
 
-module Config =
+module Factory =
 
     let private (|Category|) = function
-        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat Category)
     

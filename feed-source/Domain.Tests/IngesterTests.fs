@@ -26,7 +26,7 @@ type Custom =
 [<assembly: Properties( Arbitrary = [| typeof<Custom> |] )>] do()
 
 let [<Property(MaxTest = 5)>] properties shouldInitialize shouldUseSameSut (GuidStringN trancheId) initialItems items = async {
-    let store = Equinox.MemoryStore.VolatileStore() |> Config.Store.Memory
+    let store = Equinox.MemoryStore.VolatileStore() |> Store.Context.Memory
 
     // Initialize with some items
     let initialSut = createSut store trancheId
@@ -49,7 +49,7 @@ let [<Property(MaxTest = 5)>] properties shouldInitialize shouldUseSameSut (Guid
     test <@ set initialResult + set result = set independentResult @> }
 
 let [<Property(MaxTest = 5, Arbitrary = [|typeof<Custom>|])>] ``lookBack is limited`` (GuidStringN trancheId, genItem) = async {
-    let store = Equinox.MemoryStore.VolatileStore() |> Config.Store.Memory
+    let store = Equinox.MemoryStore.VolatileStore() |> Store.Context.Memory
     // Initialize with more items than the lookBack accommodates
     let initialSut = createSut store trancheId
     let itemCount =

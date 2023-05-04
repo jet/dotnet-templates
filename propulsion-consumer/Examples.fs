@@ -159,7 +159,7 @@ module MultiMessages =
     // We'll use the same event parsing logic, though it works a little differently
     open MultiStreams
 
-    type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name : string * count : int | Unclassified of messageKey : string
+    type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name: string * count : int | Unclassified of messageKey: string
 
     type Processor() =
         let log = Log.ForContext<Processor>()
@@ -185,7 +185,7 @@ module MultiMessages =
             | StreamName.CategoryAndId (otherCategoryName, _) -> yield OtherCat (otherCategoryName, Seq.length span.e) }
 
         // NB can be called in parallel, so must be thread-safe
-        member x.Handle(streamName : StreamName, spanJson : string) =
+        member x.Handle(streamName : StreamName, spanJson: string) =
             for x in x.Interpret(streamName, spanJson) do
                 match x with
                 | Fave (Favorites.Favorited _) -> Interlocked.Increment &favorited |> ignore

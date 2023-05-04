@@ -2,9 +2,10 @@
 module Shipping.Infrastructure.Args
 
 open System
-module Config = Shipping.Domain.Config
 
-exception MissingArg of message : string with override this.Message = this.message
+module Store = Shipping.Domain.Store
+
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 let [<Literal>] REGION =                    "EQUINOX_DYNAMO_REGION"
@@ -14,7 +15,7 @@ let [<Literal>] SECRET_KEY =                "EQUINOX_DYNAMO_SECRET_ACCESS_KEY"
 let [<Literal>] TABLE =                     "EQUINOX_DYNAMO_TABLE"
 let [<Literal>] INDEX_TABLE =               "EQUINOX_DYNAMO_TABLE_INDEX"
 
-type Configuration(tryGet : string -> string option) =
+type Configuration(tryGet: string -> string option) =
 
     member val tryGet =                     tryGet
     member _.get key =                      match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
@@ -126,11 +127,11 @@ type [<RequireQualifiedAccess; NoComparison; NoEquality>]
 
 module TargetStoreArgs =
     
-    let connectTarget targetStore cache : Config.Store<_> =
+    let connectTarget targetStore cache : Store.Context<_> =
         match targetStore with
         | TargetStoreArgs.Cosmos a ->
             let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-            Config.Store.Cosmos (context, cache)
+            Store.Context.Cosmos (context, cache)
         | TargetStoreArgs.Dynamo a ->
             let context = a.Connect() |> DynamoStoreContext.create
-            Config.Store.Dynamo (context, cache)
+            Store.Context.Dynamo (context, cache)

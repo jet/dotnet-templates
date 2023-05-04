@@ -16,7 +16,7 @@ module Events =
         | Started of            {| epochId : ListEpochId |}
         | Snapshotted of        {| active : ListEpochId |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Store.EventCodec.gen<Event>, Store.EventCodec.genJsonElement<Event>
 
 module Fold =
 
@@ -48,10 +48,10 @@ type Service internal (resolve : unit -> Equinox.Decider<Events.Event, Fold.Stat
         let decider = resolve ()
         decider.Transact(interpret epochId, load = Equinox.AllowStale)
 
-module Config =
+module Factory =
 
     let private (|Category|) = function
-        | Config.Store.Memory store -> Config.Memory.create Events.codec Fold.initial Fold.fold store
-        | Config.Store.Cosmos (context, cache) ->
-            Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create (Category cat) = Service(streamId >> Config.resolveDecider cat Category)
+        | Store.Context.Memory store -> Store.Memory.create Events.codec Fold.initial Fold.fold store
+        | Store.Context.Cosmos (context, cache) ->
+            Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+    let create (Category cat) = Service(streamId >> Store.resolveDecider cat Category)

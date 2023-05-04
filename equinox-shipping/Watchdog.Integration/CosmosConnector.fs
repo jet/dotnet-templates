@@ -27,5 +27,5 @@ type CosmosConnector(connectionString, databaseId, containerId) =
         let storeCfg =
             let context = client |> CosmosStoreContext.create
             let cache = Equinox.Cache("Tests", sizeMb = 10)
-            Shipping.Domain.Config.Store.Cosmos (context, cache)
+            Shipping.Domain.Store.Context.Cosmos (context, cache)
         storeCfg, monitored

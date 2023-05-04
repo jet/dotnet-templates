@@ -6,7 +6,7 @@ open System
 
 type IndexerStackProps
     (   // DynamoDB Streams Source ARN (for Store Table)
-        storeStreamArn : string,
+        storeStreamArn: string,
 
         // DynamoDB Index Table Name
         indexTableName : string,

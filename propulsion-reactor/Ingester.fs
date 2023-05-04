@@ -3,12 +3,12 @@ module ReactorTemplate.Ingester
 [<RequireQualifiedAccess>]
 type Outcome =
     /// Handler processed the span, with counts of used vs unused known event types
-    | Ok of used : int * unused : int
+    | Ok of used: int * unused: int
     /// Handler processed the span, but idempotency checks resulted in no writes being applied; includes count of decoded events
-    | Skipped of count : int
+    | Skipped of count: int
     /// Handler determined the events were not relevant to its duties and performed no actions
     /// e.g. wrong category, events that dont imply a state change
-    | NotApplicable of count : int
+    | NotApplicable of count: int
 
 /// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
@@ -41,25 +41,25 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 #if blank
 let reactionCategories = [| "Todos" |]
     
-let handle stream (span : Propulsion.Sinks.Event[]) = async {
+let handle stream (span: Propulsion.Sinks.Event[]) = async {
     match stream, span with
     | FsCodec.StreamName.CategoryAndId ("Todos", id), _ ->
         let ok = true
         // "TODO: add handler code"
         match ok with
-        | true -> return struct (Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, span.Length - 1))
+        | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, span.Length - 1)
         | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped span.Length
     | _ -> return Propulsion.Streams.AllProcessed, Outcome.NotApplicable span.Length }
 #else
 // map from external contract to internal contract defined by the aggregate
-let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryData =
+let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData =
     { items =
         [| for x in x.items ->
             { id = x.id; order = x.order; title = x.title; completed = x.completed } |] }
 
 let reactionCategories = [| Todo.Reactions.Category |]
 
-let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service) stream span = async {
+let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) stream span = async {
     match stream, span with
     | Todo.Reactions.Parse (clientId, events) when events |> Seq.exists Todo.Reactions.impliesStateChange ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
@@ -71,10 +71,10 @@ let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service)
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
+    static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead,
                             ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig
+        SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig

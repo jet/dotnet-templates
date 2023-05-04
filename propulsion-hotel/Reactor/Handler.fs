@@ -56,19 +56,19 @@ let private handle (processor : GroupCheckoutProcess.Service) stream _events = a
         return failwithf "Span from unexpected category %A" other }
 
 let private createService store =
-    let stays = GuestStay.Config.create store
-    let checkouts = GroupCheckout.Config.create store
+    let stays = GuestStay.Factory.create store
+    let checkouts = GroupCheckout.Factory.create store
     GroupCheckoutProcess.Service(stays, checkouts, checkoutParallelism = 5)
         
 let create store =
     createService store |> handle
             
-type Config private () =
+type Factory private () =
     
-    static member StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead : int,
+    static member StartSink(log, stats, maxConcurrentStreams, handle,maxReadAhead,
                             ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
-        Infrastructure.SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig
+        Infrastructure.SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig

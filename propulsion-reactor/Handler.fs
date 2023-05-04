@@ -4,11 +4,11 @@ module ReactorTemplate.Handler
 [<RequireQualifiedAccess>]
 type Outcome =
     /// Handler processed the span, with counts of used vs unused known event types
-    | Ok of used : int * unused : int
+    | Ok of used: int * unused: int
     /// Handler processed the span, but idempotency checks resulted in no writes being applied; includes count of decoded events
-    | Skipped of count : int
+    | Skipped of count: int
     /// Handler determined the events were not relevant to its duties and performed no decoding or processing
-    | NotApplicable of count : int
+    | NotApplicable of count: int
 
 /// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
@@ -49,7 +49,7 @@ let generate stream version summary =
 let reactionCategories = [| Contract.Input.Category |]
     
 let handle
-        (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
+        (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         stream span = async {
     match stream, span with
     | Contract.Input.Parse (_clientId, events) ->
@@ -66,8 +66,8 @@ let handle
 let categories = [| Todo.Reactions.Category |]
     
 let handle
-        (service : Todo.Service)
-        (produceSummary : Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
+        (service: Todo.Service)
+        (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         stream span = async {
     match stream, span with
     | Todo.Reactions.Parse (clientId, events) ->
@@ -83,12 +83,11 @@ let handle
 
 type Config private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Propulsion.Streams.Scheduling.Stats<_, _>, maxConcurrentStreams : int,
-                            handle : _ -> _ -> Async<_>,
-                            maxReadAhead : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+    static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead,
+                            ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink categories sourceConfig
+        SourceConfig.start (log, Store.log) sink categories sourceConfig
 //#endif

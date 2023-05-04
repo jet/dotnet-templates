@@ -6,8 +6,8 @@ open FsCheck.Xunit
 open System
 
 let runCheckoutScenario store (paymentId, id, NonEmptyArray stays, payBefore) checkWithRetry = async {
-    let staysService = GuestStay.Config.create store
-    let checkoutService = GroupCheckout.Config.create store            
+    let staysService = GuestStay.Factory.create store
+    let checkoutService = GroupCheckout.Factory.create store            
     let mutable charged = 0
     for stayId, chargeId, PositiveInt amount in stays do
         charged <- charged + amount

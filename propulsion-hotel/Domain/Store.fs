@@ -1,7 +1,7 @@
-module Domain.Config
+module Domain.Store
 
 [<RequireQualifiedAccess; NoComparison; NoEquality>]
-type Store =
+type Context =
     | Memory of Equinox.MemoryStore.VolatileStore<struct (int * System.ReadOnlyMemory<byte>)>
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
     | Mdb    of Equinox.MessageDb.MessageDbContext * Equinox.Core.ICache

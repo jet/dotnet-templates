@@ -25,13 +25,13 @@ type SourceConfig =
         * tailSleepInterval : TimeSpan
         * statsInterval : TimeSpan
 and [<NoEquality; NoComparison>] CosmosFeedConfig =
-    | Ephemeral of processorName : string
-    | Persistent of processorName : string * startFromTail : bool * maxItems : int option * lagFrequency : TimeSpan
+    | Ephemeral of processorName: string
+    | Persistent of processorName: string * startFromTail : bool * maxItems : int option * lagFrequency : TimeSpan
 
 module SourceConfig =
     module Memory =
         open Propulsion.MemoryStore
-        let start log (sink: Propulsion.Sinks.Sink) (categories : string array)
+        let start log (sink: Propulsion.Sinks.Sink) (categories: string[])
             (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source = MemoryStoreSource(log, store, categories, sink)
             source.Start(), Some (fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false))

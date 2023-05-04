@@ -58,7 +58,7 @@ let handle
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
-type Config private () =
+type Factory private () =
     
     static member private StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
                                     ?wakeForResults, ?idleDelay, ?purgeInterval) =
@@ -68,11 +68,11 @@ type Config private () =
     static member StartSink(log, stats, maxConcurrentStreams, manager : FinalizationProcess.Manager, processingTimeout,
                             maxReadAhead, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         let handle = handle processingTimeout manager.Pump
-        Config.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead,
+        Factory.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead,
                          ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
         
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig
+        SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig
         
     static member CreateDynamoSource(log, sink, sourceArgs, trancheIds) =
-        SourceConfig.Dynamo.create (log, Config.log) sink reactionCategories sourceArgs (Some trancheIds)
+        SourceConfig.Dynamo.create (log, Store.log) sink reactionCategories sourceArgs (Some trancheIds)

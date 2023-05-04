@@ -29,7 +29,7 @@ module TicketsCheckpoint =
     let toPosition (x : TicketsCheckpoint) : Propulsion.Feed.Position = %x
     let toStreamIndex (x : TicketsCheckpoint) : int64 = %x
 
-type ItemDto = { id : TicketId; payload : string }
+type ItemDto = { id : TicketId; payload: string }
 type SliceDto = { closed : bool; tickets : ItemDto[]; position : TicketsCheckpoint; checkpoint : TicketsCheckpoint }
 
 type Session(client: HttpClient) =

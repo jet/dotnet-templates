@@ -113,10 +113,10 @@ let build (args : Args.Arguments) =
         let store =
             let context = client |> CosmosStoreContext.create
             let cache = Equinox.Cache(AppName, sizeMb = 10)
-            Config.Store.Cosmos (context, cache)
+            Store.Context.Cosmos (context, cache)
         let stats = Reactor.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-        let handle = Reactor.Config.createHandler store
-        Reactor.Config.StartSink(Log.Logger, stats, maxConcurrentStreams, handle, maxReadAhead)
+        let handle = Reactor.Factory.createHandler store
+        Reactor.Factory.StartSink(Log.Logger, stats, maxConcurrentStreams, handle, maxReadAhead)
     let source =
         let parseFeedDoc = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumCategoryEvents Reactor.reactionCategories
         let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect parseFeedDoc)

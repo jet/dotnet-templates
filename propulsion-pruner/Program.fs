@@ -4,7 +4,7 @@ open Propulsion.CosmosStore
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -169,7 +169,7 @@ let build (args : Args.Arguments, log : ILogger) =
         if (target.DatabaseId, target.ContainerId) = (archive.DatabaseId, archive.ContainerId) then
             missingArg "Danger! Can not prune a target based on itself"
         let context = target.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
+        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
         CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
     let source =
         let observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)

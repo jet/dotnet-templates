@@ -11,7 +11,7 @@
         <None Include="README.md" />
         <!--#endif-->
         <Compile Include="Infrastructure.fs" />
-        <Compile Include="Config.fs" />
+        <Compile Include="Store.fs" />
         <Compile Include="SourceConfig.fs" />
         <!--#if (!blank) -->
         <Compile Include="Todo.fs" />

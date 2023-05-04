@@ -10,7 +10,7 @@ module Contract =
     let [<Literal>] Category = "TodoSummary"
 
     /// A single Item in the list
-    type ItemInfo = { id : int; order : int; title : string; completed : bool }
+    type ItemInfo = { id : int; order : int; title: string; completed : bool }
 
     /// All data summarized for Summary Event Stream
     type SummaryInfo = { items : ItemInfo[] }
@@ -20,7 +20,7 @@ module Contract =
         interface TypeShape.UnionContract.IUnionContract
     type VersionAndMessage = int64*Message
     // We also want the index (which is the Version of the Summary) whenever we're handling an event
-    let private codec : FsCodec.IEventCodec<VersionAndMessage, _, _> = Config.EventCodec.withIndex<Message>
+    let private codec : FsCodec.IEventCodec<VersionAndMessage, _, _> = Store.EventCodec.withIndex<Message>
     let [<return: Struct>] (|DecodeNewest|_|) (stream, span : Propulsion.Sinks.Event[]) : VersionAndMessage voption =
         span |> Seq.rev |> Seq.tryPickV (EventCodec.tryDecode codec stream)
     let [<return: Struct>] (|StreamName|_|) = function

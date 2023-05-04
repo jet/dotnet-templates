@@ -11,12 +11,12 @@ type Service internal (ingester : ExactlyOnceIngester.Service<_, _, _, _>) =
     member _.ActiveIngestionEpochId() =
         ingester.ActiveIngestionEpochId()
 
-module Config =
+module Factory =
 
     let create_ linger maxItemsPerEpoch store =
         let log = Serilog.Log.ForContext<Service>()
-        let series = ListSeries.Config.create store
-        let epochs = ListEpoch.Config.create maxItemsPerEpoch store
+        let series = ListSeries.Factory.create store
+        let epochs = ListEpoch.Factory.create maxItemsPerEpoch store
         let ingester = ExactlyOnceIngester.create log linger (series.ReadIngestionEpochId, series.MarkIngestionEpochId) (epochs.Ingest, Array.toSeq)
         Service(ingester)
     let create store =

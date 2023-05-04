@@ -1,4 +1,4 @@
-module ConsumerTemplate.Config
+module ConsumerTemplate.Store
 
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider cat = Equinox.Decider.resolve log cat
@@ -14,5 +14,5 @@ module Cosmos =
         createCached codec initial fold accessStrategy (context, cache)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type Store =
+type Context =
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache

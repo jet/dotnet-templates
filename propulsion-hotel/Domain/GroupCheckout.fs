@@ -24,7 +24,7 @@ module Events =
         /// Records confirmation of completion of the group checkout. No further Stays can be Selected, nor should any balance be outstanding
         | Confirmed of          {| at : DateTimeOffset |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Config.EventCodec.gen<Event>
+    let codec = Store.EventCodec.gen<Event>
 
 module Fold =
 
@@ -116,13 +116,13 @@ type Service internal (resolve : GroupCheckoutId -> Equinox.Decider<Events.Event
         let decider = resolve groupCheckoutId
         decider.Query(Flow.nextAction)
 
-module Config =
+module Factory =
 
-    let private (|StoreCat|) = function
-        | Config.Store.Memory store ->
-            Config.Memory.create Events.codec Fold.initial Fold.fold store
-        | Config.Store.Dynamo (context, cache) ->
-            Config.Dynamo.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-        | Config.Store.Mdb (context, cache) ->
-            Config.Mdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (StoreCat cat) = streamId >> Config.resolve cat Category |> Service
+    let private (|Category|) = function
+        | Store.Context.Memory store ->
+            Store.Memory.create Events.codec Fold.initial Fold.fold store
+        | Store.Context.Dynamo (context, cache) ->
+            Store.Dynamo.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+        | Store.Context.Mdb (context, cache) ->
+            Store.Mdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = streamId >> Store.resolve cat Category |> Service

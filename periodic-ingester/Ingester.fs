@@ -25,7 +25,7 @@ type Stats(log, statsInterval, stateInterval) =
             log.Information(" Changed {changed} Unchanged {skipped} Stale {stale}", changed, unchanged, stale)
             stale <- 0; unchanged <- 0; changed <- 0
 
-type TicketData = { lastUpdated : DateTimeOffset; body : string }
+type TicketData = { lastUpdated: DateTimeOffset; body: string }
 
 module PipelineEvent =
 
@@ -38,10 +38,10 @@ module PipelineEvent =
     (* Each item per stream is represented as an event; if multiple events have been found for a given stream, they are delivered together *)
 
     let private dummyEventData = let dummyEventType, noBody = "eventType", Unchecked.defaultof<_> in FsCodec.Core.EventData.Create(dummyEventType, noBody)
-    let sourceItemOfTicketIdAndData struct (id : TicketId, data : TicketData) : Propulsion.Feed.SourceItem<Propulsion.Sinks.EventBody> =
+    let sourceItemOfTicketIdAndData struct (id: TicketId, data: TicketData): Propulsion.Feed.SourceItem<Propulsion.Sinks.EventBody> =
         { streamName = streamName id; eventData = dummyEventData; context = box data }
     let [<return: Struct>] (|TicketEvents|_|) = function
-        | StreamName ticketId, (s : Propulsion.Sinks.Event[]) ->
+        | StreamName ticketId, (s: Propulsion.Sinks.Event[]) ->
             ValueSome (ticketId, s |> Seq.map (fun e -> Unchecked.unbox<TicketData> e.Context))
         | _ -> ValueNone
 
@@ -53,7 +53,7 @@ let handle stream span = async {
     | x -> return failwithf "Unexpected stream %O" x
 }
 
-type Config private () =
+type Factory private () =
     
-    static member StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead) =
+    static member StartSink(log: Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats)

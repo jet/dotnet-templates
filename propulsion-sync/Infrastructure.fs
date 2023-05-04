@@ -5,13 +5,13 @@ open Serilog
 open Serilog.Events
 open System
 
-module Config =
+module Store =
 
     let log = Log.ForContext("isMetric", true)
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 module Log =
 
@@ -47,7 +47,7 @@ type Equinox.CosmosStore.CosmosStoreConnector with
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
@@ -55,7 +55,7 @@ module CosmosStoreContext =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, verbose, verboseStore, ?maybeSeqEndpoint) =
+    static member Configure(configuration: LoggerConfiguration, verbose, verboseStore, ?maybeSeqEndpoint) =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose then c.MinimumLevel.Debug() else c
@@ -65,7 +65,7 @@ type Logging() =
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
                      .MinimumLevel.Override(typeof<Propulsion.EventStore.Internal.Writer.Result>.FullName, generalLevel)
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
-                    let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+                    let configure (a: Configuration.LoggerSinkConfiguration): unit =
                         a.Logger(fun l ->
                             l.WriteTo.Sink(Equinox.EventStore.Log.InternalMetrics.Stats.LogSink())
                              .WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink()) |> ignore) |> ignore

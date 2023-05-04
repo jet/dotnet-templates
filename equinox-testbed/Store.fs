@@ -1,4 +1,4 @@
-module TestbedTemplate.Config
+module TestbedTemplate.Store
 
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider cat = Equinox.Decider.resolve log cat
@@ -31,7 +31,7 @@ module Esdb =
         Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, ?caching = cacheStrategy, ?access = accessStrategy)
 
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
-type Store =
+type Context =
 //#if (memoryStore || (!cosmos && !eventStore))
     | Memory of Equinox.MemoryStore.VolatileStore<obj>
 //#endif

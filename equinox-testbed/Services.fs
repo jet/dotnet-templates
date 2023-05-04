@@ -22,7 +22,7 @@ module Domain =
                 | Favorited                             of Favorited
                 | Unfavorited                           of Unfavorited
                 interface TypeShape.UnionContract.IUnionContract
-            let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJe<Event>
+            let codec, codecJe = Store.EventCodec.gen<Event>, Store.EventCodec.genJe<Event>
 
         module Fold =
 
@@ -76,29 +76,29 @@ module Domain =
                 decider.Query id
 
         let create cat =
-            streamId >> Config.createDecider cat Category |> Service
+            streamId >> Store.createDecider cat Category |> Service
 
-        module Config =
+        module Factory =
 
             let snapshot = Fold.isOrigin, Fold.toSnapshot
             let private (|Category|) = function
 //#if memoryStore || (!cosmos && !eventStore)
-                | Config.Store.Memory store ->
-                    Config.Memory.create Events.codec Fold.initial Fold.fold store
+                | Store.Context.Memory store ->
+                    Store.Memory.create Events.codec Fold.initial Fold.fold store
 //#endif
 //#if cosmos
-                | Config.Store.Cosmos (context, caching, unfolds) ->
+                | Store.Context.Cosmos (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot snapshot else Equinox.CosmosStore.AccessStrategy.Unoptimized
-                    Config.Cosmos.create Events.codecJe Fold.initial Fold.fold caching accessStrategy context
+                    Store.Cosmos.create Events.codecJe Fold.initial Fold.fold caching accessStrategy context
 //#endif
 //#if eventStore
-                | Config.Store.Esdb (context, caching, unfolds) ->
+                | Store.Context.Esdb (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.EventStoreDb.AccessStrategy.RollingSnapshots snapshot |> Some else None
-                    Config.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context
+                    Store.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context
 //#endif
-            let create (Category cat) = streamId >> Config.createDecider cat Category |> Service
+            let create (Category cat) = streamId >> Store.createDecider cat Category |> Service
 
 open Microsoft.Extensions.DependencyInjection
 
 let register (services : IServiceCollection, storageConfig) =
-    services.AddSingleton(Domain.Favorites.Config.create storageConfig) |> ignore
+    services.AddSingleton(Domain.Favorites.Factory.create storageConfig) |> ignore

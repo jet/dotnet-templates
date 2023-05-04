@@ -4,13 +4,13 @@ module ArchiverTemplate.Infrastructure
 open Serilog
 open System
 
-module Config =
+module Store =
 
     let log = Log.ForContext("isMetric", true)
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 module Log =
 

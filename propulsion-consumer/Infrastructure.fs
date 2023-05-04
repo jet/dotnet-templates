@@ -15,7 +15,7 @@ module EventCodec =
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 type FSharp.Control.Async with
     static member AwaitTaskCorrect (task : Task<'T>) : Async<'T> =

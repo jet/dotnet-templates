@@ -13,7 +13,7 @@ type SourceConfig =
         * batchSizeCutoff : int
         * tailSleepInterval : TimeSpan
         * statsInterval : TimeSpan
-    | Mdb of connectionString : string
+    | Mdb of connectionString: string
         * checkpoints : Propulsion.Feed.IFeedCheckpointStore
         * startFromTail : bool
         * batchSize : int
@@ -23,7 +23,7 @@ type SourceConfig =
 module SourceConfig =
     module Memory =
         open Propulsion.MemoryStore
-        let start log (sink: Propulsion.Sinks.Sink) (categories : string array)
+        let start log (sink: Propulsion.Sinks.Sink) (categories: string[])
             (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source = MemoryStoreSource(log, store, categories, sink)
             source.Start(), Some (fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false))
