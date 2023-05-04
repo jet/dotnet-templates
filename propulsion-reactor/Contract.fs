@@ -25,7 +25,7 @@ module Input =
         | EventA of Value
         | EventB of Value
         interface TypeShape.UnionContract.IUnionContract
-    let private codec: FsCodec.IEventCodec<_, _, _> = Config.EventCodec.withIndex<Event>
+    let private codec: FsCodec.IEventCodec<_, _, _> = Store.EventCodec.withIndex<Event>
 
     open Propulsion.Internal
     let (|Decode|) (stream, span: Propulsion.Sinks.Event[]) =

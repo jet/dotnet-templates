@@ -156,7 +156,7 @@ let build (args: Args.Arguments) =
     let sink = Propulsion.Kafka.ParallelProducerSink.Start(maxReadAhead, maxConcurrentProcessors, Handler.render, producer, args.StatsInterval)
 #else // kafka && !parallelOnly
     let stats = Handler.ProductionStats(Log.Logger, args.StatsInterval, args.StateInterval)
-    let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentProcessors, Handler.render, producer, stats, statsInterval = args.StatsInterval)
+    let sink = Propulsion.Kafka.StreamsProducerSink.Start(Log.Logger, maxReadAhead, maxConcurrentProcessors, Handler.render, producer, stats)
 #endif // kafka && !parallelOnly
 #else // !kafka
     let stats = Handler.Stats(Log.Logger, args.StatsInterval, args.StateInterval)

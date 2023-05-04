@@ -9,13 +9,14 @@ open System
 module Events =
 
     type Categorization =
-        | NonTerminal of System.DateTimeOffset
+        | NonTerminal of DateTimeOffset
         | Terminal
     let createCategorizationCodec isTerminalEvent =
         let tryDecode (encoded: FsCodec.ITimelineEvent<ReadOnlyMemory<byte>>) =
             ValueSome (if isTerminalEvent encoded then Terminal else NonTerminal encoded.Timestamp)
         let encode _ = failwith "Not Implemented"
         let mapCausation () _ = failwith "Not Implemented"
+        // This is the only Create overload that exposes the Event info we need at present
         FsCodec.Codec.Create<Categorization, _, unit>(encode, tryDecode, mapCausation)
 
 module Fold =

@@ -296,14 +296,14 @@ let build (args: Args.Arguments) =
             Propulsion.Sinks.Event.renderedSize, Propulsion.Sinks.Event.eventSize)
 #endif // !sourceKafka && kafka && !blank
 #else // !sourceKafka && !kafka (i.e., ingester)
-        Ingester.Config.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, purgeInterval = args.PurgeInterval)
+        Ingester.Factory.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, purgeInterval = args.PurgeInterval)
 #endif // !sourceKafka && !kafka
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig log consumerGroupName
 #if kafka        
-        Handler.Config.StartSource(log, sink, sourceConfig)
+        Handler.Factory.StartSource(log, sink, sourceConfig)
 #else
-        Ingester.Config.StartSource(log, sink, sourceConfig)
+        Ingester.Factory.StartSource(log, sink, sourceConfig)
 #endif
     [|  source.AwaitWithStopOnCancellation()
         sink.AwaitWithStopOnCancellation()

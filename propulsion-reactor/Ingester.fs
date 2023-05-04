@@ -69,7 +69,7 @@ let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) s
     | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
 #endif
 
-type Config private () =
+type Factory private () =
     
     static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead,
                             ?wakeForResults, ?idleDelay, ?purgeInterval) =

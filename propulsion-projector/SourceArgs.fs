@@ -168,9 +168,9 @@ module Esdb =
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
     let private createCheckpointStore (consumerGroup, checkpointInterval): _ -> Propulsion.Feed.IFeedCheckpointStore = function
         | Store.Context.Cosmos (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
+            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
         | Store.Context.Dynamo (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
+            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]           Verbose
