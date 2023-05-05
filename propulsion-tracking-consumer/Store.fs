@@ -3,6 +3,11 @@ module ConsumerTemplate.Store
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider cat = Equinox.Decider.resolve log cat
 
+module Codec =
+
+    let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
+
 module Cosmos =
 
     let private createCached codec initial fold accessStrategy (context, cache) =

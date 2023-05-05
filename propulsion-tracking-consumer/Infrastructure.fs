@@ -17,24 +17,6 @@ module EnvVar =
 
     let tryGet varName: string option = System.Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module EventCodec =
-
-    /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x: Propulsion.Sinks.Event) =
-        match codec.TryDecode x with
-        | ValueNone ->
-            if Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                Log.ForContext("event", System.Text.Encoding.UTF8.GetString(let d = x.Data in d.Span), true)
-                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
-            ValueNone
-        | x -> x
-
-    open FsCodec.SystemTextJson
-
-    let private defaultOptions = Options.Create()
-    let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>(options = defaultOptions)
-
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(connectionName, databaseId, containerId) =

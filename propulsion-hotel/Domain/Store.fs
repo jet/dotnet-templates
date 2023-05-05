@@ -1,21 +1,14 @@
 module Domain.Store
 
-[<RequireQualifiedAccess; NoComparison; NoEquality>]
-type Context =
-    | Memory of Equinox.MemoryStore.VolatileStore<struct (int * System.ReadOnlyMemory<byte>)>
-    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-    | Mdb    of Equinox.MessageDb.MessageDbContext * Equinox.Core.ICache
-
 let log = Serilog.Log.ForContext("isMetric", true)
 let resolve cat = Equinox.Decider.resolve log cat
 
-module EventCodec =
+module Codec =
 
     open FsCodec.SystemTextJson
 
-    let private defaultOptions = Options.Create()
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>(options = defaultOptions)
+        Codec.Create<'t>() // options = Options.Default
 
 module Memory =
 
@@ -47,3 +40,9 @@ module Mdb =
     let createUnoptimized codec initial fold (context, cache) =
         let accessStrategy = None
         create codec initial fold accessStrategy (context, cache)
+
+[<RequireQualifiedAccess; NoComparison; NoEquality>]
+type Context =
+    | Memory of Equinox.MemoryStore.VolatileStore<struct (int * System.ReadOnlyMemory<byte>)>
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
+    | Mdb    of Equinox.MessageDb.MessageDbContext * Equinox.Core.ICache

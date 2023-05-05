@@ -261,7 +261,7 @@ let build (args: Args.Arguments) =
 #if blank // kafka && blank
     let handle = Handler.handle produceSummary
 #else // kafka && !blank
-    let srcService = Todo.Config.create store
+    let srcService = Todo.Factory.create store
     let handle = Handler.handle srcService produceSummary
 #endif // kafka && !blank
 #else // !kafka (i.e., ingester)
@@ -291,9 +291,7 @@ let build (args: Args.Arguments) =
 #if blank // !sourceKafka && kafka && blank
         Handler.Factory.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, purgeInterval = args.PurgeInterval)
 #else // !sourceKafka && kafka && !blank
-        Propulsion.Sync.Factory.Start(
-            Log.Logger, maxReadAhead, maxConcurrentStreams, (fun sn ss ct -> Async.startImmediateAsTask ct (handle sn ss)), stats,
-            Propulsion.Sinks.Event.renderedSize, Propulsion.Sinks.Event.eventSize)
+        Propulsion.Sinks.Factory.StartConcurrentChunked(Log.Logger, maxReadAhead, maxConcurrentStreams, handle, stats, purgeInterval = args.PurgeInterval)
 #endif // !sourceKafka && kafka && !blank
 #else // !sourceKafka && !kafka (i.e., ingester)
         Ingester.Factory.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, purgeInterval = args.PurgeInterval)

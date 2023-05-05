@@ -3,15 +3,14 @@ module TestbedTemplate.Store
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider cat = Equinox.Decider.resolve log cat
 
-module EventCodec =
+module Codec =
 
     open FsCodec.SystemTextJson
 
-    let private defaultOptions = Options.Create()
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>(options = defaultOptions)
-    let genJe<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>(options = defaultOptions)
+        Codec.Create<'t>() // options = Options.Default
+    let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
+        CodecJsonElement.Create<'t>() // options = Options.Default
 
 module Memory =
 

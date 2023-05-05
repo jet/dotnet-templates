@@ -8,18 +8,6 @@ open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Threading
 
-module EventCodec =
-
-    /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : IEventCodec<_, _, _>) (log : ILogger) streamName (x: Propulsion.Sinks.Event) =
-        match codec.TryDecode x with
-        | ValueNone ->
-            if log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                log.ForContext("event", System.Text.Encoding.UTF8.GetString(let d = x.Data in d.Span), true)
-                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
-            ValueNone
-        | x -> x
-
 /// This more advanced sample shows processing >1 category of events, and maintaining derived state based on it
 // When processing streamwise, the handler is passed deduplicated spans of events per stream, with a guarantee of max 1
 // in-flight request per stream, which allows one to avoid having to consider any explicit concurrency management
@@ -50,13 +38,24 @@ module MultiStreams =
             /// Clearing of the list
             | Cleared
             interface TypeShape.UnionContract.IUnionContract
-        let codec = EventCodec.gen<Event>
-        let tryDecode = EventCodec.tryDecode codec
+            
+        module Reactions =
+
+            let dec = Streams.Codec.gen<Event>
+            let [<return: Struct>] (|StreamName|_|) = function
+                | FsCodec.StreamName.CategoryAndId (Category, id) -> ValueSome id
+                | _ -> ValueNone 
+            let [<return: Struct>] (|Parse|_|) = function
+                | struct (StreamName id, _) & Streams.Decode dec events -> ValueSome (id, events)
+                | _ -> ValueNone
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module Favorites =
 
         let [<Literal>] Category = "Favorites"
+        let [<return: Struct>] (|StreamName|_|) = function
+            | FsCodec.StreamName.CategoryAndId (Category, id) -> ValueSome id
+            | _ -> ValueNone 
 
         type Favorited =        { date: DateTimeOffset; skuId: SkuId }
         type Unfavorited =      { skuId: SkuId }
@@ -65,40 +64,42 @@ module MultiStreams =
             | Favorited         of Favorited
             | Unfavorited       of Unfavorited
             interface TypeShape.UnionContract.IUnionContract
-        let codec = EventCodec.gen<Event>
-        let tryDecode = EventCodec.tryDecode codec
+        
+        module Reactions =
+
+            let dec = Streams.Codec.gen<Event>
+            let [<return: Struct>] (|Parse|_|) = function
+                | struct (StreamName id, _) & Streams.Decode dec events -> ValueSome (id, events)
+                | _ -> ValueNone
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int
 
     // Maintains a denormalized view cache per stream (in-memory, unbounded). TODO: keep in a persistent store
     type InMemoryHandler() =
-        let log = Log.ForContext<InMemoryHandler>()
 
         // events are handled concurrently across streams. Only a single Handle call will be in progress at any time per stream
         let faves, saves = ConcurrentDictionary<string, HashSet<SkuId>>(), ConcurrentDictionary<string, SkuId list>()
 
         // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
-        let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) (streamName, span) =
-            let decode tryDecode = span |> Seq.chooseV (tryDecode log streamName) |> Array.ofSeq
-            match streamName with
-            | StreamName.CategoryAndId (Favorites.Category, id) ->
+        let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) = function
+            | Favorites.Reactions.Parse (id, events) ->
                 let s = match faves.TryGetValue id with true, value -> value | false, _ -> HashSet<SkuId>()
-                FavoritesEvents (id, s, decode Favorites.tryDecode)
-            | StreamName.CategoryAndId (SavedForLater.Category, id) ->
+                FavoritesEvents (id, s, events)
+            | SavedForLater.Reactions.Parse (id, events) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
-                SavedForLaterEvents (id, s, decode SavedForLater.tryDecode)
-            | StreamName.CategoryAndId (categoryName, _) -> OtherCategory (categoryName, Seq.length span)
+                SavedForLaterEvents (id, s, events)
+            | StreamName.CategoryAndId (categoryName, _), events -> OtherCategory struct (categoryName, Array.length events)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
         member _.Handle(streamName : StreamName, span : Propulsion.Sinks.Event[]) = async {
-            match streamName, span with
+            match struct (streamName, span) with
             | OtherCategory (cat, count) ->
                 return Propulsion.Sinks.StreamResult.AllProcessed, OtherCategory (cat, count)
             | FavoritesEvents (id, s, xs) ->
                 let folder (s : HashSet<_>) = function
                     | Favorites.Favorited e -> s.Add(e.skuId) |> ignore; s
                     | Favorites.Unfavorited e -> s.Remove(e.skuId) |> ignore; s
-                faves.[id] <- Array.fold folder s xs
+                faves[id] <- Array.fold folder s xs
                 return Propulsion.Sinks.StreamResult.AllProcessed, Faves xs.Length
             | SavedForLaterEvents (id, s, xs) ->
                 let remove (skus : SkuId seq) (s : _ list) =
@@ -111,7 +112,7 @@ module MultiStreams =
                     | SavedForLater.Added e -> add e.skus s
                     | SavedForLater.Removed e -> remove e.skus s
                     | SavedForLater.Merged e -> s |> remove [| for x in e.items -> x.skuId |] |> add [| for x in e.items -> x.skuId |]
-                saves.[id] <- (s, xs) ||> Array.fold folder
+                saves[id] <- (s, xs) ||> Array.fold folder
                 return Propulsion.Sinks.StreamResult.AllProcessed, Saves xs.Length
         }
 
@@ -162,7 +163,6 @@ module MultiMessages =
     type Message = Fave of Favorites.Event | Save of SavedForLater.Event | OtherCat of name: string * count : int | Unclassified of messageKey: string
 
     type Processor() =
-        let log = Log.ForContext<Processor>()
         let mutable favorited, unfavorited, saved, removed, cleared = 0, 0, 0, 0, 0
         let cats, keys = Stats.CatStats(), ConcurrentDictionary()
 
@@ -177,12 +177,14 @@ module MultiMessages =
 
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
         member private _.Interpret(streamName : StreamName, spanJson) : seq<Message> = seq {
-            let span = Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
-            let decode tryDecode wrap = Propulsion.Codec.NewtonsoftJson.RenderedSpan.enum span |> Seq.chooseV (fun struct (_s, e) -> e |> tryDecode log streamName |> ValueOption.map wrap)
-            match streamName with
-            | StreamName.CategoryAndId (Favorites.Category, _) -> yield! decode Favorites.tryDecode Fave
-            | StreamName.CategoryAndId (SavedForLater.Category, _) -> yield! decode SavedForLater.tryDecode Save
-            | StreamName.CategoryAndId (otherCategoryName, _) -> yield OtherCat (otherCategoryName, Seq.length span.e) }
+            let raw =
+                Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
+                |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.enum
+                |> Seq.map ValueTuple.snd
+            match struct (streamName, Array.ofSeq raw) with
+            | Favorites.Reactions.Parse (_, events) -> yield! events |> Seq.map Fave
+            | SavedForLater.Reactions.Parse (_, events) -> yield! events |> Seq.map Save
+            | StreamName.CategoryAndId (otherCategoryName, _), events -> yield OtherCat (otherCategoryName, events.Length) }
 
         // NB can be called in parallel, so must be thread-safe
         member x.Handle(streamName : StreamName, spanJson: string) =

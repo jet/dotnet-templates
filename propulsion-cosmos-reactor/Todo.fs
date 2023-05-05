@@ -1,7 +1,5 @@
 module ReactorTemplate.Todo
 
-open Propulsion.Internal
-
 let [<Literal>] Category = "Todos"
 let streamId = Equinox.StreamId.gen ClientId.toString
 let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
@@ -20,19 +18,19 @@ module Events =
         | Cleared       of ClearedData
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Store.EventCodec.genJe<Event>
+    let codec = Store.Codec.genJsonElement<Event>
 
 module Reactions =
 
-    let codec = Store.EventCodec.gen<Events.Event>
     let categories = [| Category |]
-    let (|Decode|) (stream, span : Propulsion.Sinks.Event[]) =
-        span |> Array.chooseV (EventCodec.tryDecode codec stream)
-    let [<return: Struct>] (|Parse|_|) = function
-        | (StreamName clientId, _) & Decode events -> ValueSome struct (clientId, events)
-        | _ -> ValueNone
+    
     /// Allows us to skip producing summaries for events that we know won't result in an externally discernable change to the summary output
-    let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
+    let private impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
+    
+    let dec = Streams.Codec.gen<Events.Event>
+    let [<return: Struct>] (|ImpliesStateChange|_|) = function
+        | struct (StreamName clientId, _) & Streams.Decode dec events when Array.exists impliesStateChange events -> ValueSome clientId
+        | _ -> ValueNone
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Fold =

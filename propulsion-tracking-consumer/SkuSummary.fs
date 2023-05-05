@@ -16,7 +16,7 @@ module Events =
         | Ingested of ItemData
         | Snapshotted of ItemData[]
         interface TypeShape.UnionContract.IUnionContract
-    let codec = EventCodec.gen<Event>
+    let codec = Store.Codec.gen<Event>
 
 module Fold =
 

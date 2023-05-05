@@ -18,7 +18,7 @@ module Events =
         | Added of          ItemIds
         | CarriedForward of Balance
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Store.EventCodec.gen<Event>, Store.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 
 module Fold =
 

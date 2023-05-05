@@ -24,7 +24,7 @@ module Events =
         /// Records confirmation of completion of the group checkout. No further Stays can be Selected, nor should any balance be outstanding
         | Confirmed of          {| at : DateTimeOffset |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Store.EventCodec.gen<Event>
+    let codec = Store.Codec.gen<Event>
 
 module Fold =
 

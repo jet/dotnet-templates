@@ -17,7 +17,7 @@ module Events =
         /// Notes checkout is being effected via a GroupCheckout. Marks stay complete equivalent to typical CheckedOut event
         | TransferredToGroup of {| at : DateTimeOffset; groupId : GroupCheckoutId; residualBalance : decimal |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Store.EventCodec.gen<Event>
+    let codec = Store.Codec.gen<Event>
 
 module Fold =
 

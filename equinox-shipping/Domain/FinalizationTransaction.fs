@@ -27,7 +27,7 @@ module Events =
         | Assigning of {| container: ContainerId; shipments: ShipmentId[] |}
         | Assigned  of {| container: ContainerId; shipments: ShipmentId[] |}
         | Completed of {| success: bool |}
-    let codec, codecJe = Store.EventCodec.gen<Event>, Store.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 
 module Reactions =
 

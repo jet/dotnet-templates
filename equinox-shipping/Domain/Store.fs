@@ -4,7 +4,7 @@ module Shipping.Domain.Store
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider cat = Equinox.Decider.resolve log cat
 
-module EventCodec =
+module Codec =
 
     open FsCodec.SystemTextJson
 

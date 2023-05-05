@@ -20,17 +20,24 @@ module EnvVar =
 
     let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module EventCodec =
+module Streams =
 
-    /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x: Propulsion.Sinks.Event) =
-        match codec.TryDecode x with
-        | ValueNone ->
-            if Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                Log.ForContext("event", System.Text.Encoding.UTF8.GetString(let d = x.Data in d.Span), true)
-                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
+    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
+    // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
+    let private tryDecode<'E> (codec : Propulsion.Sinks.Codec<'E>) (streamName : FsCodec.StreamName) event =
+        match codec.TryDecode event with
+        | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
+            Log.ForContext("eventData", renderBody event.Data)
+                .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
             ValueNone
         | x -> x
+    let (|Decode|) codec struct (stream, events: Propulsion.Sinks.Event[]) : 'E[] =
+        events |> Propulsion.Internal.Array.chooseV (tryDecode codec stream)
+        
+    module Codec =
+        
+        let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
+            FsCodec.SystemTextJson.Codec.Create<'E>() // options = Options.Default
 
 module Log =
 

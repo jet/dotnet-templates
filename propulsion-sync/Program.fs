@@ -500,11 +500,11 @@ let build (args: Args.Arguments, log) =
                             span
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
                             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
-                        return struct (FsCodec.StreamName.toString stream, value) }
-                    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic, degreeOfParallelism=producers)
+                        return FsCodec.StreamName.toString stream, value }
+                    let producer = Propulsion.Kafka.Producer(Log.Logger, AppName, broker, Confluent.Kafka.Acks.All, topic, degreeOfParallelism = producers)
                     let stats = Stats(Log.Logger, args.StatsInterval, args.StateInterval)
                     StreamsProducerSink.Start(
-                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, stats, statsInterval = args.StatsInterval, maxBytes = maxBytes, maxEvents = maxEvents),
+                        Log.Logger, args.MaxReadAhead, args.MaxWriters, render, producer, stats, maxBytes = maxBytes, maxEvents = maxEvents),
                     args.CategoryFilterFunction(longOnly=true)
                 | None ->
 #endif

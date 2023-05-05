@@ -12,7 +12,7 @@ module Events =
         | Closed
         | Snapshotted of        {| ids: ItemId[]; closed: bool |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Store.EventCodec.gen<Event>, Store.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 
 module Fold =
 

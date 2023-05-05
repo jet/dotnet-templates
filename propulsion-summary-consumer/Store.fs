@@ -3,19 +3,10 @@ module ConsumerTemplate.Store
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider cat = Equinox.Decider.resolve log cat
 
-module EventCodec =
+module Codec =
 
-    open FsCodec.SystemTextJson
-
-    let private serdes = Serdes.Default
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>(serdes = serdes)
-    let private withUpconverter<'c, 'e when 'c :> TypeShape.UnionContract.IUnionContract> up : FsCodec.IEventCodec<'e, _, _> =
-        let down (_ : 'e) = failwith "Unexpected"
-        Codec.Create<'e, 'c, _>(up, down, serdes = serdes)
-    let withIndex<'c when 'c :> TypeShape.UnionContract.IUnionContract> : FsCodec.IEventCodec<int64 * 'c, _, _> =
-        let up (raw : FsCodec.ITimelineEvent<_>) e = raw.Index, e
-        withUpconverter<'c, int64 * 'c> up
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 module Cosmos =
 

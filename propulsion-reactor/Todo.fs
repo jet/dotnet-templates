@@ -20,19 +20,24 @@ module Events =
         | Cleared       of ClearedData
         | Snapshotted   of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Store.EventCodec.gen<Event>, Store.EventCodec.genJe<Event>
+    let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 
 module Reactions =
 
-    let [<Literal>] Category = Category
-    let (|Decode|) (stream, span: Propulsion.Sinks.Event[]) =
-        span |> Array.chooseV (EventCodec.tryDecode Events.codec stream)
-    let [<return: Struct>] (|Parse|_|) = function
-        | (StreamName clientId, _) & Decode events -> ValueSome struct (clientId, events)
-        | _ -> ValueNone
-
+    let categories = [| Category |]
+    
     /// Allows us to skip producing summaries for events that we know won't result in an externally discernable change to the summary output
-    let impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
+    let private impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
+    
+    let private dec = Streams.Codec.gen<Events.Event>
+    let [<return: Struct>] private (|Parse|_|) = function
+        | struct (StreamName clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
+        | _ -> ValueNone
+    let (|ImpliesStateChange|NoStateChange|NotApplicable|) = function
+        | Parse (clientId, events) ->
+            if events |> Array.exists impliesStateChange then ImpliesStateChange (clientId, events.Length)
+            else NoStateChange (clientId, events)
+        | _, events -> NotApplicable events.Length
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
 module Fold =

@@ -19,7 +19,7 @@ module Events =
         | Closed
         | Snapshotted of {| ids: TicketId[]; closed: bool |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Store.EventCodec.gen<Event>
+    let codec = Store.Codec.gen<Event>
 
 let itemId (x: Events.Item): TicketId = x.id
 let (|ItemIds|): Events.Item[] -> TicketId[] = Array.map itemId

@@ -39,11 +39,12 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
         logExternalStats |> Option.iter (fun dumpTo -> dumpTo log)
 
 #if blank
-let reactionCategories = [| "Todos" |]
+let [<Literal>] Category = "Todos"
+let reactionCategories = [| Category |]
     
 let handle stream (span: Propulsion.Sinks.Event[]) = async {
     match stream, span with
-    | FsCodec.StreamName.CategoryAndId ("Todos", id), _ ->
+    | FsCodec.StreamName.CategoryAndId (Category, id), _ ->
         let ok = true
         // "TODO: add handler code"
         match ok with
@@ -57,15 +58,15 @@ let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData
         [| for x in x.items ->
             { id = x.id; order = x.order; title = x.title; completed = x.completed } |] }
 
-let reactionCategories = [| Todo.Reactions.Category |]
+let reactionCategories = Todo.Reactions.categories
 
 let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) stream span = async {
-    match stream, span with
-    | Todo.Reactions.Parse (clientId, events) when events |> Seq.exists Todo.Reactions.impliesStateChange ->
+    match struct (stream, span) with
+    | Todo.Reactions.ImpliesStateChange (clientId, eventCount) ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
-        | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, span.Length - 1)
-        | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped span.Length
+        | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
+        | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped eventCount
     | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
 #endif
 

@@ -12,7 +12,7 @@ module Events =
         | Revoked
         | Snapshotted of {| reservation: TransactionId option; association: ContainerId option |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Store.EventCodec.gen<Event>, Store.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 
 module Fold =
 

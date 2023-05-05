@@ -12,7 +12,7 @@ module Events =
     type Event =
         | Ingested of IngestedData
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Store.EventCodec.genJe<Event>
+    let codec = Store.Codec.genJsonElement<Event>
 
 module Fold =
 

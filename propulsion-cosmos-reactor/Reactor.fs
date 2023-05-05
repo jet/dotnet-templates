@@ -32,8 +32,8 @@ let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryD
 let reactionCategories = Todo.Reactions.categories
 
 let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service) stream events = async {
-    match stream, events with
-    | Todo.Reactions.Parse (clientId, events) when events |> Seq.exists Todo.Reactions.impliesStateChange ->
+    match struct (stream, events) with
+    | Todo.Reactions.ImpliesStateChange clientId  ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
         | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, events.Length - 1)

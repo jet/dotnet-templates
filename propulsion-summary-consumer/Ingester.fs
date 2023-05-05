@@ -2,12 +2,13 @@
 /// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
 module ConsumerTemplate.Ingester
 
-open Propulsion.Internal
-
 /// Defines the contract we share with the proReactor --'s published feed
 module Contract =
 
     let [<Literal>] Category = "TodoSummary"
+    let [<return: Struct>] (|StreamName|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId
+        | _ -> ValueNone
 
     /// A single Item in the list
     type ItemInfo = { id : int; order : int; title: string; completed : bool }
@@ -18,16 +19,12 @@ module Contract =
     type Message =
         | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
-    type VersionAndMessage = int64*Message
+        
     // We also want the index (which is the Version of the Summary) whenever we're handling an event
-    let private codec : FsCodec.IEventCodec<VersionAndMessage, _, _> = Store.EventCodec.withIndex<Message>
-    let [<return: Struct>] (|DecodeNewest|_|) (stream, span : Propulsion.Sinks.Event[]) : VersionAndMessage voption =
-        span |> Seq.rev |> Seq.tryPickV (EventCodec.tryDecode codec stream)
-    let [<return: Struct>] (|StreamName|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId
-        | _ -> ValueNone
-    let [<return: Struct>] (|MatchNewest|_|) = function
-        | (StreamName clientId, _) & DecodeNewest (version, update) -> ValueSome struct (clientId, version, update)
+    type VersionAndMessage = int64*Message
+    let private dec : Propulsion.Sinks.Codec<VersionAndMessage> = Streams.Codec.genWithIndex<Message>
+    let [<return: Struct>] (|Parse|_|) = function
+        | (StreamName clientId, _) & Streams.DecodeNewest dec (version, update) -> ValueSome struct (clientId, version, update)
         | _ -> ValueNone
 
 [<RequireQualifiedAccess>]
@@ -68,7 +65,7 @@ let map : Contract.Message -> TodoSummary.Events.SummaryData = function
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
 let ingest (service : TodoSummary.Service) stream (span : Propulsion.Sinks.Event[]) = async {
     match stream, span with
-    | Contract.MatchNewest (clientId, version, update) ->
+    | Contract.Parse (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with
         | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, span.Length - 1)
         | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped span.Length

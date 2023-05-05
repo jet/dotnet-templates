@@ -50,13 +50,13 @@ let handle maxDop stream span = async {
             do! Async.Sleep(TimeSpan.FromSeconds 1.)
             return if i % 3 = 1 then Some 42 else None
         })
-        let! results = Async.Parallel(maybeAccept, maxDegreeOfParallelism=maxDop)
+        let! results = Async.Parallel(maybeAccept, maxDegreeOfParallelism = maxDop)
         let ready = results |> Array.choose id
         let maybeAdd = ready |> Seq.mapi (fun i _x -> async {
             do! Async.Sleep(TimeSpan.FromSeconds 1.)
             return if i % 2 = 1 then Some 42 else None
         })
-        let! added = Async.Parallel(maybeAdd, maxDegreeOfParallelism=maxDop)
+        let! added = Async.Parallel(maybeAdd, maxDegreeOfParallelism = maxDop)
         let outcome = { added = Seq.length added; notReady = results.Length - ready.Length; dups = results.Length - ticketIds.Length }
         return Propulsion.Sinks.PartiallyProcessed ticketIds.Length, outcome
     | x -> return failwithf "Unexpected stream %O" x

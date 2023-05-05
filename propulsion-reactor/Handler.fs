@@ -46,7 +46,7 @@ let generate stream version summary =
     Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version event
 
 #if blank
-let reactionCategories = [| Contract.Input.Category |]
+let categories = [| Contract.Input.Category |]
     
 let handle
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
@@ -60,25 +60,25 @@ let handle
                 | Contract.Input.EventB { field = x } -> Contract.EventB { value = x }
             let wrapped = generate stream version summary
             let! _ = produceSummary wrapped in ()
-        return struct (Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (events.Length, 0))
+        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (events.Length, 0)
     | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
 #else
-let categories = [| Todo.Reactions.Category |]
+let categories = Todo.Reactions.categories
     
 let handle
         (service: Todo.Service)
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         stream span = async {
-    match stream, span with
-    | Todo.Reactions.Parse (clientId, events) ->
-        if events |> Seq.exists Todo.Reactions.impliesStateChange then
-            let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
-            let wrapped = generate stream version' (Contract.Summary summary)
-            let! _ = produceSummary wrapped
-            return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, events.Length - 1)
-        else
-            return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped events.Length
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
+    match struct (stream, span) with
+    | Todo.Reactions.ImpliesStateChange (clientId, eventCount) ->
+        let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
+        let wrapped = generate stream version' (Contract.Summary summary)
+        let! _ = produceSummary wrapped
+        return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
+    | Todo.Reactions.NoStateChange (_clientId, events) ->
+        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped events.Length
+    | Todo.Reactions.NotApplicable eventCount ->
+        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable eventCount }
 #endif
 
 type Factory private () =

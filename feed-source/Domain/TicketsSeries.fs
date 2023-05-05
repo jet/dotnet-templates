@@ -15,7 +15,7 @@ module Events =
         | Started of {| fcId: FcId; epochId: TicketsEpochId |}
         | Snapshotted of {| active: Map<FcId, TicketsEpochId> |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec = Store.EventCodec.gen<Event>
+    let codec = Store.Codec.gen<Event>
 
 module Fold =
 
