@@ -33,7 +33,7 @@ type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheNa
     let cache =                         Equinox.Cache(cacheName, sizeMb = 1)
     let checkpoints =                   indexClient.CreateCheckpointService(consumerGroupName, cache, Store.log)
 
-    new (c : Configuration, requestTimeout, retries) =
+    new (c: Configuration, requestTimeout, retries) =
         let conn =
             match c.DynamoRegion with
             | Some r -> DynamoStoreConnector(r, requestTimeout, retries)
@@ -52,7 +52,7 @@ type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheNa
         Handler.Factory.CreateDynamoSource(Log.Logger, sink, (indexClient, checkpoints, loadMode, fromTail, batchSizeCutoff, tailSleepInterval, statsInterval), trancheIds)
 
 /// Wiring for Source and Sink running the Watchdog.Handler
-type App(store : Store) =
+type App(store: Store) =
     
     let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2., verboseStore = false, logExternalStats = store.DumpMetrics)
     let processingTimeout = 10. |> TimeSpan.FromSeconds
@@ -76,7 +76,7 @@ type App(store : Store) =
 type Function() =
 
     do  // TOCONSIDER surface metrics from write activities to prometheus by wiring up Metrics Sink (for now we emit them to the log instead)
-        let removeMetrics (e : Serilog.Events.LogEvent) =
+        let removeMetrics (e: Serilog.Events.LogEvent) =
             e.RemovePropertyIfPresent(Equinox.DynamoStore.Core.Log.PropertyTag)
             e.RemovePropertyIfPresent(Propulsion.Streams.Log.PropertyTag)
             e.RemovePropertyIfPresent(Propulsion.Feed.Core.Log.PropertyTag)
@@ -92,7 +92,7 @@ type Function() =
     let app = App(store)
 
     /// Process for all tranches in the input batch; requeue any triggers that we've not yet fully completed the processing for
-    member _.Handle(event : SQSEvent, context : ILambdaContext) : System.Threading.Tasks.Task<SQSBatchResponse> = task {
+    member _.Handle(event: SQSEvent, context: ILambdaContext): System.Threading.Tasks.Task<SQSBatchResponse> = task {
         let req = Propulsion.DynamoStore.Lambda.SqsNotificationBatch.parse event
         let! updated = app.RunUntilCaughtUp(req.Tranches, context.RemainingTime)
         return Propulsion.DynamoStore.Lambda.SqsNotificationBatch.batchResponseWithFailuresForPositionsNotReached req updated }

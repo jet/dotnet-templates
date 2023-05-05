@@ -64,7 +64,7 @@ module Args =
 //#if cosmos
                 | Cosmos _ ->           "Run transactions in-process against CosmosDb."
 //#endif
-    and TestArguments(c : Storage.Configuration, p : ParseResults<TestParameters>) =
+    and TestArguments(c: Storage.Configuration, p: ParseResults<TestParameters>) =
         let duration =                  p.GetResult(DurationM, 30.) |> TimeSpan.FromMinutes
         member val Options =            p.GetResults Cached @ p.GetResults Unfolds
         member val Cache =              p.Contains Cached
@@ -79,7 +79,7 @@ module Args =
             | [] -> TimeSpan.FromSeconds 10.|> Seq.singleton
             | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(float i) }
             |> fun intervals -> [| yield duration; yield! intervals |]
-        member x.ConfigureStore(log : ILogger, createStoreLog) =
+        member x.ConfigureStore(log: ILogger, createStoreLog) =
             match p.GetSubCommand() with
 //#if memoryStore || (!cosmos && !eventStore)
             | Memory _ ->
@@ -124,14 +124,14 @@ let createStoreLog verbose verboseConsole maybeSeqEndpoint =
 module LoadTest =
     open Microsoft.Extensions.DependencyInjection
 
-    let private runLoadTest log testsPerSecond duration errorCutoff reportingIntervals (clients : ClientId[]) runSingleTest =
+    let private runLoadTest log testsPerSecond duration errorCutoff reportingIntervals (clients: ClientId[]) runSingleTest =
         let mutable idx = -1L
         let selectClient () =
             let clientIndex = Interlocked.Increment(&idx) |> int
             clients.[clientIndex % clients.Length]
         let selectClient = async { return async { return selectClient() } }
         Equinox.Tools.TestHarness.Local.runLoadTest log reportingIntervals testsPerSecond errorCutoff duration selectClient runSingleTest
-    let private decorateWithLogger (domainLog : ILogger, verbose) (run: 't -> Async<unit>) =
+    let private decorateWithLogger (domainLog: ILogger, verbose) (run: 't -> Async<unit>) =
         let execute clientId =
             if not verbose then run clientId
             else async {
@@ -140,10 +140,10 @@ module LoadTest =
                 with e -> domainLog.Warning(e, "Test threw an exception"); e.Reraise () }
         execute
     let private createResultLog fileName = LoggerConfiguration().WriteTo.File(fileName).CreateLogger()
-    let run (log: ILogger) (verbose, verboseConsole, maybeSeq) reportFilename (a : Args.TestArguments) =
+    let run (log: ILogger) (verbose, verboseConsole, maybeSeq) reportFilename (a: Args.TestArguments) =
         let createStoreLog verboseStore = createStoreLog verboseStore verboseConsole maybeSeq
         let _storeLog, storeConfig: ILogger * Store.Context = a.ConfigureStore(log, createStoreLog)
-        let runSingleTest : ClientId -> Async<unit> =
+        let runSingleTest: ClientId -> Async<unit> =
             let services = ServiceCollection()
             Services.register(services, storeConfig)
             let container = services.BuildServiceProvider()

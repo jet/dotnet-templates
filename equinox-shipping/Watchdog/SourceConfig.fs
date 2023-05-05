@@ -5,46 +5,46 @@ open System.Threading.Tasks
 
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type SourceConfig =
-    | Memory of store : Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>
-    | Cosmos of monitoredContainer : Microsoft.Azure.Cosmos.Container
-        * leasesContainer : Microsoft.Azure.Cosmos.Container
-        * checkpoints : CosmosFeedConfig
-        * tailSleepInterval : TimeSpan
-    | Dynamo of indexStore : Equinox.DynamoStore.DynamoStoreClient
-        * checkpoints : Propulsion.Feed.IFeedCheckpointStore
-        * loading : Propulsion.DynamoStore.EventLoadMode
-        * startFromTail : bool
-        * batchSizeCutoff : int
-        * tailSleepInterval : TimeSpan
-        * statsInterval : TimeSpan
-    | Esdb of client : EventStore.Client.EventStoreClient
-        * checkpoints : Propulsion.Feed.IFeedCheckpointStore
-        * withData : bool
-        * startFromTail : bool
-        * batchSize : int
-        * tailSleepInterval : TimeSpan
-        * statsInterval : TimeSpan
+    | Memory of store: Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>
+    | Cosmos of monitoredContainer: Microsoft.Azure.Cosmos.Container
+        * leasesContainer: Microsoft.Azure.Cosmos.Container
+        * checkpoints: CosmosFeedConfig
+        * tailSleepInterval: TimeSpan
+    | Dynamo of indexStore: Equinox.DynamoStore.DynamoStoreClient
+        * checkpoints: Propulsion.Feed.IFeedCheckpointStore
+        * loading: Propulsion.DynamoStore.EventLoadMode
+        * startFromTail: bool
+        * batchSizeCutoff: int
+        * tailSleepInterval: TimeSpan
+        * statsInterval: TimeSpan
+    | Esdb of client: EventStore.Client.EventStoreClient
+        * checkpoints: Propulsion.Feed.IFeedCheckpointStore
+        * withData: bool
+        * startFromTail: bool
+        * batchSize: int
+        * tailSleepInterval: TimeSpan
+        * statsInterval: TimeSpan
 and [<NoEquality; NoComparison>] CosmosFeedConfig =
     | Ephemeral of processorName: string
-    | Persistent of processorName: string * startFromTail : bool * maxItems : int option * lagFrequency : TimeSpan
+    | Persistent of processorName: string * startFromTail: bool * maxItems: int option * lagFrequency: TimeSpan
 
 module SourceConfig =
     module Memory =
         open Propulsion.MemoryStore
         let start log (sink: Propulsion.Sinks.Sink) (categories: string[])
-            (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+            (store: Equinox.MemoryStore.VolatileStore<_>): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source = MemoryStoreSource(log, store, categories, sink)
             source.Start(), Some (fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false))
     module Cosmos =
         open Propulsion.CosmosStore
         let start log (sink: Propulsion.Sinks.Sink) categories
-            (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+            (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let parseFeedDoc = EquinoxSystemTextJsonParser.enumCategoryEvents categories
             let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect parseFeedDoc)
             let source =
                 match checkpointConfig with
                 | Ephemeral processorName ->
-                    let withStartTime1sAgo (x : Microsoft.Azure.Cosmos.ChangeFeedProcessorBuilder) =
+                    let withStartTime1sAgo (x: Microsoft.Azure.Cosmos.ChangeFeedProcessorBuilder) =
                         x.WithStartTime(let t = DateTime.UtcNow in t.AddSeconds -1.)
                     let lagFrequency = TimeSpan.FromMinutes 1.
                     CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer,
@@ -72,7 +72,7 @@ module SourceConfig =
     module Esdb =
         open Propulsion.EventStoreDb
         let start log (sink: Propulsion.Sinks.Sink) categories
-            (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+            (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 EventStoreSource(
                     log, statsInterval,
@@ -81,7 +81,7 @@ module SourceConfig =
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 
-    let start (log, storeLog) sink categories : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) option = function
+    let start (log, storeLog) sink categories: SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) option = function
         | SourceConfig.Memory volatileStore ->
             Memory.start log sink categories volatileStore
         | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval) ->

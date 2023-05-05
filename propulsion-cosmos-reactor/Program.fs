@@ -3,7 +3,7 @@ module ReactorTemplate.Program
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -33,7 +33,7 @@ module Args =
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 2."
                 | MaxWriters _ ->           "maximum number of concurrent streams on which to process at any time. Default: 8."
                 | Cosmos _ ->               "specify CosmosDB input parameters"
-    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 2)
         let maxConcurrentProcessors =       p.GetResult(MaxWriters, 8)
         member val Verbose =                p.Contains Parameters.Verbose
@@ -74,7 +74,7 @@ module Args =
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to request from the feed. Default: unlimited."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
-    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+    and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let discovery =                     p.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -91,7 +91,7 @@ module Args =
         member _.Verbose =                  p.Contains Verbose
         member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
         member x.MonitoringParams() =
-            let leases : Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
+            let leases: Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
             Log.Information("ChangeFeed Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
                 leases.Database.Id, leases.Id, Option.toNullable maxItems)
             if fromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
@@ -99,14 +99,14 @@ module Args =
         member x.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(database, containerId)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "ReactorTemplate"
 
-let build (args : Args.Arguments) =
+let build (args: Args.Arguments) =
     let processorName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
     let client, monitored = args.Cosmos.ConnectStoreAndMonitored()
     let sink =
@@ -126,7 +126,7 @@ let build (args : Args.Arguments) =
     sink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
-let startMetricsServer port : IDisposable =
+let startMetricsServer port: IDisposable =
     let metricsServer = new Prometheus.KestrelMetricServer(port = port)
     let ms = metricsServer.Start()
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
@@ -136,7 +136,7 @@ open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
 let run args = async {
     let sink, source = build args
-    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
+    use _metricsServer: IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     return! [|   Async.AwaitKeyboardInterruptAsTaskCanceledException()
                  source.AwaitWithStopOnCancellation()
                  sink.AwaitWithStopOnCancellation()

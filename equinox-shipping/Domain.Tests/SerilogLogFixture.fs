@@ -5,14 +5,14 @@ module Log =
     /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
     let isStoreMetrics e = Serilog.Filters.Matching.WithProperty("isMetric").Invoke e
     
-type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel : Serilog.Events.LogEventLevel, ?templatePrefix) =
+type XunitOutputSink(?messageSink: Xunit.Abstractions.IMessageSink, ?minLevel: Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =
         let baseTemplate = "{Timestamp:HH:mm:ss.fff} {Level:u1} " + Option.toObj templatePrefix + "{Message} {Properties}{NewLine}{Exception}"
         let template = if minLevel <= Serilog.Events.LogEventLevel.Debug then baseTemplate else baseTemplate.Replace("{Properties}", "")
         Serilog.Formatting.Display.MessageTemplateTextFormatter(template, null)
-    let mutable currentTestOutput : Xunit.Abstractions.ITestOutputHelper option = None
-    let writeSerilogEvent (logEvent : Serilog.Events.LogEvent) =
+    let mutable currentTestOutput: Xunit.Abstractions.ITestOutputHelper option = None
+    let writeSerilogEvent (logEvent: Serilog.Events.LogEvent) =
         logEvent.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Equinox.EventStoreDb.Log.PropertyTag

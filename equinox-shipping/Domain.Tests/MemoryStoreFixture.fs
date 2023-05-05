@@ -18,7 +18,7 @@ module MemoryStoreLogger =
 /// Holds Equinox MemoryStore. Disposable to correctly manage unsubscription of logger at end of test
 type MemoryStoreFixture() =
     let store = Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>()
-    let mutable disconnectLog : (unit -> unit) option = None
+    let mutable disconnectLog: (unit -> unit) option = None
     member val Config = Shipping.Domain.Store.Context.Memory store
     member _.Committed = store.Committed
     member _.TestOutput with set testOutput =

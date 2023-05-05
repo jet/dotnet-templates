@@ -8,7 +8,7 @@ open Serilog
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(c : LoggerConfiguration, appName) =
+    static member Configure(c: LoggerConfiguration, appName) =
         let customTags = ["app", appName]
         c
             .MinimumLevel.Debug()
@@ -22,7 +22,7 @@ type Logging() =
             .Enrich.FromLogContext()
             .WriteTo.Console()
 
-let createWebHostBuilder args : IWebHostBuilder =
+let createWebHostBuilder args: IWebHostBuilder =
     WebHost
         .CreateDefaultBuilder(args)
         .UseSerilog()

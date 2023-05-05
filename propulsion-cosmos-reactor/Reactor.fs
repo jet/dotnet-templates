@@ -24,14 +24,14 @@ type Stats(log, statsInterval, stateInterval) =
             ok <- 0; skipped <- 0; na <- 0
 
 // map from external contract to internal contract defined by the aggregate
-let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryData =
+let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData =
     { items =
         [| for x in x.items ->
             { id = x.id; order = x.order; title = x.title; completed = x.completed } |] }
 
 let reactionCategories = Todo.Reactions.categories
 
-let handle (sourceService : Todo.Service) (summaryService : TodoSummary.Service) stream events = async {
+let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) stream events = async {
     match struct (stream, events) with
     | Todo.Reactions.ImpliesStateChange clientId  ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)

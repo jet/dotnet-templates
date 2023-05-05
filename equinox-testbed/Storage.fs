@@ -47,7 +47,7 @@ module Cosmos =
                 | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
                 | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -66,7 +66,7 @@ module Cosmos =
     open Equinox.CosmosStore
 
     let private createContext storeClient maxItems = CosmosStoreContext(storeClient, queryMaxItems = maxItems, tipMaxEvents = 256)
-    let config (cache, unfolds, maxItems) (info : Arguments) =
+    let config (cache, unfolds, maxItems) (info: Arguments) =
         let storeClient = info.Connect() |> Async.RunSynchronously
         let cacheStrategy =
             if cache then
@@ -95,7 +95,7 @@ module EventStore =
 
     open Equinox.EventStoreDb
 
-    type Arguments(p : ParseResults<Parameters>) =
+    type Arguments(p: ParseResults<Parameters>) =
         member val ConnectionString =   p.GetResult(ConnectionString)
 
         member val Retries =            p.GetResult(Retries, 1)
@@ -108,7 +108,7 @@ module EventStore =
                 tags = ["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
             .Establish("TestbedTemplate", Discovery.ConnectionString connectionString, ConnectionStrategy.ClusterTwinPreferSlaveReads)
     let private createContext connection batchSize = EventStoreContext(connection, batchSize = batchSize)
-    let config (log: Serilog.ILogger, storeLog) (cache, unfolds, batchSize) (args : ParseResults<Parameters>) =
+    let config (log: Serilog.ILogger, storeLog) (cache, unfolds, batchSize) (args: ParseResults<Parameters>) =
         let a = Arguments args
         let timeout, retries as operationThrottling = a.Timeout, a.Retries
         log.Information("EventStore {connectionString} timeout: {timeout}s retries {retries}",

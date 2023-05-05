@@ -2,13 +2,13 @@ namespace Reactor.Integration
 
 open Infrastructure
 
-type MessageDbConnector(connectionString : string) =
+type MessageDbConnector(connectionString: string) =
     
     let client =                        Equinox.MessageDb.MessageDbClient connectionString
     let context =                       Equinox.MessageDb.MessageDbContext client
     let cache =                         Equinox.Cache("Tests", sizeMb = 10)
     
-    new (c : Reactor.SourceArgs.Configuration) = MessageDbConnector(c.MdbConnectionString)
+    new (c: Reactor.SourceArgs.Configuration) = MessageDbConnector(c.MdbConnectionString)
     new () =                            MessageDbConnector(Reactor.SourceArgs.Configuration EnvVar.tryGet)
 
     member val ConnectionString =       connectionString

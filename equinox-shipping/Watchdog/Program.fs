@@ -37,7 +37,7 @@ module Args =
                 | Cosmos _ ->               "specify CosmosDB parameters."
                 | Dynamo _ ->               "specify DynamoDB input parameters"
                 | Esdb _ ->                 "specify EventStore DB input parameters"
-    and Arguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: SourceArgs.Configuration, p: ParseResults<Parameters>) =
         let processorName =                 p.GetResult ProcessorName
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 16)
         let maxConcurrentProcessors =       p.GetResult(MaxWriters, 8)
@@ -53,7 +53,7 @@ module Args =
                                                             processorName, maxReadAhead, maxConcurrentProcessors)
                                             (processorName, maxReadAhead, maxConcurrentProcessors)
         member val ProcessingTimeout =      p.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
-        member val Store : Choice<SourceArgs.Cosmos.Arguments, SourceArgs.Dynamo.Arguments, SourceArgs.Esdb.Arguments> =
+        member val Store: Choice<SourceArgs.Cosmos.Arguments, SourceArgs.Dynamo.Arguments, SourceArgs.Esdb.Arguments> =
                                             match p.GetSubCommand() with
                                             | Cosmos a -> Choice1Of3 <| SourceArgs.Cosmos.Arguments(c, a)
                                             | Dynamo a -> Choice2Of3 <| SourceArgs.Dynamo.Arguments(c, a)
@@ -63,7 +63,7 @@ module Args =
                                             | Choice1Of3 s -> s.Verbose
                                             | Choice2Of3 s -> s.Verbose
                                             | Choice3Of3 s -> s.Verbose
-        member x.ConnectStoreAndSource(appName) : Store.Context<_> * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
+        member x.ConnectStoreAndSource(appName): Store.Context<_> * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | Choice1Of3 a ->
@@ -97,14 +97,14 @@ module Args =
                 store, buildSourceConfig, Equinox.EventStoreDb.Log.InternalMetrics.dump
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         Arguments(SourceArgs.Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "Watchdog"
 
-let build (args : Args.Arguments) =
+let build (args: Args.Arguments) =
     let consumerGroupName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
     let store, buildSourceConfig, dumpMetrics = args.ConnectStoreAndSource(AppName)
     let log = Log.Logger

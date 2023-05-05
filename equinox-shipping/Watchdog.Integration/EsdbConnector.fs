@@ -15,7 +15,7 @@ type EsdbConnector(connection, credentials) =
     let storeContext =                  connection |> EventStoreContext.create
     let cache =                         Equinox.Cache("Tests", sizeMb = 10)
     
-    new (c : Shipping.Watchdog.SourceArgs.Configuration) =
+    new (c: Shipping.Watchdog.SourceArgs.Configuration) =
                                         EsdbConnector(c.MaybeEventStoreConnection |> Option.defaultValue "esdb://admin:changeit@localhost:2111,localhost:2112,localhost:2113?tls=true&tlsVerifyCert=false",
                                                       c.MaybeEventStoreCredentials)
     new () =                            EsdbConnector(Shipping.Watchdog.SourceArgs.Configuration EnvVar.tryGet)

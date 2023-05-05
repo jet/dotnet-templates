@@ -12,7 +12,7 @@ module Codec =
 
 module Memory =
 
-    let create codec initial fold store : Equinox.Category<_, _, _> =
+    let create codec initial fold store: Equinox.Category<_, _, _> =
         Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
 
 let defaultCacheDuration = System.TimeSpan.FromMinutes 20.

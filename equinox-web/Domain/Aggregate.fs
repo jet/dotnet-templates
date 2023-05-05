@@ -21,25 +21,25 @@ module Fold =
     let evolve s = function
         | Events.Happened -> { happened = true }
         | Events.Snapshotted e -> { happened = e.happened}
-    let fold : State -> Events.Event seq -> State = Seq.fold evolve
+    let fold: State -> Events.Event seq -> State = Seq.fold evolve
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot state = Events.Snapshotted { happened = state.happened }
 
-let interpretMarkDone (state : Fold.State) =
+let interpretMarkDone (state: Fold.State) =
     if state.happened then [] else [Events.Happened]
 
-type View = { sorted : bool }
+type View = { sorted: bool }
 
 type Service internal (resolve: string -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Read the present state
     // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
-    member _.Read clientId : Async<View> =
+    member _.Read clientId: Async<View> =
         let decider = resolve clientId
         decider.Query(fun s -> { sorted = s.happened })
 
     /// Execute the specified command
-    member _.MarkDone(clientId, command) : Async<unit> =
+    member _.MarkDone(clientId): Async<unit> =
         let decider = resolve clientId
         decider.Transact(interpretMarkDone)
 

@@ -5,7 +5,7 @@ open FsCheck.Xunit
 open Propulsion.Reactor.Internal // Async.timeoutAfter
 open System
 
-let run (log: Serilog.ILogger) (processManager : Shipping.Domain.FinalizationProcess.Manager) runTimeout check (NonEmptyArray batches) = async {
+let run (log: Serilog.ILogger) (processManager: Shipping.Domain.FinalizationProcess.Manager) runTimeout check (NonEmptyArray batches) = async {
 
     let counts = System.Collections.Generic.Stack()
     let mutable timeouts = 0
@@ -24,13 +24,13 @@ let run (log: Serilog.ILogger) (processManager : Shipping.Domain.FinalizationPro
 }    
 
 [<AbstractClass>]
-type ReactorPropertiesBase(reactor : FixtureBase, testOutput) =
+type ReactorPropertiesBase(reactor: FixtureBase, testOutput) =
     let logSub = reactor.CaptureSerilogLog testOutput
     
-    abstract member DisposeAsync : unit -> Async<unit>
+    abstract member DisposeAsync: unit -> Async<unit>
     default _.DisposeAsync() = async.Zero ()
 
-    abstract member RunTimeout : TimeSpan with get
+    abstract member RunTimeout: TimeSpan with get
     default _.RunTimeout = TimeSpan.FromSeconds 1.
 
     // Abusing IDisposable rather than IAsyncDisposable as we want the output to accompany the test output
@@ -41,12 +41,12 @@ type ReactorPropertiesBase(reactor : FixtureBase, testOutput) =
             reactor.DumpStats()
             logSub.Dispose() }
         
-type MemoryProperties (reactor : MemoryReactor.Fixture, testOutput) =
+type MemoryProperties (reactor: MemoryReactor.Fixture, testOutput) =
     // Trigger logging of (Aggregate) Reactor stats after each Test/Propery is run
     inherit ReactorPropertiesBase(reactor, testOutput)
 
     [<Property(EndSize = 1000, MaxTest = 10)>]
-    let run args : Async<unit> =
+    let run args: Async<unit> =
         run reactor.Log reactor.ProcessManager reactor.RunTimeout reactor.CheckReactions args
    
     override _.DisposeAsync() =
@@ -57,7 +57,7 @@ type MemoryProperties (reactor : MemoryReactor.Fixture, testOutput) =
     interface Xunit.IClassFixture<MemoryReactor.Fixture>
 
 [<Xunit.Collection(CosmosReactor.CollectionName)>]
-type CosmosProperties(reactor : CosmosReactor.Fixture, testOutput) =
+type CosmosProperties(reactor: CosmosReactor.Fixture, testOutput) =
     // Failsafe to emit the Remaining stats even in the case of a Test/Property failing (in success case, it's redundant)
     inherit ReactorPropertiesBase(reactor, testOutput)
 
@@ -67,7 +67,7 @@ type CosmosProperties(reactor : CosmosReactor.Fixture, testOutput) =
 #else
     [<Property(MaxTest = 1)>]
 #endif    
-    let run args : Async<unit> = async {
+    let run args: Async<unit> = async {
         do! run reactor.Log reactor.ProcessManager reactor.RunTimeout reactor.CheckReactions args
         // Dump the stats after each and every iteration of the test
         reactor.DumpStats() }
@@ -81,7 +81,7 @@ type CosmosProperties(reactor : CosmosReactor.Fixture, testOutput) =
     //     (* TODO implement reactor.Wait() *) }
     
 [<Xunit.Collection(DynamoReactor.CollectionName)>]
-type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
+type DynamoProperties(reactor: DynamoReactor.Fixture, testOutput) =
     // Failsafe to emit the Remaining stats even in the case of a Test/Property failing (in success case, it's redundant)
     inherit ReactorPropertiesBase(reactor, testOutput)
 
@@ -91,7 +91,7 @@ type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
 #else
     [<Property(MaxTest = 2)>]
 #endif    
-    let run args : Async<unit> = async {
+    let run args: Async<unit> = async {
         do! run reactor.Log reactor.ProcessManager reactor.RunTimeout reactor.CheckReactions args
         // Dump the stats after each and every iteration of the test
         reactor.DumpStats() }
@@ -103,7 +103,7 @@ type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
         reactor.Wait()
 
 [<Xunit.Collection(EsdbReactor.CollectionName)>]
-type EsdbProperties(reactor : EsdbReactor.Fixture, testOutput) =
+type EsdbProperties(reactor: EsdbReactor.Fixture, testOutput) =
     // Failsafe to emit the Remaining stats even in the case of a Test/Property failing (in success case, it's redundant)
     inherit ReactorPropertiesBase(reactor, testOutput)
 
@@ -113,7 +113,7 @@ type EsdbProperties(reactor : EsdbReactor.Fixture, testOutput) =
 #else
     [<Property(MaxTest = 10)>]
 #endif    
-    let run args : Async<unit> = async {
+    let run args: Async<unit> = async {
         do! run reactor.Log reactor.ProcessManager reactor.RunTimeout reactor.CheckReactions args
         // Dump the stats after each and every iteration of the test
         reactor.DumpStats() }

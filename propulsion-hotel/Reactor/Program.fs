@@ -37,7 +37,7 @@ module Args =
 
                 | Dynamo _ ->               "specify DynamoDB input parameters"
                 | Mdb _ ->                  "specify MessageDb input parameters"
-    and Arguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: SourceArgs.Configuration, p: ParseResults<Parameters>) =
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 16)
         let maxConcurrentProcessors =       p.GetResult(MaxWriters, 8)
         member val ProcessorName =          p.GetResult ProcessorName
@@ -52,12 +52,12 @@ module Args =
         member x.ProcessorParams() =        Log.Information("Reacting... {processorName}, reading {maxReadAhead} ahead, {dop} streams",
                                                             x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
                                             (x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
-        member val Store : Choice<SourceArgs.Dynamo.Arguments, SourceArgs.Mdb.Arguments> =
+        member val Store: Choice<SourceArgs.Dynamo.Arguments, SourceArgs.Mdb.Arguments> =
                                             match p.GetSubCommand() with
                                             | Dynamo a -> Choice1Of2 <| SourceArgs.Dynamo.Arguments(c, a)
                                             | Mdb a ->    Choice2Of2 <| SourceArgs.Mdb.Arguments(c, a)
                                             | a ->        Args.missingArg $"Unexpected Store subcommand %A{a}"
-        member x.ConnectStoreAndSource(appName) : Store.Context * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
+        member x.ConnectStoreAndSource(appName): Store.Context * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | Choice1Of2 a ->
@@ -79,14 +79,14 @@ module Args =
                 store, buildSourceConfig, Equinox.MessageDb.Log.InternalMetrics.dump
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         Arguments(SourceArgs.Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "Reactor"
 
-let build (args : Args.Arguments) =
+let build (args: Args.Arguments) =
     let consumerGroupName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
     let store, buildSourceConfig, dumpMetrics = args.ConnectStoreAndSource(AppName)
     let log = Log.Logger
@@ -103,7 +103,7 @@ let build (args : Args.Arguments) =
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
-let startMetricsServer port : IDisposable =
+let startMetricsServer port: IDisposable =
     let metricsServer = new Prometheus.KestrelMetricServer(port = port)
     let ms = metricsServer.Start()
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
@@ -113,7 +113,7 @@ let run args = async {
     let sink, source = build args
     use _ = source
     use _ = sink
-    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
+    use _metricsServer: IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     return! Async.Parallel [ Async.AwaitKeyboardInterruptAsTaskCanceledException()
                              source.AwaitWithStopOnCancellation()
                              sink.AwaitWithStopOnCancellation() ] |> Async.Ignore<unit[]> }

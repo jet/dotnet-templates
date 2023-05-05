@@ -7,10 +7,10 @@ let streamId = Equinox.StreamId.gen ClientId.toString
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
 
-    type ItemData =     { id : int; order : int; title: string; completed : bool }
-    type DeletedData =  { id : int }
-    type ClearedData =  { nextId : int }
-    type SnapshotData = { nextId : int; items : ItemData[] }
+    type ItemData =     { id: int; order: int; title: string; completed: bool }
+    type DeletedData =  { id: int }
+    type ClearedData =  { nextId: int }
+    type SnapshotData = { nextId: int; items: ItemData[] }
     /// Events we keep in Todo-* streams
     type Event =
         | Added         of ItemData
@@ -28,7 +28,7 @@ module Events =
 module Fold =
 
     /// Present state of the Todo List as inferred from the Events we've seen to date
-    type State = { items : Events.ItemData list; nextId : int }
+    type State = { items: Events.ItemData list; nextId: int }
     /// State implied by the absence of any events on this stream
     let initial = { items = []; nextId = 0 }
     /// Compute State change implied by a given Event
@@ -39,7 +39,7 @@ module Fold =
         | Events.Cleared e     -> { nextId = e.nextId; items = [] }
         | Events.Snapshotted s -> { nextId = s.nextId; items = List.ofArray s.items }
     /// Folds a set of events from the store into a given `state`
-    let fold : State -> Events.Event seq -> State = Seq.fold evolve
+    let fold: State -> Events.Event seq -> State = Seq.fold evolve
     /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
     let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
     /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
@@ -48,51 +48,51 @@ module Fold =
 /// Properties that can be edited on a Todo List item
 type Props = { order: int; title: string; completed: bool }
 
-let mkItem id (value : Props) : Events.ItemData = { id = id; order = value.order; title = value.title; completed = value.completed }
+let mkItem id (value: Props): Events.ItemData = { id = id; order = value.order; title = value.title; completed = value.completed }
 
-let decideAdd value (state : Fold.State) =
+let decideAdd value (state: Fold.State) =
     [ Events.Added (mkItem state.nextId value) ]
 
-let decideUpdate itemId value (state : Fold.State) =
+let decideUpdate itemId value (state: Fold.State) =
     let proposed = mkItem itemId value
     match state.items |> List.tryFind (function { id = id } -> id = itemId) with
     | Some current when current <> proposed -> [ Events.Updated proposed ]
     | _ -> []
 
-let decideDelete id (state : Fold.State) =
+let decideDelete id (state: Fold.State) =
     if state.items |> List.exists (fun x -> x.id = id) then [ Events.Deleted { id=id } ] else []
 
-let decideClear (state : Fold.State) =
+let decideClear (state: Fold.State) =
     if state.items |> List.isEmpty then [] else [ Events.Cleared { nextId = state.nextId } ]
 
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }
 
-let private render (item: Events.ItemData) : View =
+let private render (item: Events.ItemData): View =
     {   id = item.id
         order = item.order
         title = item.title
         completed = item.completed }
 
 /// Defines operations that a Controller can perform on a Todo List
-type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     (* READ *)
 
     /// List all open items
-    member _.List clientId  : Async<View seq> =
+    member _.List clientId: Async<View seq> =
         let decider = resolve clientId
         decider.Query(fun x -> seq { for x in x.items -> render x })
 
     /// Load details for a single specific item
-    member _.TryGet(clientId, id) : Async<View option> =
+    member _.TryGet(clientId, id): Async<View option> =
         let decider = resolve clientId
         decider.Query(fun x -> x.items |> List.tryFind (fun x -> x.id = id) |> Option.map render)
 
     (* WRITE *)
 
     /// Execute the specified (blind write) command
-    member _.Execute(clientId , command) : Async<unit> =
+    member _.Execute(clientId , command): Async<unit> =
         let decider = resolve clientId
         decider.Transact command
 
@@ -112,21 +112,21 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         decider.Transact(decideDelete id)
 
     /// Completely clear the Todo list
-    member _.Clear(clientId) : Async<unit> =
+    member _.Clear(clientId): Async<unit> =
         let decider = resolve clientId
         decider.Transact decideClear
 
     (* WRITE-READ *)
 
     /// Create a new ToDo List item; response contains the generated `id`
-    member _.Create(clientId, template: Props) : Async<View> =
+    member _.Create(clientId, template: Props): Async<View> =
         let decider = resolve clientId
         decider.Transact(decideAdd template, fun s -> s.items |> List.head |> render)
 
     /// Update the specified item as referenced by the `item.id`
-    member _.Patch(clientId, id: int, value: Props) : Async<View> =
+    member _.Patch(clientId, id: int, value: Props): Async<View> =
         let decider = resolve clientId
-        let echoUpdated id (s : Fold.State) = s.items |> List.find (fun x -> x.id = id)
+        let echoUpdated id (s: Fold.State) = s.items |> List.find (fun x -> x.id = id)
         decider.Transact(decideUpdate id value, echoUpdated id >> render)
 
 module Factory =

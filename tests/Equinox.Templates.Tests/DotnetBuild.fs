@@ -36,7 +36,7 @@ type EqxWebs() as this =
 #endif
        do this.Add("eqxweb", ["--todos"; "--aggregate"; "--dynamo"])
 
-type DotnetBuild(output : ITestOutputHelper, folder : EquinoxTemplatesFixture) =
+type DotnetBuild(output: ITestOutputHelper, folder: EquinoxTemplatesFixture) =
 
     let run template args =
         output.WriteLine(sprintf "using %s" folder.PackagePath)

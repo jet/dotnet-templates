@@ -4,10 +4,10 @@ open Domain
 open Infrastructure
 
 [<RequireQualifiedAccess>]
-type Outcome = Merged of ok : int * failed : int | Noop
+type Outcome = Merged of ok: int * failed: int | Noop
 
 /// Handles Reactions associated with the group checkout process
-type Service(guestStays : GuestStay.Service, groupCheckouts : GroupCheckout.Service, checkoutParallelism) =
+type Service(guestStays: GuestStay.Service, groupCheckouts: GroupCheckout.Service, checkoutParallelism) =
 
     (* Alternate impl of attemptMerge + executeMergeStayAttempts_ that's easier to read
     let executeMergeStayAttempts_ groupCheckoutId stayIds = async {
@@ -33,7 +33,7 @@ type Service(guestStays : GuestStay.Service, groupCheckouts : GroupCheckout.Serv
 
     // Attempts to merge the specified stays into the specified Group Checkout
     // Maps the results of each individual merge attempt into 0, 1 or 2 events reflecting the progress achieved against the requested merges 
-    let decideMerge groupCheckoutId stayIds : Async<Outcome * GroupCheckout.Events.Event list> = async {
+    let decideMerge groupCheckoutId stayIds: Async<Outcome * GroupCheckout.Events.Event list> = async {
         let! residuals, fails = executeMergeStayAttempts groupCheckoutId stayIds
         let events = [ 
             match residuals with
@@ -57,5 +57,5 @@ type Service(guestStays : GuestStay.Service, groupCheckouts : GroupCheckout.Serv
 
     /// Handles Reactions based on the state of the Group Checkout's workflow
     /// NOTE result includes the post-version of the stream after processing has concluded
-    member _.React(groupCheckoutId) : Async<Outcome * int64> = 
+    member _.React(groupCheckoutId): Async<Outcome * int64> = 
         groupCheckouts.React(groupCheckoutId, handleReaction groupCheckoutId)

@@ -2,14 +2,14 @@ namespace Shipping.Watchdog.Integration
 
 open Shipping.Infrastructure
 
-type DynamoConnector(connector : Equinox.DynamoStore.DynamoStoreConnector, table, indexTable) =
+type DynamoConnector(connector: Equinox.DynamoStore.DynamoStoreConnector, table, indexTable) =
     
     let client =                        connector.CreateClient()
     let storeClient =                   Equinox.DynamoStore.DynamoStoreClient(client, table)
     let storeContext =                  storeClient |> DynamoStoreContext.create
     let cache =                         Equinox.Cache("Tests", sizeMb = 10)
     
-    new (c : Shipping.Watchdog.SourceArgs.Configuration) =
+    new (c: Shipping.Watchdog.SourceArgs.Configuration) =
         let timeout, retries =          System.TimeSpan.FromSeconds 5., 5
         let connector =                 match c.DynamoRegion with
                                         | Some systemName -> Equinox.DynamoStore.DynamoStoreConnector(systemName, timeout, retries)

@@ -2,14 +2,14 @@ namespace Reactor.Integration
 
 open Infrastructure // isStoreMetrics
 
-type XunitOutputSink(?messageSink : Xunit.Abstractions.IMessageSink, ?minLevel : Serilog.Events.LogEventLevel, ?templatePrefix) =
+type XunitOutputSink(?messageSink: Xunit.Abstractions.IMessageSink, ?minLevel: Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =
         let baseTemplate = "{Timestamp:HH:mm:ss.fff} {Level:u1} " + Option.toObj templatePrefix + "{Message:l} {Properties}{NewLine}{Exception}"
         let template = if minLevel <= Serilog.Events.LogEventLevel.Debug then baseTemplate else baseTemplate.Replace("{Properties}", "")
         Serilog.Formatting.Display.MessageTemplateTextFormatter(template, null)
-    let mutable currentTestOutput : Xunit.Abstractions.ITestOutputHelper option = None
-    let writeSerilogEvent (logEvent : Serilog.Events.LogEvent) =
+    let mutable currentTestOutput: Xunit.Abstractions.ITestOutputHelper option = None
+    let writeSerilogEvent (logEvent: Serilog.Events.LogEvent) =
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Equinox.MessageDb.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Propulsion.Feed.Core.Log.PropertyTag

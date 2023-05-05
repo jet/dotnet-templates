@@ -25,7 +25,7 @@ module Store =
         | Cosmos of mode: Microsoft.Azure.Cosmos.ConnectionMode * connectionStringWithUriAndKey: string * database: string * container: string * cacheMb: int
 //#endif
 //#if dynamo
-        | Dynamo of region : string * tableName: string * cacheMb: int
+        | Dynamo of region: string * tableName: string * cacheMb: int
 //#endif
 
 //#if (memoryStore || (!cosmos && !dynamo && !eventStore))
@@ -53,7 +53,7 @@ module Store =
         module CosmosStoreContext =
 
             /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-            let create (storeClient : CosmosStoreClient) =
+            let create (storeClient: CosmosStoreClient) =
                 let maxEvents = 256
                 CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
@@ -69,7 +69,7 @@ module Store =
         module DynamoStoreContext =
 
             /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
-            let create (storeClient : DynamoStoreClient) =
+            let create (storeClient: DynamoStoreClient) =
                 let maxEvents = 256
                 DynamoStoreContext(storeClient, tipMaxEvents = maxEvents)
 
@@ -112,7 +112,7 @@ module Store =
 module Services =
 
     /// Registers the Equinox Store, Stream Resolver, Service Builder and the Service
-    let register (services : IServiceCollection, storeCfg) =
+    let register (services: IServiceCollection, storeCfg) =
         let store = Store.connect storeCfg
 //#if todos
         services.AddSingleton(Todo.Factory.create store) |> ignore
@@ -127,7 +127,7 @@ module Services =
 type Startup() =
 
     // This method gets called by the runtime. Use this method to add services to the container.
-    member _.ConfigureServices(services: IServiceCollection) : unit =
+    member _.ConfigureServices(services: IServiceCollection): unit =
         services
             .AddMvc()
             .AddJsonOptions(fun options ->
@@ -195,7 +195,7 @@ type Startup() =
         Services.register(services, storeConfig)
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-    member _.Configure(app: IApplicationBuilder, env: IHostEnvironment) : unit =
+    member _.Configure(app: IApplicationBuilder, env: IHostEnvironment): unit =
         if env.IsDevelopment() then app.UseDeveloperExceptionPage() |> ignore
         else app.UseHsts() |> ignore
 

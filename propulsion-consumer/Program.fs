@@ -41,7 +41,7 @@ module Args =
 
                 | MaxDop _ ->               "maximum number of items to process in parallel. Default: 8"
                 | Verbose _ ->              "request verbose logging."
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
         member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
         member val Group =                  p.TryGetResult Group  |> Option.defaultWith (fun () -> c.Group)
@@ -52,14 +52,14 @@ module Args =
         member val Verbose =                p.Contains Verbose
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "ConsumerTemplate"
 
-let start (args : Args.Arguments) =
+let start (args: Args.Arguments) =
     let c =
         FsKafka.KafkaConsumerConfig.Create(
             AppName,

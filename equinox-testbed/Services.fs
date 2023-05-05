@@ -30,38 +30,38 @@ module Domain =
 
             type private InternalState(input: State) =
                 let dict = System.Collections.Generic.Dictionary<SkuId, Events.Favorited>()
-                let favorite (e : Events.Favorited) =   dict[e.skuId] <- e
+                let favorite (e: Events.Favorited) =   dict[e.skuId] <- e
                 let favoriteAll (xs: Events.Favorited seq) = for x in xs do favorite x
                 do favoriteAll input
                 member _.ReplaceAllWith xs =           dict.Clear(); favoriteAll xs
-                member _.Favorite(e : Events.Favorited) =  favorite e
+                member _.Favorite(e: Events.Favorited) =  favorite e
                 member _.Unfavorite id =               dict.Remove id |> ignore
                 member _.AsState() =                   Seq.toArray dict.Values
 
-            let initial : State = [||]
+            let initial: State = [||]
             let private evolve (s: InternalState) = function
                 | Events.Snapshotted { net = net } ->   s.ReplaceAllWith net
                 | Events.Favorited e ->                 s.Favorite e
                 | Events.Unfavorited { skuId = id } ->  s.Unfavorite id
-            let fold (state: State) (events: seq<Events.Event>) : State =
+            let fold (state: State) (events: seq<Events.Event>): State =
                 let s = InternalState state
                 for e in events do evolve s e
                 s.AsState()
             let isOrigin = function Events.Snapshotted _ -> true | _ -> false
             let toSnapshot state = Events.Snapshotted { net = state }
 
-        let private doesntHave skuId (state : Fold.State) = state |> Array.exists (fun x -> x.skuId = skuId) |> not
+        let private doesntHave skuId (state: Fold.State) = state |> Array.exists (fun x -> x.skuId = skuId) |> not
 
-        let favorite date skuIds (state : Fold.State) =
+        let favorite date skuIds (state: Fold.State) =
             [ for skuId in Seq.distinct skuIds do
                 if state |> doesntHave skuId then
                     yield Events.Favorited { date = date; skuId = skuId } ]
 
-        let unfavorite skuId (state : Fold.State) =
+        let unfavorite skuId (state: Fold.State) =
             if state |> doesntHave skuId then [] else
             [ Events.Unfavorited { skuId = skuId } ]
 
-        type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
+        type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
             member x.Favorite(clientId, skus) =
                 let decider = resolve clientId
@@ -71,7 +71,7 @@ module Domain =
                 let decider = resolve clientId
                 decider.Transact(unfavorite sku)
 
-            member _.List(clientId) : Async<Events.Favorited []> =
+            member _.List(clientId): Async<Events.Favorited []> =
                 let decider = resolve clientId
                 decider.Query id
 
@@ -100,5 +100,5 @@ module Domain =
 
 open Microsoft.Extensions.DependencyInjection
 
-let register (services : IServiceCollection, storageConfig) =
+let register (services: IServiceCollection, storageConfig) =
     services.AddSingleton(Domain.Favorites.Factory.create storageConfig) |> ignore

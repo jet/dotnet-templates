@@ -4,7 +4,7 @@ open Propulsion.Internal
 open System
 open FeedConsumerTemplate.Domain
 
-type Outcome = { added : int; notReady : int; dups : int }
+type Outcome = { added: int; notReady: int; dups: int }
 
 /// Gathers stats based on the outcome of each Span processed for periodic emission
 type Stats(log, statsInterval, stateInterval) =
@@ -28,15 +28,15 @@ type Stats(log, statsInterval, stateInterval) =
 
 module PipelineEvent =
 
-    type Item = { id : TicketId; payload: string }
-    let ofIndexAndItem index (item : Item) =
+    type Item = { id: TicketId; payload: string }
+    let ofIndexAndItem index (item: Item) =
         FsCodec.Core.TimelineEvent.Create(
             index,
             "eventType",
             Unchecked.defaultof<_>,
             context = item)
     let [<return: Struct>] (|ItemsForFc|_|) = function
-        | FsCodec.StreamName.CategoryAndIds (_,[|_ ; FcId.Parse fc|]), (s : Propulsion.Sinks.Event[]) ->
+        | FsCodec.StreamName.CategoryAndIds (_,[|_ ; FcId.Parse fc|]), (s: Propulsion.Sinks.Event[]) ->
             ValueSome (fc, s |> Seq.map (fun e -> Unchecked.unbox<Item> e.Context))
         | _ -> ValueNone
 

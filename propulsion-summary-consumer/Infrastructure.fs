@@ -7,14 +7,14 @@ open System
 
 module Guid =
 
-    let inline toStringN (x : Guid) = x.ToString "N"
+    let inline toStringN (x: Guid) = x.ToString "N"
 
 /// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =
-    let toString (value : ClientId): string = Guid.toStringN %value
-    let parse (value: string) : ClientId = let raw = Guid.Parse value in % raw
+    let toString (value: ClientId): string = Guid.toStringN %value
+    let parse (value: string): ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
 
 module EnvVar =
@@ -25,23 +25,23 @@ module Streams =
 
     let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
     // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
-    let private tryDecode<'E> (codec : Propulsion.Sinks.Codec<'E>) (streamName : FsCodec.StreamName) event =
+    let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
         match codec.TryDecode event with
         | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
             Log.ForContext("eventData", renderBody event.Data)
                 .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
             ValueNone
         | x -> x
-    let [<return: Struct>] (|DecodeNewest|_|) codec (stream, events : Propulsion.Sinks.Event[]) : 'E voption =
+    let [<return: Struct>] (|DecodeNewest|_|) codec (stream, events: Propulsion.Sinks.Event[]): 'E voption =
         events |> Seq.rev |> Propulsion.Internal.Seq.tryPickV (tryDecode codec stream)
 
     module Codec =
 
-        let private withUpconverter<'c, 'e when 'c :> TypeShape.UnionContract.IUnionContract> up : Propulsion.Sinks.Codec<'e> =
-            let down (_ : 'e) = failwith "Unexpected"
+        let private withUpconverter<'c, 'e when 'c :> TypeShape.UnionContract.IUnionContract> up: Propulsion.Sinks.Codec<'e> =
+            let down (_: 'e) = failwith "Unexpected"
             FsCodec.SystemTextJson.Codec.Create<'e, 'c, _>(up, down) // options = Options.Default
         let genWithIndex<'c when 'c :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<int64 * 'c>  =
-            let up (raw : FsCodec.ITimelineEvent<_>) e = raw.Index, e
+            let up (raw: FsCodec.ITimelineEvent<_>) e = raw.Index, e
             withUpconverter<'c, int64 * 'c> up
 
 type Equinox.CosmosStore.CosmosStoreConnector with
@@ -62,7 +62,7 @@ type Equinox.CosmosStore.CosmosStoreConnector with
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
@@ -70,7 +70,7 @@ module CosmosStoreContext =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+    static member Configure(configuration: LoggerConfiguration, ?verbose) =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c

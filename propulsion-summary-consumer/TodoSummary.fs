@@ -7,8 +7,8 @@ let streamId = Equinox.StreamId.gen ClientId.toString
 module Events =
 
     type ItemData = { id: int; order: int; title: string; completed: bool }
-    type SummaryData = { items : ItemData[] }
-    type IngestedData = { version : int64; value : SummaryData }
+    type SummaryData = { items: ItemData[] }
+    type IngestedData = { version: int64; value: SummaryData }
     type Event =
         | Ingested of IngestedData
         interface TypeShape.UnionContract.IUnionContract
@@ -16,19 +16,19 @@ module Events =
 
 module Fold =
 
-    type State = { version : int64; value : Events.SummaryData option }
+    type State = { version: int64; value: Events.SummaryData option }
     let initial = { version = -1L; value = None }
     let evolve _state = function
         | Events.Ingested e -> { version = e.version; value = Some e.value }
-    let fold : State -> Events.Event seq -> State = Seq.fold evolve
+    let fold: State -> Events.Event seq -> State = Seq.fold evolve
     let toSnapshot state = Events.Ingested { version = state.version; value = state.value.Value }
 
-let ingest version value (state : Fold.State) =
+let ingest version value (state: Fold.State) =
     if state.version >= version then false, [] else
     true, [Events.Ingested { version = version; value = value }]
 
 type Item = { id: int; order: int; title: string; completed: bool }
-let render : Fold.State -> Item[] = function
+let render: Fold.State -> Item[] = function
     | { value = Some { items = xs} } ->
         [| for x in xs ->
             {   id = x.id
@@ -38,9 +38,9 @@ let render : Fold.State -> Item[] = function
     | _ -> [||]
 
 /// Defines the operations that the Read side of a Controller and/or the Ingester can perform on the 'aggregate'
-type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
-    member _.TryIngest(clientId, version, value) : Async<bool> =
+    member _.TryIngest(clientId, version, value): Async<bool> =
         let decider = resolve clientId
         decider.Transact(ingest version value)
 

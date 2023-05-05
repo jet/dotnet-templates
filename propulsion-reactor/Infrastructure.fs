@@ -30,26 +30,26 @@ module Streams =
 
     let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
     // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
-    let private tryDecode<'E> (codec : Propulsion.Sinks.Codec<'E>) (streamName : FsCodec.StreamName) event =
+    let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
         match codec.TryDecode event with
         | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
             Log.ForContext("eventData", renderBody event.Data)
                 .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
             ValueNone
         | x -> x
-    let (|Decode|) codec struct (stream, events: Propulsion.Sinks.Event[]) : 'E[] =
+    let (|Decode|) codec struct (stream, events: Propulsion.Sinks.Event[]): 'E[] =
         events |> Propulsion.Internal.Array.chooseV (tryDecode codec stream)
     
     module Codec =
         
-        let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
+        let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract>: Propulsion.Sinks.Codec<'E> =
             FsCodec.SystemTextJson.Codec.Create<'E>() // options = Options.Default
 
-        let private withUpconverter<'c, 'e when 'c :> TypeShape.UnionContract.IUnionContract> up : Propulsion.Sinks.Codec<'e> =
-            let down (_ : 'e) = failwith "Unexpected"
+        let private withUpconverter<'c, 'e when 'c :> TypeShape.UnionContract.IUnionContract> up: Propulsion.Sinks.Codec<'e> =
+            let down (_: 'e) = failwith "Unexpected"
             FsCodec.SystemTextJson.Codec.Create<'e, 'c, _>(up, down) // options = Options.Default
         let genWithIndex<'c when 'c :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<int64 * 'c>  =
-            let up (raw : FsCodec.ITimelineEvent<_>) e = raw.Index, e
+            let up (raw: FsCodec.ITimelineEvent<_>) e = raw.Index, e
             withUpconverter<'c, int64 * 'c> up
 
 // #endif

@@ -6,9 +6,9 @@ open System.Collections.Concurrent
 type EventAccumulator<'E>() =
     let messages = ConcurrentDictionary<FsCodec.StreamName, ConcurrentQueue<'E>>()
 
-    member _.Record(struct (streamName, events : 'E[])) =
+    member _.Record(struct (streamName, events: 'E[])) =
         let initStreamQueue _ = ConcurrentQueue events
-        let appendToQueue _ (queue : ConcurrentQueue<'E>) = events |> Seq.iter queue.Enqueue; queue
+        let appendToQueue _ (queue: ConcurrentQueue<'E>) = events |> Seq.iter queue.Enqueue; queue
         messages.AddOrUpdate(streamName, initStreamQueue, appendToQueue) |> ignore
 
     member _.Queue(stream) =

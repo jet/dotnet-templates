@@ -43,7 +43,7 @@ module Args =
                 | MaxWriters _ ->           "maximum number of items to process in parallel. Default: 8"
                 | Verbose _ ->              "request verbose logging."
                 | Cosmos _ ->               "specify CosmosDb input parameters"
-    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Cosmos =                 CosmosArguments(c, p.GetResult Cosmos)
         member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
         member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
@@ -73,7 +73,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
-    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+    and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -85,14 +85,14 @@ module Args =
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "ConsumerTemplate"
 
-let start (args : Args.Arguments) =
+let start (args: Args.Arguments) =
     let service =
         let store =
             let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
@@ -103,7 +103,7 @@ let start (args : Args.Arguments) =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,
             maxInFlightBytes = args.MaxInFlightBytes, ?statisticsInterval = args.LagFrequency)
-    let parseStreamSummaries(res : Confluent.Kafka.ConsumeResult<_, _>) : seq<Propulsion.Streams.StreamEvent<_>> =
+    let parseStreamSummaries(res: Confluent.Kafka.ConsumeResult<_, _>): seq<Propulsion.Streams.StreamEvent<_>> =
         Propulsion.Codec.NewtonsoftJson.RenderedSummary.parse res.Message.Value
     let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
     Propulsion.Kafka.Factory.StartConcurrent(Log.Logger, config, parseStreamSummaries, args.MaxConcurrentStreams, Ingester.ingest service, stats)

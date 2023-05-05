@@ -4,7 +4,7 @@ open Shipping.Infrastructure
 open System
 
 [<RequireQualifiedAccess>]
-type Outcome = Completed | Deferred | Resolved of successfully : bool
+type Outcome = Completed | Deferred | Resolved of successfully: bool
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
 type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
@@ -39,8 +39,8 @@ open Shipping.Domain
 let private reactionCategories = [| FinalizationTransaction.Category |]
 
 let handle
-        (processingTimeout : TimeSpan)
-        (driveTransaction : Shipping.Domain.TransactionId -> Async<bool>)
+        (processingTimeout: TimeSpan)
+        (driveTransaction: Shipping.Domain.TransactionId -> Async<bool>)
         stream span = async {
     let processingStuckCutoff = let now = DateTimeOffset.UtcNow in now.Add(-processingTimeout)
     match stream, span with
@@ -60,12 +60,12 @@ let handle
 
 type Factory private () =
     
-    static member private StartSink(log : Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
+    static member private StartSink(log: Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
                                     ?wakeForResults, ?idleDelay, ?purgeInterval) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
-    static member StartSink(log, stats, maxConcurrentStreams, manager : FinalizationProcess.Manager, processingTimeout,
+    static member StartSink(log, stats, maxConcurrentStreams, manager: FinalizationProcess.Manager, processingTimeout,
                             maxReadAhead, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         let handle = handle processingTimeout manager.Pump
         Factory.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead,

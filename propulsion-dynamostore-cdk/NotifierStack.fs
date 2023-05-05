@@ -9,17 +9,17 @@ type NotifierStackProps
         indexStreamArn: string,
 
         // Target SNS FIFO Topic Arn (Default: Create fresh topic)
-        updatesTopicArn : string option,
+        updatesTopicArn: string option,
 
         // Path for published binaries for Propulsion.DynamoStore.Notifier
-        lambdaCodePath : string,
+        lambdaCodePath: string,
 
         // Lambda memory allocation - default 128 MB
-        ?memorySize : int,
+        ?memorySize: int,
         // Lambda max batch size - default 10
-        ?batchSize : int,
+        ?batchSize: int,
         // Lambda max batch size - default 10s
-        ?timeout : TimeSpan) =
+        ?timeout: TimeSpan) =
     inherit StackProps()
     member val IndexStreamArn = indexStreamArn
     member val UpdatesTopicArn = updatesTopicArn
@@ -28,10 +28,10 @@ type NotifierStackProps
     member val Timeout = defaultArg timeout (TimeSpan.FromSeconds 10)
     member val LambdaCodePath = lambdaCodePath
 
-type NotifierStack(scope, id, props : NotifierStackProps) as stack =
+type NotifierStack(scope, id, props: NotifierStackProps) as stack =
     inherit Stack(scope, id, props)
 
-    let props : DynamoStoreNotifierLambdaProps =
+    let props: DynamoStoreNotifierLambdaProps =
         {   indexStreamArn = props.IndexStreamArn
             updatesTarget = match props.UpdatesTopicArn with Some ta -> UpdatesTarget.ExistingTopic ta | None -> UpdatesTarget.Default 
             memorySize = props.MemorySize; batchSize = props.BatchSize; timeout = props.Timeout

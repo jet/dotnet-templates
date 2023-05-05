@@ -9,8 +9,8 @@ open System.Runtime.CompilerServices
 type SkuId = string<skuId>
 and [<Measure>] skuId
 module SkuId =
-    let toString (value : SkuId): string = % value
-    let parse (value: string) : SkuId = let raw = value in % raw
+    let toString (value: SkuId): string = % value
+    let parse (value: string): SkuId = let raw = value in % raw
     let (|Parse|) = parse
 
 module EnvVar =
@@ -35,7 +35,7 @@ type Equinox.CosmosStore.CosmosStoreConnector with
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
@@ -43,7 +43,7 @@ module CosmosStoreContext =
 type Logging() =
 
     [<Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+    static member Configure(configuration: LoggerConfiguration, ?verbose) =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c

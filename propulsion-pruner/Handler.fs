@@ -4,7 +4,7 @@ open System
 
 // As we're not looking at the bodies of the events in the course of the shouldPrune decision, we remove them
 //   from the Event immediately in order to avoid consuming lots of memory without purpose while they're queued
-let removeDataAndMeta (x: Propulsion.Sinks.Event) : FsCodec.ITimelineEvent<_> =
+let removeDataAndMeta (x: Propulsion.Sinks.Event): FsCodec.ITimelineEvent<_> =
     FsCodec.Core.TimelineEvent.Create(x.Index, x.EventType, Unchecked.defaultof<Propulsion.Sinks.EventBody>, timestamp = x.Timestamp)
 
 let categoryFilter = function
@@ -16,7 +16,7 @@ let categoryFilter = function
 // 2. If transactional processing will benefit from being able to load the events using the provisioned capacity on the Primary
 // 3. All relevant systems are configured to be able to fall back to the Secondary where the head of a stream being read has been pruned
 // NOTE - DANGEROUS - events submitted to the CosmosPruner get removed from the supplied Context!
-let shouldPrune category (age : TimeSpan) =
+let shouldPrune category (age: TimeSpan) =
     match category, age.TotalDays with
     // TODO define pruning criteria
     | "CategoryName",  age -> age > 30.
@@ -24,7 +24,7 @@ let shouldPrune category (age : TimeSpan) =
 
 // Only relevant (copied to secondary container, meeting expiration criteria) events get fed into the CosmosPruner for removal
 // NOTE - DANGEROUS - events submitted to the CosmosPruner get removed from the supplied Context!
-let selectPrunable changeFeedDocument : Propulsion.Streams.StreamEvent<_> seq = seq {
+let selectPrunable changeFeedDocument: Propulsion.Streams.StreamEvent<_> seq = seq {
     let asOf = DateTimeOffset.UtcNow
     for s, e in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents categoryFilter changeFeedDocument do
         let (FsCodec.StreamName.Category cat) = s

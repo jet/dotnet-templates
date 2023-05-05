@@ -5,18 +5,18 @@ module ConsumerTemplate.Ingester
 /// Defines the shape of input messages on the topic we're consuming
 module Contract =
 
-    type OrderInfo = { poNumber: string; reservedUnitQuantity : int }
+    type OrderInfo = { poNumber: string; reservedUnitQuantity: int }
     type Message =
-        {  skuId : SkuId // primary key for the aggregate
+        {  skuId: SkuId // primary key for the aggregate
            locationId: string
-           messageIndex : int64
+           messageIndex: int64
            pickTicketId: string
-           purchaseOrderInfo : OrderInfo[] }
+           purchaseOrderInfo: OrderInfo[] }
     let serdes = FsCodec.SystemTextJson.Serdes.Default
     // TODO remove .Span
-    let parse (utf8 : Propulsion.Sinks.EventBody) : Message = serdes.Deserialize<Message>(utf8.Span)
+    let parse (utf8: Propulsion.Sinks.EventBody): Message = serdes.Deserialize<Message>(utf8.Span)
 
-type Outcome = Completed of used : int * unused : int
+type Outcome = Completed of used: int * unused: int
 
 /// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval) =
@@ -37,13 +37,13 @@ type Stats(log, statsInterval, stateInterval) =
 
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
 let ingest
-        (service : SkuSummary.Service)
-        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId)) (events : Propulsion.Sinks.Event[]) = async {
+        (service: SkuSummary.Service)
+        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId)) (events: Propulsion.Sinks.Event[]) = async {
     let items =
         [ for e in events do
             let x = Contract.parse e.Data
             for o in x.purchaseOrderInfo do
-                let x : SkuSummary.Events.ItemData =
+                let x: SkuSummary.Events.ItemData =
                     {   locationId = x.locationId
                         messageIndex = x.messageIndex
                         picketTicketId = x.pickTicketId

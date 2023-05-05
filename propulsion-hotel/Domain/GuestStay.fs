@@ -7,15 +7,15 @@ module Events =
 
     type Event =
         /// Notes time of of checkin of the guest (does not affect whether charges can be levied against the stay)
-        | CheckedIn of          {| at : DateTimeOffset |}
+        | CheckedIn of          {| at: DateTimeOffset |}
         /// Notes addition of a charge against the stay
-        | Charged of            {| chargeId : ChargeId; at : DateTimeOffset; amount : decimal |}
+        | Charged of            {| chargeId: ChargeId; at: DateTimeOffset; amount: decimal |}
         /// Notes a payment against this stay
-        | Paid of               {| paymentId : PaymentId; at : DateTimeOffset; amount : decimal |}
+        | Paid of               {| paymentId: PaymentId; at: DateTimeOffset; amount: decimal |}
         /// Notes an ordinary checkout by the Guest (requires prior payment of all outstanding charges)
-        | CheckedOut of         {| at : DateTimeOffset |}
+        | CheckedOut of         {| at: DateTimeOffset |}
         /// Notes checkout is being effected via a GroupCheckout. Marks stay complete equivalent to typical CheckedOut event
-        | TransferredToGroup of {| at : DateTimeOffset; groupId : GroupCheckoutId; residualBalance : decimal |}
+        | TransferredToGroup of {| at: DateTimeOffset; groupId: GroupCheckoutId; residualBalance: decimal |}
         interface TypeShape.UnionContract.IUnionContract
     let codec = Store.Codec.gen<Event>
 
@@ -25,8 +25,8 @@ module Fold =
     type State =
         | Active of             Balance
         | Closed
-        | TransferredToGroup of {| groupId : GroupCheckoutId; amount : decimal |}
-    and Balance = { balance : decimal; charges : ChargeId[]; payments : PaymentId[]; checkedInAt : DateTimeOffset option }
+        | TransferredToGroup of {| groupId: GroupCheckoutId; amount: decimal |}
+    and Balance = { balance: decimal; charges: ChargeId[]; payments: PaymentId[]; checkedInAt: DateTimeOffset option }
     let initial = Active { balance = 0m; charges = [||]; payments = [||]; checkedInAt = None }
 
     let evolve state event =
@@ -39,7 +39,7 @@ module Fold =
             | Events.CheckedOut _ -> Closed
             | Events.TransferredToGroup e -> TransferredToGroup {| groupId = e.groupId; amount = e.residualBalance |}
         | Closed _ | TransferredToGroup _ -> invalidOp "No events allowed after CheckedOut/TransferredToGroup"
-    let fold : State -> Events.Event seq -> State = Seq.fold evolve
+    let fold: State -> Events.Event seq -> State = Seq.fold evolve
 
 module Decide =
 
@@ -65,21 +65,21 @@ module Decide =
 
     [<RequireQualifiedAccess>]
     type CheckoutResult = Ok | AlreadyCheckedOut | BalanceOutstanding of decimal
-    let checkout at : State -> CheckoutResult * Events.Event list = function
+    let checkout at: State -> CheckoutResult * Events.Event list = function
         | Closed -> CheckoutResult.Ok, []
         | TransferredToGroup _ -> CheckoutResult.AlreadyCheckedOut, []
         | Active { balance = 0m } -> CheckoutResult.Ok, [ Events.CheckedOut {| at = at |} ]
         | Active { balance = residual } -> CheckoutResult.BalanceOutstanding residual, []
 
     [<RequireQualifiedAccess>]
-    type GroupCheckoutResult = Ok of residual : decimal | AlreadyCheckedOut
-    let groupCheckout at groupId : State -> GroupCheckoutResult * Events.Event list = function
+    type GroupCheckoutResult = Ok of residual: decimal | AlreadyCheckedOut
+    let groupCheckout at groupId: State -> GroupCheckoutResult * Events.Event list = function
         | Closed -> GroupCheckoutResult.AlreadyCheckedOut, []
         | TransferredToGroup s when s.groupId = groupId -> GroupCheckoutResult.Ok s.amount, []
         | TransferredToGroup _ -> GroupCheckoutResult.AlreadyCheckedOut, []
         | Active { balance = residual } -> GroupCheckoutResult.Ok residual, [ Events.TransferredToGroup {| at = at; groupId = groupId; residualBalance = residual |} ]
 
-type Service internal (resolve : GuestStayId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve: GuestStayId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.Charge(id, chargeId, amount) =
         let decider = resolve id
@@ -89,12 +89,12 @@ type Service internal (resolve : GuestStayId -> Equinox.Decider<Events.Event, Fo
         let decider = resolve id
         decider.Transact(Decide.payment DateTimeOffset.UtcNow paymentId amount)
  
-    member _.Checkout(id, at) : Async<Decide.CheckoutResult> =
+    member _.Checkout(id, at): Async<Decide.CheckoutResult> =
         let decider = resolve id
         decider.Transact(Decide.checkout (defaultArg at DateTimeOffset.UtcNow))
 
     // Driven exclusively by GroupCheckout
-    member _.GroupCheckout(id, groupId, ?at) : Async<Decide.GroupCheckoutResult> =
+    member _.GroupCheckout(id, groupId, ?at): Async<Decide.GroupCheckoutResult> =
         let decider = resolve id
         decider.Transact(Decide.groupCheckout (defaultArg at DateTimeOffset.UtcNow) groupId)
 

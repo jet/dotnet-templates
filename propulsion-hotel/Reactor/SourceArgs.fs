@@ -43,7 +43,7 @@ module Dynamo =
                 | MaxItems _ ->             "maximum events to load in a batch. Default: 100"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
 
-    type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
         let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
                                             | Some systemName ->
                                                 Choice1Of2 systemName
@@ -70,7 +70,7 @@ module Dynamo =
         member _.Connect() =
             connector.LogConfiguration()
             client.ConnectStore("Main", table) |> DynamoStoreContext.create
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log: ILogger) =
             log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} No event hydration", batchSizeCutoff)
             let indexStoreClient = indexStoreClient.Value
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
@@ -99,7 +99,7 @@ module Mdb =
                 | BatchSize _ ->            "maximum events to load in a batch. Default: 1000"
                 | TailSleepIntervalMs _ ->  "How long to sleep in ms once the consumer has hit the tail (default: 100ms)"
                 | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
-    type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
         let writeConnStr =                  p.TryGetResult ConnectionString |> Option.defaultWith (fun () -> c.MdbConnectionString)
         let readConnStr =                   p.TryGetResult ReadConnectionString |> Option.orElseWith (fun () -> c.MdbReadConnectionString) |> Option.defaultValue writeConnStr
         let checkpointConnStr =             p.TryGetResult CheckpointConnectionString |> Option.defaultValue writeConnStr
@@ -108,7 +108,7 @@ module Mdb =
         let batchSize =                     p.GetResult(BatchSize, 1000)
         let tailSleepInterval =             p.GetResult(TailSleepIntervalMs, 100) |> TimeSpan.FromMilliseconds
         member _.Connect() =
-                                            let sanitize (cs : string) = Npgsql.NpgsqlConnectionStringBuilder(cs, Password = null)
+                                            let sanitize (cs: string) = Npgsql.NpgsqlConnectionStringBuilder(cs, Password = null)
                                             Log.Information("Npgsql checkpoint connection {connectionString}", sanitize checkpointConnStr)
                                             if writeConnStr = readConnStr then
                                                 Log.Information("MessageDB connection {connectionString}", sanitize writeConnStr)
@@ -117,7 +117,7 @@ module Mdb =
                                                 Log.Information("MessageDB read connection {connectionString}", sanitize readConnStr)
                                             let client = Equinox.MessageDb.MessageDbClient(writeConnStr, readConnStr)
                                             Equinox.MessageDb.MessageDbContext(client, batchSize)
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log: ILogger) =
             log.Information("MessageDbSource batchSize {batchSize} Checkpoints schema {schema}", batchSize, schema)
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
             readConnStr, fromTail, batchSize, tailSleepInterval

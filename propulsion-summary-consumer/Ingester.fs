@@ -11,10 +11,10 @@ module Contract =
         | _ -> ValueNone
 
     /// A single Item in the list
-    type ItemInfo = { id : int; order : int; title: string; completed : bool }
+    type ItemInfo = { id: int; order: int; title: string; completed: bool }
 
     /// All data summarized for Summary Event Stream
-    type SummaryInfo = { items : ItemInfo[] }
+    type SummaryInfo = { items: ItemInfo[] }
 
     type Message =
         | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
@@ -22,7 +22,7 @@ module Contract =
         
     // We also want the index (which is the Version of the Summary) whenever we're handling an event
     type VersionAndMessage = int64*Message
-    let private dec : Propulsion.Sinks.Codec<VersionAndMessage> = Streams.Codec.genWithIndex<Message>
+    let private dec: Propulsion.Sinks.Codec<VersionAndMessage> = Streams.Codec.genWithIndex<Message>
     let [<return: Struct>] (|Parse|_|) = function
         | (StreamName clientId, _) & Streams.DecodeNewest dec (version, update) -> ValueSome struct (clientId, version, update)
         | _ -> ValueNone
@@ -30,11 +30,11 @@ module Contract =
 [<RequireQualifiedAccess>]
 type Outcome =
     /// Handler processed the span, with counts of used vs unused known event types
-    | Ok of used : int * unused : int
+    | Ok of used: int * unused: int
     /// Handler processed the span, but idempotency checks resulted in no writes being applied; includes count of decoded events
-    | Skipped of count : int
+    | Skipped of count: int
     /// Handler determined the events were not relevant to its duties and performed no decoding or processing
-    | NotApplicable of count : int
+    | NotApplicable of count: int
 
 /// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval) =
@@ -56,14 +56,14 @@ type Stats(log, statsInterval, stateInterval) =
             ok <- 0; skipped <- 0l; na <- 0
 
 /// Map from external contract to internal contract defined by the aggregate
-let map : Contract.Message -> TodoSummary.Events.SummaryData = function
+let map: Contract.Message -> TodoSummary.Events.SummaryData = function
     | Contract.Summary x ->
         { items =
             [| for x in x.items ->
                 { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
 
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : TodoSummary.Service) stream (span : Propulsion.Sinks.Event[]) = async {
+let ingest (service: TodoSummary.Service) stream (span: Propulsion.Sinks.Event[]) = async {
     match stream, span with
     | Contract.Parse (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with

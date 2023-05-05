@@ -34,11 +34,11 @@ module Sinks =
 
     let tags appName = ["app", appName]
 
-    let equinoxMetricsOnly tags (l : LoggerConfiguration) =
+    let equinoxMetricsOnly tags (l: LoggerConfiguration) =
         l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
          .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(tags))
 
-    let console (configuration : LoggerConfiguration) =
+    let console (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
         configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
 
@@ -46,15 +46,15 @@ module Sinks =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+    static member Configure(configuration: LoggerConfiguration, ?verbose) =
         configuration
             .Enrich.FromLogContext()
             .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member private Sinks(configuration : LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
-        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+    static member private Sinks(configuration: LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
+        let configure (a: Configuration.LoggerSinkConfiguration): unit =
             a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
             a.Logger(fun l -> // but filter what gets emitted to the console sink
                 let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
@@ -63,5 +63,5 @@ type Logging() =
         configuration.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=Action<_> configure)
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Sinks(configuration : LoggerConfiguration, configureMetricsSinks, verboseStore) =
+    static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
         configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)

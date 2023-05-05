@@ -15,7 +15,7 @@ module Codec =
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
 module Memory =
 
-    let create _codec initial fold store : Equinox.Category<_, _, _> =
+    let create _codec initial fold store: Equinox.Category<_, _, _> =
         // While the actual prod codec can be used, the Box codec allows one to stub out the decoding on the basis that
         // nothing will be proved beyond what a complete roundtripping test per `module Aggregate` would already cover
         Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), fold, initial)

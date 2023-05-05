@@ -37,7 +37,7 @@ let private reactionCategories = [| GroupCheckout.Category |]
 // NOTE while Propulsion supplies the handler with the full set of outstanding events since the last successful checkpoint,
 //   the nature of the reaction processing we are performing here can also be reliant on state that's inferred based on events 
 //   prior to those that will have arrived on the feed. For that reason, the caller does not forward the `events` argument here.
-let private handle (processor : GroupCheckoutProcess.Service) stream _events = async {
+let private handle (processor: GroupCheckoutProcess.Service) stream _events = async {
     match stream with
     | GroupCheckout.StreamName groupCheckoutId ->
         let! outcome, ver' = processor.React(groupCheckoutId)

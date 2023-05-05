@@ -41,7 +41,7 @@ module Args =
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
                 | MaxWriters _ ->           "maximum number of items to process in parallel. Default: 8"
                 | Cosmos _ ->               "specify CosmosDb input parameters"
-    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Verbose =                p.Contains Verbose
         member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
         member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
@@ -69,7 +69,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+    and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -88,7 +88,7 @@ module Args =
 
 let [<Literal>] AppName = "ConsumerTemplate"
 
-let start (args : Args.Arguments) =
+let start (args: Args.Arguments) =
     let service =
         let store =
             let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create

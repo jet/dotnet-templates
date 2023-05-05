@@ -5,26 +5,26 @@ open System.Threading.Tasks
 
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type SourceConfig =
-    | Memory of store : Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>
-    | Dynamo of indexStore : Equinox.DynamoStore.DynamoStoreClient
-        * checkpoints : Propulsion.Feed.IFeedCheckpointStore
-        * loading : Propulsion.DynamoStore.EventLoadMode
-        * startFromTail : bool
-        * batchSizeCutoff : int
-        * tailSleepInterval : TimeSpan
-        * statsInterval : TimeSpan
+    | Memory of store: Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>
+    | Dynamo of indexStore: Equinox.DynamoStore.DynamoStoreClient
+        * checkpoints: Propulsion.Feed.IFeedCheckpointStore
+        * loading: Propulsion.DynamoStore.EventLoadMode
+        * startFromTail: bool
+        * batchSizeCutoff: int
+        * tailSleepInterval: TimeSpan
+        * statsInterval: TimeSpan
     | Mdb of connectionString: string
-        * checkpoints : Propulsion.Feed.IFeedCheckpointStore
-        * startFromTail : bool
-        * batchSize : int
-        * tailSleepInterval : TimeSpan
-        * statsInterval : TimeSpan
+        * checkpoints: Propulsion.Feed.IFeedCheckpointStore
+        * startFromTail: bool
+        * batchSize: int
+        * tailSleepInterval: TimeSpan
+        * statsInterval: TimeSpan
 
 module SourceConfig =
     module Memory =
         open Propulsion.MemoryStore
         let start log (sink: Propulsion.Sinks.Sink) (categories: string[])
-            (store : Equinox.MemoryStore.VolatileStore<_>) : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+            (store: Equinox.MemoryStore.VolatileStore<_>): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source = MemoryStoreSource(log, store, categories, sink)
             source.Start(), Some (fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false))
     module Dynamo =
@@ -54,7 +54,7 @@ module SourceConfig =
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 
-    let start (log, storeLog) sink categories : SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) option = function
+    let start (log, storeLog) sink categories: SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) option = function
         | SourceConfig.Memory volatileStore ->
             Memory.start log sink categories volatileStore
         | SourceConfig.Dynamo (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->

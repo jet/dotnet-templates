@@ -4,10 +4,10 @@ open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and
 open System
 
 module Guid =
-    let inline toStringN (x : Guid) = x.ToString "N"
+    let inline toStringN (x: Guid) = x.ToString "N"
 
 /// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =
-    let toString (value : ClientId): string = Guid.toStringN %value
+    let toString (value: ClientId): string = Guid.toStringN %value

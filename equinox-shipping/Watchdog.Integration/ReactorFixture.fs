@@ -27,7 +27,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
 
     member val Store = store
     member val ProcessManager = manager
-    abstract member RunTimeout : TimeSpan with get
+    abstract member RunTimeout: TimeSpan with get
     default _.RunTimeout = TimeSpan.FromSeconds 1.
     member val Log = Serilog.Log.Logger // initialized by CaptureSerilogLog
 

@@ -40,7 +40,7 @@ module Args =
                 | RuThreshold _ ->          "minimum request charge required to log. Default: 0"
                 | MaxKib _ ->               "max KiB to submit to Sync operation. Default: 512"
                 | SrcCosmos _ ->            "Cosmos input parameters."
-    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Verbose =                p.Contains Parameters.Verbose
         member val SyncLogging =            p.Contains SyncVerbose, p.TryGetResult RuThreshold
         member val PrometheusPort =         p.TryGetResult PrometheusPort
@@ -50,15 +50,15 @@ module Args =
         member val MaxBytes =               p.GetResult(MaxKib, 512) * 1024
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
-        member val Source : CosmosSourceArguments =
+        member val Source: CosmosSourceArguments =
             match p.GetSubCommand() with
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for SrcCosmos"
         member x.DestinationArchive = x.Source.Archive
         member x.MonitoringParams() =
             let srcC = x.Source
-            let leases : Microsoft.Azure.Cosmos.Container =
-                let dstC : CosmosSinkArguments = srcC.Archive
+            let leases: Microsoft.Azure.Cosmos.Container =
+                let dstC: CosmosSinkArguments = srcC.Archive
                 match srcC.LeaseContainer, dstC.LeaseContainerId with
                 | _, None ->        srcC.ConnectLeases()
                 | None, Some dc ->  dstC.ConnectLeases dc
@@ -103,7 +103,7 @@ module Args =
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
 
                 | DstCosmos _ ->            "CosmosDb Sink parameters."
-    and CosmosSourceArguments(c : Configuration, p : ParseResults<CosmosSourceParameters>) =
+    and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
         let discovery =                     p.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
         let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
@@ -116,7 +116,7 @@ module Args =
 
         member val FromTail =               p.Contains CosmosSourceParameters.FromTail
         member val MaxItems =               p.TryGetResult MaxItems
-        member val LagFrequency : TimeSpan = p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
+        member val LagFrequency: TimeSpan = p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val LeaseContainer =         p.TryGetResult CosmosSourceParameters.LeaseContainer
         member val Verbose =                p.Contains Verbose
         member private _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
@@ -147,7 +147,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 0."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
-    and CosmosSinkArguments(c : Configuration, p : ParseResults<CosmosSinkParameters>) =
+    and CosmosSinkArguments(c: Configuration, p: ParseResults<CosmosSinkParameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
@@ -162,7 +162,7 @@ module Args =
         member _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
@@ -172,12 +172,12 @@ let [<Literal>] AppName = "ArchiverTemplate"
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         // while the default maxJsonBytes is 30000 - we are prepared to incur significant extra write RU charges in order to maximize packing
         let maxEvents, maxJsonBytes = 100_000, 100_000
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents, tipMaxJsonLength=maxJsonBytes)
 
-let build (args : Args.Arguments, log) =
+let build (args: Args.Arguments, log) =
     let archiverSink =
         let context = args.DestinationArchive.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
@@ -191,7 +191,7 @@ let build (args : Args.Arguments, log) =
     archiverSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
-let startMetricsServer port : IDisposable =
+let startMetricsServer port: IDisposable =
     let metricsServer = new Prometheus.KestrelMetricServer(port = port)
     let ms = metricsServer.Start()
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
@@ -199,10 +199,10 @@ let startMetricsServer port : IDisposable =
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
-let run (args : Args.Arguments) = async {
+let run (args: Args.Arguments) = async {
     let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Sinks.Factory>()
     let sink, source = build (args, log)
-    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
+    use _metricsServer: IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     return! [|  Async.AwaitKeyboardInterruptAsTaskCanceledException()
                 source.AwaitWithStopOnCancellation()
                 sink.AwaitWithStopOnCancellation()

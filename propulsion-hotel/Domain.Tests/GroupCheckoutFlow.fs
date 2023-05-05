@@ -7,7 +7,7 @@ open Reactor
 open Swensen.Unquote
 
 [<Property>]
-let ``Happy path including Reaction`` (store, groupCheckoutId, paymentId, stays : _ []) = async {
+let ``Happy path including Reaction`` (store, groupCheckoutId, paymentId, stays: _ []) = async {
     let staysService = GuestStay.Factory.create store
     let sut = GroupCheckout.Factory.create store
     let processor = GroupCheckoutProcess.Service(staysService, sut, 2)
