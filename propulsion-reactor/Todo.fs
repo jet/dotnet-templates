@@ -36,7 +36,7 @@ module Reactions =
     let (|ImpliesStateChange|NoStateChange|NotApplicable|) = function
         | Parse (clientId, events) ->
             if events |> Array.exists impliesStateChange then ImpliesStateChange (clientId, events.Length)
-            else NoStateChange (clientId, events)
+            else NoStateChange events.Length
         | _, events -> NotApplicable events.Length
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream

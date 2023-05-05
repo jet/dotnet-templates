@@ -42,7 +42,7 @@ module Streams =
     
     module Codec =
         
-        let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract>: Propulsion.Sinks.Codec<'E> =
+        let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
             FsCodec.SystemTextJson.Codec.Create<'E>() // options = Options.Default
 
         let private withUpconverter<'c, 'e when 'c :> TypeShape.UnionContract.IUnionContract> up: Propulsion.Sinks.Codec<'e> =

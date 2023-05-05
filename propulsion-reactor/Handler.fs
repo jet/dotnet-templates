@@ -75,8 +75,8 @@ let handle
         let wrapped = generate stream version' (Contract.Summary summary)
         let! _ = produceSummary wrapped
         return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
-    | Todo.Reactions.NoStateChange (_clientId, events) ->
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped events.Length
+    | Todo.Reactions.NoStateChange eventCount ->
+        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped eventCount
     | Todo.Reactions.NotApplicable eventCount ->
         return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable eventCount }
 #endif
