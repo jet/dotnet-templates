@@ -70,9 +70,9 @@ type TicketsFeed(baseUri) =
     let tickets = Session(client).Tickets
 
     // TODO add retries - consumer loop will abort if this throws
-    member _.Poll(trancheId, pos, ct) = task {
+    member _.Poll(trancheId, pos) = async {
         let checkpoint = TicketsCheckpoint.ofPosition pos
-        let! pg = tickets.Poll(TrancheId.toFcId trancheId, checkpoint) |> Async.startImmediateAsTask ct
+        let! pg = tickets.Poll(TrancheId.toFcId trancheId, checkpoint)
         let baseIndex = TicketsCheckpoint.toStreamIndex pg.position
         let map (x: ItemDto): Ingester.PipelineEvent.Item = { id = x.id; payload = x.payload }
         let items = pg.tickets |> Array.mapi (fun i x -> Ingester.PipelineEvent.ofIndexAndItem (baseIndex + int64 i) (map x))
@@ -80,7 +80,7 @@ type TicketsFeed(baseUri) =
     }
 
     // TODO add retries - consumer loop will not commence if this emits an exception
-    member _.ReadTranches(ct) = task {
-        let! activeFcs = tickets.ActiveFcs() |> Async.startImmediateAsTask ct
+    member _.ReadTranches() = async {
+        let! activeFcs = tickets.ActiveFcs()
         return [| for f in activeFcs -> TrancheId.ofFcId f |]
     }
