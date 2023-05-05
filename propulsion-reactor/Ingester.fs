@@ -42,15 +42,15 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 let [<Literal>] Category = "Todos"
 let reactionCategories = [| Category |]
     
-let handle stream (span: Propulsion.Sinks.Event[]) = async {
-    match stream, span with
+let handle stream (events: Propulsion.Sinks.Event[]) = async {
+    match stream, events with
     | FsCodec.StreamName.CategoryAndId (Category, id), _ ->
         let ok = true
         // "TODO: add handler code"
         match ok with
-        | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, span.Length - 1)
-        | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped span.Length
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
+        | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, events.Length - 1)
+        | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped events.Length
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
 #else
 // map from external contract to internal contract defined by the aggregate
 let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData =
@@ -60,14 +60,14 @@ let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData
 
 let reactionCategories = Todo.Reactions.categories
 
-let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) stream span = async {
-    match struct (stream, span) with
+let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) stream events = async {
+    match struct (stream, events) with
     | Todo.Reactions.ImpliesStateChange (clientId, eventCount) ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
         | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
         | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped eventCount
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
 #endif
 
 type Factory private () =

@@ -63,10 +63,10 @@ let map: Contract.Message -> TodoSummary.Events.SummaryData = function
                 { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
 
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service: TodoSummary.Service) stream (span: Propulsion.Sinks.Event[]) = async {
-    match struct (stream, span) with
+let ingest (service: TodoSummary.Service) stream (events: Propulsion.Sinks.Event[]) = async {
+    match struct (stream, events) with
     | Contract.Parse (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with
-        | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, span.Length - 1)
-        | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped span.Length
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
+        | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, events.Length - 1)
+        | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped events.Length
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }

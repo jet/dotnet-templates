@@ -91,8 +91,8 @@ module MultiStreams =
             | StreamName.CategoryAndId (categoryName, _), events -> OtherCategory struct (categoryName, Array.length events)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
-        member _.Handle(streamName: StreamName, span: Propulsion.Sinks.Event[]) = async {
-            match struct (streamName, span) with
+        member _.Handle(streamName: StreamName, events: Propulsion.Sinks.Event[]) = async {
+            match struct (streamName, events) with
             | OtherCategory (cat, count) ->
                 return Propulsion.Sinks.StreamResult.AllProcessed, OtherCategory (cat, count)
             | FavoritesEvents (id, s, xs) ->

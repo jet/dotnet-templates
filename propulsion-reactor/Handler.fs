@@ -50,8 +50,8 @@ let categories = [| Contract.Input.Category |]
     
 let handle
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
-        stream span = async {
-    match struct (stream, span) with
+        stream events = async {
+    match struct (stream, events) with
     | Contract.Input.Parse (_clientId, events) ->
         for version, event in events do
             let summary =
@@ -61,15 +61,15 @@ let handle
             let wrapped = generate stream version summary
             let! _ = produceSummary wrapped in ()
         return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (events.Length, 0)
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
 #else
 let categories = Todo.Reactions.categories
     
 let handle
         (service: Todo.Service)
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
-        stream span = async {
-    match struct (stream, span) with
+        stream events = async {
+    match struct (stream, events) with
     | Todo.Reactions.ImpliesStateChange (clientId, eventCount) ->
         let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
         let wrapped = generate stream version' (Contract.Summary summary)

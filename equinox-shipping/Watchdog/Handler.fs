@@ -41,9 +41,9 @@ let private reactionCategories = [| FinalizationTransaction.Category |]
 let handle
         (processingTimeout: TimeSpan)
         (driveTransaction: Shipping.Domain.TransactionId -> Async<bool>)
-        stream span = async {
+        stream events = async {
     let processingStuckCutoff = let now = DateTimeOffset.UtcNow in now.Add(-processingTimeout)
-    match stream, span with
+    match stream, events with
     | TransactionWatchdog.Finalization.MatchStatus (transId, state) ->
         match TransactionWatchdog.toStatus processingStuckCutoff state with
         | TransactionWatchdog.Complete ->

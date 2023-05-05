@@ -39,9 +39,9 @@ type ProductionStats(log, statsInterval, stateInterval) =
 ///   to preserve ordering at stream (key) level for messages produced to the topic)
 // TODO NOTE: The bulk of any manipulation should take place before events enter the scheduler, i.e. in program.fs
 // TODO NOTE: While filtering out entire categories is appropriate, you should not filter within a given stream (i.e., by event type)
-let render (stream: FsCodec.StreamName) (span: Propulsion.Sinks.Event[]) = async {
+let render (stream: FsCodec.StreamName) (events: Propulsion.Sinks.Event[]) = async {
     let value =
-        span
+        events
         |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
         |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
     return FsCodec.StreamName.toString stream, value }
@@ -72,11 +72,11 @@ type Stats(log, statsInterval, stateInterval) =
 
 let categories = [| "categoryA" |]
 
-let handle _stream (span: Propulsion.Sinks.Event[]) = async {
+let handle _stream (events: Propulsion.Sinks.Event[]) = async {
     let r = System.Random()
-    let ms = r.Next(1, span.Length)
+    let ms = r.Next(1, events.Length)
     do! Async.Sleep ms
-    return Propulsion.Sinks.StreamResult.AllProcessed, span.Length }
+    return Propulsion.Sinks.StreamResult.AllProcessed, events.Length }
 #endif // !kafka
 
 type Factory private () =

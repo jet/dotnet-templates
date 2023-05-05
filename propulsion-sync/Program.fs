@@ -495,9 +495,9 @@ let build (args: Args.Arguments, log) =
                 match cosmos.KafkaSink with
                 | Some kafka ->
                     let broker, topic, producers = kafka.BuildTargetParams()
-                    let render (stream: FsCodec.StreamName) (span: Propulsion.Sinks.Event[]) = async {
+                    let render (stream: FsCodec.StreamName) (events: Propulsion.Sinks.Event[]) = async {
                         let value =
-                            span
+                            events
                             |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.ofStreamSpan stream
                             |> Propulsion.Codec.NewtonsoftJson.Serdes.Serialize
                         return FsCodec.StreamName.toString stream, value }

@@ -40,8 +40,8 @@ module PipelineEvent =
             ValueSome (fc, s |> Seq.map (fun e -> Unchecked.unbox<Item> e.Context))
         | _ -> ValueNone
 
-let handle maxDop stream span = async {
-    match stream, span with
+let handle maxDop stream events = async {
+    match stream, events with
     | PipelineEvent.ItemsForFc (_fc, items) ->
         // Take chunks of max 1000 in order to make handler latency be less 'lumpy'
         // What makes sense in terms of a good chunking size will vary depending on the workload in question

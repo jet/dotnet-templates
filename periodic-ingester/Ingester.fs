@@ -45,8 +45,8 @@ module PipelineEvent =
             ValueSome (ticketId, s |> Seq.map (fun e -> Unchecked.unbox<TicketData> e.Context))
         | _ -> ValueNone
 
-let handle stream span = async {
-    match stream, span with
+let handle stream events = async {
+    match stream, events with
     | PipelineEvent.TicketEvents (ticketId, items) ->
         // TODO : Ingest the data
         return Propulsion.Sinks.StreamResult.AllProcessed, IngestionOutcome.Unchanged
