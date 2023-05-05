@@ -32,7 +32,7 @@ module Streams =
                 .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
             ValueNone
         | x -> x
-    let [<return: Struct>] (|DecodeNewest|_|) codec (stream, events: Propulsion.Sinks.Event[]): 'E voption =
+    let [<return: Struct>] (|DecodeNewest|_|) codec struct (stream, events: Propulsion.Sinks.Event[]): 'E voption =
         events |> Seq.rev |> Propulsion.Internal.Seq.tryPickV (tryDecode codec stream)
 
     module Codec =

@@ -30,7 +30,7 @@ module Input =
     let private dec = Streams.Codec.genWithIndex<Event>
 
     let [<return: Struct>] (|Parse|_|) = function
-        | (StreamName clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
+        | struct (StreamName clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
         | _ -> ValueNone
 
 type Data = { value: int }

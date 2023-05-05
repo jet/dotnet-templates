@@ -24,7 +24,7 @@ module Contract =
     type VersionAndMessage = int64*Message
     let private dec: Propulsion.Sinks.Codec<VersionAndMessage> = Streams.Codec.genWithIndex<Message>
     let [<return: Struct>] (|Parse|_|) = function
-        | (StreamName clientId, _) & Streams.DecodeNewest dec (version, update) -> ValueSome struct (clientId, version, update)
+        | struct (StreamName clientId, _) & Streams.DecodeNewest dec (version, update) -> ValueSome struct (clientId, version, update)
         | _ -> ValueNone
 
 [<RequireQualifiedAccess>]
