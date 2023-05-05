@@ -289,7 +289,7 @@ let build (args: Args.Arguments) =
     let sink =
 #if kafka // !sourceKafka && kafka 
 #if blank // !sourceKafka && kafka && blank
-        Handler.Config.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, purgeInterval = args.PurgeInterval)
+        Handler.Factory.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead, purgeInterval = args.PurgeInterval)
 #else // !sourceKafka && kafka && !blank
         Propulsion.Sync.Factory.Start(
             Log.Logger, maxReadAhead, maxConcurrentStreams, (fun sn ss ct -> Async.startImmediateAsTask ct (handle sn ss)), stats,

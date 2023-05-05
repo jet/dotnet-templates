@@ -49,7 +49,7 @@ let handle stream (span: Propulsion.Sinks.Event[]) = async {
         match ok with
         | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, span.Length - 1)
         | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped span.Length
-    | _ -> return Propulsion.Streams.AllProcessed, Outcome.NotApplicable span.Length }
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable span.Length }
 #else
 // map from external contract to internal contract defined by the aggregate
 let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData =
