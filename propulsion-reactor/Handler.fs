@@ -51,7 +51,7 @@ let categories = [| Contract.Input.Category |]
 let handle
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         stream span = async {
-    match stream, span with
+    match struct (stream, span) with
     | Contract.Input.Parse (_clientId, events) ->
         for version, event in events do
             let summary =
