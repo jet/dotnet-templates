@@ -35,13 +35,13 @@ module Dynamo =
 module Esdb =
 
     let create codec initial fold (context, cache) =
-        let cacheStrategy = Equinox.EventStoreDb.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, cacheStrategy)
 
 module Sss =
 
     let create codec initial fold (context, cache) =
-        let cacheStrategy = Equinox.SqlStreamStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.SqlStreamStore.SqlStreamStoreCategory(context, codec, fold, initial, cacheStrategy)
 
 #if esdb

@@ -34,7 +34,7 @@ module Mdb =
     open Equinox.MessageDb
 
     let private create codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
         MessageDbCategory(context, codec, fold, initial, cacheStrategy, ?access = accessStrategy)
 
     let createUnoptimized codec initial fold (context, cache) =

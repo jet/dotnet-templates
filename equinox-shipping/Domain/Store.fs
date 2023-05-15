@@ -48,7 +48,7 @@ module Dynamo =
 module Esdb =
 
     let private createCached codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = Equinox.EventStoreDb.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
         Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, cacheStrategy, ?access = accessStrategy)
     let createUnoptimized codec initial fold (context, cache) =
         createCached codec initial fold None (context, cache)

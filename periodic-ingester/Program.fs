@@ -124,9 +124,8 @@ let build (args: Args.Arguments) =
         let source =
             Propulsion.Feed.PeriodicSource(
                 Log.Logger, args.StatsInterval, feed.SourceId,
-                client.Crawl, feed.RefreshInterval, checkpoints,
-                sink)
-        source.Start()
+                feed.RefreshInterval, checkpoints, sink)
+        source.Start(client.Crawl)
     sink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly

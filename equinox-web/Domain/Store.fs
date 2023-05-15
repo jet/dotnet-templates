@@ -57,7 +57,7 @@ module Dynamo =
 module Esdb =
 
     let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
-        let cacheStrategy = Equinox.EventStoreDb.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let accessStrategy = Equinox.EventStoreDb.AccessStrategy.RollingSnapshots (isOrigin, toSnapshot)
         Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, cacheStrategy, accessStrategy)
 

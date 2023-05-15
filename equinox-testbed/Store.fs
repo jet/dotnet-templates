@@ -38,5 +38,5 @@ type Context =
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.CosmosStore.CachingStrategy * unfolds: bool
 //#endif
 //#if eventStore
-    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.EventStoreDb.CachingStrategy option * unfolds: bool
+    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.CachingStrategy option * unfolds: bool
 //#endif

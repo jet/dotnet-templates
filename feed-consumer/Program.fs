@@ -112,8 +112,8 @@ let build (args: Args.Arguments) =
         let source =
             Propulsion.Feed.FeedSource(
                 Log.Logger, args.StatsInterval, args.SourceId, args.TailSleepInterval,
-                checkpoints, sink, (fun (t, p, c) -> Propulsion.Internal.Async.startImmediateAsTask c (feed.Poll(t, p))))
-        source.Start(fun ct -> Propulsion.Internal.Async.startImmediateAsTask ct (feed.ReadTranches()))
+                checkpoints, sink)
+        source.Start(feed.ReadTranches, fun t p -> feed.Poll(t, p))
     sink, source
 
 let run args = async {

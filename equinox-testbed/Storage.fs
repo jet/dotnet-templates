@@ -117,7 +117,7 @@ module EventStore =
         let cacheStrategy =
             if cache then
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
-                CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
+                Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
             else None
         Store.Context.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)
 //#endif

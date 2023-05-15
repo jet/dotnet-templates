@@ -62,7 +62,7 @@ namespace TodoBackendTemplate
 
             var cacheStrategy = _cache == null
                 ? null
-                : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
+                : Equinox.CosmosStore.CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
             var cat = new CosmosStoreCategory<TEvent, TState, Unit>(_store, codec.ToJsonElementCodec(), FuncConvert.FromFunc(fold), initial, cacheStrategy, accessStrategy, compressUnfolds:FSharpOption<bool>.None);
             return args => cat.Resolve(handlerLog).Invoke(args.Item1, args.Item2);
         }
