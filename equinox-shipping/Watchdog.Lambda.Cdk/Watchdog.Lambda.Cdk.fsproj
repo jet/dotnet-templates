@@ -20,7 +20,7 @@
         <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props-->
         <!-- <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />-->
 
-        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0-rc.4.4" />
+        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0-rc.5" />
     </ItemGroup>
 
 </Project>

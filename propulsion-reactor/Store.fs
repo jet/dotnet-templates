@@ -50,15 +50,15 @@ module Esdb =
 module Sss =
 
     let create codec initial fold (context, cache) =
-        let cacheStrategy = Equinox.SqlStreamStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         Equinox.SqlStreamStore.SqlStreamStoreCategory(context, codec, fold, initial, cacheStrategy)
 
 #endif
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Context =
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
 #if !(sourceKafka && kafka)
-    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.Core.ICache
-    | Sss of Equinox.SqlStreamStore.SqlStreamStoreContext * Equinox.Core.ICache
+    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.Cache
+    | Sss of Equinox.SqlStreamStore.SqlStreamStoreContext * Equinox.Cache
 #endif

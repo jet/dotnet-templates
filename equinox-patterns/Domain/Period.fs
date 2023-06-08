@@ -107,7 +107,7 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
         let decide' s = async {
             let! r, es = decideIngestWithCarryForward rules () s
             return Option.get r.carryForward, es }
-        decider.TransactAsync(decide', load = Equinox.AllowStale)
+        decider.TransactAsync(decide', load = Equinox.AnyCachedValue)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     let tryTransact periodId getIncoming (decide: 'request -> Fold.State -> 'request * 'result * Events.Event list) request shouldClose: Async<Result<'request, 'result>> =
@@ -116,7 +116,7 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
                 decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
                 decideCarryForward  = fun res state -> async { if shouldClose res then return! genBalance state else return None } } // also close, if we should
         let decider = resolve periodId
-        decider.TransactAsync(decideIngestWithCarryForward rules request, load = Equinox.AllowStale)
+        decider.TransactAsync(decideIngestWithCarryForward rules request, load = Equinox.AnyCachedValue)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     /// Processing completes when `decide` yields None for the residual of the 'request
@@ -133,7 +133,7 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
         aux periodId getIncoming (Some request)
 
     /// Exposes the full state to a reader (which is appropriate for a demo but is an anti-pattern in the general case)
-    /// NOTE unlike for the Transact method, we do not supply ResolveOption.AllowStale, which means we'll see updates from other instances
+    /// NOTE unlike for the Transact method, we do not supply ResolveOption.AnyCachedValue, which means we'll see updates from other instances
     member _.Read periodId =
         let decider = resolve periodId
         decider.Query id

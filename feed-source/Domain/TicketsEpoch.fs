@@ -51,7 +51,7 @@ let decide capacity candidates (currentIds, closed as state) =
     | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, []
     | false, [||] ->           { accepted = [||]; residual = [||];            content = currentIds; closed = closed }, []
     | false, freshItems ->
-        // NOTE we in some cases end up triggering splitting of a request (or set of requests coalesced in the AsyncBatchingGate)
+        // NOTE we in some cases end up triggering splitting of a request (or set of requests coalesced in the Batcher)
         // In some cases it might be better to be a little tolerant and not be rigid about limiting things as
         // - snapshots should compress well (no major incremental cost for a few more items)
         // - its always good to avoid a second store roundtrip
@@ -76,12 +76,13 @@ type IngestionService internal (capacity, resolve: FcId * TicketsEpochId -> Equi
         // Accept whatever date is in the cache on the basis that we are doing most of the writing so will more often than not
         // have the correct state already without a roundtrip. What if the data is actually stale? we'll end up needing to resync,
         // but we we need to deal with that as a race condition anyway
-        decider.Transact(decide capacity ticketIds, Equinox.AllowStale)
+        decider.Transact(decide capacity ticketIds, Equinox.AnyCachedValue)
 
     /// Obtains a complete list of all the tickets in the specified fcid/epochId
+    /// NOTE AnyCachedValue option assumes that it's safe to ignore writes from other nodes
     member _.ReadTickets(fcId, epochId): Async<TicketId[]> =
         let decider = resolve (fcId, epochId)
-        decider.Query(fst, Equinox.AllowStale)
+        decider.Query(fst, Equinox.AnyCachedValue)
 
 module Factory =
 

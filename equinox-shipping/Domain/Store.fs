@@ -58,6 +58,6 @@ module Esdb =
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Context<'t> =
     | Memory of Equinox.MemoryStore.VolatileStore<'t>
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-    | Esdb of   Equinox.EventStoreDb.EventStoreContext * Equinox.Core.ICache
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
+    | Esdb of   Equinox.EventStoreDb.EventStoreContext * Equinox.Cache

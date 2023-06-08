@@ -46,7 +46,7 @@ type Service internal (resolve: unit -> Equinox.Decider<Events.Event, Fold.State
     /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by anointing a successor via this
     member _.MarkIngestionEpochId epochId: Async<unit> =
         let decider = resolve ()
-        decider.Transact(interpret epochId, load = Equinox.AllowStale)
+        decider.Transact(interpret epochId, load = Equinox.AnyCachedValue)
 
 module Factory =
 

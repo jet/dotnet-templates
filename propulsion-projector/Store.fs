@@ -47,6 +47,6 @@ module Sss =
 #if esdb
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Context =
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
 #endif

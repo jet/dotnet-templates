@@ -13,8 +13,7 @@ module Contract =
            pickTicketId: string
            purchaseOrderInfo: OrderInfo[] }
     let serdes = FsCodec.SystemTextJson.Serdes.Default
-    // TODO remove .Span
-    let parse (utf8: Propulsion.Sinks.EventBody): Message = serdes.Deserialize<Message>(utf8.Span)
+    let parse (utf8: Propulsion.Sinks.EventBody): Message = serdes.Deserialize<Message>(utf8)
 
 type Outcome = Completed of used: int * unused: int
 

@@ -85,7 +85,7 @@ type ServiceForFc internal (log: Serilog.ILogger, fcId, epochs: TicketsEpoch.Ing
 
     /// Within the processing for a given FC, we have a Scheduler running N streams concurrently
     /// If each thread works in isolation, they'll conflict with each other as they feed the ticket into the batch in epochs.Ingest
-    /// Instead, we enable concurrent requests to coalesce by having requests converge in this AsyncBatchingGate
+    /// Instead, we enable concurrent requests to coalesce by having requests converge in this Batcher
     /// This has the following critical effects:
     /// - Traffic to CosmosDB is naturally constrained to a single flight in progress
     ///   (BatchingGate does not release next batch for execution until current has succeeded or throws)
@@ -94,7 +94,7 @@ type ServiceForFc internal (log: Serilog.ILogger, fcId, epochs: TicketsEpoch.Ing
     ///   a) back-off, re-read and retry if there's a concurrent write Optimistic Concurrency Check failure when writing the stream
     ///   b) enter a prolonged period of retries if multiple concurrent writes trigger rate limiting and 429s from CosmosDB
     ///   c) readers will less frequently encounter sustained 429s on the batch
-    let batchedIngest = AsyncBatchingGate(tryIngest, linger)
+    let batchedIngest = Equinox.Core.Batching.Batcher(tryIngest, linger)
 
     /// Upon startup, we initialize the Tickets cache from recent epochs; we want to kick that process off before our first ingest
     member _.Initialize() = async {

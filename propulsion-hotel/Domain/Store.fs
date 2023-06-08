@@ -44,5 +44,5 @@ module Mdb =
 [<RequireQualifiedAccess; NoComparison; NoEquality>]
 type Context =
     | Memory of Equinox.MemoryStore.VolatileStore<struct (int * System.ReadOnlyMemory<byte>)>
-    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-    | Mdb    of Equinox.MessageDb.MessageDbContext * Equinox.Core.ICache
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
+    | Mdb    of Equinox.MessageDb.MessageDbContext * Equinox.Cache

@@ -56,7 +56,7 @@ type Service<[<Measure>]'id, 'req, 'res, 'outcome> internal
 
     /// In the overall processing using an Ingester, we frequently have a Scheduler running N streams concurrently
     /// If each thread works in isolation, they'll conflict with each other as they feed the Items into the batch in epochs.Ingest
-    /// Instead, we enable concurrent requests to coalesce by having requests converge in this AsyncBatchingGate
+    /// Instead, we enable concurrent requests to coalesce by having requests converge in this Batcher
     /// This has the following critical effects:
     /// - Traffic to CosmosDB is naturally constrained to a single flight in progress
     ///   (BatchingGate does not release next batch for execution until current has succeeded or throws)
@@ -65,7 +65,7 @@ type Service<[<Measure>]'id, 'req, 'res, 'outcome> internal
     ///   a) back-off, re-read and retry if there's a concurrent write Optimistic Concurrency Check failure when writing the stream
     ///   b) enter a prolonged period of retries if multiple concurrent writes trigger rate limiting and 429s from CosmosDB
     ///   c) readers will less frequently encounter sustained 429s on the batch
-    let batchedIngest = Equinox.Core.AsyncBatchingGate(tryIngest, linger)
+    let batchedIngest = Equinox.Core.Batching.Batcher(tryIngest, linger)
 
     /// Run the requests over a chain of epochs.
     /// Returns the subset that actually got handled this time around (i.e., exclusive of items that did not trigger writes per the idempotency rules).

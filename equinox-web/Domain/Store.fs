@@ -70,11 +70,11 @@ type Context<'t> =
 type Context =
 #endif
 //#if cosmos
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
 //#endif
 //#if dynamo
-    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
 //#endif
 //#if eventStore
-    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.Core.ICache
+    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.Cache
 //#endif

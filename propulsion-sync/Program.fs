@@ -473,8 +473,8 @@ module Checkpoints =
         let create groupName (context, cache) =
             let caching = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
             let cat = CosmosStoreCategory(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
-            let resolve log = Equinox.Decider.resolve log cat
-            Checkpoint.CheckpointSeries(groupName, resolve)
+            let resolve log = Equinox.DeciderCore.Resolve(cat, log)
+            failwith "TODO Checkpoint.CheckpointSeries(groupName, resolve) // Propulsion 3rc5 has a very unfortunate mangle, and don't have time to figure out a hack-workaround"
 
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Sync.Stats<unit>(log, statsInterval, stateInterval)

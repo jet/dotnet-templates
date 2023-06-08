@@ -58,12 +58,12 @@ type Service internal
         // NOTE decider which will initially transact against potentially stale cached state, which will trigger a
         // resync if another writer has gotten in before us. This is a conscious decision in this instance; the bulk
         // of writes are presumed to be coming from within this same process
-        decider.Transact(decide shouldClose items, load = Equinox.AllowStale)
+        decider.Transact(decide shouldClose items, load = Equinox.AnyCachedValue)
 
-    /// Returns all the items currently held in the stream (Not using AllowStale on the assumption this needs to see updates from other apps)
+    /// Returns all the items currently held in the stream (Not using AnyCachedValue on the assumption this needs to see updates from other apps)
     member _.Read epochId: Async<Fold.State> =
         let decider = resolve epochId
-        decider.Query id
+        decider.Query(id, Equinox.AllowStale (System.TimeSpan.FromSeconds 1))
 
 module Factory =
 

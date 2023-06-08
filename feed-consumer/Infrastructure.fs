@@ -254,7 +254,7 @@ type HttpResponseMessage with
 
 module HttpRes =
 
-    let private serdes = FsCodec.SystemTextJson.Options.Default |> FsCodec.SystemTextJson.Serdes
+    let private serdes = FsCodec.SystemTextJson.Serdes.Default
     /// Deserialize body using default System.Text.Json profile - throw with content details if StatusCode is unexpected or decoding fails
     let deserializeExpectedStj<'t> expectedStatusCode (res: HttpResponseMessage) =
         res.Interpret(expectedStatusCode, serdes.Deserialize<'t>)

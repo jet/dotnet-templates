@@ -20,4 +20,4 @@ module Cosmos =
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Context =
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
