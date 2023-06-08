@@ -13,21 +13,21 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     let contextId = Shipping.Domain.Guid.generateStringN ()
     let manager =
         let maxDop = 4
-        Shipping.Domain.FinalizationProcess.Config.create maxDop store
+        Shipping.Domain.FinalizationProcess.Factory.create maxDop store
     let log = Serilog.Log.Logger
     let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1, stateInterval = TimeSpan.FromMinutes 2,
                               verboseStore = true, logExternalStats = dumpStats)
-    let sink = Handler.Config.StartSink(log, stats, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 1024, maxConcurrentStreams = 4,
+    let sink = Handler.Factory.StartSink(log, stats, 4, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 1024,
                                         // Ensure batches are completed ASAP so waits in the tests are minimal
                                         wakeForResults = true)
     let source, awaitReactions =
         let consumerGroupName = $"ReactorFixture/{contextId}"
         let sourceConfig = createSourceConfig consumerGroupName
-        Handler.Config.StartSource(log, sink, sourceConfig)
+        Handler.Factory.StartSource(log, sink, sourceConfig)
 
     member val Store = store
     member val ProcessManager = manager
-    abstract member RunTimeout : TimeSpan with get
+    abstract member RunTimeout: TimeSpan with get
     default _.RunTimeout = TimeSpan.FromSeconds 1.
     member val Log = Serilog.Log.Logger // initialized by CaptureSerilogLog
 
@@ -59,7 +59,7 @@ module MemoryReactor =
         new (messageSink) =
             let store = Equinox.MemoryStore.VolatileStore()
             let createSourceConfig _groupName = SourceConfig.Memory store
-            new Fixture(messageSink, Shipping.Domain.Config.Store.Memory store, createSourceConfig)
+            new Fixture(messageSink, Shipping.Domain.Store.Context.Memory store, createSourceConfig)
         override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member _.Wait() = base.Await(TimeSpan.MaxValue) // Propagation delay is not applicable for MemoryStore
         member val private Backoff = TimeSpan.FromMilliseconds 1
@@ -106,7 +106,7 @@ module DynamoReactor =
         new (messageSink) =
             let conn = DynamoConnector()
             let createSourceConfig consumerGroupName =
-                let loadMode = DynamoLoadModeConfig.Hydrate (conn.StoreContext, 4)
+                let loadMode = Propulsion.DynamoStore.WithData (4, conn.StoreContext)
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
                 SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
                                      tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
@@ -137,7 +137,7 @@ module EsdbReactor =
             let conn = EsdbConnector()
             let createSourceConfig consumerGroupName =
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
-                SourceConfig.Esdb (conn.EventStoreClient, checkpoints, hydrateBodies = true, startFromTail = true, batchSize = 100,
+                SourceConfig.Esdb (conn.EventStoreClient, checkpoints, withData = true, startFromTail = true, batchSize = 100,
                                    tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
         override _.RunTimeout = TimeSpan.FromSeconds 0.1

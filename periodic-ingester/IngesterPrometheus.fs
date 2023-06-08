@@ -5,7 +5,7 @@ let baseDesc desc = "PeriodicIngesterTemplate: Ingester " + desc
 
 module private Counter =
 
-    let private make (config : Prometheus.CounterConfiguration) name desc =
+    let private make (config: Prometheus.CounterConfiguration) name desc =
         let ctr = Prometheus.Metrics.CreateCounter(name, desc, config)
         fun tagValues -> ctr.WithLabels(tagValues).Inc
 

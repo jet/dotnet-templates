@@ -9,31 +9,13 @@ open System.Runtime.CompilerServices
 type SkuId = string<skuId>
 and [<Measure>] skuId
 module SkuId =
-    let toString (value : SkuId) : string = % value
-    let parse (value : string) : SkuId = let raw = value in % raw
+    let toString (value: SkuId): string = % value
+    let parse (value: string): SkuId = let raw = value in % raw
     let (|Parse|) = parse
 
 module EnvVar =
 
-    let tryGet varName : string option = System.Environment.GetEnvironmentVariable varName |> Option.ofObj
-
-module EventCodec =
-
-    /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x : FsCodec.ITimelineEvent<Propulsion.Streams.Default.EventBody>) =
-        match codec.TryDecode x with
-        | ValueNone ->
-            if Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                Log.ForContext("event", System.Text.Encoding.UTF8.GetString(let d = x.Data in d.Span), true)
-                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
-            ValueNone
-        | x -> x
-
-    open FsCodec.SystemTextJson
-
-    let private defaultOptions = Options.Create()
-    let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>(options = defaultOptions)
+    let tryGet varName: string option = System.Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 
@@ -53,7 +35,7 @@ type Equinox.CosmosStore.CosmosStoreConnector with
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
@@ -61,7 +43,7 @@ module CosmosStoreContext =
 type Logging() =
 
     [<Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+    static member Configure(configuration: LoggerConfiguration, ?verbose) =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c

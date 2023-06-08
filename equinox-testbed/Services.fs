@@ -22,7 +22,7 @@ module Domain =
                 | Favorited                             of Favorited
                 | Unfavorited                           of Unfavorited
                 interface TypeShape.UnionContract.IUnionContract
-            let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJe<Event>
+            let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 
         module Fold =
 
@@ -30,38 +30,38 @@ module Domain =
 
             type private InternalState(input: State) =
                 let dict = System.Collections.Generic.Dictionary<SkuId, Events.Favorited>()
-                let favorite (e : Events.Favorited) =   dict[e.skuId] <- e
+                let favorite (e: Events.Favorited) =   dict[e.skuId] <- e
                 let favoriteAll (xs: Events.Favorited seq) = for x in xs do favorite x
                 do favoriteAll input
                 member _.ReplaceAllWith xs =           dict.Clear(); favoriteAll xs
-                member _.Favorite(e : Events.Favorited) =  favorite e
+                member _.Favorite(e: Events.Favorited) =  favorite e
                 member _.Unfavorite id =               dict.Remove id |> ignore
                 member _.AsState() =                   Seq.toArray dict.Values
 
-            let initial : State = [||]
+            let initial: State = [||]
             let private evolve (s: InternalState) = function
                 | Events.Snapshotted { net = net } ->   s.ReplaceAllWith net
                 | Events.Favorited e ->                 s.Favorite e
                 | Events.Unfavorited { skuId = id } ->  s.Unfavorite id
-            let fold (state: State) (events: seq<Events.Event>) : State =
+            let fold (state: State) (events: seq<Events.Event>): State =
                 let s = InternalState state
                 for e in events do evolve s e
                 s.AsState()
             let isOrigin = function Events.Snapshotted _ -> true | _ -> false
             let toSnapshot state = Events.Snapshotted { net = state }
 
-        let private doesntHave skuId (state : Fold.State) = state |> Array.exists (fun x -> x.skuId = skuId) |> not
+        let private doesntHave skuId (state: Fold.State) = state |> Array.exists (fun x -> x.skuId = skuId) |> not
 
-        let favorite date skuIds (state : Fold.State) =
+        let favorite date skuIds (state: Fold.State) =
             [ for skuId in Seq.distinct skuIds do
                 if state |> doesntHave skuId then
                     yield Events.Favorited { date = date; skuId = skuId } ]
 
-        let unfavorite skuId (state : Fold.State) =
+        let unfavorite skuId (state: Fold.State) =
             if state |> doesntHave skuId then [] else
             [ Events.Unfavorited { skuId = skuId } ]
 
-        type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
+        type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
             member x.Favorite(clientId, skus) =
                 let decider = resolve clientId
@@ -71,34 +71,34 @@ module Domain =
                 let decider = resolve clientId
                 decider.Transact(unfavorite sku)
 
-            member _.List(clientId) : Async<Events.Favorited []> =
+            member _.List(clientId): Async<Events.Favorited []> =
                 let decider = resolve clientId
                 decider.Query id
 
         let create cat =
-            streamId >> Config.createDecider cat Category |> Service
+            streamId >> Store.createDecider cat Category |> Service
 
-        module Config =
+        module Factory =
 
             let snapshot = Fold.isOrigin, Fold.toSnapshot
             let private (|Category|) = function
 //#if memoryStore || (!cosmos && !eventStore)
-                | Config.Store.Memory store ->
-                    Config.Memory.create Events.codec Fold.initial Fold.fold store
+                | Store.Context.Memory store ->
+                    Store.Memory.create Events.codec Fold.initial Fold.fold store
 //#endif
 //#if cosmos
-                | Config.Store.Cosmos (context, caching, unfolds) ->
+                | Store.Context.Cosmos (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot snapshot else Equinox.CosmosStore.AccessStrategy.Unoptimized
-                    Config.Cosmos.create Events.codecJe Fold.initial Fold.fold caching accessStrategy context
+                    Store.Cosmos.create Events.codecJe Fold.initial Fold.fold caching accessStrategy context
 //#endif
 //#if eventStore
-                | Config.Store.Esdb (context, caching, unfolds) ->
+                | Store.Context.Esdb (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.EventStoreDb.AccessStrategy.RollingSnapshots snapshot |> Some else None
-                    Config.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context
+                    Store.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context
 //#endif
-            let create (Category cat) = streamId >> Config.createDecider cat Category |> Service
+            let create (Category cat) = streamId >> Store.createDecider cat Category |> Service
 
 open Microsoft.Extensions.DependencyInjection
 
-let register (services : IServiceCollection, storageConfig) =
-    services.AddSingleton(Domain.Favorites.Config.create storageConfig) |> ignore
+let register (services: IServiceCollection, storageConfig) =
+    services.AddSingleton(Domain.Favorites.Factory.create storageConfig) |> ignore

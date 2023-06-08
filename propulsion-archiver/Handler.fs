@@ -1,7 +1,7 @@
 module ArchiverTemplate.Handler
 
 type Stats(log, statsInterval, stateInterval) =
-    inherit Propulsion.Streams.Sync.Stats<unit>(log, statsInterval, stateInterval)
+    inherit Propulsion.Sync.Stats<unit>(log, statsInterval, stateInterval)
 
     override _.HandleOk(()) = ()
     override _.HandleExn(log, exn) =
@@ -18,7 +18,7 @@ let (|Archivable|NotArchivable|) = function
     | _ ->
         NotArchivable
 
-let selectArchivable changeFeedDocument: Propulsion.Streams.StreamEvent<_> seq = seq {
+let selectArchivable changeFeedDocument: Propulsion.Sinks.StreamEvent seq = seq {
     for struct (s, _e) as batch in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents categoryFilter changeFeedDocument do
         let (FsCodec.StreamName.Category cat) = s
         match cat with

@@ -11,7 +11,7 @@ module Log =
     
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 module Choice =
 
@@ -45,7 +45,7 @@ type Equinox.DynamoStore.DynamoStoreClient with
 
 type Equinox.DynamoStore.DynamoStoreContext with
 
-    member internal x.LogConfiguration(log : ILogger) =
+    member internal x.LogConfiguration(log: ILogger) =
         log.Information("DynamoStore Tip thresholds: {maxTipBytes}b {maxTipEvents}e Query Paging {queryMaxItems} items",
                         x.TipOptions.MaxBytes, Option.toNullable x.TipOptions.MaxEvents, x.QueryOptions.MaxItems)
 
@@ -59,7 +59,7 @@ type Amazon.DynamoDBv2.IAmazonDynamoDB with
 module DynamoStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
-    let create (storeClient : Equinox.DynamoStore.DynamoStoreClient) =
+    let create (storeClient: Equinox.DynamoStore.DynamoStoreClient) =
         Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
 
 /// Equinox and Propulsion provide metrics as properties in log emissions
@@ -68,20 +68,20 @@ module Sinks =
 
     let tags appName = ["app", appName]
 
-    let private equinoxMetricsOnly tags (l : LoggerConfiguration) =
+    let private equinoxMetricsOnly tags (l: LoggerConfiguration) =
         l.WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
          .WriteTo.Sink(Equinox.DynamoStore.Prometheus.LogSink(tags))
          .WriteTo.Sink(Equinox.MessageDb.Log.InternalMetrics.Stats.LogSink())
 
-    let private equinoxAndPropulsionMetrics tags group (l : LoggerConfiguration) =
+    let private equinoxAndPropulsionMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
           |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
 
-    let equinoxAndPropulsionFeedMetrics tags group (l : LoggerConfiguration) =
+    let equinoxAndPropulsionFeedMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxAndPropulsionMetrics tags group
           |> fun l -> l.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
 
-    let console (configuration : LoggerConfiguration) =
+    let console (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
         configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
 
@@ -89,14 +89,14 @@ module Sinks =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+    static member Configure(configuration: LoggerConfiguration, ?verbose) =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member private Sinks(configuration : LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
-        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+    static member private Sinks(configuration: LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
+        let configure (a: Configuration.LoggerSinkConfiguration): unit =
             a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
             a.Logger(fun l -> // but filter what gets emitted to the console sink
                 let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
@@ -105,5 +105,5 @@ type Logging() =
         configuration.WriteTo.Async(bufferSize = 65536, blockWhenFull = true, configure = System.Action<_> configure)
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Sinks(configuration : LoggerConfiguration, configureMetricsSinks, verboseStore) =
+    static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
         configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)

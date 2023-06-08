@@ -10,6 +10,10 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Target `Equinox` v `4.0.0-rc.9`, `Propulsion` v `3.0.0-rc.3` [#128](https://github.com/jet/dotnet-templates/pull/128)
+- `module Config` -> `module Store`/`module Factory` [#128](https://github.com/jet/dotnet-templates/pull/128)
+
 ### Removed 
 ### Fixed
 

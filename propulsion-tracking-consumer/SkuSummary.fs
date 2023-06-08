@@ -7,24 +7,24 @@ let streamId = Equinox.StreamId.gen SkuId.toString
 module Events =
 
     type ItemData =
-        {   locationId : string
-            messageIndex : int64
-            picketTicketId : string
-            poNumber : string
-            reservedQuantity : int }
+        {   locationId: string
+            messageIndex: int64
+            picketTicketId: string
+            poNumber: string
+            reservedQuantity: int }
     type Event =
         | Ingested of ItemData
         | Snapshotted of ItemData[]
         interface TypeShape.UnionContract.IUnionContract
-    let codec = EventCodec.gen<Event>
+    let codec = Store.Codec.gen<Event>
 
 module Fold =
 
     type State = Events.ItemData list
     module State =
-        let equals (x : Events.ItemData) (y : Events.ItemData) =
+        let equals (x: Events.ItemData) (y: Events.ItemData) =
             x.locationId = y.locationId
-        let supersedes (x : Events.ItemData) (y : Events.ItemData) =
+        let supersedes (x: Events.ItemData) (y: Events.ItemData) =
             equals x y
             && y.messageIndex > x.messageIndex
             && y.reservedQuantity <> x.reservedQuantity
@@ -39,16 +39,16 @@ module Fold =
     let evolve state = function
         | Events.Ingested e -> e :: state
         | Events.Snapshotted items -> List.ofArray items
-    let fold : State -> Events.Event seq -> State = Seq.fold evolve
-    let toSnapshot (x : State) : Events.Event = Events.Snapshotted (Array.ofList x)
+    let fold: State -> Events.Event seq -> State = Seq.fold evolve
+    let toSnapshot (x: State): Events.Event = Events.Snapshotted (Array.ofList x)
 
-let ingest (updates : Events.ItemData list) (state : Fold.State) =
+let ingest (updates: Events.ItemData list) (state: Fold.State) =
     [for x in updates do if x |> Fold.State.isNewOrUpdated state then yield Events.Ingested x]
 
-type Service internal (resolve : SkuId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve: SkuId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// <returns>count of items</returns>
-    member _.Ingest(skuId, items) : Async<int> =
+    member _.Ingest(skuId, items): Async<int> =
         let decider = resolve skuId
         let decide state =
             let events = ingest items state
@@ -59,8 +59,8 @@ type Service internal (resolve : SkuId -> Equinox.Decider<Events.Event, Fold.Sta
         let decider = resolve skuId
         decider.Query id
 
-module Config =
+module Factory =
 
     let private (|Category|) = function
-        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat Category)

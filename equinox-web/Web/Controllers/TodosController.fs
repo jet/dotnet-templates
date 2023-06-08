@@ -24,40 +24,40 @@ type GetByIdArgsTemplate = { id: int }
 type TodosController(service: Todo.Service) =
     inherit ControllerBase()
 
-    let toProps (value : TodoView) : Todo.Props = { order = value.order; title = value.title; completed = value.completed }
+    let toProps (value: TodoView): Todo.Props = { order = value.order; title = value.title; completed = value.completed }
 
-    member private this.WithUri(x : Todo.View) : TodoView =
+    member private this.WithUri(x: Todo.View): TodoView =
         let url = this.Url.RouteUrl("GetTodo", { id=x.id }, this.Request.Scheme) // Supplying scheme is secret sauce for making it absolute as required by client
         { id = x.id; url = url; order = x.order; title = x.title; completed = x.completed }
 
     [<HttpGet>]
-    member this.Get([<FromClientIdHeader>]clientId : ClientId) = async {
+    member this.Get([<FromClientIdHeader>]clientId: ClientId) = async {
         let! xs = service.List(clientId)
         return seq { for x in xs -> this.WithUri(x) }
     }
 
     [<HttpGet("{id}", Name="GetTodo")>]
-    member this.Get([<FromClientIdHeader>]clientId : ClientId, id) : Async<IActionResult> = async {
+    member this.Get([<FromClientIdHeader>]clientId: ClientId, id): Async<IActionResult> = async {
         let! x = service.TryGet(clientId, id)
         return match x with None -> this.NotFound() :> _ | Some x -> ObjectResult(this.WithUri x) :> _
     }
 
     [<HttpPost>]
-    member this.Post([<FromClientIdHeader>]clientId : ClientId, [<FromBody>]value : TodoView) : Async<TodoView> = async {
+    member this.Post([<FromClientIdHeader>]clientId: ClientId, [<FromBody>]value: TodoView): Async<TodoView> = async {
         let! created = service.Create(clientId, toProps value)
         return this.WithUri created
     }
 
     [<HttpPatch "{id}">]
-    member this.Patch([<FromClientIdHeader>]clientId : ClientId, id, [<FromBody>]value : TodoView) : Async<TodoView> = async {
+    member this.Patch([<FromClientIdHeader>]clientId: ClientId, id, [<FromBody>]value: TodoView): Async<TodoView> = async {
         let! updated = service.Patch(clientId, id, toProps value)
         return this.WithUri updated
     }
 
     [<HttpDelete "{id}">]
-    member _.Delete([<FromClientIdHeader>]clientId : ClientId, id): Async<unit> =
+    member _.Delete([<FromClientIdHeader>]clientId: ClientId, id): Async<unit> =
         service.Delete(clientId, id)
 
     [<HttpDelete>]
-    member _.DeleteAll([<FromClientIdHeader>]clientId : ClientId): Async<unit> =
+    member _.DeleteAll([<FromClientIdHeader>]clientId: ClientId): Async<unit> =
         service.Clear(clientId)

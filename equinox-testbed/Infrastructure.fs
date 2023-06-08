@@ -6,26 +6,26 @@ open Serilog
 open System
 
 module Guid =
-    let inline toStringN (x : Guid) = x.ToString "N"
+    let inline toStringN (x: Guid) = x.ToString "N"
 
 /// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
-module ClientId = let toString (value : ClientId) : string = Guid.toStringN %value
+module ClientId = let toString (value: ClientId): string = Guid.toStringN %value
 
 /// SkuId strongly typed id; represented internally as a Guid
 // NB Perf is suboptimal as a key, see Equinox's samples/Store for expanded version
 type SkuId = Guid<skuId>
 and [<Measure>] skuId
-module SkuId = let toString (value : SkuId) : string = Guid.toStringN %value
+module SkuId = let toString (value: SkuId): string = Guid.toStringN %value
 
-module Config =
+module Store =
 
     let log = Serilog.Log.ForContext("isMetric", true)
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
 type Equinox.CosmosStore.CosmosStoreConnector with
 

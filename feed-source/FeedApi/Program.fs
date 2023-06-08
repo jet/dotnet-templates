@@ -3,7 +3,7 @@ module FeedSourceTemplate.Program
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -26,9 +26,9 @@ module Args =
                 match a with
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | Cosmos _ ->               "specify CosmosDB input parameters."
-    and Arguments(config : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(config: Configuration, p: ParseResults<Parameters>) =
         member val Verbose =                p.Contains Parameters.Verbose
-        member val Cosmos : CosmosArguments =
+        member val Cosmos: CosmosArguments =
             match p.GetSubCommand() with
             | Parameters.Cosmos cosmos -> CosmosArguments(config, cosmos)
             | _ -> missingArg "Must specify cosmos"
@@ -51,7 +51,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 9."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
-    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+    and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -73,17 +73,17 @@ let [<Literal>] AppName = "FeedSourceTemplate"
 
 open Microsoft.Extensions.DependencyInjection
 
-let registerSingleton<'t when 't : not struct> (services : IServiceCollection) (s : 't) =
+let registerSingleton<'t when 't : not struct> (services: IServiceCollection) (s: 't) =
     services.AddSingleton s |> ignore
 
 [<System.Runtime.CompilerServices.Extension>]
 type AppDependenciesExtensions() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member AddTickets(services : IServiceCollection, store) : unit = Async.RunSynchronously <| async {
+    static member AddTickets(services: IServiceCollection, store): unit = Async.RunSynchronously <| async {
 
-        let ticketsSeries = Domain.TicketsSeries.Config.create None store
-        let ticketsEpochs = Domain.TicketsEpoch.Reader.Config.create store
+        let ticketsSeries = Domain.TicketsSeries.Factory.create None store
+        let ticketsEpochs = Domain.TicketsEpoch.Reader.Factory.create store
         let tickets = Domain.TicketsIngester.Config.Create store
 
         ticketsSeries |> registerSingleton services
@@ -96,15 +96,15 @@ open Microsoft.Extensions.Hosting
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
-let run (args : Args.Arguments) =
+let run (args: Args.Arguments) =
     let cosmos = args.Cosmos
     let context = cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
     let cache = Equinox.Cache(AppName, sizeMb = 2)
-    let store = FeedSourceTemplate.Domain.Config.Store.Cosmos (context, cache)
+    let store = FeedSourceTemplate.Domain.Store.Context.Cosmos (context, cache)
 
     Hosting.createHostBuilder()
         .ConfigureServices(fun s ->

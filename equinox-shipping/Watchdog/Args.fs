@@ -2,9 +2,10 @@
 module Shipping.Infrastructure.Args
 
 open System
-module Config = Shipping.Domain.Config
 
-exception MissingArg of message : string with override this.Message = this.message
+module Store = Shipping.Domain.Store
+
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 let [<Literal>] REGION =                    "EQUINOX_DYNAMO_REGION"
@@ -14,7 +15,7 @@ let [<Literal>] SECRET_KEY =                "EQUINOX_DYNAMO_SECRET_ACCESS_KEY"
 let [<Literal>] TABLE =                     "EQUINOX_DYNAMO_TABLE"
 let [<Literal>] INDEX_TABLE =               "EQUINOX_DYNAMO_TABLE_INDEX"
 
-type Configuration(tryGet : string -> string option) =
+type Configuration(tryGet: string -> string option) =
 
     member val tryGet =                     tryGet
     member _.get key =                      match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
@@ -59,7 +60,7 @@ module Cosmos =
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let connection =                    p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection)
         let discovery =                     Equinox.CosmosStore.Discovery.ConnectionString connection
         let mode =                          p.TryGetResult ConnectionMode
@@ -97,7 +98,7 @@ module Dynamo =
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesTimeoutS _ ->      "specify max wait-time including retries in seconds (default: 5)"
 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
                                             | Some systemName ->
                                                 Choice1Of2 systemName
@@ -126,11 +127,11 @@ type [<RequireQualifiedAccess; NoComparison; NoEquality>]
 
 module TargetStoreArgs =
     
-    let connectTarget targetStore cache : Config.Store<_> =
+    let connectTarget targetStore cache: Store.Context<_> =
         match targetStore with
         | TargetStoreArgs.Cosmos a ->
             let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-            Config.Store.Cosmos (context, cache)
+            Store.Context.Cosmos (context, cache)
         | TargetStoreArgs.Dynamo a ->
             let context = a.Connect() |> DynamoStoreContext.create
-            Config.Store.Dynamo (context, cache)
+            Store.Context.Dynamo (context, cache)

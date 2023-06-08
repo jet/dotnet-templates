@@ -1,19 +1,16 @@
-module FeedSourceTemplate.Domain.Config
+module FeedSourceTemplate.Domain.Store
 
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider cat = Equinox.Decider.resolve log cat
 
-module EventCodec =
+module Codec =
 
-    open FsCodec.SystemTextJson
-
-    let private defaultOptions = Options.Create()
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>(options = defaultOptions)
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 module Memory =
 
-    let create codec initial fold store : Equinox.Category<_, _, _> =
+    let create codec initial fold store: Equinox.Category<_, _, _> =
         Equinox.MemoryStore.MemoryStoreCategory(store, codec, fold, initial)
 
 module Cosmos =
@@ -31,6 +28,6 @@ module Cosmos =
         createCached codec initial fold accessStrategy (context, cache)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type Store<'t> =
+type Context<'t> =
     | Memory of Equinox.MemoryStore.VolatileStore<'t>
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache

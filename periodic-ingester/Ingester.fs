@@ -25,7 +25,7 @@ type Stats(log, statsInterval, stateInterval) =
             log.Information(" Changed {changed} Unchanged {skipped} Stale {stale}", changed, unchanged, stale)
             stale <- 0; unchanged <- 0; changed <- 0
 
-type TicketData = { lastUpdated : DateTimeOffset; body : string }
+type TicketData = { lastUpdated: DateTimeOffset; body: string }
 
 module PipelineEvent =
 
@@ -38,17 +38,22 @@ module PipelineEvent =
     (* Each item per stream is represented as an event; if multiple events have been found for a given stream, they are delivered together *)
 
     let private dummyEventData = let dummyEventType, noBody = "eventType", Unchecked.defaultof<_> in FsCodec.Core.EventData.Create(dummyEventType, noBody)
-    let sourceItemOfTicketIdAndData struct (id : TicketId, data : TicketData) : Propulsion.Feed.SourceItem<Propulsion.Streams.Default.EventBody> =
+    let sourceItemOfTicketIdAndData struct (id: TicketId, data: TicketData): Propulsion.Feed.SourceItem<Propulsion.Sinks.EventBody> =
         { streamName = streamName id; eventData = dummyEventData; context = box data }
     let [<return: Struct>] (|TicketEvents|_|) = function
-        | StreamName ticketId, (s : Propulsion.Streams.StreamSpan<_>) ->
+        | StreamName ticketId, (s: Propulsion.Sinks.Event[]) ->
             ValueSome (ticketId, s |> Seq.map (fun e -> Unchecked.unbox<TicketData> e.Context))
         | _ -> ValueNone
 
-let handle stream span ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
-    match stream, span with
+let handle stream events = async {
+    match stream, events with
     | PipelineEvent.TicketEvents (ticketId, items) ->
         // TODO : Ingest the data
-        return struct (Propulsion.Streams.SpanResult.AllProcessed, IngestionOutcome.Unchanged)
+        return Propulsion.Sinks.StreamResult.AllProcessed, IngestionOutcome.Unchanged
     | x -> return failwithf "Unexpected stream %O" x
 }
+
+type Factory private () =
+    
+    static member StartSink(log: Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats)

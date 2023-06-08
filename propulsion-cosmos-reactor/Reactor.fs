@@ -2,7 +2,7 @@ module ReactorTemplate.Reactor
 
 type Outcome = Metrics.Outcome
 
-/// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
+/// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
@@ -24,28 +24,30 @@ type Stats(log, statsInterval, stateInterval) =
             ok <- 0; skipped <- 0; na <- 0
 
 // map from external contract to internal contract defined by the aggregate
-let toSummaryEventData ( x : Contract.SummaryInfo) : TodoSummary.Events.SummaryData =
+let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData =
     { items =
         [| for x in x.items ->
             { id = x.id; order = x.order; title = x.title; completed = x.completed } |] }
 
-let categoryFilter = Todo.Reactions.categoryFilter
+let reactionCategories = Todo.Reactions.categories
 
-let handle
-        (sourceService : Todo.Service)
-        (summaryService : TodoSummary.Service)
-        stream (span : Propulsion.Streams.StreamSpan<_>) ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
-    match stream, span with
-    | Todo.Reactions.Parse (clientId, events) when events |> Seq.exists Todo.Reactions.impliesStateChange ->
+let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) stream events = async {
+    match struct (stream, events) with
+    | Todo.Reactions.ImpliesStateChange clientId  ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
-        | true -> return struct (Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Ok (1, span.Length - 1))
-        | false -> return Propulsion.Streams.SpanResult.OverrideWritePosition version', Outcome.Skipped span.Length
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
+        | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, events.Length - 1)
+        | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped events.Length
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
 
-module Config =
+module Factory =
 
     let createHandler store =
-        let srcService = Todo.Config.create store
-        let dstService = TodoSummary.Config.create store
+        let srcService = Todo.Factory.create store
+        let dstService = TodoSummary.Factory.create store
         handle srcService dstService
+
+type Factory private () =
+    
+    static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats)

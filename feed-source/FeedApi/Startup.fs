@@ -9,10 +9,10 @@ open Serilog
 
 type Startup() =
 
-    member this.ConfigureServices(services : IServiceCollection) =
+    member this.ConfigureServices(services: IServiceCollection) =
         services.AddControllers() |> ignore
 
-    member this.Configure(app : IApplicationBuilder, env : IWebHostEnvironment) =
+    member this.Configure(app: IApplicationBuilder, env: IWebHostEnvironment) =
         if env.IsDevelopment() then
             app.UseDeveloperExceptionPage() |> ignore
 
@@ -28,7 +28,7 @@ type Startup() =
 
 module Hosting =
 
-    let createHostBuilder () : IHostBuilder =
+    let createHostBuilder (): IHostBuilder =
         Host.CreateDefaultBuilder()
             .UseSerilog()
             .ConfigureWebHostDefaults(fun webBuilder ->

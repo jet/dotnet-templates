@@ -1,8 +1,5 @@
 module Reactor.Handler
 
-open Infrastructure
-open Propulsion.Internal
-
 type Outcome = GroupCheckoutProcess.Outcome
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
@@ -40,7 +37,7 @@ let private reactionCategories = [| GroupCheckout.Category |]
 // NOTE while Propulsion supplies the handler with the full set of outstanding events since the last successful checkpoint,
 //   the nature of the reaction processing we are performing here can also be reliant on state that's inferred based on events 
 //   prior to those that will have arrived on the feed. For that reason, the caller does not forward the `events` argument here.
-let private handle (processor : GroupCheckoutProcess.Service) stream = async {
+let private handle (processor: GroupCheckoutProcess.Service) stream _events = async {
     match stream with
     | GroupCheckout.StreamName groupCheckoutId ->
         let! outcome, ver' = processor.React(groupCheckoutId)
@@ -54,26 +51,24 @@ let private handle (processor : GroupCheckoutProcess.Service) stream = async {
         // NOTE also that in some cases, the observed position on the stream can be beyond that which has been notified via
         //   the change feed. In those cases, Propulsion will drop any incoming events that would represent duplication of processing,
         //   (and not even invoke the Handler unless one or more of the feed events are beyond the write position)
-        return struct (Propulsion.Streams.SpanResult.OverrideWritePosition ver', outcome)
+        return Propulsion.Sinks.StreamResult.OverrideNextIndex ver', outcome
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
 let private createService store =
-    let stays = GuestStay.Config.create store
-    let checkouts = GroupCheckout.Config.create store
+    let stays = GuestStay.Factory.create store
+    let checkouts = GroupCheckout.Factory.create store
     GroupCheckoutProcess.Service(stays, checkouts, checkoutParallelism = 5)
         
 let create store =
     createService store |> handle
             
-type Config private () =
+type Factory private () =
     
-    static member StartSink(log : Serilog.ILogger, stats : Stats, handle,
-                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        let handle stream _events ct = Async.startImmediateAsTask ct (handle stream)
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle,
-                                                stats, stats.StatsInterval.Period,
-                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+    static member StartSink(log, stats, maxConcurrentStreams, handle,maxReadAhead,
+                            ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
+                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink reactionCategories sourceConfig
+        Infrastructure.SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig

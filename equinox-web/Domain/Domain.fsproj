@@ -7,7 +7,7 @@
 
   <ItemGroup>
     <Compile Include="Infrastructure.fs" />
-    <Compile Include="Config.fs" />
+    <Compile Include="Store.fs" />
 	<!--#if (aggregate)-->
 	<Compile Include="Aggregate.fs" />
 	<!--#endif-->
@@ -17,11 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.7" />
-    <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.7" />
-    <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.7" />
-    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.7" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.9" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.10" />
+    <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.10" />
+    <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.10" />
+    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.10" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.10" />
   </ItemGroup>
 
 </Project>

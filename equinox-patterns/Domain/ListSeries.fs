@@ -13,10 +13,10 @@ let streamId () = Equinox.StreamId.gen ListSeriesId.toString ListSeriesId.wellKn
 module Events =
 
     type Event =
-        | Started of            {| epochId : ListEpochId |}
-        | Snapshotted of        {| active : ListEpochId |}
+        | Started of            {| epochId: ListEpochId |}
+        | Snapshotted of        {| active: ListEpochId |}
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJsonElement<Event>
+    let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 
 module Fold =
 
@@ -25,33 +25,33 @@ module Fold =
     let private evolve _state = function
         | Events.Started e -> Some e.epochId
         | Events.Snapshotted e -> Some e.active
-    let fold : State -> Events.Event seq -> State = Seq.fold evolve
+    let fold: State -> Events.Event seq -> State = Seq.fold evolve
 
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot s = Events.Snapshotted {| active = Option.get s |}
 
-let interpret epochId (state : Fold.State) =
+let interpret epochId (state: Fold.State) =
     [if state |> Option.forall (fun cur -> cur < epochId) && epochId >= ListEpochId.initial then
         yield Events.Started {| epochId = epochId |}]
 
-type Service internal (resolve : unit -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve: unit -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Determines the current active epoch
     /// Uses cached values as epoch transitions are rare, and caller needs to deal with the inherent race condition in any case
-    member _.ReadIngestionEpochId() : Async<ListEpochId> =
+    member _.ReadIngestionEpochId(): Async<ListEpochId> =
         let decider = resolve ()
         decider.Query(Option.defaultValue ListEpochId.initial)
 
     /// Mark specified `epochId` as live for the purposes of ingesting
     /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by anointing a successor via this
-    member _.MarkIngestionEpochId epochId : Async<unit> =
+    member _.MarkIngestionEpochId epochId: Async<unit> =
         let decider = resolve ()
-        decider.Transact(interpret epochId, load = Equinox.AllowStale)
+        decider.Transact(interpret epochId, load = Equinox.AnyCachedValue)
 
-module Config =
+module Factory =
 
     let private (|Category|) = function
-        | Config.Store.Memory store -> Config.Memory.create Events.codec Fold.initial Fold.fold store
-        | Config.Store.Cosmos (context, cache) ->
-            Config.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create (Category cat) = Service(streamId >> Config.resolveDecider cat Category)
+        | Store.Context.Memory store -> Store.Memory.create Events.codec Fold.initial Fold.fold store
+        | Store.Context.Cosmos (context, cache) ->
+            Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+    let create (Category cat) = Service(streamId >> Store.resolveDecider cat Category)

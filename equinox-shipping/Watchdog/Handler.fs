@@ -4,7 +4,7 @@ open Shipping.Infrastructure
 open System
 
 [<RequireQualifiedAccess>]
-type Outcome = Completed | Deferred | Resolved of successfully : bool
+type Outcome = Completed | Deferred | Resolved of successfully: bool
 
 /// Gathers stats based on the outcome of each Span processed, periodically including them in the Sink summaries
 type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
@@ -36,47 +36,43 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
 open Shipping.Domain
 
-let private isReactionStream = function
-    | FinalizationTransaction.Category -> true
-    | _ -> false
+let private reactionCategories = [| FinalizationTransaction.Category |]
 
 let handle
-        (processingTimeout : TimeSpan)
-        (driveTransaction : Shipping.Domain.TransactionId -> Async<bool>)
-        stream span ct = Propulsion.Internal.Async.startImmediateAsTask ct <| async {
+        (processingTimeout: TimeSpan)
+        (driveTransaction: Shipping.Domain.TransactionId -> Async<bool>)
+        stream events = async {
     let processingStuckCutoff = let now = DateTimeOffset.UtcNow in now.Add(-processingTimeout)
-    match stream, span with
+    match stream, events with
     | TransactionWatchdog.Finalization.MatchStatus (transId, state) ->
         match TransactionWatchdog.toStatus processingStuckCutoff state with
         | TransactionWatchdog.Complete ->
-            return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Completed)
+            return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Completed
         | TransactionWatchdog.Active ->
             // We don't want to be warming the data center for no purpose; visiting every second is not too expensive
             do! Async.Sleep 1000 // ms
-            return Propulsion.Streams.SpanResult.PartiallyProcessed 0, Outcome.Deferred
+            return Propulsion.Sinks.StreamResult.NoneProcessed, Outcome.Deferred
         | TransactionWatchdog.Stuck ->
             let! success = driveTransaction transId
-            return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Resolved success
+            return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Resolved success
     | other ->
         return failwithf "Span from unexpected category %A" other }
 
-type Config private () =
+type Factory private () =
     
-    static member private StartSink(log : Serilog.ILogger, stats : Stats,
-                            handle : System.Func<FsCodec.StreamName, Propulsion.Streams.Default.StreamSpan, _,
-                                     System.Threading.Tasks.Task<struct (Propulsion.Streams.SpanResult * Outcome)>>,
-                            maxReadAhead : int, maxConcurrentStreams : int, ?wakeForResults, ?idleDelay, ?purgeInterval) =
-        Propulsion.Streams.Default.Config.Start(log, maxReadAhead, maxConcurrentStreams, handle, stats, stats.StatsInterval.Period,
-                                                ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
+    static member private StartSink(log: Serilog.ILogger, stats, maxConcurrentStreams, handle, maxReadAhead,
+                                    ?wakeForResults, ?idleDelay, ?purgeInterval) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats,
+                                                 ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
-    static member StartSink(log, stats, manager : FinalizationProcess.Manager, processingTimeout,
-                            maxReadAhead, maxConcurrentStreams, ?wakeForResults, ?idleDelay, ?purgeInterval) =
+    static member StartSink(log, stats, maxConcurrentStreams, manager: FinalizationProcess.Manager, processingTimeout,
+                            maxReadAhead, ?wakeForResults, ?idleDelay, ?purgeInterval) =
         let handle = handle processingTimeout manager.Pump
-        Config.StartSink(log, stats, handle, maxReadAhead, maxConcurrentStreams,
+        Factory.StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead,
                          ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
         
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Config.log) sink isReactionStream sourceConfig
+        SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig
         
     static member CreateDynamoSource(log, sink, sourceArgs, trancheIds) =
-        SourceConfig.Dynamo.create (log, Config.log) sink isReactionStream sourceArgs (Some trancheIds)
+        SourceConfig.Dynamo.create (log, Store.log) sink reactionCategories sourceArgs (Some trancheIds)

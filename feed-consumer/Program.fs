@@ -3,7 +3,7 @@
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -43,7 +43,7 @@ module Args =
                 | FcsDop _ ->               "maximum number of FCs to process in parallel. Default: 4"
                 | TicketsDop _ ->           "maximum number of Tickets to process in parallel (per FC). Default: 4"
                 | Cosmos _ ->               "Cosmos Store parameters."
-    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Verbose =                p.Contains Parameters.Verbose
         member val GroupId =                p.TryGetResult Group        |> Option.defaultWith (fun () -> c.Group)
         member val SourceId =               p.GetResult(SourceId,"default") |> Propulsion.Feed.SourceId.parse
@@ -55,7 +55,7 @@ module Args =
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val CheckpointInterval =     TimeSpan.FromHours 1.
         member val TailSleepInterval =      TimeSpan.FromSeconds 1.
-        member val Cosmos : CosmosArguments =
+        member val Cosmos: CosmosArguments =
             match p.GetSubCommand() with
             | Cosmos cosmos -> CosmosArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos"
@@ -78,7 +78,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds (default: 30)."
                 | Retries _ ->              "specify operation retries (default: 9)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 30)"
-    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+    and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let discovery =                     p.TryGetResult Connection   |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 30.)   |> TimeSpan.FromSeconds
@@ -98,22 +98,22 @@ module Args =
 
 let [<Literal>] AppName = "FeedConsumerTemplate"
 
-let build (args : Args.Arguments) =
+let build (args: Args.Arguments) =
     let cache = Equinox.Cache(AppName, sizeMb = 10)
     let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
 
     let sink =
-        let handle = Ingester.handle args.TicketsDop
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
-        Propulsion.Streams.Default.Config.Start(Log.Logger, args.MaxReadAhead, args.FcsDop, handle, stats, args.StatsInterval)
+        let handle = Ingester.handle args.TicketsDop
+        Ingester.Factory.StartSink(Log.Logger, stats, args.FcsDop, handle, args.MaxReadAhead)
     let source =
-        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (args.GroupId, args.CheckpointInterval) (context, cache)
+        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.log (args.GroupId, args.CheckpointInterval) (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri
         let source =
             Propulsion.Feed.FeedSource(
                 Log.Logger, args.StatsInterval, args.SourceId, args.TailSleepInterval,
-                checkpoints, sink, feed.Poll)
-        source.Start(fun ct -> source.Pump(feed.ReadTranches, ct))
+                checkpoints, sink)
+        source.Start(feed.ReadTranches, fun t p -> feed.Poll(t, p))
     sink, source
 
 let run args = async {

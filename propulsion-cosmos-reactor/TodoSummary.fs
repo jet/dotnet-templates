@@ -7,28 +7,28 @@ let streamId = Equinox.StreamId.gen ClientId.toString
 module Events =
 
     type ItemData = { id: int; order: int; title: string; completed: bool }
-    type SummaryData = { items : ItemData[] }
-    type IngestedData = { version : int64; value : SummaryData }
+    type SummaryData = { items: ItemData[] }
+    type IngestedData = { version: int64; value: SummaryData }
     type Event =
         | Ingested of IngestedData
         interface TypeShape.UnionContract.IUnionContract
-    let codec, codecJe = Config.EventCodec.gen<Event>, Config.EventCodec.genJe<Event>
+    let codec = Store.Codec.genJsonElement<Event>
 
 module Fold =
 
-    type State = { version : int64; value : Events.SummaryData option }
+    type State = { version: int64; value: Events.SummaryData option }
     let initial = { version = -1L; value = None }
     let evolve _state = function
         | Events.Ingested e -> { version = e.version; value = Some e.value }
-    let fold : State -> Events.Event seq -> State = Seq.fold evolve
+    let fold: State -> Events.Event seq -> State = Seq.fold evolve
     let toSnapshot state = Events.Ingested { version = state.version; value = state.value.Value }
 
-let decide (version : int64, value : Events.SummaryData) (state : Fold.State) =
+let decide (version: int64, value: Events.SummaryData) (state: Fold.State) =
     if state.version >= version then false, [] else
     true, [Events.Ingested { version = version; value = value }]
 
 type Item = { id: int; order: int; title: string; completed: bool }
-let render : Fold.State -> Item[] = function
+let render: Fold.State -> Item[] = function
     | { value = Some { items = xs} } ->
         [| for x in xs ->
             {   id = x.id
@@ -38,10 +38,10 @@ let render : Fold.State -> Item[] = function
     | _ -> [||]
 
 /// Defines the operations that the Read side of a Controller and/or the Reactor can perform on the 'aggregate'
-type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
+type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Returns false if the ingestion was rejected due to being an older version of the data than is presently being held
-    member _.TryIngest(clientId, version, value) : Async<bool> =
+    member _.TryIngest(clientId, version, value): Async<bool> =
         let decider = resolve clientId
         decider.Transact(decide (version, value))
 
@@ -49,8 +49,8 @@ type Service internal (resolve : ClientId -> Equinox.Decider<Events.Event, Fold.
         let decider = resolve clientId
         decider.Query render
 
-module Config =
+module Factory =
 
     let private (|Category|) = function
-        | Config.Store.Cosmos (context, cache) -> Config.Cosmos.createRollingState Events.codecJe Fold.initial Fold.fold Fold.toSnapshot (context, cache)
-    let create (Category cat) = Service(streamId >> Config.createDecider cat Category)
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createRollingState Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat Category)

@@ -3,7 +3,7 @@
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -41,7 +41,7 @@ module Args =
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off"
                 | MaxWriters _ ->           "maximum number of items to process in parallel. Default: 8"
                 | Cosmos _ ->               "specify CosmosDb input parameters"
-    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Verbose =                p.Contains Verbose
         member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
         member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
@@ -69,7 +69,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
-    and CosmosArguments(c : Configuration, p : ParseResults<CosmosParameters>) =
+    and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -88,13 +88,13 @@ module Args =
 
 let [<Literal>] AppName = "ConsumerTemplate"
 
-let start (args : Args.Arguments) =
+let start (args: Args.Arguments) =
     let service =
         let store =
             let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
             let cache = Equinox.Cache(AppName, sizeMb = 10)
-            Config.Store.Cosmos (context, cache)
-        SkuSummary.Config.create store
+            Store.Context.Cosmos (context, cache)
+        SkuSummary.Factory.create store
     let config =
         FsKafka.KafkaConsumerConfig.Create(
             AppName, args.Broker, [args.Topic], args.Group, Confluent.Kafka.AutoOffsetReset.Earliest,
@@ -106,9 +106,7 @@ let start (args : Args.Arguments) =
     // The StreamNameSequenceGenerator maintains an Index per stream with which the messages are tagged in order to be able to
     //   represent them as a sequence of indexed messages per stream
     let sequencer = Propulsion.Kafka.StreamNameSequenceGenerator()
-    Propulsion.Kafka.StreamsConsumer.Start
-        (   Log.Logger, config, sequencer.ConsumeResultToStreamEvent(), Ingester.ingest service, args.MaxConcurrentStreams,
-            stats, args.StateInterval)
+    Propulsion.Kafka.Factory.StartConcurrent(Log.Logger, config, sequencer.ConsumeResultToStreamEvent(), args.MaxConcurrentStreams, Ingester.ingest service, stats)
 
 let run args = async {
     use consumer = start args

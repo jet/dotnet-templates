@@ -2,44 +2,41 @@
 /// Due to this, we should ensure that writes only happen where the update is not redundant and/or a replay of a previous message
 module ConsumerTemplate.Ingester
 
-open Propulsion.Internal
-
 /// Defines the contract we share with the proReactor --'s published feed
 module Contract =
 
     let [<Literal>] Category = "TodoSummary"
+    let [<return: Struct>] (|StreamName|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId
+        | _ -> ValueNone
 
     /// A single Item in the list
-    type ItemInfo = { id : int; order : int; title : string; completed : bool }
+    type ItemInfo = { id: int; order: int; title: string; completed: bool }
 
     /// All data summarized for Summary Event Stream
-    type SummaryInfo = { items : ItemInfo[] }
+    type SummaryInfo = { items: ItemInfo[] }
 
     type Message =
         | [<System.Runtime.Serialization.DataMember(Name="TodoUpdateV1")>] Summary of SummaryInfo
         interface TypeShape.UnionContract.IUnionContract
-    type VersionAndMessage = int64*Message
+        
     // We also want the index (which is the Version of the Summary) whenever we're handling an event
-    let private codec : FsCodec.IEventCodec<VersionAndMessage, _, _> = Config.EventCodec.withIndex<Message>
-    let [<return: Struct>] (|DecodeNewest|_|) (stream, span : Propulsion.Streams.StreamSpan<_>) : VersionAndMessage voption =
-        span |> Seq.rev |> Seq.tryPickV (EventCodec.tryDecode codec stream)
-    let [<return: Struct>] (|StreamName|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId
-        | _ -> ValueNone
-    let [<return: Struct>] (|MatchNewest|_|) = function
-        | (StreamName clientId, _) & DecodeNewest (version, update) -> ValueSome struct (clientId, version, update)
+    type VersionAndMessage = int64*Message
+    let private dec: Propulsion.Sinks.Codec<VersionAndMessage> = Streams.Codec.genWithIndex<Message>
+    let [<return: Struct>] (|Parse|_|) = function
+        | struct (StreamName clientId, _) & Streams.DecodeNewest dec (version, update) -> ValueSome struct (clientId, version, update)
         | _ -> ValueNone
 
 [<RequireQualifiedAccess>]
 type Outcome =
     /// Handler processed the span, with counts of used vs unused known event types
-    | Ok of used : int * unused : int
+    | Ok of used: int * unused: int
     /// Handler processed the span, but idempotency checks resulted in no writes being applied; includes count of decoded events
-    | Skipped of count : int
+    | Skipped of count: int
     /// Handler determined the events were not relevant to its duties and performed no decoding or processing
-    | NotApplicable of count : int
+    | NotApplicable of count: int
 
-/// Gathers stats based on the outcome of each Span processed for emission, at intervals controlled by `StreamsConsumer`
+/// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
 type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
@@ -59,17 +56,17 @@ type Stats(log, statsInterval, stateInterval) =
             ok <- 0; skipped <- 0l; na <- 0
 
 /// Map from external contract to internal contract defined by the aggregate
-let map : Contract.Message -> TodoSummary.Events.SummaryData = function
+let map: Contract.Message -> TodoSummary.Events.SummaryData = function
     | Contract.Summary x ->
         { items =
             [| for x in x.items ->
                 { id = x.id; order = x.order; title = x.title; completed = x.completed } |]}
 
 /// Ingest queued events per client - each time we handle all the incoming updates for a given stream as a single act
-let ingest (service : TodoSummary.Service) stream (span : Propulsion.Streams.StreamSpan<_>) ct = Async.startImmediateAsTask ct <| async {
-    match stream, span with
-    | Contract.MatchNewest (clientId, version, update) ->
+let ingest (service: TodoSummary.Service) stream (events: Propulsion.Sinks.Event[]) = async {
+    match struct (stream, events) with
+    | Contract.Parse (clientId, version, update) ->
         match! service.TryIngest(clientId, version, map update) with
-        | true -> return struct (Propulsion.Streams.SpanResult.AllProcessed, Outcome.Ok (1, span.Length - 1))
-        | false -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.Skipped span.Length
-    | _ -> return Propulsion.Streams.SpanResult.AllProcessed, Outcome.NotApplicable span.Length }
+        | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, events.Length - 1)
+        | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped events.Length
+    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }

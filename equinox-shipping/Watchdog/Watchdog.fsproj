@@ -18,10 +18,10 @@
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
-        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.2" />
-        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.2" />
-        <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.2" />
-        <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-rc.2" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.5" />
+        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.5" />
+        <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.5" />
+        <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-rc.5" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
 

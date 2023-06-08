@@ -6,8 +6,8 @@ open FsCheck.Xunit
 open System
 
 let runCheckoutScenario store (paymentId, id, NonEmptyArray stays, payBefore) checkWithRetry = async {
-    let staysService = GuestStay.Config.create store
-    let checkoutService = GroupCheckout.Config.create store            
+    let staysService = GuestStay.Factory.create store
+    let checkoutService = GroupCheckout.Factory.create store            
     let mutable charged = 0
     for stayId, chargeId, PositiveInt amount in stays do
         charged <- charged + amount
@@ -42,10 +42,10 @@ let runCheckoutScenario store (paymentId, id, NonEmptyArray stays, payBefore) ch
         | GroupCheckout.Decide.BalanceOutstanding _ -> return false }
 
 [<AbstractClass>]
-type ReactorPropertiesBase(reactor : FixtureBase, testOutput) =
+type ReactorPropertiesBase(reactor: FixtureBase, testOutput) =
     let logSub = reactor.CaptureSerilogLog testOutput
     
-    abstract member DisposeAsync : unit -> Async<unit>
+    abstract member DisposeAsync: unit -> Async<unit>
     default _.DisposeAsync() = async.Zero ()
 
     // Abusing IDisposable rather than IAsyncDisposable as we want the output to accompany the test output
@@ -56,12 +56,12 @@ type ReactorPropertiesBase(reactor : FixtureBase, testOutput) =
             reactor.DumpStats()
             logSub.Dispose() }
 
-type MemoryProperties (reactor : MemoryReactor.Fixture, testOutput) =
+type MemoryProperties (reactor: MemoryReactor.Fixture, testOutput) =
     // Trigger logging of (Aggregate) Reactor stats after each Test/Property is run
     inherit ReactorPropertiesBase(reactor, testOutput)
 
     [<Property(EndSize = 1000, MaxTest = 10)>]
-    let run args : Async<bool> =
+    let run args: Async<bool> =
         runCheckoutScenario reactor.Store args reactor.CheckReactions
    
     override _.DisposeAsync() =
@@ -72,7 +72,7 @@ type MemoryProperties (reactor : MemoryReactor.Fixture, testOutput) =
     interface Xunit.IClassFixture<MemoryReactor.Fixture>
 
 [<Xunit.Collection(DynamoReactor.CollectionName)>]
-type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
+type DynamoProperties(reactor: DynamoReactor.Fixture, testOutput) =
     // Failsafe to emit the Remaining stats even in the case of a Test/Property failing (in success case, it's redundant)
     inherit ReactorPropertiesBase(reactor, testOutput)
 
@@ -82,7 +82,7 @@ type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
 #else
     [<Property(MaxTest = 2)>]
 #endif    
-    let run args : Async<bool> = async {
+    let run args: Async<bool> = async {
         try return! runCheckoutScenario reactor.Store args reactor.CheckReactions
         // Dump the stats after each and every iteration of the test
         finally reactor.DumpStats() }
@@ -94,7 +94,7 @@ type DynamoProperties(reactor : DynamoReactor.Fixture, testOutput) =
         reactor.Wait()
 
 [<Xunit.Collection(MessageDbReactor.CollectionName)>]
-type MessageDbProperties(reactor : MessageDbReactor.Fixture, testOutput) =
+type MessageDbProperties(reactor: MessageDbReactor.Fixture, testOutput) =
     // Failsafe to emit the Remaining stats even in the case of a Test/Property failing (in success case, it's redundant)
     inherit ReactorPropertiesBase(reactor, testOutput)
 
@@ -104,7 +104,7 @@ type MessageDbProperties(reactor : MessageDbReactor.Fixture, testOutput) =
 #else
     [<Property(MaxTest = 2)>]
 #endif    
-    let run args : Async<bool> = async {
+    let run args: Async<bool> = async {
         try return! runCheckoutScenario reactor.Store args reactor.CheckReactions
         // Dump the stats after each and every iteration of the test
         finally reactor.DumpStats() }

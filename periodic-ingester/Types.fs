@@ -5,8 +5,8 @@ open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and
 type [<Measure>] ticketId
 type TicketId = string<ticketId>
 module TicketId =
-    let toString (value : TicketId) : string = %value
-    let parse (value : string) : TicketId = let raw = value in % raw
+    let toString (value: TicketId): string = %value
+    let parse (value: string): TicketId = let raw = value in % raw
     let (|Parse|) = parse
 
 [<RequireQualifiedAccess>]

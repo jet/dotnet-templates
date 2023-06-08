@@ -1,22 +1,21 @@
-module TodoBackendTemplate.Config
+module TodoBackendTemplate.Store
 
 let log = Serilog.Log.ForContext("isMetric", true)
 let resolveDecider cat = Equinox.Decider.resolve log cat
 
-module EventCodec =
+module Codec =
 
     open FsCodec.SystemTextJson
 
-    let private defaultOptions = Options.Create()
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>(options = defaultOptions)
+        Codec.Create<'t>() // options = Options.Default
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>(options = defaultOptions)
+        CodecJsonElement.Create<'t>() // options = Options.Default
 
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
 module Memory =
 
-    let create _codec initial fold store : Equinox.Category<_, _, _> =
+    let create _codec initial fold store: Equinox.Category<_, _, _> =
         // While the actual prod codec can be used, the Box codec allows one to stub out the decoding on the basis that
         // nothing will be proved beyond what a complete roundtripping test per `module Aggregate` would already cover
         Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Box.Codec.Create(), fold, initial)
@@ -58,24 +57,24 @@ module Dynamo =
 module Esdb =
 
     let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
-        let cacheStrategy = Equinox.EventStoreDb.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
         let accessStrategy = Equinox.EventStoreDb.AccessStrategy.RollingSnapshots (isOrigin, toSnapshot)
         Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, cacheStrategy, accessStrategy)
 
 //#endif
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
-type Store<'t> =
+type Context<'t> =
     | Memory of Equinox.MemoryStore.VolatileStore<'t>
 #else
-type Store =
+type Context =
 #endif
 //#if cosmos
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
 //#endif
 //#if dynamo
-    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
 //#endif
 //#if eventStore
-    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.Core.ICache
+    | Esdb of Equinox.EventStoreDb.EventStoreContext * Equinox.Cache
 //#endif

@@ -9,7 +9,7 @@ open System.Runtime.CompilerServices
 
 module Process =
 
-    let direct (evt : IEvent<_, _>) output = evt.AddHandler(DataReceivedEventHandler(fun _sender args -> output args.Data))
+    let direct (evt: IEvent<_, _>) output = evt.AddHandler(DataReceivedEventHandler(fun _sender args -> output args.Data))
 
     let run fileName args =
         let out, err = System.Text.StringBuilder(), System.Text.StringBuilder()

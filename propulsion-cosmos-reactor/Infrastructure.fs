@@ -6,31 +6,38 @@ open System
 
 module Guid =
 
-    let inline toStringN (x : Guid) = x.ToString "N"
+    let inline toStringN (x: Guid) = x.ToString "N"
 
 /// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
 type ClientId = Guid<clientId>
 and [<Measure>] clientId
 module ClientId =
-    let toString (value : ClientId) : string = Guid.toStringN %value
-    let parse (value : string) : ClientId = let raw = Guid.Parse value in % raw
+    let toString (value: ClientId): string = Guid.toStringN %value
+    let parse (value: string): ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
 
 module EnvVar =
 
-    let tryGet varName : string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
+    let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module EventCodec =
+module Streams =
 
-    /// Uses the supplied codec to decode the supplied event record `x` (iff at LogEventLevel.Debug, detail fails to `log` citing the `stream` and content)
-    let tryDecode (codec : FsCodec.IEventCodec<_, _, _>) streamName (x : FsCodec.ITimelineEvent<Propulsion.Streams.Default.EventBody>) =
-        match codec.TryDecode x with
-        | ValueNone ->
-            if Log.IsEnabled Serilog.Events.LogEventLevel.Debug then
-                Log.ForContext("event", System.Text.Encoding.UTF8.GetString(let d = x.Data in d.Span), true)
-                    .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, x.EventType, streamName)
+    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
+    // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
+    let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
+        match codec.TryDecode event with
+        | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
+            Log.ForContext("eventData", renderBody event.Data)
+                .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
             ValueNone
         | x -> x
+    let (|Decode|) codec struct (stream, events: Propulsion.Sinks.Event[]): 'E[] =
+        events |> Propulsion.Internal.Array.chooseV (tryDecode codec stream)
+        
+    module Codec =
+        
+        let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
+            FsCodec.SystemTextJson.Codec.Create<'E>() // options = Options.Default
 
 module Log =
 
@@ -68,7 +75,7 @@ module ConnectorExtensions =
 module CosmosStoreContext =
 
     /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient : Equinox.CosmosStore.CosmosStoreClient) =
+    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
         let maxEvents = 256
         Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
 
@@ -78,19 +85,19 @@ module Sinks =
 
     let tags appName = ["app", appName]
 
-    let equinoxMetricsOnly tags (l : LoggerConfiguration) =
+    let equinoxMetricsOnly tags (l: LoggerConfiguration) =
         l.WriteTo.Sink(Equinox.CosmosStore.Core.Log.InternalMetrics.Stats.LogSink())
          .WriteTo.Sink(Equinox.CosmosStore.Prometheus.LogSink(tags))
 
-    let equinoxAndPropulsionConsumerMetrics tags group (l : LoggerConfiguration) =
+    let equinoxAndPropulsionConsumerMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
           |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
 
-    let equinoxAndPropulsionCosmosConsumerMetrics tags group (l : LoggerConfiguration) =
+    let equinoxAndPropulsionCosmosConsumerMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxAndPropulsionConsumerMetrics tags group
           |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
 
-    let console (configuration : LoggerConfiguration) =
+    let console (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
         configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
 
@@ -98,14 +105,14 @@ module Sinks =
 type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Configure(configuration : LoggerConfiguration, ?verbose) =
+    static member Configure(configuration: LoggerConfiguration, ?verbose) =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member private Sinks(configuration : LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
-        let configure (a : Configuration.LoggerSinkConfiguration) : unit =
+    static member private Sinks(configuration: LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
+        let configure (a: Configuration.LoggerSinkConfiguration): unit =
             a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
             a.Logger(fun l -> // but filter what gets emitted to the console sink
                 let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
@@ -114,5 +121,5 @@ type Logging() =
         configuration.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
 
     [<System.Runtime.CompilerServices.Extension>]
-    static member Sinks(configuration : LoggerConfiguration, configureMetricsSinks, verboseStore) =
+    static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
         configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)

@@ -4,7 +4,7 @@ open Serilog
 open Shipping.Infrastructure
 open System
 
-module Config = Shipping.Domain.Config
+module Store = Shipping.Domain.Store
 
 module Args =
 
@@ -37,7 +37,7 @@ module Args =
                 | Cosmos _ ->               "specify CosmosDB parameters."
                 | Dynamo _ ->               "specify DynamoDB input parameters"
                 | Esdb _ ->                 "specify EventStore DB input parameters"
-    and Arguments(c : SourceArgs.Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: SourceArgs.Configuration, p: ParseResults<Parameters>) =
         let processorName =                 p.GetResult ProcessorName
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 16)
         let maxConcurrentProcessors =       p.GetResult(MaxWriters, 8)
@@ -53,7 +53,7 @@ module Args =
                                                             processorName, maxReadAhead, maxConcurrentProcessors)
                                             (processorName, maxReadAhead, maxConcurrentProcessors)
         member val ProcessingTimeout =      p.GetResult(TimeoutS, 10.) |> TimeSpan.FromSeconds
-        member val Store : Choice<SourceArgs.Cosmos.Arguments, SourceArgs.Dynamo.Arguments, SourceArgs.Esdb.Arguments> =
+        member val Store: Choice<SourceArgs.Cosmos.Arguments, SourceArgs.Dynamo.Arguments, SourceArgs.Esdb.Arguments> =
                                             match p.GetSubCommand() with
                                             | Cosmos a -> Choice1Of3 <| SourceArgs.Cosmos.Arguments(c, a)
                                             | Dynamo a -> Choice2Of3 <| SourceArgs.Dynamo.Arguments(c, a)
@@ -63,7 +63,7 @@ module Args =
                                             | Choice1Of3 s -> s.Verbose
                                             | Choice2Of3 s -> s.Verbose
                                             | Choice3Of3 s -> s.Verbose
-        member x.ConnectStoreAndSource(appName) : Config.Store<_> * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
+        member x.ConnectStoreAndSource(appName): Store.Context<_> * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | Choice1Of3 a ->
@@ -73,49 +73,49 @@ module Args =
                     let checkpointConfig = CosmosFeedConfig.Persistent (groupName, startFromTail, maxItems, lagFrequency)
                     SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
                 let context = client |> CosmosStoreContext.create
-                let store = Config.Store.Cosmos (context, cache)
+                let store = Store.Context.Cosmos (context, cache)
                 store, buildSourceConfig, Equinox.CosmosStore.Core.Log.InternalMetrics.dump
             | Choice2Of3 a ->
                 let context = a.Connect()
                 let buildSourceConfig log groupName =
                     let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, cache)
-                    let load = DynamoLoadModeConfig.Hydrate (context, streamsDop)
+                    let load = Propulsion.DynamoStore.WithData (streamsDop, context)
                     SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
-                let store = Config.Store.Dynamo (context, cache)
+                let store = Store.Context.Dynamo (context, cache)
                 store, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
             | Choice3Of3 a ->
                 let connection = a.Connect(Log.Logger, appName, EventStore.Client.NodePreference.Leader)
                 let context = connection |> EventStoreContext.create
-                let store = Config.Store.Esdb (context, cache)
+                let store = Store.Context.Esdb (context, cache)
                 let targetStore = a.ConnectTarget(cache)
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, targetStore)
-                    let hydrateBodies = true
-                    SourceConfig.Esdb (connection.ReadConnection, checkpoints, hydrateBodies, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
+                    let withData = true
+                    SourceConfig.Esdb (connection.ReadConnection, checkpoints, withData, startFromTail, maxItems, tailSleepInterval, x.StatsInterval)
                 store, buildSourceConfig, Equinox.EventStoreDb.Log.InternalMetrics.dump
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName = programName)
         Arguments(SourceArgs.Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "Watchdog"
 
-let build (args : Args.Arguments) =
+let build (args: Args.Arguments) =
     let consumerGroupName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
     let store, buildSourceConfig, dumpMetrics = args.ConnectStoreAndSource(AppName)
     let log = Log.Logger
     let sink =
         let stats = Handler.Stats(log, args.StatsInterval, args.StateInterval, args.VerboseStore, dumpMetrics)
-        let manager = Shipping.Domain.FinalizationProcess.Config.create args.ProcessManagerMaxDop store
-        Handler.Config.StartSink(log, stats, manager, args.ProcessingTimeout, maxReadAhead, maxConcurrentStreams,
+        let manager = Shipping.Domain.FinalizationProcess.Factory.create args.ProcessManagerMaxDop store
+        Handler.Factory.StartSink(log, stats, maxConcurrentStreams, manager, args.ProcessingTimeout, maxReadAhead, 
                                  wakeForResults = args.WakeForResults, idleDelay = args.IdleDelay, purgeInterval = args.PurgeInterval)
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig log consumerGroupName
-        Handler.Config.StartSource(log, sink, sourceConfig)
+        Handler.Factory.StartSource(log, sink, sourceConfig)
     sink, source
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
@@ -125,7 +125,7 @@ let run args =
     [|   Async.AwaitKeyboardInterruptAsTaskCanceledException()
          source.AwaitWithStopOnCancellation()
          sink.AwaitWithStopOnCancellation()
-    |] |> Async.Parallel |> Async.Ignore<unit array>
+    |] |> Async.Parallel |> Async.Ignore<unit[]>
 
 [<EntryPoint>]
 let main argv =

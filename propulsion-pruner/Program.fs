@@ -4,7 +4,7 @@ open Propulsion.CosmosStore
 open Serilog
 open System
 
-exception MissingArg of message : string with override this.Message = this.message
+exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
 
 type Configuration(tryGet) =
@@ -34,7 +34,7 @@ module Args =
                 | MaxReadAhead _ ->         "maximum number of batches to let processing get ahead of completion. Default: 8."
                 | MaxWriters _ ->           "maximum number of concurrent writes to target. Default: 4."
                 | SrcCosmos _ ->            "Cosmos Archive parameters."
-    and Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Verbose =                p.Contains Parameters.Verbose
         member val PrometheusPort =         p.TryGetResult PrometheusPort
         member val ProcessorName =          p.GetResult ProcessorName
@@ -42,15 +42,15 @@ module Args =
         member val MaxWriters =             p.GetResult(MaxWriters, 4)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
-        member val Source : CosmosSourceArguments =
+        member val Source: CosmosSourceArguments =
             match p.GetSubCommand() with
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for Source"
         member x.DeletionTarget = x.Source.Target
         member x.MonitoringParams() =
             let srcC = x.Source
-            let leases : Microsoft.Azure.Cosmos.Container =
-                let dstC : CosmosSinkArguments = srcC.Target
+            let leases: Microsoft.Azure.Cosmos.Container =
+                let dstC: CosmosSinkArguments = srcC.Target
                 match srcC.LeaseContainerId, dstC.LeaseContainerId with
                 | None, None ->     srcC.ConnectLeases(srcC.ContainerId + "-aux")
                 | Some sc, None ->  srcC.ConnectLeases(sc)
@@ -96,7 +96,7 @@ module Args =
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
 
                 | DstCosmos _ ->            "CosmosDb Pruning Target parameters."
-    and CosmosSourceArguments(c : Configuration, p : ParseResults<CosmosSourceParameters>) =
+    and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
         let discovery =                     p.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
         let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
@@ -110,7 +110,7 @@ module Args =
         member val Verbose =                p.Contains Verbose
         member val FromTail =               p.Contains CosmosSourceParameters.FromTail
         member val MaxItems =               p.TryGetResult MaxItems
-        member val LagFrequency : TimeSpan = p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
+        member val LagFrequency: TimeSpan = p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val LeaseContainerId =       p.TryGetResult CosmosSourceParameters.LeaseContainer
         member x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
 
@@ -137,7 +137,7 @@ module Args =
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 0."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
-    and CosmosSinkArguments(c : Configuration, p : ParseResults<CosmosSinkParameters>) =
+    and CosmosSinkArguments(c: Configuration, p: ParseResults<CosmosSinkParameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
@@ -154,14 +154,14 @@ module Args =
 
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
-    let parse tryGetConfigValue argv : Arguments =
+    let parse tryGetConfigValue argv: Arguments =
         let programName = System.Reflection.Assembly.GetEntryAssembly().GetName().Name
         let parser = ArgumentParser.Create<Parameters>(programName=programName)
         Arguments(Configuration tryGetConfigValue, parser.ParseCommandLine argv)
 
 let [<Literal>] AppName = "PrunerTemplate"
 
-let build (args : Args.Arguments, log : ILogger) =
+let build (args: Args.Arguments, log: ILogger) =
     let archive = args.Source
     // NOTE - DANGEROUS - events submitted to this sink get DELETED from the supplied Context!
     let deletingEventsSink =
@@ -169,7 +169,7 @@ let build (args : Args.Arguments, log : ILogger) =
         if (target.DatabaseId, target.ContainerId) = (archive.DatabaseId, archive.ContainerId) then
             missingArg "Danger! Can not prune a target based on itself"
         let context = target.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Config.log)
+        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
         CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
     let source =
         let observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
@@ -179,7 +179,7 @@ let build (args : Args.Arguments, log : ILogger) =
     deletingEventsSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
-let startMetricsServer port : IDisposable =
+let startMetricsServer port: IDisposable =
     let metricsServer = new Prometheus.KestrelMetricServer(port = port)
     let ms = metricsServer.Start()
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
@@ -187,10 +187,10 @@ let startMetricsServer port : IDisposable =
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
-let run (args : Args.Arguments) = async {
-    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Streams.Default.Config>()
+let run (args: Args.Arguments) = async {
+    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Sinks.Factory>()
     let sink, source = build (args, log)
-    use _metricsServer : IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
+    use _metricsServer: IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     return! [|   Async.AwaitKeyboardInterruptAsTaskCanceledException()
                  source.AwaitWithStopOnCancellation()
                  sink.AwaitWithStopOnCancellation()

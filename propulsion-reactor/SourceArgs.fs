@@ -28,14 +28,14 @@ type [<RequireQualifiedAccess; NoComparison; NoEquality>]
 
 module TargetStoreArgs =
     
-    let connectTarget targetStore cache: Config.Store =
+    let connectTarget targetStore cache: Store.Context =
         match targetStore with
         | TargetStoreArgs.Cosmos a ->
             let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-            Config.Store.Cosmos (context, cache)
+            Store.Context.Cosmos (context, cache)
         | TargetStoreArgs.Dynamo a ->
             let context = a.Connect() |> DynamoStoreContext.create
-            Config.Store.Dynamo (context, cache)
+            Store.Context.Dynamo (context, cache)
             
 #endif
 #if sourceKafka
@@ -59,7 +59,7 @@ module Kafka =
                 | Cosmos _ ->               "CosmosDb Sink parameters."
                 | Dynamo _ ->               "CosmosDb Sink parameters."
                 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
         member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
         member val MaxInFlightBytes =       p.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
@@ -67,12 +67,12 @@ module Kafka =
         member x.BuildSourceParams() =      x.Broker, x.Topic
 
 #if !(kafka && blank)
-        member private _.TargetStoreArgs : TargetStoreArgs =
+        member private _.TargetStoreArgs: TargetStoreArgs =
             match p.GetSubCommand() with
             | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
             | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `kafka`"
-        member x.ConnectTarget(cache) : Config.Store =
+        member x.ConnectTarget(cache): Store.Context =
             TargetStoreArgs.connectTarget x.TargetStoreArgs cache
 #endif
 #else // !sourceKafka
@@ -114,7 +114,7 @@ module Cosmos =
                 | Dynamo _ ->               "DynamoDb Sink parameters."
 #endif
 
-    type Arguments(c : Args.Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
@@ -130,8 +130,8 @@ module Cosmos =
         let lagFrequency =                  p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member _.Verbose =                  p.Contains Verbose
         member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
-        member x.MonitoringParams(log : ILogger) =
-            let leases : Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
+        member x.MonitoringParams(log: ILogger) =
+            let leases: Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
             log.Information("ChangeFeed Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
                 leases.Database.Id, leases.Id, Option.toNullable maxItems)
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
@@ -139,12 +139,12 @@ module Cosmos =
         member x.ConnectStoreAndMonitored() =
             connector.ConnectStoreAndMonitored(database, containerId)
 #if !(kafka && blank)
-        member private _.TargetStoreArgs : TargetStoreArgs =
+        member private _.TargetStoreArgs: TargetStoreArgs =
             match p.GetSubCommand() with
             | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
             | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `esdb`"
-        member x.ConnectTarget(cache) : Config.Store =
+        member x.ConnectTarget(cache): Store.Context =
             TargetStoreArgs.connectTarget x.TargetStoreArgs cache
 #endif
 
@@ -191,7 +191,7 @@ module Dynamo =
                 | Dynamo _ ->               "DynamoDb Sink parameters."
 #endif
 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
                                             | Some systemName ->
                                                 Choice1Of2 systemName
@@ -219,21 +219,21 @@ module Dynamo =
         member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.LogConfiguration()
                                             client.ConnectStore("Main", table) |> DynamoStoreContext.create
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log: ILogger) =
             log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} Hydrater parallelism {streamsDop}", batchSizeCutoff, streamsDop)
             let indexStoreClient = indexStoreClient.Value
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
             indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval, streamsDop
         member _.CreateCheckpointStore(group, cache) =
             let indexTable = indexStoreClient.Value
-            indexTable.CreateCheckpointService(group, cache, Config.log)
+            indexTable.CreateCheckpointService(group, cache, Store.log)
 #if !(kafka && blank)
-        member private _.TargetStoreArgs : TargetStoreArgs =
+        member private _.TargetStoreArgs: TargetStoreArgs =
             match p.GetSubCommand() with
             | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
             | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `esdb`"
-        member x.ConnectTarget(cache) : Config.Store =
+        member x.ConnectTarget(cache): Store.Context =
             TargetStoreArgs.connectTarget x.TargetStoreArgs cache
 #endif
 
@@ -245,14 +245,14 @@ module Esdb =
         alternately one could use a SQL Server DB via Propulsion.SqlStreamStore
 
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
-    let private createCheckpointStore (consumerGroup, checkpointInterval) : _ -> Propulsion.Feed.IFeedCheckpointStore = function
-        | Config.Store.Cosmos (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
-        | Config.Store.Dynamo (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Config.log (consumerGroup, checkpointInterval) (context, cache)
+    let private createCheckpointStore (consumerGroup, checkpointInterval): _ -> Propulsion.Feed.IFeedCheckpointStore = function
+        | Store.Context.Cosmos (context, cache) ->
+            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
+        | Store.Context.Dynamo (context, cache) ->
+            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
 #if !(sourceKafka && kafka)
-        | Config.Store.Esdb _
-        | Config.Store.Sss _ -> failwith "Unexpected store type"
+        | Store.Context.Esdb _
+        | Store.Context.Sss _ -> failwith "Unexpected store type"
 #endif
         
     type [<NoEquality; NoComparison>] Parameters =
@@ -281,7 +281,7 @@ module Esdb =
                 | Dynamo _ ->               "DynamoDB Target Store parameters (also used for checkpoint storage)."
 #endif
 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let startFromTail =                 p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 100)
         let tailSleepInterval =             TimeSpan.FromSeconds 0.5
@@ -294,24 +294,24 @@ module Esdb =
         let checkpointInterval =            TimeSpan.FromHours 1.
         member val Verbose =                p.Contains Verbose
 
-        member _.Connect(appName, nodePreference) : Equinox.EventStoreDb.EventStoreConnection =
+        member _.Connect(appName, nodePreference): Equinox.EventStoreDb.EventStoreConnection =
             Log.Information("EventStore {discovery}", connectionStringLoggable)
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             Equinox.EventStoreDb.EventStoreConnector(timeout, retries, tags = tags)
                 .Establish(appName, discovery, Equinox.EventStoreDb.ConnectionStrategy.ClusterSingle nodePreference)
     
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log: ILogger) =
             log.Information("EventStoreSource BatchSize {batchSize} ", batchSize)
             startFromTail, batchSize, tailSleepInterval
-        member _.CreateCheckpointStore(group, store) : Propulsion.Feed.IFeedCheckpointStore =
+        member _.CreateCheckpointStore(group, store): Propulsion.Feed.IFeedCheckpointStore =
             createCheckpointStore (group, checkpointInterval) store 
 #if !(kafka && blank)
-        member private _.TargetStoreArgs : TargetStoreArgs =
+        member private _.TargetStoreArgs: TargetStoreArgs =
             match p.GetSubCommand() with
             | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
             | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `esdb`"
-        member x.ConnectTarget(cache) : Config.Store =
+        member x.ConnectTarget(cache): Store.Context =
             TargetStoreArgs.connectTarget x.TargetStoreArgs cache
 #endif            
 
@@ -346,7 +346,7 @@ module Sss =
                 | Dynamo _ ->               "DynamoDB Target Store parameters"
 #endif            
 
-    type Arguments(c : Configuration, p : ParseResults<Parameters>) =
+    type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let startFromTail =                 p.Contains FromTail
         let tailSleepInterval =             p.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
         let checkpointEventInterval =       TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint
@@ -371,19 +371,19 @@ module Sss =
             Log.Information("SqlStreamStore MsSql Connection {connectionString} Schema {schema} AutoCreate {autoCreate}", conn, schema, autoCreate)
             let rawStore = Equinox.SqlStreamStore.MsSql.Connector(sssConnectionString, schema, autoCreate=autoCreate).Connect() |> Async.RunSynchronously
             Equinox.SqlStreamStore.SqlStreamStoreConnection rawStore
-        member _.MonitoringParams(log : ILogger) =
+        member _.MonitoringParams(log: ILogger) =
             log.Information("SqlStreamStoreSource BatchSize {batchSize} ", batchSize)
             startFromTail, batchSize, tailSleepInterval
-        member x.CreateCheckpointStoreSql(groupName) : Propulsion.Feed.IFeedCheckpointStore =
+        member x.CreateCheckpointStoreSql(groupName): Propulsion.Feed.IFeedCheckpointStore =
             let connectionString = x.BuildCheckpointsConnectionString()
             Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString, groupName, checkpointEventInterval)
 #if !(kafka && blank)
-        member private _.TargetStoreArgs : TargetStoreArgs =
+        member private _.TargetStoreArgs: TargetStoreArgs =
             match p.GetSubCommand() with
             | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
             | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `sss`"
-        member x.ConnectTarget(cache) : Config.Store =
+        member x.ConnectTarget(cache): Store.Context =
             TargetStoreArgs.connectTarget x.TargetStoreArgs cache
 #endif            
 #endif

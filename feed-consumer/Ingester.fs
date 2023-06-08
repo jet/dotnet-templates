@@ -4,7 +4,7 @@ open Propulsion.Internal
 open System
 open FeedConsumerTemplate.Domain
 
-type Outcome = { added : int; notReady : int; dups : int }
+type Outcome = { added: int; notReady: int; dups: int }
 
 /// Gathers stats based on the outcome of each Span processed for periodic emission
 type Stats(log, statsInterval, stateInterval) =
@@ -28,21 +28,21 @@ type Stats(log, statsInterval, stateInterval) =
 
 module PipelineEvent =
 
-    type Item = { id : TicketId; payload : string }
-    let ofIndexAndItem index (item : Item) =
+    type Item = { id: TicketId; payload: string }
+    let ofIndexAndItem index (item: Item) =
         FsCodec.Core.TimelineEvent.Create(
             index,
             "eventType",
             Unchecked.defaultof<_>,
             context = item)
     let [<return: Struct>] (|ItemsForFc|_|) = function
-        | FsCodec.StreamName.CategoryAndIds (_,[|_ ; FcId.Parse fc|]), (s : Propulsion.Streams.StreamSpan<Propulsion.Streams.Default.EventBody>) ->
+        | FsCodec.StreamName.CategoryAndIds (_,[|_ ; FcId.Parse fc|]), (s: Propulsion.Sinks.Event[]) ->
             ValueSome (fc, s |> Seq.map (fun e -> Unchecked.unbox<Item> e.Context))
         | _ -> ValueNone
 
-let handle maxDop stream span ct = Async.startImmediateAsTask ct <| async {
-    match stream, span with
-    | PipelineEvent.ItemsForFc (fc, items) ->
+let handle maxDop stream events = async {
+    match stream, events with
+    | PipelineEvent.ItemsForFc (_fc, items) ->
         // Take chunks of max 1000 in order to make handler latency be less 'lumpy'
         // What makes sense in terms of a good chunking size will vary depending on the workload in question
         let ticketIds = seq { for x in items -> x.id } |> Seq.truncate 1000 |> Seq.toArray
@@ -50,14 +50,19 @@ let handle maxDop stream span ct = Async.startImmediateAsTask ct <| async {
             do! Async.Sleep(TimeSpan.FromSeconds 1.)
             return if i % 3 = 1 then Some 42 else None
         })
-        let! results = Async.Parallel(maybeAccept, maxDegreeOfParallelism=maxDop)
+        let! results = Async.Parallel(maybeAccept, maxDegreeOfParallelism = maxDop)
         let ready = results |> Array.choose id
         let maybeAdd = ready |> Seq.mapi (fun i _x -> async {
             do! Async.Sleep(TimeSpan.FromSeconds 1.)
             return if i % 2 = 1 then Some 42 else None
         })
-        let! added = Async.Parallel(maybeAdd, maxDegreeOfParallelism=maxDop)
+        let! added = Async.Parallel(maybeAdd, maxDegreeOfParallelism = maxDop)
         let outcome = { added = Seq.length added; notReady = results.Length - ready.Length; dups = results.Length - ticketIds.Length }
-        return struct (Propulsion.Streams.SpanResult.PartiallyProcessed ticketIds.Length, outcome)
+        return Propulsion.Sinks.PartiallyProcessed ticketIds.Length, outcome
     | x -> return failwithf "Unexpected stream %O" x
 }
+
+type Factory private () =
+
+    static member StartSink(log, stats, dop, handle, maxReadAhead) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, dop, handle, stats)

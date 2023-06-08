@@ -1,10 +1,10 @@
-module Shipping.Domain.Config
+module Shipping.Domain.Store
 
 /// Tag log entries so we can filter them out if logging to the console
 let log = Serilog.Log.ForContext("isMetric", true)
 let createDecider cat = Equinox.Decider.resolve log cat
 
-module EventCodec =
+module Codec =
 
     open FsCodec.SystemTextJson
 
@@ -16,7 +16,7 @@ module EventCodec =
 
 module Memory =
 
-    let create codec initial fold store : Equinox.Category<_, _, _> =
+    let create codec initial fold store: Equinox.Category<_, _, _> =
         Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
 
 let defaultCacheDuration = System.TimeSpan.FromMinutes 20.
@@ -48,7 +48,7 @@ module Dynamo =
 module Esdb =
 
     let private createCached codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = Equinox.EventStoreDb.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
         Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, cacheStrategy, ?access = accessStrategy)
     let createUnoptimized codec initial fold (context, cache) =
         createCached codec initial fold None (context, cache)
@@ -56,8 +56,8 @@ module Esdb =
         createCached codec initial fold (Some Equinox.EventStoreDb.AccessStrategy.LatestKnownEvent) (context, cache)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type Store<'t> =
+type Context<'t> =
     | Memory of Equinox.MemoryStore.VolatileStore<'t>
-    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Core.ICache
-    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Core.ICache
-    | Esdb of   Equinox.EventStoreDb.EventStoreContext * Equinox.Core.ICache
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
+    | Esdb of   Equinox.EventStoreDb.EventStoreContext * Equinox.Cache

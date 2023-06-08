@@ -21,12 +21,12 @@ let genDefault<'t> = ArbMap.defaults |> ArbMap.generate<'t>
 type Custom =
 
     static member GuidStringN() = genDefault |> Gen.map (Guid.toStringN >> GuidStringN) |> Arb.fromGen
-    static member Item() = genDefault |> Gen.map (fun i -> { i with id = TicketId.genForTest () } : TicketsEpoch.Events.Item) |> Arb.fromGen
+    static member Item() = genDefault |> Gen.map (fun i -> { i with id = TicketId.genForTest () }: TicketsEpoch.Events.Item) |> Arb.fromGen
 
 [<assembly: Properties( Arbitrary = [| typeof<Custom> |] )>] do()
 
 let [<Property(MaxTest = 5)>] properties shouldInitialize shouldUseSameSut (GuidStringN trancheId) initialItems items = async {
-    let store = Equinox.MemoryStore.VolatileStore() |> Config.Store.Memory
+    let store = Equinox.MemoryStore.VolatileStore() |> Store.Context.Memory
 
     // Initialize with some items
     let initialSut = createSut store trancheId
@@ -49,7 +49,7 @@ let [<Property(MaxTest = 5)>] properties shouldInitialize shouldUseSameSut (Guid
     test <@ set initialResult + set result = set independentResult @> }
 
 let [<Property(MaxTest = 5, Arbitrary = [|typeof<Custom>|])>] ``lookBack is limited`` (GuidStringN trancheId, genItem) = async {
-    let store = Equinox.MemoryStore.VolatileStore() |> Config.Store.Memory
+    let store = Equinox.MemoryStore.VolatileStore() |> Store.Context.Memory
     // Initialize with more items than the lookBack accommodates
     let initialSut = createSut store trancheId
     let itemCount =
@@ -57,7 +57,7 @@ let [<Property(MaxTest = 5, Arbitrary = [|typeof<Custom>|])>] ``lookBack is limi
         (lookBackLimit+1) * maxPickTicketsPerBatch
         // Add one more so we end up with an active batchId = lookBackLimit
         + 1
-    let items = Array.init itemCount (fun _ -> genItem () |> fun x -> { x with id = TicketId.genForTest () } : TicketsEpoch.Events.Item)
+    let items = Array.init itemCount (fun _ -> genItem () |> fun x -> { x with id = TicketId.genForTest () }: TicketsEpoch.Events.Item)
     test <@ Array.distinct items = items @>
     let batch0 = Array.take maxPickTicketsPerBatch items
     let batchesInLookBack = Array.skip maxPickTicketsPerBatch items
