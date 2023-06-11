@@ -13,7 +13,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Removed 
 ### Fixed
 
-<a name="6.3.0"></a>
+<a name="6.3.1"></a>
+## [6.3.1] - 2023-06-12
+
+### Changed
+
+- Target `Equinox` v `4.0.0-rc.11`, `Propulsion` v `3.0.0-rc.6~~~~`
+
+- <a name="6.3.0"></a>
 ## [6.3.0] - 2023-06-08
 
 ### Changed
@@ -624,7 +631,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/6.3.0...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/6.3.1...HEAD
+[6.3.1]: https://github.com/jet/dotnet-templates/compare/6.3.0...6.3.1
 [6.3.0]: https://github.com/jet/dotnet-templates/compare/6.2.0...6.3.0
 [6.2.0]: https://github.com/jet/dotnet-templates/compare/6.1.0...6.2.0
 [6.1.0]: https://github.com/jet/dotnet-templates/compare/6.0.0...6.1.0

@@ -18,11 +18,11 @@
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
-        <PackageReference Include="Equinox.DynamoStore.Prometheus" Version="4.0.0-rc.10" />
+        <PackageReference Include="Equinox.DynamoStore.Prometheus" Version="4.0.0-rc.11" />
         <PackageReference Include="prometheus-net.AspNetCore" Version="3.6.0" />
-        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.5" />
-        <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-rc.5" />
-        <PackageReference Include="Propulsion.MessageDb" Version="3.0.0-rc.5" />
+        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.6" />
+        <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-rc.6" />
+        <PackageReference Include="Propulsion.MessageDb" Version="3.0.0-rc.6" />
         <PackageReference Include="Serilog.Sinks.Async" Version="1.5.0" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
