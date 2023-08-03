@@ -150,8 +150,8 @@ module Args =
     and CosmosSinkArguments(c: Configuration, p: ParseResults<CosmosSinkParameters>) =
         let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
-        let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
-        let retries =                       p.GetResult(CosmosSinkParameters.Retries, 0)
+        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
+        let retries =                       p.GetResult(Retries, 0)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)

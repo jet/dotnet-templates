@@ -11,7 +11,6 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable completed, deferred, failed, succeeded = 0, 0, 0, 0
-
     override _.HandleOk res = res |> function
         | Outcome.Completed -> completed <- completed + 1
         | Outcome.Deferred -> deferred <- deferred + 1
@@ -25,11 +24,8 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
     override _.Classify(exn) =
         match exn with
-        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited
-        | :? Microsoft.Azure.Cosmos.CosmosException as e
-            when (e.StatusCode = System.Net.HttpStatusCode.TooManyRequests
-                  || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
-                 && not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
+        | OutcomeKind.StoreExceptions kind -> kind
+        | Equinox_CosmosStore_Exceptions.ServiceUnavailable when not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
         | x -> base.Classify x
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")

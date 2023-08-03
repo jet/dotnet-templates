@@ -22,17 +22,16 @@ type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable ok, skipped = 0, 0
-
     override _.HandleOk res = res |> function
         | Completed (used, unused) -> ok <- ok + used; skipped <- skipped + unused
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
-
     override _.DumpStats() =
         base.DumpStats()
         if ok <> 0 || skipped <> 0 then
             log.Information(" Used {ok} Skipped {skipped}", ok, skipped)
             ok <- 0; skipped <- 0
+            
+    override _.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
 
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
 let ingest

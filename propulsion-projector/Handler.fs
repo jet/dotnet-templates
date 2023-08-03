@@ -56,19 +56,18 @@ type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<int>(log, statsInterval, stateInterval)
 
     let mutable totalCount = 0
-
     // TODO consider best balance between logging or gathering summary information per handler invocation
     // here we don't log per invocation (such high level stats are already gathered and emitted) but accumulate for periodic emission
     override _.HandleOk count =
         totalCount <- totalCount + count
-    // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
-
     override _.DumpStats() =
         base.DumpStats()
         log.Information(" Total events processed {total}", totalCount)
         totalCount <- 0
+
+    // TODO consider whether to log cause of every individual failure in full (Failure counts are emitted periodically)
+    override _.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
 
 let categories = [| "categoryA" |]
 

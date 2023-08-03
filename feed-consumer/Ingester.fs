@@ -11,20 +11,18 @@ type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable added, notReady, dups = 0, 0, 0
-
     override _.HandleOk outcome =
         added <- added + outcome.added
         notReady <- notReady + outcome.notReady
         dups <- dups + outcome.dups
-
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
-
     override _.DumpStats() =
         base.DumpStats()
         if added <> 0 || notReady <> 0 || dups <> 0 then
             log.Information(" Added {added} Not Yet Shipped {notReady} Duplicates {dups}", added, notReady, dups)
             added <- 0; notReady <- 0; dups <- 0
+
+    override _.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
 
 module PipelineEvent =
 

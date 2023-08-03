@@ -9,21 +9,20 @@ type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<IngestionOutcome>(log, statsInterval, stateInterval)
 
     let mutable stale, unchanged, changed = 0, 0, 0
-
     override _.HandleOk outcome =
         Prometheus.Stats.observeIngestionOutcome outcome
         match outcome with
         | IngestionOutcome.Stale ->      stale <- stale + 1
         | IngestionOutcome.Unchanged ->  unchanged <- unchanged + 1
         | IngestionOutcome.Changed ->    changed <- changed + 1
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
-
     override _.DumpStats() =
         base.DumpStats()
         if stale <> 0 || unchanged <> 0 || changed <> 0 then
             log.Information(" Changed {changed} Unchanged {skipped} Stale {stale}", changed, unchanged, stale)
             stale <- 0; unchanged <- 0; changed <- 0
+
+    override _.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
 
 type TicketData = { lastUpdated: DateTimeOffset; body: string }
 

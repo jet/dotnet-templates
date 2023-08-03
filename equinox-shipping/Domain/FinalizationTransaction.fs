@@ -74,7 +74,7 @@ module Flow =
         | Fold.State.Assigned s ->  Action.FinalizeContainer (s.container, s.shipments)
         | Fold.State.Completed r -> Action.Finish             r.success
         // As all state transitions are driven by FinalizationProcess, we can rule this out
-        | Fold.State.Initial as s      -> failwith (sprintf "Cannot interpret state %A" s)
+        | Fold.State.Initial as s      -> failwith $"Cannot interpret state %A{s}"
 
     let isValidTransition (event: Events.Event) (state: Fold.State) =
         match state, event with

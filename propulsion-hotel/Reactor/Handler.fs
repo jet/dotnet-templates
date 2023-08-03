@@ -7,7 +7,9 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable completed, ignored, failed, succeeded = 0, 0, 0, 0
-
+    override _.HandleOk res = res |> function
+        | Outcome.Merged (ok, denied)-> completed <- completed + 1; succeeded <- succeeded + ok; failed <- failed + denied
+        | Outcome.Noop -> ignored <- ignored + 1
     override _.DumpStats() =
         base.DumpStats()
         if completed <> 0 || ignored <> 0 || failed <> 0 || succeeded <> 0 then
@@ -15,9 +17,6 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
             completed <- 0; failed <- 0; succeeded <- 0; ignored <- 0
         match logExternalStats with None -> () | Some f -> let logWithoutContext = Serilog.Log.Logger in f logWithoutContext
 
-    override _.HandleOk res = res |> function
-        | Outcome.Merged (ok, denied)-> completed <- completed + 1; succeeded <- succeeded + ok; failed <- failed + denied
-        | Outcome.Noop -> ignored <- ignored + 1
     override _.Classify(exn) =
         match exn with
         | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited

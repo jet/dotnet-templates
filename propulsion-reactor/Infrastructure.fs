@@ -149,3 +149,22 @@ type Logging() =
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
                     c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+
+module Equinox_CosmosStore_Exceptions =
+    open Microsoft.Azure.Cosmos
+    let [<return: Struct>] (|CosmosStatus|_|) (x: exn) = match x with :? CosmosException as ce -> ValueSome ce.StatusCode | _ -> ValueNone
+    let (|RateLimited|RequestTimeout|ServiceUnavailable|CosmosStatusCode|Other|) = function
+        | CosmosStatus System.Net.HttpStatusCode.TooManyRequests ->     RateLimited
+        | CosmosStatus System.Net.HttpStatusCode.RequestTimeout ->      RequestTimeout
+        | CosmosStatus System.Net.HttpStatusCode.ServiceUnavailable ->  ServiceUnavailable
+        | CosmosStatus s -> CosmosStatusCode s
+        | _ -> Other
+
+module OutcomeKind =
+    
+    let [<return: Struct>] (|StoreExceptions|_|) exn =
+        match exn with
+        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded
+        | Equinox_CosmosStore_Exceptions.RateLimited -> Propulsion.Streams.OutcomeKind.RateLimited |> ValueSome
+        | Equinox_CosmosStore_Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
+        | _ -> ValueNone

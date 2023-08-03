@@ -7,21 +7,20 @@ type Stats(log, statsInterval, stateInterval) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable ok, skipped, na = 0, 0, 0
-
     override _.HandleOk res =
         Metrics.observeReactorOutcome res
         match res with
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
-
     override _.DumpStats() =
         base.DumpStats()
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0
+
+    override _.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
 
 // map from external contract to internal contract defined by the aggregate
 let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData =

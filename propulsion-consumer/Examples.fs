@@ -126,14 +126,10 @@ module MultiStreams =
 
         let mutable faves, saves = 0, 0
         let otherCats = Stats.CatStats()
-
         override _.HandleOk res = res |> function
             | Faves count -> faves <- faves + count
             | Saves count -> saves <- saves + count
             | OtherCategory (cat, count) -> otherCats.Ingest(cat, int64 count)
-        override _.HandleExn(log, exn) =
-            log.Information(exn, "Unhandled")
-
         // Dump stats relating to the nature of the message processing throughput
         override _.DumpStats() =
             base.DumpStats()
@@ -143,6 +139,9 @@ module MultiStreams =
             if otherCats.Any then
                 log.Information(" Ignored Categories {ignoredCats}", Seq.truncate 5 otherCats.StatsDescending)
                 otherCats.Clear()
+                
+        override _.HandleExn(log, exn) =
+            log.Information(exn, "Unhandled")
 
     let private parseStreamEvents(res: Confluent.Kafka.ConsumeResult<_, _>): seq<Propulsion.Sinks.StreamEvent> =
         Propulsion.Codec.NewtonsoftJson.RenderedSpan.parse res.Message.Value
