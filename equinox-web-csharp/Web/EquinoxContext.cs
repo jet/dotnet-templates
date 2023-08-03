@@ -8,10 +8,11 @@ namespace TodoBackendTemplate
 {
     public abstract class EquinoxContext
     {
-        public abstract Func<(string, string), Equinox.DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
+        public abstract Func<string, Equinox.DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
+            string name,
             Serilog.ILogger storeLog,
             FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
-            Func<TState, IEnumerable<TEvent>, TState> fold,
+            Func<TState, TEvent[], TState> fold,
             TState initial,
             Func<TEvent, bool> isOrigin = null,
             Func<TState, TEvent> toSnapshot = null);

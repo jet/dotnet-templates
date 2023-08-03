@@ -1,7 +1,8 @@
 module Patterns.Domain.ListEpoch
 
-let [<Literal>] Category = "ListEpoch"
-let streamId = Equinox.StreamId.gen ListEpochId.toString
+module Stream =
+    let [<Literal>] Category = "ListEpoch"
+    let id = Equinox.StreamId.gen ListEpochId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -35,16 +36,16 @@ let decide shouldClose candidateIds = function
         let added, events =
             // TOCONSIDER in general, one would expect the inputs to naturally be distinct
             match candidateIds |> Array.except currentIds (*|> Array.distinct*) with
-            | [||] -> [||], []
+            | [||] -> [||], [||]
             | news ->
                 let closing = shouldClose news currentIds
                 let ingestEvent = Events.Ingested {| ids = news |}
-                news, if closing then [ ingestEvent ; Events.Closed ] else [ ingestEvent ]
+                news, [| ingestEvent; if closing then Events.Closed |]
         let _, closed = Fold.fold state events
         let res: ExactlyOnceIngester.IngestResult<_, _> = { accepted = added; closed = closed; residual = [||] }
         res, events
     | currentIds, true ->
-        { accepted = [||]; closed = true; residual = candidateIds |> Array.except currentIds (*|> Array.distinct*) }, []
+        { accepted = [||]; closed = true; residual = candidateIds |> Array.except currentIds (*|> Array.distinct*) }, [||]
 
 // NOTE see feedSource for example of separating Service logic into Ingestion and Read Services in order to vary the folding and/or state held
 type Service internal
@@ -68,8 +69,8 @@ type Service internal
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store -> Store.Memory.create Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Context.Memory store -> Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create maxItemsPerEpoch (Category cat) =
         let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-        Service(shouldClose, streamId >> Store.resolveDecider cat Category)
+        Service(shouldClose, Stream.id >> Store.createDecider cat)

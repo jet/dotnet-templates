@@ -15,7 +15,6 @@ type EventAccumulator<'E>() =
         match messages.TryGetValue stream with
         | false, _ -> Seq.empty<'E>
         | true, xs -> xs :> _
-    member x.Queue(cat, sid) = x.Queue(FsCodec.StreamName.create cat (Equinox.Core.StreamId.toString sid))
     
     member _.All() = seq { for KeyValue (_, xs) in messages do yield! xs }
 

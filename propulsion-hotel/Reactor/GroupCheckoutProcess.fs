@@ -33,15 +33,15 @@ type Service(guestStays: GuestStay.Service, groupCheckouts: GroupCheckout.Servic
 
     // Attempts to merge the specified stays into the specified Group Checkout
     // Maps the results of each individual merge attempt into 0, 1 or 2 events reflecting the progress achieved against the requested merges 
-    let decideMerge groupCheckoutId stayIds: Async<Outcome * GroupCheckout.Events.Event list> = async {
+    let decideMerge groupCheckoutId stayIds: Async<Outcome * GroupCheckout.Events.Event[]> = async {
         let! residuals, fails = executeMergeStayAttempts groupCheckoutId stayIds
-        let events = [ 
+        let events = [| 
             match residuals with
             | [||] -> ()
             | xs -> GroupCheckout.Events.StaysMerged {| residuals = [| for stayId, amount in xs -> { stay = stayId; residual = amount } |] |}
             match fails with
             | [||] -> ()
-            | stayIds -> GroupCheckout.Events.MergesFailed {| stays = stayIds |} ]
+            | stayIds -> GroupCheckout.Events.MergesFailed {| stays = stayIds |} |]
         let outcome = Outcome.Merged (residuals.Length, fails.Length)
         return outcome, events }
 
@@ -53,7 +53,7 @@ type Service(guestStays: GuestStay.Service, groupCheckouts: GroupCheckout.Servic
             // Nothing we can do other than wait for the Confirm to Come
         | GroupCheckout.Flow.Finished ->
             // No processing of any kind can happen after we reach this phase
-            return Outcome.Noop, [] }
+            return Outcome.Noop, [||] }
 
     /// Handles Reactions based on the state of the Group Checkout's workflow
     /// NOTE result includes the post-version of the stream after processing has concluded

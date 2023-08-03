@@ -1,7 +1,8 @@
 module ReactorTemplate.TodoSummary
 
-let [<Literal>] Category = "TodoSummary"
-let streamId = Equinox.StreamId.gen ClientId.toString
+module Stream =
+    let [<Literal>] Category = "TodoSummary"
+    let id = Equinox.StreamId.gen ClientId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -24,8 +25,8 @@ module Fold =
     let toSnapshot state = Events.Ingested { version = state.version; value = state.value.Value }
 
 let decide (version: int64, value: Events.SummaryData) (state: Fold.State) =
-    if state.version >= version then false, [] else
-    true, [Events.Ingested { version = version; value = value }]
+    if state.version >= version then false, [||] else
+    true, [| Events.Ingested { version = version; value = value } |]
 
 type Item = { id: int; order: int; title: string; completed: bool }
 let render: Fold.State -> Item[] = function
@@ -52,5 +53,5 @@ type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.S
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createRollingState Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
-    let create (Category cat) = Service(streamId >> Store.createDecider cat Category)
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createRollingState Stream.Category Events.codec Fold.initial Fold.fold Fold.toSnapshot (context, cache)
+    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

@@ -52,14 +52,14 @@ module Dynamo =
 
     open Equinox.DynamoStore
     
-    let defaultCacheDuration = System.TimeSpan.FromMinutes 20.
-    let private createCached codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        DynamoStoreCategory(context, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, cacheStrategy, accessStrategy)
+    let defaultCacheDuration = TimeSpan.FromMinutes 20.
+    let private createCached name codec initial fold accessStrategy (context, cache) =
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
+        DynamoStoreCategory(context, name, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, accessStrategy, cacheStrategy)
 
-    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+    let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
-        createCached codec initial fold accessStrategy (context, cache)
+        createCached name codec initial fold accessStrategy (context, cache)
 
 type Equinox.DynamoStore.DynamoStoreConnector with
 

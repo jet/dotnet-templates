@@ -170,7 +170,8 @@ let build (args: Args.Arguments, log: ILogger) =
             missingArg "Danger! Can not prune a target based on itself"
         let context = target.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
-        CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
+        let stats = CosmosStorePrunerStats(Log.Logger, args.StatsInterval, args.StateInterval)
+        CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, stats)
     let source =
         let observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()

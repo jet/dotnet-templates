@@ -41,7 +41,7 @@ module Store =
     module private ES =
         open Equinox.EventStoreDb
         let connect connectionString =
-            let c = EventStoreConnector(reqTimeout=TimeSpan.FromSeconds 5., reqRetries=1)
+            let c = EventStoreConnector(reqTimeout=TimeSpan.FromSeconds 5.(*, reqRetries = 1*))
             let conn = c.Establish("Twin", Discovery.ConnectionString connectionString, ConnectionStrategy.ClusterTwinPreferSlaveReads)
             EventStoreContext(conn, batchSize = 500)
 

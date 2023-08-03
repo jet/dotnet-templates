@@ -74,4 +74,4 @@ type Factory private () =
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig
+        SourceConfig.start (log, Store.Metrics.log) sink reactionCategories sourceConfig

@@ -1,8 +1,11 @@
 module Shipping.Domain.Store
 
-/// Tag log entries so we can filter them out if logging to the console
-let log = Serilog.Log.ForContext("isMetric", true)
-let createDecider cat = Equinox.Decider.resolve log cat
+module Metrics = 
+
+    /// Tag log entries so we can filter them out if logging to the console
+    let log = Serilog.Log.ForContext("isMetric", true)
+
+let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
 module Codec =
 
@@ -16,44 +19,43 @@ module Codec =
 
 module Memory =
 
-    let create codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
+    let create name codec initial fold store: Equinox.Category<_, _, _> =
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
 
-let defaultCacheDuration = System.TimeSpan.FromMinutes 20.
+let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
+let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
 
 module Cosmos =
 
     open Equinox.CosmosStore
     
-    let private createCached codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        CosmosStoreCategory(context, codec, fold, initial, cacheStrategy, accessStrategy)
+    let private createCached name codec initial fold accessStrategy (context, cache) =
+        CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
 
-    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+    let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
-        createCached codec initial fold accessStrategy (context, cache)
+        createCached name codec initial fold accessStrategy (context, cache)
 
 module Dynamo =
 
     open Equinox.DynamoStore
     
-    let private createCached codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        DynamoStoreCategory(context, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, cacheStrategy, accessStrategy)
+    let private createCached name codec initial fold accessStrategy (context, cache) =
+        DynamoStoreCategory(context, name, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, accessStrategy, cacheStrategy cache)
 
-    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+    let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
-        createCached codec initial fold accessStrategy (context, cache)
+        createCached name codec initial fold accessStrategy (context, cache)
 
 module Esdb =
 
-    let private createCached codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        Equinox.EventStoreDb.EventStoreCategory(context, codec, fold, initial, cacheStrategy, ?access = accessStrategy)
-    let createUnoptimized codec initial fold (context, cache) =
-        createCached codec initial fold None (context, cache)
-    let createLatestKnownEvent codec initial fold (context, cache) =
-        createCached codec initial fold (Some Equinox.EventStoreDb.AccessStrategy.LatestKnownEvent) (context, cache)
+    let private createCached name codec initial fold accessStrategy (context, cache) =
+        let cachingStrategy = cache |> Option.map cacheStrategy |> Option.defaultValue Equinox.CachingStrategy.NoCaching
+        Equinox.EventStoreDb.EventStoreCategory(context, name, codec, fold, initial, accessStrategy, cachingStrategy)
+    let createUnoptimized name codec initial fold (context, cache) =
+        createCached name codec initial fold Equinox.EventStoreDb.AccessStrategy.Unoptimized (context, Some cache)
+    let createLatestKnownEvent name codec initial fold (context, cache) =
+        createCached name codec initial fold Equinox.EventStoreDb.AccessStrategy.LatestKnownEvent (context, None)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Context<'t> =

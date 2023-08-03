@@ -1,7 +1,8 @@
 ﻿module TodoBackendTemplate.Aggregate
 
-let [<Literal>] Category = "Aggregate"
-let streamId = Equinox.StreamId.gen id
+module Stream =
+    let [<Literal>] Category = "Aggregate"
+    let id = Equinox.StreamId.gen id
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -25,8 +26,8 @@ module Fold =
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot state = Events.Snapshotted { happened = state.happened }
 
-let interpretMarkDone (state: Fold.State) =
-    if state.happened then [] else [Events.Happened]
+let interpretMarkDone (state: Fold.State) = [|
+    if not state.happened then Events.Happened |]
 
 type View = { sorted: bool }
 
@@ -48,19 +49,19 @@ module Factory =
     let private (|Category|) = function
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
         | Store.Context.Memory store ->
-            Store.Memory.create Events.codec Fold.initial Fold.fold store
+            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
 #endif
 //#endif
 //#if cosmos
         | Store.Context.Cosmos (context, cache) ->
-            Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if dynamo
         | Store.Context.Dynamo (context, cache) ->
-            Store.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if eventStore
         | Store.Context.Esdb (context, cache) ->
-            Store.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            Store.Esdb.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
-    let create (Category cat) = Service(streamId >> Store.resolveDecider cat Category)
+    let create (Category cat) = Service(Stream.id >> Store.resolveDecider cat)

@@ -1,7 +1,8 @@
 module Domain.GuestStay
 
-let [<Literal>] Category = "GuestStay"
-let streamId = Equinox.StreamId.gen GuestStayId.toString
+module Stream =
+    let [<Literal>] Category = "GuestStay"
+    let id = Equinox.StreamId.gen GuestStayId.toString
 
 module Events =
 
@@ -50,34 +51,33 @@ module Decide =
         | Active { checkedInAt = Some t } when t = at -> []
         | Active _ | Closed _ | TransferredToGroup _ -> invalidOp "Invalid checkin"
 
-    let charge at chargeId amount state =
-        match state with
+    let charge at chargeId amount = function
         | Closed _ | TransferredToGroup _ -> invalidOp "Cannot record charge for Closed account"
         | Active bal ->
-            if bal.charges |> Array.contains chargeId then []
-            else [ Events.Charged {| at = at; chargeId = chargeId; amount = amount |} ]
+            if bal.charges |> Array.contains chargeId then [||]
+            else [| Events.Charged {| at = at; chargeId = chargeId; amount = amount |} |]
 
     let payment at paymentId amount = function
         | Closed _ | TransferredToGroup _ -> invalidOp "Cannot record payment for not opened account" // TODO fix message at source
         | Active bal ->
-            if bal.payments |> Array.contains paymentId then []
-            else [ Events.Paid {| at = at; paymentId = paymentId; amount = amount |} ]
+            if bal.payments |> Array.contains paymentId then [||]
+            else [| Events.Paid {| at = at; paymentId = paymentId; amount = amount |} |]
 
     [<RequireQualifiedAccess>]
     type CheckoutResult = Ok | AlreadyCheckedOut | BalanceOutstanding of decimal
-    let checkout at: State -> CheckoutResult * Events.Event list = function
-        | Closed -> CheckoutResult.Ok, []
-        | TransferredToGroup _ -> CheckoutResult.AlreadyCheckedOut, []
-        | Active { balance = 0m } -> CheckoutResult.Ok, [ Events.CheckedOut {| at = at |} ]
-        | Active { balance = residual } -> CheckoutResult.BalanceOutstanding residual, []
+    let checkout at: State -> CheckoutResult * Events.Event[] = function
+        | Closed -> CheckoutResult.Ok, [||]
+        | TransferredToGroup _ -> CheckoutResult.AlreadyCheckedOut, [||]
+        | Active { balance = 0m } -> CheckoutResult.Ok, [| Events.CheckedOut {| at = at |} |]
+        | Active { balance = residual } -> CheckoutResult.BalanceOutstanding residual, [||]
 
     [<RequireQualifiedAccess>]
     type GroupCheckoutResult = Ok of residual: decimal | AlreadyCheckedOut
-    let groupCheckout at groupId: State -> GroupCheckoutResult * Events.Event list = function
-        | Closed -> GroupCheckoutResult.AlreadyCheckedOut, []
-        | TransferredToGroup s when s.groupId = groupId -> GroupCheckoutResult.Ok s.amount, []
-        | TransferredToGroup _ -> GroupCheckoutResult.AlreadyCheckedOut, []
-        | Active { balance = residual } -> GroupCheckoutResult.Ok residual, [ Events.TransferredToGroup {| at = at; groupId = groupId; residualBalance = residual |} ]
+    let groupCheckout at groupId: State -> GroupCheckoutResult * Events.Event[] = function
+        | Closed -> GroupCheckoutResult.AlreadyCheckedOut, [||]
+        | TransferredToGroup s when s.groupId = groupId -> GroupCheckoutResult.Ok s.amount, [||]
+        | TransferredToGroup _ -> GroupCheckoutResult.AlreadyCheckedOut, [||]
+        | Active { balance = residual } -> GroupCheckoutResult.Ok residual, [| Events.TransferredToGroup {| at = at; groupId = groupId; residualBalance = residual |} |]
 
 type Service internal (resolve: GuestStayId -> Equinox.Decider<Events.Event, Fold.State>) =
 
@@ -102,9 +102,9 @@ module Factory =
 
     let private (|Category|) = function
         | Store.Context.Memory store ->
-            Store.Memory.create Events.codec Fold.initial Fold.fold store
+            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
         | Store.Context.Dynamo (context, cache) ->
-            Store.Dynamo.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+            Store.Dynamo.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
         | Store.Context.Mdb (context, cache) ->
-            Store.Mdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(streamId >> Store.resolve cat Category)
+            Store.Mdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

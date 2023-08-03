@@ -1,8 +1,9 @@
 ﻿module TodoBackendTemplate.Todo
 
-let [<Literal>] Category = "Todos"
-/// Maps a ClientId to the StreamId portion of the StreamName where data for that client will be held
-let streamId = Equinox.StreamId.gen ClientId.toString
+module Stream =
+    let [<Literal>] Category = "Todos"
+    /// Maps a ClientId to the StreamId portion of the StreamName where data for that client will be held
+    let id = Equinox.StreamId.gen ClientId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -51,19 +52,19 @@ type Props = { order: int; title: string; completed: bool }
 let mkItem id (value: Props): Events.ItemData = { id = id; order = value.order; title = value.title; completed = value.completed }
 
 let decideAdd value (state: Fold.State) =
-    [ Events.Added (mkItem state.nextId value) ]
+    [| Events.Added (mkItem state.nextId value) |]
 
-let decideUpdate itemId value (state: Fold.State) =
+let decideUpdate itemId value (state: Fold.State) = [|
     let proposed = mkItem itemId value
     match state.items |> List.tryFind (function { id = id } -> id = itemId) with
-    | Some current when current <> proposed -> [ Events.Updated proposed ]
-    | _ -> []
+    | Some current when current <> proposed -> Events.Updated proposed
+    | _ -> () |]
 
-let decideDelete id (state: Fold.State) =
-    if state.items |> List.exists (fun x -> x.id = id) then [ Events.Deleted { id=id } ] else []
+let decideDelete id (state: Fold.State) = [|
+    if state.items |> List.exists (fun x -> x.id = id) then Events.Deleted { id = id } |]
 
-let decideClear (state: Fold.State) =
-    if state.items |> List.isEmpty then [] else [ Events.Cleared { nextId = state.nextId } ]
+let decideClear (state: Fold.State) = [|
+    if state.items |> List.isEmpty |> not then Events.Cleared { nextId = state.nextId } |]
 
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }
@@ -131,21 +132,21 @@ type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.S
 
 module Factory =
 
-    let private resolveCategory = function
+    let private (|Category|) = function
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
         | Store.Context.Memory store ->
-            Store.Memory.create Events.codec Fold.initial Fold.fold store
+            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
 #endif
 //#if cosmos
         | Store.Context.Cosmos (context, cache) ->
-            Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if dynamo
         | Store.Context.Dynamo (context, cache) ->
-            Store.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if eventStore
         | Store.Context.Esdb (context, cache) ->
-            Store.Esdb.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+            Store.Esdb.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
-    let create store = Service(fun id -> Store.resolveDecider (resolveCategory store) Category (streamId id))
+    let create (Category cat) = Service(Stream.id >> Store.resolveDecider cat)

@@ -1,7 +1,8 @@
 ﻿module Shipping.Domain.Shipment
 
-let [<Literal>] private Category = "Shipment"
-let streamId = Equinox.StreamId.gen ShipmentId.toString
+module private Stream =
+    let [<Literal>] Category = "Shipment"
+    let id = Equinox.StreamId.gen ShipmentId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -29,20 +30,20 @@ module Fold =
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot (state: State) = Events.Snapshotted {| reservation = state.reservation; association = state.association |}
 
-let decideReserve transactionId: Fold.State -> bool * Events.Event list = function
-    | { reservation = Some r } when r = transactionId -> true, []
-    | { reservation = None } -> true, [ Events.Reserved {| transaction = transactionId |} ]
-    | _ -> false, []
+let decideReserve transactionId: Fold.State -> bool * Events.Event[] = function
+    | { reservation = Some r } when r = transactionId -> true, [||]
+    | { reservation = None } -> true, [| Events.Reserved {| transaction = transactionId |} |]
+    | _ -> false, [||]
 
-let interpretRevoke transactionId: Fold.State -> Events.Event list = function
+let interpretRevoke transactionId: Fold.State -> Events.Event[] = function
     | { reservation = Some r; association = None } when r = transactionId ->
-        [ Events.Revoked ]
-    | _ -> [] // Ignore if a) already revoked/never reserved b) not reserved for this transactionId
+        [| Events.Revoked |]
+    | _ -> [||] // Ignore if a) already revoked/never reserved b) not reserved for this transactionId
 
-let interpretAssign transactionId containerId: Fold.State -> Events.Event list = function
+let interpretAssign transactionId containerId: Fold.State -> Events.Event[] = function
     | { reservation = Some r; association = None } when r = transactionId ->
-        [ Events.Assigned {| container = containerId |} ]
-    | _ -> [] // Ignore if a) this transaction was not the one reserving it or b) it's already been assigned
+        [| Events.Assigned {| container = containerId |} |]
+    | _ -> [||] // Ignore if a) this transaction was not the one reserving it or b) it's already been assigned
 
 type Service internal (resolve: ShipmentId -> Equinox.Decider<Events.Event, Fold.State>) =
 
@@ -61,8 +62,8 @@ type Service internal (resolve: ShipmentId -> Equinox.Decider<Events.Event, Fold
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Context.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Context.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(streamId >> Store.createDecider cat Category)
+        | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Context.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Context.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

@@ -31,7 +31,7 @@ type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheNa
     let client =                        DynamoStoreClient(dynamo, table)
     let context =                       DynamoStoreContext(client)
     let cache =                         Equinox.Cache(cacheName, sizeMb = 1)
-    let checkpoints =                   indexClient.CreateCheckpointService(consumerGroupName, cache, Store.log)
+    let checkpoints =                   indexClient.CreateCheckpointService(consumerGroupName, cache, Store.Metrics.log)
 
     new (c: Configuration, requestTimeout, retries) =
         let conn =

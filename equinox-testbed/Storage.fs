@@ -59,10 +59,10 @@ module Cosmos =
         member _.Connect() =                connector.ConnectStore("Main", database, container)
 
 
-    /// Standing up an Equinox instance is necessary to run for test purposes; You'll need to either:
-    /// 1) replace connection below with a connection string or Uri+Key for an initialized Equinox instance with a database and container named "equinox-test"
-    /// 2) Set the 3x environment variables and create a local Equinox using tools/Equinox.Tool/bin/Release/net461/eqx.exe `
-    ///     init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
+    // Standing up an Equinox instance is necessary to run for test purposes; You'll need to either:
+    // 1) replace connection below with a connection string or Uri+Key for an initialized Equinox instance with a database and container named "equinox-test"
+    // 2) Set the 3x environment variables and create a local Equinox using tools/Equinox.Tool/bin/Release/net461/eqx.exe `
+    //     init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
     open Equinox.CosmosStore
 
     let private createContext storeClient maxItems = CosmosStoreContext(storeClient, queryMaxItems = maxItems, tipMaxEvents = 256)
@@ -71,8 +71,8 @@ module Cosmos =
         let cacheStrategy =
             if cache then
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
-                CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
-            else CachingStrategy.NoCaching
+                Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
+            else Equinox.CachingStrategy.NoCaching
         Store.Context.Cosmos (createContext storeClient maxItems, cacheStrategy, unfolds)
 
 //#endif
@@ -102,7 +102,7 @@ module EventStore =
         member val Timeout =            p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
 
     let private connect (log: Serilog.ILogger) connectionString (operationTimeout, operationRetries) =
-        EventStoreConnector(reqTimeout=operationTimeout, reqRetries=operationRetries,
+        EventStoreConnector(reqTimeout=operationTimeout,// reqRetries=operationRetries,
                 // heartbeatTimeout=heartbeatTimeout, concurrentOperationsLimit=col,
                 // log = (if log.IsEnabled(Serilog.Events.LogEventLevel.Debug) then Logger.SerilogVerbose log else Logger.SerilogNormal log),
                 tags = ["M", Environment.MachineName; "I", Guid.NewGuid() |> string])
@@ -117,7 +117,7 @@ module EventStore =
         let cacheStrategy =
             if cache then
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
-                Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.) |> Some
-            else None
+                Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
+            else Equinox.CachingStrategy.NoCaching
         Store.Context.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)
 //#endif

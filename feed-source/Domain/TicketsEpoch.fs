@@ -5,8 +5,9 @@
 /// Each successive epoch is identified by an index, i.e. TicketsEpoch-FC001_0, then TicketsEpoch-FC001_1
 module FeedSourceTemplate.Domain.TicketsEpoch
 
-let [<Literal>] Category = "TicketsEpoch"
-let streamId = Equinox.StreamId.gen2 FcId.toString TicketsEpochId.toString
+module Stream = 
+    let [<Literal>] Category = "TicketsEpoch"
+    let id = Equinox.StreamId.gen2 FcId.toString TicketsEpochId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -28,15 +29,18 @@ module Fold =
 
     type State = TicketId[] * bool
     let initial = [||], false
-    let evolve (ids, closed) = function
+    
+    module Snapshot =
+    
+        let generate (ids, closed) = Events.Snapshotted {| ids = ids; closed = closed |}
+        let isOrigin = function Events.Snapshotted _ -> true | _ -> false
+        let config = isOrigin, generate
+    
+    let private evolve (ids, closed) = function
+        | Events.Snapshotted e                            -> (e.ids, e.closed)
         | Events.Ingested { items = ItemIds ingestedIds } -> (Array.append ids ingestedIds, closed)
         | Events.Closed                                   -> (ids, true)
-        | Events.Snapshotted e                            -> (e.ids, e.closed)
-
-    let fold: State -> Events.Event seq -> State = Seq.fold evolve
-
-    let isOrigin = function Events.Snapshotted _ -> true | _ -> false
-    let toSnapshot (ids, closed) = Events.Snapshotted {| ids = ids; closed = closed |}
+    let fold = Array.fold evolve
 
 let notAlreadyIn (ids: TicketId seq) =
     let ids = System.Collections.Generic.HashSet ids
@@ -48,8 +52,8 @@ type Result = { accepted: TicketId[]; residual: Events.Item[]; content: TicketId
 /// NOTE does not deduplicate (distinct) candidates and/or the residuals on the basis that the caller should guarantee that
 let decide capacity candidates (currentIds, closed as state) =
     match closed, candidates |> Array.filter (notAlreadyIn currentIds) with
-    | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, []
-    | false, [||] ->           { accepted = [||]; residual = [||];            content = currentIds; closed = closed }, []
+    | true, freshCandidates -> { accepted = [||]; residual = freshCandidates; content = currentIds; closed = closed }, [||]
+    | false, [||] ->           { accepted = [||]; residual = [||];            content = currentIds; closed = closed }, [||]
     | false, freshItems ->
         // NOTE we in some cases end up triggering splitting of a request (or set of requests coalesced in the Batcher)
         // In some cases it might be better to be a little tolerant and not be rigid about limiting things as
@@ -62,8 +66,8 @@ let decide capacity candidates (currentIds, closed as state) =
         let closing = acceptingCount = capacityNow
         let ItemIds addedItemIds as itemsIngested, residualItems = Array.splitAt acceptingCount freshItems
         let events =
-            [   if (not << Array.isEmpty) itemsIngested then yield Events.Ingested { items = itemsIngested }
-                if closing then yield Events.Closed ]
+            [|  if (not << Array.isEmpty) itemsIngested then yield Events.Ingested { items = itemsIngested }
+                if closing then yield Events.Closed |]
         let currentIds, closed = Fold.fold state events
         { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, events
 
@@ -87,11 +91,11 @@ type IngestionService internal (capacity, resolve: FcId * TicketsEpochId -> Equi
 module Factory =
 
     let private create_ capacity resolve =
-        IngestionService(capacity, streamId >> resolve)
+        IngestionService(capacity, Stream.id >> resolve)
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create capacity (Category cat) = Store.createDecider cat Category |> create_ capacity
+        | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)
+    let create capacity (Category cat) = Store.createDecider cat |> create_ capacity
 
 /// Custom Fold and caching logic compared to the IngesterService
 /// - When reading, we want the full Items
@@ -119,6 +123,6 @@ module Reader =
     module Factory =
 
         let private (|Category|) = function
-            | Store.Context.Memory store ->            Store.Memory.create Events.codec initial fold store
-            | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createUnoptimized Events.codec initial fold (context, cache)
-        let create (Category cat) = Service(streamId >> Store.createDecider cat Category)
+            | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec initial fold store
+            | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createUnoptimized Stream.Category Events.codec initial fold (context, cache)
+        let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

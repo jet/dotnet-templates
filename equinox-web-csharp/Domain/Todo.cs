@@ -1,6 +1,7 @@
 ﻿using Microsoft.FSharp.Core;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -168,37 +169,34 @@ namespace TodoBackendTemplate
             }
 
             /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
-            public IEnumerable<Event> Interpret(State s)
+            [SuppressMessage("ReSharper", "CoVariantArrayConversion")]
+            public Event[] Interpret(State s)
             {
                 switch (this)
                 {
                     case Add c:
-                        yield return Make<Event.Added>(s.NextId, c.Props);
-                        break;
+                        return new[] { Make<Event.Added>(s.NextId, c.Props) };
                     case Update c:
-                        var proposed = new {c.Props.Order, c.Props.Title, c.Props.Completed};
+                        var proposed = new { c.Props.Order, c.Props.Title, c.Props.Completed };
 
                         bool IsEquivalent(Event.ItemData i) =>
                             i.Id == c.Id
-                            && new {i.Order, i.Title, i.Completed} == proposed;
+                            && new { i.Order, i.Title, i.Completed } == proposed;
 
-                        if (!s.Items.Any(IsEquivalent))
-                            yield return Make<Event.Updated>(c.Id, c.Props);
-                        break;
-                    case Delete c:
-                        if (s.Items.Any(i => i.Id == c.Id))
-                            yield return new Event.Deleted {Id = c.Id};
-                        break;
-                    case Clear:
-                        if (s.Items.Any())
-                            yield return new Event.Cleared {NextId = s.NextId};
-                        break;
+                        return s.Items.Any(IsEquivalent)
+                            ? Array.Empty<Event>()
+                            : new[] { Make<Event.Updated>(c.Id, c.Props) };
+                    case Delete c when s.Items.All(i => i.Id != c.Id):
+                        return Array.Empty<Event>();
+                    case Delete c: return new[] { new Event.Deleted {Id = c.Id} };
+                    case Clear when !s.Items.Any(): return Array.Empty<Event>();
+                    case Clear: return new[] { new Event.Cleared { NextId = s.NextId } };
 
                     default:
                         throw new ArgumentOutOfRangeException(nameof(s), this, "invalid");
                 }
 
-                T Make<T>(int id, Props value) where T : Event.ItemEvent, new() =>
+                Event Make<T>(int id, Props value) where T : Event.ItemEvent, new() =>
                     new T {Data = {Id = id, Order = value.Order, Title = value.Title, Completed = value.Completed}};
             }
         }
@@ -262,7 +260,7 @@ namespace TodoBackendTemplate
                     s => Render(s.Items.Single(x => x.Id == id)));
 
                 static View Render(Event.ItemData i) =>
-                    new View {Id = i.Id, Order = i.Order, Title = i.Title, Completed = i.Completed};
+                    new () {Id = i.Id, Order = i.Order, Title = i.Title, Completed = i.Completed};
         }
     }
 }

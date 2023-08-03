@@ -4,8 +4,9 @@
 /// Can also be used to walk back through time to visit every ticket there has ever been for correlation purposes
 module FeedSourceTemplate.Domain.TicketsSeries
 
-let [<Literal>] Category = "Tickets"
-let streamId = Equinox.StreamId.gen TicketsSeriesId.toString
+module Stream =
+    let [<Literal>] Category = "Tickets"
+    let id = Equinox.StreamId.gen TicketsSeriesId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -34,9 +35,9 @@ let readEpochId fcId (state: Fold.State) =
     state
     |> Map.tryFind fcId
 
-let interpret (fcId, epochId) (state: Fold.State) =
-    [if state |> readEpochId fcId |> Option.forall (fun cur -> cur < epochId) && epochId >= TicketsEpochId.initial then
-        yield Events.Started {| fcId = fcId; epochId = epochId |}]
+let interpret (fcId, epochId) (state: Fold.State) = [|
+    if state |> readEpochId fcId |> Option.forall (fun cur -> cur < epochId) && epochId >= TicketsEpochId.initial then
+        Events.Started {| fcId = fcId; epochId = epochId |} |]
 
 type EpochDto = { fc: FcId; ingestionEpochId: TicketsEpochId }
 module EpochDto =
@@ -68,8 +69,8 @@ module Factory =
         // For now we have a single global sequence. This provides us an extension point should we ever need to reprocess
         // NOTE we use a custom id in order to isolate data for acceptance tests
         let seriesId = defaultArg seriesId TicketsSeriesId.wellKnownId
-        Service(seriesId, streamId >> resolve)
+        Service(seriesId, Stream.id >> resolve)
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-    let create seriesOverride (Category cat) = create_ seriesOverride (Store.createDecider cat Category)
+        | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+    let create seriesOverride (Category cat) = create_ seriesOverride (Store.createDecider cat)

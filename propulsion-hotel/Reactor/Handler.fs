@@ -26,7 +26,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 
 open Domain
 
-let private reactionCategories = [| GroupCheckout.Category |]
+let private reactionCategories = [| GroupCheckout.Stream.Category |]
 
 // Invocation of the handler is prompted by event notifications from the event store's feed.
 // Wherever possible, multiple events get processed together (e.g. in catchup scenarios or where the async checkpointing
@@ -38,7 +38,7 @@ let private reactionCategories = [| GroupCheckout.Category |]
 //   prior to those that will have arrived on the feed. For that reason, the caller does not forward the `events` argument here.
 let private handle (processor: GroupCheckoutProcess.Service) stream _events = async {
     match stream with
-    | GroupCheckout.StreamName groupCheckoutId ->
+    | GroupCheckout.Stream.Matches groupCheckoutId ->
         let! outcome, ver' = processor.React(groupCheckoutId)
         // For the reasons noted above, processing is carried out based on the reading of the stream for which the handler was triggered.
         // In some cases, due to the clustered nature of the store (and not requiring consistent reads / leader connections
@@ -70,4 +70,4 @@ type Factory private () =
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
-        Infrastructure.SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig
+        Infrastructure.SourceConfig.start (log, Store.Metrics.log) sink reactionCategories sourceConfig

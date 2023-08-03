@@ -29,4 +29,4 @@ type EsdbConnector(connection, credentials) =
     member x.CreateCheckpointService(consumerGroupName) =
         let checkpointInterval =        TimeSpan.FromHours 1.
         let store = Equinox.MemoryStore.VolatileStore()
-        Propulsion.Feed.ReaderCheckpoint.MemoryStore.create Shipping.Domain.Store.log (consumerGroupName, checkpointInterval) store
+        Propulsion.Feed.ReaderCheckpoint.MemoryStore.create Shipping.Domain.Store.Metrics.log (consumerGroupName, checkpointInterval) store

@@ -24,4 +24,4 @@ type DynamoConnector(connector: Equinox.DynamoStore.DynamoStoreConnector, table,
     member x.CreateCheckpointService(consumerGroupName) =
         let checkpointInterval =        System.TimeSpan.FromHours 1.
         let store = Equinox.MemoryStore.VolatileStore()
-        Propulsion.Feed.ReaderCheckpoint.MemoryStore.create Domain.Store.log (consumerGroupName, checkpointInterval) store
+        Propulsion.Feed.ReaderCheckpoint.MemoryStore.create Domain.Store.Metrics.log (consumerGroupName, checkpointInterval) store

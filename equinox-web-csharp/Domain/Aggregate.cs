@@ -70,16 +70,14 @@ namespace TodoBackendTemplate
             {
             }
 
-            public IEnumerable<Event> Interpret(State s)
-            {
-                switch (this)
+            public Event[] Interpret(State s) => this switch
                 {
-                    case MakeItSo:
-                        if (!s.Happened) yield return new Event.Happened();
-                        break;
-                    default: throw new ArgumentOutOfRangeException(nameof(Command), this, "invalid");
-                }
-            }
+                    MakeItSo =>
+                        s.Happened
+                            ? Array.Empty<Event>()
+                            : new Event[] { new Event.Happened() },
+                    _ => throw new ArgumentOutOfRangeException(nameof(Command), this, "invalid")
+                };
         }
 
         public record View(bool Sorted);

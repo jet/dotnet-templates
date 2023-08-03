@@ -226,7 +226,7 @@ module Dynamo =
             indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval, streamsDop
         member _.CreateCheckpointStore(group, cache) =
             let indexTable = indexStoreClient.Value
-            indexTable.CreateCheckpointService(group, cache, Store.log)
+            indexTable.CreateCheckpointService(group, cache, Store.Metrics.log)
 #if !(kafka && blank)
         member private _.TargetStoreArgs: TargetStoreArgs =
             match p.GetSubCommand() with
@@ -247,9 +247,9 @@ module Esdb =
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
     let private createCheckpointStore (consumerGroup, checkpointInterval): _ -> Propulsion.Feed.IFeedCheckpointStore = function
         | Store.Context.Cosmos (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
+            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
         | Store.Context.Dynamo (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
+            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
 #if !(sourceKafka && kafka)
         | Store.Context.Esdb _
         | Store.Context.Sss _ -> failwith "Unexpected store type"
@@ -349,7 +349,6 @@ module Sss =
     type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let startFromTail =                 p.Contains FromTail
         let tailSleepInterval =             p.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
-        let checkpointEventInterval =       TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint
         let batchSize =                     p.GetResult(BatchSize, 512)
         let connection =                    p.TryGetResult Connection |> Option.defaultWith (fun () -> c.SqlStreamStoreConnection)
         let credentials =                   p.TryGetResult Credentials |> Option.orElseWith (fun () -> c.SqlStreamStoreCredentials) |> Option.toObj
@@ -376,7 +375,7 @@ module Sss =
             startFromTail, batchSize, tailSleepInterval
         member x.CreateCheckpointStoreSql(groupName): Propulsion.Feed.IFeedCheckpointStore =
             let connectionString = x.BuildCheckpointsConnectionString()
-            Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString, groupName, checkpointEventInterval)
+            Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString, groupName)
 #if !(kafka && blank)
         member private _.TargetStoreArgs: TargetStoreArgs =
             match p.GetSubCommand() with

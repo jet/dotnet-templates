@@ -471,9 +471,9 @@ module Checkpoints =
         let transmute' xs s = let x, y = Checkpoint.Fold.transmute (Array.toList xs) s in (List.toArray x, List.toArray y)
         let access = AccessStrategy.Custom (Checkpoint.Fold.isOrigin, transmute')
         let create groupName (context, cache) =
-            let caching = CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, caching, access)
-            let resolve log categoryName sid = Equinox.DeciderCore.Resolve(cat, log).Invoke(categoryName, sid)
+            let caching = Equinox.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+            let cat = CosmosStoreCategory(context, Checkpoint.Category, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, access, caching)
+            let resolve sid = Equinox.Stream.Resolve(cat, Store.Metrics.log).Invoke(sid)
             Checkpoint.CheckpointSeries(groupName, resolve)
 
 type Stats(log, statsInterval, stateInterval) =
@@ -509,17 +509,19 @@ let build (args: Args.Arguments, log) =
                 | None ->
 #endif
                 let context = CosmosStoreContext.create target
-                let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
-                Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval),
+                let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.Metrics.log)
+                let stats = Propulsion.CosmosStore.CosmosStoreSinkStats(log, args.StatsInterval, args.StateInterval)
+                Propulsion.CosmosStore.CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, stats),
                 args.CategoryFilterFunction(excludeLong=true)
             Some target, sink, streamFilter
         | Choice2Of2 es ->
             let connect connIndex = async {
-                let lfc = Store.log.ForContext("ConnId", connIndex)
+                let lfc = Store.Metrics.log.ForContext("ConnId", connIndex)
                 let! c = es.Connect(log, lfc, ConnectionStrategy.ClusterSingle NodePreference.Master, AppName)
                 return EventStoreContext(c, batchSize = Int32.MaxValue) }
             let targets = Array.init args.MaxConnections (string >> connect) |> Async.Parallel |> Async.RunSynchronously
-            let sink = EventStoreSink.Start(log, Store.log, args.MaxReadAhead, targets, args.MaxWriters, args.StatsInterval, args.StateInterval)
+            let stats = EventStoreSinkStats(log, args.StatsInterval, args.StateInterval)
+            let sink = EventStoreSink.Start(log, Store.Metrics.log, args.MaxReadAhead, targets, args.MaxWriters, stats)
             None, sink, args.CategoryFilterFunction()
     match args.SourceParams() with
     | Choice1Of2 (monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->

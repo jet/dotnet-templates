@@ -7,7 +7,9 @@ open System
 
 module Store =
 
-    let log = Log.ForContext("isMetric", true)
+    module Metrics =
+
+        let log = Log.ForContext("isMetric", true)
 
 module EnvVar =
 

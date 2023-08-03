@@ -154,7 +154,7 @@ module Dynamo =
             indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval, streamsDop
         member _.CreateCheckpointStore(group, cache) =
             let indexTable = indexStoreClient.Value
-            indexTable.CreateCheckpointService(group, cache, Store.log)
+            indexTable.CreateCheckpointService(group, cache, Store.Metrics.log)
 
 // #endif // dynamo
 #if esdb
@@ -168,9 +168,9 @@ module Esdb =
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
     let private createCheckpointStore (consumerGroup, checkpointInterval): _ -> Propulsion.Feed.IFeedCheckpointStore = function
         | Store.Context.Cosmos (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
+            Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
         | Store.Context.Dynamo (context, cache) ->
-            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.log (consumerGroup, checkpointInterval) (context, cache)
+            Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]           Verbose

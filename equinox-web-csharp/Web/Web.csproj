@@ -5,10 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.11" />
-    <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.0.0-rc.11" />
-    <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.11" />
-    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.11" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.12.12" />
+    <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.0.0-rc.12.12" />
+    <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.12.12" />
+    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.12.12" />
     <PackageReference Include="prometheus-net.AspNetCore" Version="3.6.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="3.2.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />

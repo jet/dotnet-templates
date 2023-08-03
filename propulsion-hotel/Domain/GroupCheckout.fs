@@ -1,10 +1,11 @@
 module Domain.GroupCheckout
 
-let [<Literal>] Category = "GroupCheckout"
-let streamId = Equinox.StreamId.gen GroupCheckoutId.toString
-let [<return: Struct>] (|StreamName|_|) = function
-    | FsCodec.StreamName.CategoryAndId (Category, GroupCheckoutId.Parse id) -> ValueSome id
-    | _ -> ValueNone
+module Stream =
+    let [<Literal>] Category = "GroupCheckout"
+    let id = Equinox.StreamId.gen GroupCheckoutId.toString
+    let [<return: Struct>] (|Matches|_|) = function
+        | FsCodec.StreamName.CategoryAndId (Category, GroupCheckoutId.Parse id) -> ValueSome id
+        | _ -> ValueNone
 
 module Events =
 
@@ -67,7 +68,7 @@ module Flow =
         | { pending = xs } when not (Array.isEmpty xs) -> MergeStays xs
         | { balance = bal } -> Ready bal
         
-    let decide handleAction (state: Fold.State): Async<'R * Events.Event list> =
+    let decide handleAction (state: Fold.State): Async<'R * Events.Event[]> =
         nextAction state |> handleAction
 
 module Decide =
@@ -77,21 +78,21 @@ module Decide =
     let add at stays state =
         let registered = HashSet(seq { yield! state.pending; yield! state.failed; for x in state.checkedOut do yield x.stay })
         match stays |> Array.except registered with
-        | [||] -> []
-        | xs -> [ Events.StaysSelected {| at = at; stays = xs |} ]
+        | [||] -> [||]
+        | xs -> [| Events.StaysSelected {| at = at; stays = xs |} |]
 
     [<NoComparison; NoEquality>]
     type ConfirmResult = Processing | Ok | BalanceOutstanding of decimal
     let confirm at state =
         match Flow.nextAction state with
-        | Flow.Finished -> ConfirmResult.Ok, []
-        | Flow.Ready 0m -> ConfirmResult.Ok, [ Events.Confirmed {| at = at |} ]
-        | Flow.Ready amount -> ConfirmResult.BalanceOutstanding amount, []
-        | Flow.MergeStays _ -> ConfirmResult.Processing, []
+        | Flow.Finished -> ConfirmResult.Ok, [||]
+        | Flow.Ready 0m -> ConfirmResult.Ok, [| Events.Confirmed {| at = at |} |]
+        | Flow.Ready amount -> ConfirmResult.BalanceOutstanding amount, [||]
+        | Flow.MergeStays _ -> ConfirmResult.Processing, [||]
 
     let pay paymentId amount at = function
-        | { payments = paymentIds } when paymentIds |> Array.contains paymentId -> []
-        | _ -> [ Events.Paid {| at = at; paymentId = paymentId; amount = amount |} ]
+        | { payments = paymentIds } when paymentIds |> Array.contains paymentId -> [||]
+        | _ -> [| Events.Paid {| at = at; paymentId = paymentId; amount = amount |} |]
 
 type Service internal (resolve: GroupCheckoutId -> Equinox.Decider<Events.Event, Fold.State>) =
 
@@ -108,7 +109,7 @@ type Service internal (resolve: GroupCheckoutId -> Equinox.Decider<Events.Event,
         decider.Transact(Decide.confirm (defaultArg at DateTimeOffset.UtcNow))
 
     /// Used by GroupCheckOutProcess to run any relevant Reaction activities
-    member _.React(id, handleReaction: Flow.State -> Async<'R * Events.Event list>): Async<'R * int64> =
+    member _.React(id, handleReaction: Flow.State -> Async<'R * Events.Event[]>): Async<'R * int64> =
         let decider = resolve id
         decider.TransactAsyncWithPostVersion(Flow.decide handleReaction)
 
@@ -120,9 +121,9 @@ module Factory =
 
     let private (|Category|) = function
         | Store.Context.Memory store ->
-            Store.Memory.create Events.codec Fold.initial Fold.fold store
+            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
         | Store.Context.Dynamo (context, cache) ->
-            Store.Dynamo.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
+            Store.Dynamo.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
         | Store.Context.Mdb (context, cache) ->
-            Store.Mdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = streamId >> Store.resolve cat Category |> Service
+            Store.Mdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Stream.id >> Store.createDecider cat |> Service

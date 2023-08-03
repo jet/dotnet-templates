@@ -181,8 +181,9 @@ let build (args: Args.Arguments, log) =
     let archiverSink =
         let context = args.DestinationArchive.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
         let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
-        CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval,
-                              purgeInterval=TimeSpan.FromMinutes 10., maxBytes = args.MaxBytes)
+        let stats = CosmosStoreSinkStats(log, args.StatsInterval, args.StateInterval)
+        CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, stats,
+                              purgeInterval = TimeSpan.FromMinutes 10., maxBytes = args.MaxBytes)
     let source =
         let observer = CosmosStoreSource.CreateObserver(log, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
         let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()

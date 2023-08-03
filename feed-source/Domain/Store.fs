@@ -1,7 +1,10 @@
 module FeedSourceTemplate.Domain.Store
 
-let log = Serilog.Log.ForContext("isMetric", true)
-let createDecider cat = Equinox.Decider.resolve log cat
+module Metrics = 
+
+    let log = Serilog.Log.ForContext("isMetric", true)
+
+let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
 module Codec =
 
@@ -10,22 +13,22 @@ module Codec =
 
 module Memory =
 
-    let create codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, codec, fold, initial)
+    let create name codec initial fold store: Equinox.Category<_, _, _> =
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, codec, fold, initial)
 
 module Cosmos =
 
-    let private createCached codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = Equinox.CosmosStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.CosmosStore.CosmosStoreCategory(context, codec, fold, initial, cacheStrategy, accessStrategy)
+    let private createCached name codec initial fold accessStrategy (context, cache) =
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        Equinox.CosmosStore.CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy)
 
-    let createUnoptimized codec initial fold (context, cache) =
+    let createUnoptimized name codec initial fold (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.Unoptimized
-        createCached codec initial fold accessStrategy (context, cache)
+        createCached name codec initial fold accessStrategy (context, cache)
 
-    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+    let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.Snapshot (isOrigin, toSnapshot)
-        createCached codec initial fold accessStrategy (context, cache)
+        createCached name codec initial fold accessStrategy (context, cache)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Context<'t> =
