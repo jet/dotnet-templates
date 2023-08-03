@@ -2,7 +2,7 @@
 
 Given a pair of DynamoDB Tables (provisioned using the `eqx` tool; see below)
 - Store table: holds application events
-  - read/written via `Equinox.DynamoStore~~~~`
+  - read/written via `Equinox.DynamoStore`
   - appends are streamed via DynamoDB Streams with a 24h retention period
 - Index table: holds an index for the table (internally the index is simply an `Equinox.DynamoStore`)
   - written by `Propulsion.DynamoStore.Indexer`
