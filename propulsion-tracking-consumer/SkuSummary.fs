@@ -1,6 +1,6 @@
 ﻿module ConsumerTemplate.SkuSummary
 
-module Stream = 
+module private Stream = 
     let [<Literal>] Category = "SkuSummary"
     let id = Equinox.StreamId.gen SkuId.toString
 

@@ -6,7 +6,7 @@ open Equinox
 module Domain =
     module Favorites =
 
-        module Stream =
+        module private Stream =
             let [<Literal>] Category = "Favorites"
             let id = StreamId.gen ClientId.toString
 

@@ -1,12 +1,16 @@
 module Domain.GroupCheckout
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "GroupCheckout"
     let id = Equinox.StreamId.gen GroupCheckoutId.toString
-    let [<return: Struct>] (|For|_|) = function
+    let tryDecode = function
         | FsCodec.StreamName.CategoryAndId (Category, GroupCheckoutId.Parse id) -> ValueSome id
         | _ -> ValueNone
 
+module Reactions =
+    let [<Literal>] Category = Stream.Category
+    let [<return: Struct>] (|For|_|) = Stream.tryDecode
+    
 module Events =
 
     type CheckoutResidual =     { stay:  GuestStayId; residual: decimal }

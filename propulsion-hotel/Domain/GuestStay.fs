@@ -1,6 +1,6 @@
 module Domain.GuestStay
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "GuestStay"
     let id = Equinox.StreamId.gen GuestStayId.toString
 

@@ -5,7 +5,7 @@
 /// Each successive epoch is identified by an index, i.e. TicketsEpoch-FC001_0, then TicketsEpoch-FC001_1
 module FeedSourceTemplate.Domain.TicketsEpoch
 
-module Stream = 
+module private Stream = 
     let [<Literal>] Category = "TicketsEpoch"
     let id = Equinox.StreamId.gen2 FcId.toString TicketsEpochId.toString
 

@@ -1,6 +1,6 @@
 module ReactorTemplate.Todo
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "Todos"
     let id = Equinox.StreamId.gen ClientId.toString
     let [<return: Struct>] (|For|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone

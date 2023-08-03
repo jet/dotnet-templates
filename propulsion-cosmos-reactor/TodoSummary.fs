@@ -1,6 +1,6 @@
 module ReactorTemplate.TodoSummary
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "TodoSummary"
     let id = Equinox.StreamId.gen ClientId.toString
 

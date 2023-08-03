@@ -32,7 +32,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
 open Shipping.Domain
 
-let private reactionCategories = [| FinalizationTransaction.Stream.Category |]
+let private reactionCategories = [| FinalizationTransaction.Reactions.Category |]
 
 let handle
         (processingTimeout: TimeSpan)

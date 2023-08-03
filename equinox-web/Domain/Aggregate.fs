@@ -1,6 +1,6 @@
 ﻿module TodoBackendTemplate.Aggregate
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "Aggregate"
     let id = Equinox.StreamId.gen id
 

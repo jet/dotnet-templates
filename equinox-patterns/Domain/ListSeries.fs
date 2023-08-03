@@ -3,7 +3,7 @@
 /// As an Epoch is marked `Closed`, the Ingester will mark a new Epoch `Started` on this aggregate via MarkIngestionEpochId
 module Patterns.Domain.ListSeries
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "ListSeries"
     // TOCONSIDER: if you need multiple lists series/epochs in a single system, the Series and Epoch streams should have a SeriesId in the stream name
     // See also the implementation in the feedSource template, where the Series aggregate also functions as an index of series held in the system

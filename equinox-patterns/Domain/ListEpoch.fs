@@ -1,6 +1,6 @@
 module Patterns.Domain.ListEpoch
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "ListEpoch"
     let id = Equinox.StreamId.gen ListEpochId.toString
 

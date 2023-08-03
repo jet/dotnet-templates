@@ -42,7 +42,7 @@ type Properties(testOutput) =
                 nameof(Container.Events.Finalized)] // Container
         test <@ res1 && set eventTypes = set expectedEvents @>
         let containerEvents =
-            buffer.Queue(Container.Stream.name containerId1)
+            buffer.Queue(Container.Reactions.streamName containerId1)
             |> Seq.chooseV (FsCodec.Deflate.EncodeUncompressed Container.Events.codec).TryDecode 
             |> List.ofSeq
         test <@ match containerEvents with

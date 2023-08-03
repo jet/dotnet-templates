@@ -4,7 +4,7 @@
 /// Can also be used to walk back through time to visit every ticket there has ever been for correlation purposes
 module FeedSourceTemplate.Domain.TicketsSeries
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "Tickets"
     let id = Equinox.StreamId.gen TicketsSeriesId.toString
 

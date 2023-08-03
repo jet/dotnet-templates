@@ -5,7 +5,7 @@
 /// c) if appropriate, the target period may be closed as part of the same decision flow if `decideCarryForward` yields Some
 module Patterns.Domain.Period
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "Period"
     let id = Equinox.StreamId.gen PeriodId.toString
 

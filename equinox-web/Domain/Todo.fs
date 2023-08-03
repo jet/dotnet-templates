@@ -1,6 +1,6 @@
 ﻿module TodoBackendTemplate.Todo
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "Todos"
     /// Maps a ClientId to the StreamId portion of the StreamName where data for that client will be held
     let id = Equinox.StreamId.gen ClientId.toString

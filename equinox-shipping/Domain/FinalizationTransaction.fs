@@ -1,9 +1,9 @@
 module Shipping.Domain.FinalizationTransaction
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "FinalizationTransaction"
     let id = Equinox.StreamId.gen TransactionId.toString
-    let [<return: Struct>] (|For|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
+    let tryDecode = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -35,6 +35,8 @@ module Reactions =
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
         encoded.EventType = nameof(Events.Completed)
+    let [<Literal>] Category = Stream.Category
+    let [<return: Struct>] (|For|_|) = Stream.tryDecode
 
 module Fold =
 

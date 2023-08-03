@@ -1,9 +1,12 @@
 module Shipping.Domain.Container
 
-module Stream =
+module private Stream =
     let [<Literal>] Category = "Container"
     let id = Equinox.StreamId.gen ContainerId.toString
     let name = id >> Equinox.Core.StreamId.toString >> FsCodec.StreamName.create Category
+   
+module Reactions =
+    let streamName = Stream.name
     
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
