@@ -3,7 +3,7 @@ module Domain.GroupCheckout
 module Stream =
     let [<Literal>] Category = "GroupCheckout"
     let id = Equinox.StreamId.gen GroupCheckoutId.toString
-    let [<return: Struct>] (|Matches|_|) = function
+    let [<return: Struct>] (|For|_|) = function
         | FsCodec.StreamName.CategoryAndId (Category, GroupCheckoutId.Parse id) -> ValueSome id
         | _ -> ValueNone
 

@@ -50,5 +50,5 @@ module Finalization =
 
     let private codec = Events.createCategorizationCodec FinalizationTransaction.Reactions.isTerminalEvent
     let [<return: Struct>] (|MatchStatus|_|) = function
-        | FinalizationTransaction.Stream.Match transId, TransactionStatus codec status -> ValueSome struct (transId, status)
+        | FinalizationTransaction.Stream.For transId, TransactionStatus codec status -> ValueSome struct (transId, status)
         | _ -> ValueNone

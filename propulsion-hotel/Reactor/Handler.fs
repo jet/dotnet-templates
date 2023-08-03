@@ -38,7 +38,7 @@ let private reactionCategories = [| GroupCheckout.Stream.Category |]
 //   prior to those that will have arrived on the feed. For that reason, the caller does not forward the `events` argument here.
 let private handle (processor: GroupCheckoutProcess.Service) stream _events = async {
     match stream with
-    | GroupCheckout.Stream.Matches groupCheckoutId ->
+    | GroupCheckout.Stream.For groupCheckoutId ->
         let! outcome, ver' = processor.React(groupCheckoutId)
         // For the reasons noted above, processing is carried out based on the reading of the stream for which the handler was triggered.
         // In some cases, due to the clustered nature of the store (and not requiring consistent reads / leader connections
@@ -52,7 +52,7 @@ let private handle (processor: GroupCheckoutProcess.Service) stream _events = as
         //   (and not even invoke the Handler unless one or more of the feed events are beyond the write position)
         return Propulsion.Sinks.StreamResult.OverrideNextIndex ver', outcome
     | other ->
-        return failwithf "Span from unexpected category %A" other }
+        return failwithf $"Span from unexpected category %s{FsCodec.StreamName.toString other}" }
 
 let private createService store =
     let stays = GuestStay.Factory.create store

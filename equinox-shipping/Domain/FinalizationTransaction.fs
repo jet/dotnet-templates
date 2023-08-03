@@ -3,7 +3,7 @@ module Shipping.Domain.FinalizationTransaction
 module Stream =
     let [<Literal>] Category = "FinalizationTransaction"
     let id = Equinox.StreamId.gen TransactionId.toString
-    let [<return: Struct>] (|Match|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
+    let [<return: Struct>] (|For|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =

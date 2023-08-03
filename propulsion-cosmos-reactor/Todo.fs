@@ -3,7 +3,7 @@ module ReactorTemplate.Todo
 module Stream =
     let [<Literal>] Category = "Todos"
     let id = Equinox.StreamId.gen ClientId.toString
-    let [<return: Struct>] (|Match|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
+    let [<return: Struct>] (|For|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -30,7 +30,7 @@ module Reactions =
     
     let dec = Streams.Codec.gen<Events.Event>
     let [<return: Struct>] (|ImpliesStateChange|_|) = function
-        | struct (Stream.Match clientId, _) & Streams.Decode dec events when Array.exists impliesStateChange events -> ValueSome clientId
+        | struct (Stream.For clientId, _) & Streams.Decode dec events when Array.exists impliesStateChange events -> ValueSome clientId
         | _ -> ValueNone
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream

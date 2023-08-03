@@ -5,7 +5,7 @@ open Propulsion.Internal
 module Stream =
     let [<Literal>] Category = "Todos"
     let id = Equinox.StreamId.gen ClientId.toString
-    let [<return: Struct>] (|Match|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
+    let [<return: Struct>] (|For|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -32,7 +32,7 @@ module Reactions =
     
     let private dec = Streams.Codec.gen<Events.Event>
     let [<return: Struct>] private (|Parse|_|) = function
-        | struct (Stream.Match clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
+        | struct (Stream.For clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
         | _ -> ValueNone
     let (|ImpliesStateChange|NoStateChange|NotApplicable|) = function
         | Parse (clientId, events) ->
