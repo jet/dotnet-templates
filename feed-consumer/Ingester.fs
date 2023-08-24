@@ -34,7 +34,7 @@ module PipelineEvent =
             Unchecked.defaultof<_>,
             context = item)
     let [<return: Struct>] (|ItemsForFc|_|) = function
-        | FsCodec.StreamName.CategoryAndIds (_,[|_ ; FcId.Parse fc|]), (s: Propulsion.Sinks.Event[]) ->
+        | FsCodec.StreamName.Split (_, FsCodec.StreamId.Parse 2 [| _; FcId.Parse fc |]), (s: Propulsion.Sinks.Event[]) ->
             ValueSome (fc, s |> Seq.map (fun e -> Unchecked.unbox<Item> e.Context))
         | _ -> ValueNone
 

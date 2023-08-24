@@ -2,7 +2,7 @@ module Patterns.Domain.ListEpoch
 
 module private Stream =
     let [<Literal>] Category = "ListEpoch"
-    let id = Equinox.StreamId.gen ListEpochId.toString
+    let id = FsCodec.StreamId.gen ListEpochId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -59,12 +59,15 @@ type Service internal
         // NOTE decider which will initially transact against potentially stale cached state, which will trigger a
         // resync if another writer has gotten in before us. This is a conscious decision in this instance; the bulk
         // of writes are presumed to be coming from within this same process
-        decider.Transact(decide shouldClose items, load = Equinox.AnyCachedValue)
+        decider.Transact(decide shouldClose items, load = Equinox.LoadOption.AnyCachedValue)
 
-    /// Returns all the items currently held in the stream (Not using AnyCachedValue on the assumption this needs to see updates from other apps)
-    member _.Read epochId: Async<Fold.State> =
+    /// Returns all the items currently held in the stream
+    /// Accommodates for Ingest logic running in another process / on another machine
+    member _.Read epochId: Async<Fold.State> = async {
         let decider = resolve epochId
-        decider.Query(id, Equinox.AllowStale (System.TimeSpan.FromSeconds 1))
+        let! _, closed as res = decider.Query(id, Equinox.LoadOption.AnyCachedValue)
+        if closed then return res // Once the Epoch is closed, no new tickets ca ever be entered so no re-reads needed
+        else return! decider.Query(id, Equinox.LoadOption.AllowStale (System.TimeSpan.FromSeconds 1)) }
 
 module Factory =
 

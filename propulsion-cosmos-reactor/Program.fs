@@ -88,15 +88,9 @@ module Args =
         let fromTail =                      p.Contains FromTail
         let maxItems =                      p.TryGetResult MaxItems
         let lagFrequency =                  p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member _.Verbose =                  p.Contains Verbose
-        member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
-        member x.MonitoringParams() =
-            let leases: Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
-            Log.Information("ChangeFeed Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
-                leases.Database.Id, leases.Id, Option.toNullable maxItems)
-            if fromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-            (leases, fromTail, maxItems, lagFrequency)
-        member x.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(database, containerId)
+        member val Verbose =                p.Contains Verbose
+        member _.MonitoringParams() =       fromTail, maxItems, lagFrequency
+        member _.ConnectWithFeed() =        connector.ConnectWithFeed(database, containerId, leaseContainerId)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv: Arguments =
@@ -108,19 +102,18 @@ let [<Literal>] AppName = "ReactorTemplate"
 
 let build (args: Args.Arguments) =
     let processorName, maxReadAhead, maxConcurrentStreams = args.ProcessorParams()
-    let client, monitored = args.Cosmos.ConnectStoreAndMonitored()
+    let context, monitored, leases = args.Cosmos.ConnectWithFeed() |> Async.RunSynchronously
     let sink =
         let store =
-            let context = client |> CosmosStoreContext.create
             let cache = Equinox.Cache(AppName, sizeMb = 10)
-            Store.Context.Cosmos (context, cache)
+            Store.Config.Cosmos (context, cache)
         let stats = Reactor.Stats(Log.Logger, args.StatsInterval, args.StateInterval)
         let handle = Reactor.Factory.createHandler store
         Reactor.Factory.StartSink(Log.Logger, stats, maxConcurrentStreams, handle, maxReadAhead)
     let source =
         let parseFeedDoc = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumCategoryEvents Reactor.reactionCategories
         let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect parseFeedDoc)
-        let leases, startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
+        let startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
         Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer,
                                                        startFromTail = startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
     sink, source

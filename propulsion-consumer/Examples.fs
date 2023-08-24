@@ -1,6 +1,5 @@
 ﻿namespace ConsumerTemplate
 
-open FsCodec
 open Propulsion.Internal
 open Serilog
 open System
@@ -21,6 +20,8 @@ module MultiStreams =
     module SavedForLater =
 
         let [<Literal>] Category = "SavedForLater"
+        let decodeId = FsCodec.StreamId.dec id
+        let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
         type Item =             { skuId: SkuId; dateSaved: DateTimeOffset }
 
@@ -42,20 +43,17 @@ module MultiStreams =
         module Reactions =
 
             let dec = Streams.Codec.gen<Event>
-            let [<return: Struct>] (|StreamName|_|) = function
-                | FsCodec.StreamName.CategoryAndId (Category, id) -> ValueSome id
-                | _ -> ValueNone 
-            let [<return: Struct>] (|Parse|_|) = function
-                | struct (StreamName id, _) & Streams.Decode dec events -> ValueSome (id, events)
+            let [<return: Struct>] (|For|_|) = tryDecode
+            let [<return: Struct>] (|Decode|_|) = function
+                | struct (For id, _) & Streams.Decode dec events -> ValueSome (id, events)
                 | _ -> ValueNone
 
     // NB - these schemas reflect the actual storage formats and hence need to be versioned with care
     module Favorites =
 
         let [<Literal>] Category = "Favorites"
-        let [<return: Struct>] (|StreamName|_|) = function
-            | FsCodec.StreamName.CategoryAndId (Category, id) -> ValueSome id
-            | _ -> ValueNone 
+        let decodeId = FsCodec.StreamId.dec id
+        let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
         type Favorited =        { date: DateTimeOffset; skuId: SkuId }
         type Unfavorited =      { skuId: SkuId }
@@ -68,8 +66,9 @@ module MultiStreams =
         module Reactions =
 
             let dec = Streams.Codec.gen<Event>
-            let [<return: Struct>] (|Parse|_|) = function
-                | struct (StreamName id, _) & Streams.Decode dec events -> ValueSome (id, events)
+            let [<return: Struct>] (|For|_|) = tryDecode
+            let [<return: Struct>] (|Decode|_|) = function
+                | struct (For id, _) & Streams.Decode dec events -> ValueSome (id, events)
                 | _ -> ValueNone
 
     type Stat = Faves of int | Saves of int | OtherCategory of string * int
@@ -82,16 +81,16 @@ module MultiStreams =
 
         // The StreamProjector mechanism trims any events that have already been handled based on the in-memory state
         let (|FavoritesEvents|SavedForLaterEvents|OtherCategory|) = function
-            | Favorites.Reactions.Parse (id, events) ->
+            | Favorites.Reactions.Decode (id, events) ->
                 let s = match faves.TryGetValue id with true, value -> value | false, _ -> HashSet<SkuId>()
                 FavoritesEvents (id, s, events)
-            | SavedForLater.Reactions.Parse (id, events) ->
+            | SavedForLater.Reactions.Decode (id, events) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
                 SavedForLaterEvents (id, s, events)
-            | StreamName.CategoryAndId (categoryName, _), events -> OtherCategory struct (categoryName, Array.length events)
+            | FsCodec.StreamName.Split (categoryName, _), events -> OtherCategory struct (categoryName, Array.length events)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
-        member _.Handle(streamName: StreamName, events: Propulsion.Sinks.Event[]) = async {
+        member _.Handle(streamName: FsCodec.StreamName, events: Propulsion.Sinks.Event[]) = async {
             match struct (streamName, events) with
             | OtherCategory (cat, count) ->
                 return Propulsion.Sinks.StreamResult.AllProcessed, OtherCategory (cat, count)
@@ -175,18 +174,18 @@ module MultiMessages =
             favorited <- 0; unfavorited <- 0; saved <- 0; removed <- 0; cleared <- 0; cats.Clear(); keys.Clear()
 
         /// Handles various category / eventType / payload types as produced by Equinox.Tool
-        member private _.Interpret(streamName: StreamName, spanJson): seq<Message> = seq {
+        member private _.Interpret(streamName: FsCodec.StreamName, spanJson): seq<Message> = seq {
             let raw =
                 Propulsion.Codec.NewtonsoftJson.RenderedSpan.Parse spanJson
                 |> Propulsion.Codec.NewtonsoftJson.RenderedSpan.enum
                 |> Seq.map ValueTuple.snd
             match struct (streamName, Array.ofSeq raw) with
-            | Favorites.Reactions.Parse (_, events) -> yield! events |> Seq.map Fave
-            | SavedForLater.Reactions.Parse (_, events) -> yield! events |> Seq.map Save
-            | StreamName.CategoryAndId (otherCategoryName, _), events -> yield OtherCat (otherCategoryName, events.Length) }
+            | Favorites.Reactions.Decode (_, events) -> yield! events |> Seq.map Fave
+            | SavedForLater.Reactions.Decode (_, events) -> yield! events |> Seq.map Save
+            | FsCodec.StreamName.Split (otherCategoryName, _), events -> yield OtherCat (otherCategoryName, events.Length) }
 
         // NB can be called in parallel, so must be thread-safe
-        member x.Handle(streamName: StreamName, spanJson: string) =
+        member x.Handle(streamName: FsCodec.StreamName, spanJson: string) =
             for x in x.Interpret(streamName, spanJson) do
                 match x with
                 | Fave (Favorites.Favorited _) -> Interlocked.Increment &favorited |> ignore
@@ -204,7 +203,7 @@ module MultiMessages =
         /// Optimal where each Message naturally lends itself to independent processing with no ordering constraints
         static member Start(config: FsKafka.KafkaConsumerConfig, degreeOfParallelism: int) =
             let log, processor = Log.ForContext<Parallel>(), Processor()
-            let handleMessage (KeyValue (streamName, eventsSpan)) _ct = task { processor.Handle(StreamName.parse streamName, eventsSpan) }
+            let handleMessage (KeyValue (streamName, eventsSpan)) _ct = task { processor.Handle(FsCodec.StreamName.parse streamName, eventsSpan) }
             Propulsion.Kafka.ParallelConsumer.Start(
                 log, config, degreeOfParallelism, handleMessage,
                 statsInterval=TimeSpan.FromSeconds 30., logExternalStats=processor.DumpStats)
@@ -217,7 +216,7 @@ module MultiMessages =
             let handleBatch (msgs: Confluent.Kafka.ConsumeResult<_, _>[]) = async {
                 let processor = Processor()
                 for m in msgs do
-                    processor.Handle(StreamName.parse m.Message.Key, m.Message.Value)
+                    processor.Handle(FsCodec.StreamName.parse m.Message.Key, m.Message.Value)
                 processor.DumpStats log }
             FsKafka.BatchedConsumer.Start(log, config, handleBatch)
 
@@ -231,6 +230,6 @@ module MultiMessages =
             let dop = new SemaphoreSlim(degreeOfParallelism)
             let handleBatch (msgs: Confluent.Kafka.ConsumeResult<_, _>[]) = async {
                 let processor = Processor()
-                let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(StreamName.parse m.Message.Key, m.Message.Value) } |> dop.Throttle })
+                let! _ = Async.Parallel(seq { for m in msgs -> async { processor.Handle(FsCodec.StreamName.parse m.Message.Key, m.Message.Value) } |> dop.Throttle })
                 processor.DumpStats log }
             FsKafka.BatchedConsumer.Start(log, config, handleBatch)

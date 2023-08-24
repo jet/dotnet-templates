@@ -4,8 +4,6 @@ open Serilog
 open Shipping.Infrastructure
 open System
 
-module Store = Shipping.Domain.Store
-
 module Args =
 
     open Argu
@@ -63,31 +61,30 @@ module Args =
                                             | Choice1Of3 s -> s.Verbose
                                             | Choice2Of3 s -> s.Verbose
                                             | Choice3Of3 s -> s.Verbose
-        member x.ConnectStoreAndSource(appName): Store.Context<_> * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
+        member x.ConnectStoreAndSource(appName): Store.Config<_> * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | Choice1Of3 a ->
-                let client, monitored = a.ConnectStoreAndMonitored()
-                let buildSourceConfig log groupName =
-                    let leases, startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams(log)
+                let context, monitored, leases = a.ConnectWithFeed() |> Async.RunSynchronously
+                let buildSourceConfig _log groupName =
+                    let startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams
                     let checkpointConfig = CosmosFeedConfig.Persistent (groupName, startFromTail, maxItems, lagFrequency)
                     SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
-                let context = client |> CosmosStoreContext.create
-                let store = Store.Context.Cosmos (context, cache)
+                let store = Store.Config.Cosmos (context, cache)
                 store, buildSourceConfig, Equinox.CosmosStore.Core.Log.InternalMetrics.dump
             | Choice2Of3 a ->
                 let context = a.Connect()
                 let buildSourceConfig log groupName =
-                    let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
+                    let indexContext, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, cache)
                     let load = Propulsion.DynamoStore.WithData (streamsDop, context)
-                    SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
-                let store = Store.Context.Dynamo (context, cache)
+                    SourceConfig.Dynamo (indexContext, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
+                let store = Store.Config.Dynamo (context, cache)
                 store, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
             | Choice3Of3 a ->
                 let connection = a.Connect(Log.Logger, appName, EventStore.Client.NodePreference.Leader)
                 let context = connection |> EventStoreContext.create
-                let store = Store.Context.Esdb (context, cache)
+                let store = Store.Config.Esdb (context, cache)
                 let targetStore = a.ConnectTarget(cache)
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval = a.MonitoringParams(log)

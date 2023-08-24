@@ -2,7 +2,10 @@
 
 module private Stream = 
     let [<Literal>] Category = "SkuSummary"
-    let id = Equinox.StreamId.gen SkuId.toString
+    let id = FsCodec.StreamId.gen SkuId.toString
+    let (|Decode|) = FsCodec.StreamId.dec SkuId.parse
+module Reactions =
+    let (|SkuId|) = function FsCodec.StreamName.Split (_, Stream.Decode skuId) -> skuId
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =

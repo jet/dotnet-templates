@@ -1,8 +1,7 @@
-module Shipping.Domain.Store
+module Store
 
 module Metrics = 
 
-    /// Tag log entries so we can filter them out if logging to the console
     let log = Serilog.Log.ForContext("isMetric", true)
 
 let createDecider cat = Equinox.Decider.forStream Metrics.log cat
@@ -58,7 +57,7 @@ module Esdb =
         createCached name codec initial fold Equinox.EventStoreDb.AccessStrategy.LatestKnownEvent (context, None)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type Context<'t> =
+type Config<'t> =
     | Memory of Equinox.MemoryStore.VolatileStore<'t>
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache

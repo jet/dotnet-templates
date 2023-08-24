@@ -11,12 +11,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.0.0-rc.12.12" />
-    <PackageReference Include="Equinox.DynamoStore.Prometheus" Version="4.0.0-rc.12.12" />
+    <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.0.0-rc.13" />
+    <PackageReference Include="Equinox.DynamoStore.Prometheus" Version="4.0.0-rc.13" />
     <PackageReference Include="prometheus-net.AspNetCore" Version="3.6.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="3.2.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.10" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.10.1" />
   </ItemGroup>
 
   <ItemGroup>

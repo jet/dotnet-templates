@@ -33,7 +33,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
     override _.Classify(exn) =
         match exn with
         | OutcomeKind.StoreExceptions kind -> kind 
-        | Equinox_CosmosStore_Exceptions.ServiceUnavailable when not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
+        | Equinox.CosmosStore.Exceptions.ServiceUnavailable when not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
         | x -> base.Classify x
     override _.HandleExn(log, exn) = log.Information(exn, "Unhandled")
 

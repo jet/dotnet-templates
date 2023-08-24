@@ -1,18 +1,17 @@
 module ReactorTemplate.Store
 
 module Metrics =
+    
     let log = Serilog.Log.ForContext("isMetric", true)
     
 let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
 module Codec =
 
-    open FsCodec.SystemTextJson
-
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.Codec.Create<'t>() // options = Options.Default
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 module Cosmos =
 
@@ -59,7 +58,7 @@ module Sss =
 
 #endif
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type Context =
+type Config =
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
 #if !(sourceKafka && kafka)

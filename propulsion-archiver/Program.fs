@@ -55,21 +55,11 @@ module Args =
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for SrcCosmos"
         member x.DestinationArchive = x.Source.Archive
-        member x.MonitoringParams() =
-            let srcC = x.Source
-            let leases: Microsoft.Azure.Cosmos.Container =
-                let dstC: CosmosSinkArguments = srcC.Archive
-                match srcC.LeaseContainer, dstC.LeaseContainerId with
-                | _, None ->        srcC.ConnectLeases()
-                | None, Some dc ->  dstC.ConnectLeases dc
-                | Some _, Some _ -> missingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database"
-            Log.Information("Archiving... {dop} writers, max {maxReadAhead} batches read ahead, max write batch {maxKib} KiB", x.MaxWriters, x.MaxReadAhead, x.MaxBytes / 1024)
-            Log.Information("ChangeFeed {processorName} Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
-                x.ProcessorName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxItems)
-            if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-            Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
-            let monitored = srcC.MonitoredContainer()
-            (monitored, leases, x.ProcessorName, srcC.FromTail, srcC.MaxItems, srcC.LagFrequency)
+        member x.Parameters() =
+            Log.Information("Archiving... {dop} writers, max {maxReadAhead} batches read ahead, max write batch {maxKib} KiB",
+                            x.MaxWriters, x.MaxReadAhead, x.MaxBytes / 1024)
+            x.ProcessorName, x.MaxReadAhead, x.MaxWriters, x.MaxBytes
+        
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
@@ -111,20 +101,17 @@ module Args =
         let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val ContainerId =            p.GetResult CosmosSourceParameters.Container
-        member x.MonitoredContainer() =     connector.ConnectMonitored(database, x.ContainerId)
-
-        member val FromTail =               p.Contains CosmosSourceParameters.FromTail
-        member val MaxItems =               p.TryGetResult MaxItems
-        member val LagFrequency: TimeSpan = p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member val LeaseContainer =         p.TryGetResult CosmosSourceParameters.LeaseContainer
-        member val Verbose =                p.Contains Verbose
-        member private _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
-        member x.ConnectLeases() =          match x.LeaseContainer with
-                                            | None ->    x.ConnectLeases(x.ContainerId + "-aux")
-                                            | Some sc -> x.ConnectLeases(sc)
-
-        member val Archive =
+        let fromTail =                      p.Contains CosmosSourceParameters.FromTail
+        let maxItems =                      p.TryGetResult MaxItems
+        let lagFrequency: TimeSpan =        p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
+        let containerId =                   p.GetResult CosmosSourceParameters.Container
+        member val MonitoringParams =       fromTail, maxItems, lagFrequency
+        member x.ConnectFeed() =            match x.Archive.MaybeLeasesContainer with
+                                            | Some leasesContainerInTarget -> connector.ConnectFeed(database, containerId, leasesContainerInTarget)
+                                            | None ->
+                                                let leaseContainerId = p.GetResult(CosmosSourceParameters.LeaseContainer, containerId + "-aux")
+                                                connector.ConnectFeed(database, containerId, leaseContainerId)
+        member val Archive: CosmosSinkArguments =
             match p.GetSubCommand() with
             | DstCosmos cosmos -> CosmosSinkArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for Sink"
@@ -154,12 +141,15 @@ module Args =
         let retries =                       p.GetResult(Retries, 0)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member _.Connect() =                connector.ConnectStore("Destination", database, container)
-
-        member val LeaseContainerId =       p.TryGetResult LeaseContainer
-        member _.ConnectLeases containerId = connector.CreateUninitialized(database, containerId)
+        let databaseId =                    p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let leaseContainerId =              p.TryGetResult LeaseContainer
+        member val MaybeLeasesContainer: Microsoft.Azure.Cosmos.Container option = leaseContainerId |> Option.map (fun id -> connector.LeasesContainer(databaseId, id))
+        member x.Connect() = async {        // while the default maxJsonBytes is 30000 - we are prepared to incur significant extra write RU charges in order to maximize packing
+                                            let maxEvents, maxJsonBytes = 100_000, 100_000
+                                            let! context = connector.ConnectContext("Destination", databaseId, container, maxEvents,
+                                                                                    tipMaxJsonLength = maxJsonBytes, ?auxContainerId = leaseContainerId)
+                                            return Equinox.CosmosStore.Core.EventsContext(context, Store.log) }
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv: Arguments =
@@ -169,26 +159,20 @@ module Args =
 
 let [<Literal>] AppName = "ArchiverTemplate"
 
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
-        // while the default maxJsonBytes is 30000 - we are prepared to incur significant extra write RU charges in order to maximize packing
-        let maxEvents, maxJsonBytes = 100_000, 100_000
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents, tipMaxJsonLength=maxJsonBytes)
-
-let build (args: Args.Arguments, log) =
+let build (args: Args.Arguments) =
+    let processorName, maxReadAhead, maxWriters, maxBytes = args.Parameters()
+    let log = (Log.forGroup processorName).ForContext<Propulsion.Sinks.Factory>()
     let archiverSink =
-        let context = args.DestinationArchive.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
+        let eventsContext = args.DestinationArchive.Connect() |> Async.RunSynchronously
         let stats = CosmosStoreSinkStats(log, args.StatsInterval, args.StateInterval)
-        CosmosStoreSink.Start(log, args.MaxReadAhead, eventsContext, args.MaxWriters, stats,
-                              purgeInterval = TimeSpan.FromMinutes 10., maxBytes = args.MaxBytes)
+        CosmosStoreSink.Start(log, maxReadAhead, eventsContext, maxWriters, stats,
+                              purgeInterval = TimeSpan.FromMinutes 10., maxBytes = maxBytes)
+    let monitored, leases = args.Source.ConnectFeed() |> Async.RunSynchronously
     let source =
         let observer = CosmosStoreSource.CreateObserver(log, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
-        let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
+        let startFromTail, maxItems, lagFrequency = args.Source.MonitoringParams
         CosmosStoreSource.Start(log, monitored, leases, processorName, observer,
-                                startFromTail = startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+                                startFromTail = startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
     archiverSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
@@ -201,8 +185,7 @@ let startMetricsServer port: IDisposable =
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException
 
 let run (args: Args.Arguments) = async {
-    let log = (Log.forGroup args.ProcessorName).ForContext<Propulsion.Sinks.Factory>()
-    let sink, source = build (args, log)
+    let sink, source = build args
     use _metricsServer: IDisposable = args.PrometheusPort |> Option.map startMetricsServer |> Option.toObj
     return! [|  Async.AwaitKeyboardInterruptAsTaskCanceledException()
                 source.AwaitWithStopOnCancellation()

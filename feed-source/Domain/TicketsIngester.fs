@@ -53,8 +53,7 @@ type ServiceForFc internal (log: Serilog.ILogger, fcId, epochs: TicketsEpoch.Ing
         AsyncCacheCell(fun ct -> Async.StartAsTask(aux, cancellationToken = ct))
 
     let tryIngest items = async {
-        let! ct = Async.CancellationToken
-        let! previousTickets = previousTickets.Await ct |> Async.AwaitTask
+        let! previousTickets = previousTickets.Await()
         let firstEpochId = effectiveEpochId ()
 
         let rec aux epochId ingestedTickets items = async {
@@ -97,10 +96,8 @@ type ServiceForFc internal (log: Serilog.ILogger, fcId, epochs: TicketsEpoch.Ing
     let batchedIngest = Equinox.Core.Batching.Batcher(tryIngest, linger)
 
     /// Upon startup, we initialize the Tickets cache from recent epochs; we want to kick that process off before our first ingest
-    member _.Initialize() = async {
-        let! ct = Async.CancellationToken
-        return! previousTickets.Await(ct) |> Async.AwaitTask |> Async.Ignore }
-
+    member _.Initialize(): Async<unit> = previousTickets.Await() |> Async.Ignore 
+    
     /// Attempts to feed the items into the sequence of epochs. Returns the subset that actually got fed in this time around.
     member _.IngestMany(items: TicketsEpoch.Events.Item[]): Async<TicketId[]> = async {
         let! results = batchedIngest.Execute items

@@ -6,7 +6,7 @@ module FeedSourceTemplate.Domain.TicketsSeries
 
 module private Stream =
     let [<Literal>] Category = "Tickets"
-    let id = Equinox.StreamId.gen TicketsSeriesId.toString
+    let id = FsCodec.StreamId.gen TicketsSeriesId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]

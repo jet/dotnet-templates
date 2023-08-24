@@ -4,6 +4,7 @@
         <OutputType>Exe</OutputType>
         <TargetFramework>net6.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
+<!--        <DefineConstants>blank</DefineConstants>-->
     </PropertyGroup>
 
     <ItemGroup>
@@ -35,14 +36,14 @@
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
-        <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.12.12" />
-        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.8.4" />
-        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.8.4" />
-        <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.8.4" />
-        <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.8.4" />
-        <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.10" />
+        <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.13" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.8.10" />
+        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.8.10" />
+        <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.8.10" />
+        <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.8.10" />
+        <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.10.1" />
         <!--#if (kafka || sourceKafka) -->
-        <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.8.4" />
+        <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.8.10" />
         <!--#endif-->
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>

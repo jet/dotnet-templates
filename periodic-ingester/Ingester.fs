@@ -31,16 +31,18 @@ module PipelineEvent =
     (* Each item fed into the Sink has a StreamName associated with it, just as with a regular source based on a change feed *)
 
     let [<Literal>] Category = "Ticket"
-    let streamName = TicketId.toString >> FsCodec.StreamName.create Category
-    let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TicketId.Parse id) -> ValueSome id | _ -> ValueNone
+    let id = FsCodec.StreamId.gen TicketId.toString
+    let decodeId = FsCodec.StreamId.dec TicketId.parse
+    let name = id >> FsCodec.StreamName.create Category
+    let [<return: Struct>] (|For|_|) = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
     (* Each item per stream is represented as an event; if multiple events have been found for a given stream, they are delivered together *)
 
     let private dummyEventData = let dummyEventType, noBody = "eventType", Unchecked.defaultof<_> in FsCodec.Core.EventData.Create(dummyEventType, noBody)
     let sourceItemOfTicketIdAndData struct (id: TicketId, data: TicketData): Propulsion.Feed.SourceItem<Propulsion.Sinks.EventBody> =
-        { streamName = streamName id; eventData = dummyEventData; context = box data }
+        { streamName = name id; eventData = dummyEventData; context = box data }
     let [<return: Struct>] (|TicketEvents|_|) = function
-        | StreamName ticketId, (s: Propulsion.Sinks.Event[]) ->
+        | For ticketId, (s: Propulsion.Sinks.Event[]) ->
             ValueSome (ticketId, s |> Seq.map (fun e -> Unchecked.unbox<TicketData> e.Context))
         | _ -> ValueNone
 

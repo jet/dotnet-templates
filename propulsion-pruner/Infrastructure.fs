@@ -19,36 +19,57 @@ module Log =
     /// The Propulsion.Streams.Prometheus LogSink uses this well-known property to identify consumer group associated with the Scheduler
     let forGroup group = Log.ForContext("group", group)
 
+module private CosmosStoreConnector =
+
+    let private logContainer (role: string) (databaseId: string) (containerId: string) =
+        Log.Information("CosmosDB {role} Database {database} Container {container}", role, databaseId, containerId)
+    let getSource (client: Microsoft.Azure.Cosmos.CosmosClient) databaseId containerId =
+        logContainer "Source" databaseId containerId
+        client.GetDatabase(databaseId).GetContainer(containerId)
+    let getLeases (client: Microsoft.Azure.Cosmos.CosmosClient) databaseId auxContainerId =
+        logContainer "Leases" databaseId auxContainerId
+        client.GetDatabase(databaseId).GetContainer(auxContainerId)
+    let getSourceAndLeases client databaseId containerId auxContainerId =
+        getSource client databaseId containerId, getLeases client databaseId auxContainerId
+
+type Equinox.CosmosStore.CosmosStoreContext with
+
+    member x.LogConfiguration(role: string, databaseId: string, containerId: string) =
+        Log.Information("CosmosStore {role:l} {db}/{container} Tip maxEvents {maxEvents} maxSize {maxJsonLen} Query maxItems {queryMaxItems}",
+                        role, databaseId, containerId, x.TipOptions.MaxEvents, x.TipOptions.MaxJsonLength, x.QueryOptions.MaxItems)
+
+type Equinox.CosmosStore.CosmosStoreClient with
+
+    member x.CreateContext(role: string, databaseId, containerId, tipMaxEvents, ?tipMaxJsonLength) =
+        let c = Equinox.CosmosStore.CosmosStoreContext(x, databaseId, containerId, tipMaxEvents, ?tipMaxJsonLength = tipMaxJsonLength)
+        c.LogConfiguration(role, databaseId, containerId)
+        c
+
 type Equinox.CosmosStore.CosmosStoreConnector with
 
-    member private x.LogConfiguration(connectionName, databaseId, containerId) =
+    member private x.LogConfiguration(role, databaseId: string, containers: string[]) =
         let o = x.Options
         let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
-        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
-        Log.Information("CosmosDb {name} Database {database} Container {container}",
-                        connectionName, databaseId, containerId)
-
-    /// Use sparingly; in general one wants to use CreateAndInitialize to avoid slow first requests
-    member x.CreateUninitialized(databaseId, containerId) =
-        x.CreateUninitialized().GetDatabase(databaseId).GetContainer(containerId)
-
-    /// Connect a CosmosStoreClient, including warming up
-    member x.ConnectStore(connectionName, databaseId, containerId) =
-        x.LogConfiguration(connectionName, databaseId, containerId)
-        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
-
-    /// Creates a CosmosClient suitable for running a CFP via CosmosStoreSource
-    member x.ConnectMonitored(databaseId, containerId) =
-        x.LogConfiguration("Source", databaseId, containerId)
-        x.CreateUninitialized(databaseId, containerId)
-
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
+        Log.Information("CosmosDB {role} {mode} {endpointUri} {db} {containers} timeout {timeout}s Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                        role, o.ConnectionMode, x.Endpoint, databaseId, containers, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+    member private x.CreateAndInitialize(role, databaseId, containers) =
+        x.LogConfiguration(role, databaseId, containers)
+        x.CreateAndInitialize(databaseId, containers)
+    member private x.Connect(role, databaseId, containers) =
+        x.LogConfiguration(role, databaseId, containers)
+        x.Connect(databaseId, containers)
+    member x.ConnectContext(role, databaseId, containerId, tipMaxEvents, ?auxContainerId) = async {
+        let! client = x.Connect(role, databaseId, [| yield containerId; yield! Option.toList auxContainerId |])
+        return client.CreateContext(role, databaseId, containerId, tipMaxEvents) }
+    member x.ConnectFeed(databaseId, containerId, auxContainerId) = async {
+        let! cosmosClient = x.CreateAndInitialize("Source", databaseId, [| containerId; auxContainerId |])
+        return CosmosStoreConnector.getSourceAndLeases cosmosClient databaseId containerId auxContainerId }
+    member x.ConnectFeed(databaseId, containerId, auxContainer) = async {
+        let! cosmosClient = x.CreateAndInitialize("Source", databaseId, [| containerId |])
+        return CosmosStoreConnector.getSource cosmosClient databaseId containerId, auxContainer }
+    member x.LeasesContainer(databaseId, auxContainerId) =
+        let client = x.CreateUninitialized()
+        CosmosStoreConnector.getLeases client databaseId auxContainerId
 
 /// Equinox and Propulsion provide metrics as properties in log emissions
 /// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.

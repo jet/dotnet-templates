@@ -1,14 +1,13 @@
 ﻿module TestbedTemplate.Services
 
 open System
-open Equinox
 
 module Domain =
     module Favorites =
 
         module private Stream =
             let [<Literal>] Category = "Favorites"
-            let id = StreamId.gen ClientId.toString
+            let id = FsCodec.StreamId.gen ClientId.toString
 
         // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
         module Events =
@@ -85,17 +84,17 @@ module Domain =
 
             let private (|Category|) = function
 //#if memoryStore || (!cosmos && !eventStore)
-                | Store.Context.Memory store ->
+                | Store.Config.Memory store ->
                     Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
 //#endif
 //#if cosmos
-                | Store.Context.Cosmos (context, caching, unfolds) ->
+                | Store.Config.Cosmos (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot Fold.Snapshot.config
                                          else Equinox.CosmosStore.AccessStrategy.Unoptimized
                     Store.Cosmos.create Stream.Category Events.codecJe Fold.initial Fold.fold accessStrategy caching context
 //#endif
 //#if eventStore
-                | Store.Context.Esdb (context, caching, unfolds) ->
+                | Store.Config.Esdb (context, caching, unfolds) ->
                     let accessStrategy = if unfolds then Equinox.EventStoreDb.AccessStrategy.RollingSnapshots Fold.Snapshot.config
                                          else Equinox.EventStoreDb.AccessStrategy.Unoptimized
                     Store.Esdb.create Stream.Category Events.codec Fold.initial Fold.fold accessStrategy caching context

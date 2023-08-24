@@ -2,9 +2,9 @@ using Equinox;
 using Equinox.CosmosStore;
 using FsCodec.SystemTextJson.Interop;
 using Microsoft.Azure.Cosmos;
-using Microsoft.FSharp.Control;
 using Microsoft.FSharp.Core;
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace TodoBackendTemplate;
@@ -35,15 +35,8 @@ public class CosmosContext : EquinoxContext
 
     static async Task<CosmosStoreContext> Connect(CosmosStoreConnector connector, string databaseId, string containerId)
     {
-        var storeClient =
-            await FSharpAsync.StartAsTask(
-                CosmosStoreClient.Connect(
-                    FuncConvert.FromFunc<(string,string)[], FSharpAsync<CosmosClient>>(connector.CreateAndInitialize),
-                    databaseId,
-                    containerId),
-                null,
-                null);
-        return new CosmosStoreContext(storeClient, tipMaxEvents: 256);
+        var client = await connector.ConnectAsync(new [] {(databaseId,containerId)}, new CancellationToken());
+        return new CosmosStoreContext(client, databaseId, containerId, tipMaxEvents: 256);
     }
 
     public override Func<string, DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
@@ -63,7 +56,7 @@ public class CosmosContext : EquinoxContext
         var cacheStrategy = _cache == null
             ? null
             : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-        var cat = new CosmosStoreCategory<TEvent, TState, Unit>(_store, name, codec.ToJsonElementCodec(), FuncConvert.FromFunc(fold), initial, accessStrategy, cacheStrategy, compressUnfolds:FSharpOption<bool>.None);
+        var cat = new CosmosStoreCategory<TEvent, TState, Unit>(_store, name, codec.ToJsonElementCodec(), fold, initial, accessStrategy, cacheStrategy, compressUnfolds:FSharpOption<bool>.None);
         return cat.Resolve(handlerLog);
     }
 }

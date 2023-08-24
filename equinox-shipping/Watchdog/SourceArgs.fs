@@ -56,15 +56,9 @@ module Cosmos =
         let maxItems =                      p.TryGetResult MaxItems
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         let lagFrequency =                  p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member _.Verbose =                  p.Contains Verbose
-        member private _.ConnectLeases() =  connector.CreateUninitialized(database, leaseContainerId)
-        member x.MonitoringParams(log: ILogger) =
-            let leases: Microsoft.Azure.Cosmos.Container = x.ConnectLeases()
-            log.Information("ChangeFeed Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
-                leases.Database.Id, leases.Id, Option.toNullable maxItems)
-            if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
-            (leases, fromTail, maxItems, tailSleepInterval, lagFrequency)
-        member x.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(database, containerId)
+        member val Verbose =                p.Contains Verbose
+        member val MonitoringParams =       fromTail, maxItems, tailSleepInterval, lagFrequency
+        member _.ConnectWithFeed() =        connector.ConnectWithFeed(database, containerId, leaseContainerId)
 
 module Dynamo =
 
@@ -124,19 +118,17 @@ module Dynamo =
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         let batchSizeCutoff =               p.GetResult(MaxItems, 100)
         let streamsDop =                    p.GetResult(StreamsDop, 4)
-        let client =                        connector.CreateClient()
-        let indexStoreClient =              lazy client.ConnectStore("Index", indexTable)
+        let client =                        lazy connector.CreateClient()
+        let indexContext =                  lazy client.Value.CreateContext("Index", indexTable)
         member val Verbose =                p.Contains Verbose
-        member _.Connect() =                connector.LogConfiguration()
-                                            client.ConnectStore("Main", table) |> DynamoStoreContext.create
+        member _.Connect() =                client.Value.CreateContext("Main", table)
         member _.MonitoringParams(log: ILogger) =
             log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} Hydrater parallelism {streamsDop}", batchSizeCutoff, streamsDop)
-            let indexStoreClient = indexStoreClient.Value
+            let indexContext = indexContext.Value
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
-            indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval, streamsDop
+            indexContext, fromTail, batchSizeCutoff, tailSleepInterval, streamsDop
         member _.CreateCheckpointStore(group, cache) =
-            let indexTable = indexStoreClient.Value
-            indexTable.CreateCheckpointService(group, cache, Store.Metrics.log)
+            indexContext.Value.CreateCheckpointService(group, cache, Store.Metrics.log)
 
 module Esdb =
 
@@ -147,11 +139,11 @@ module Esdb =
 
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
     let private createCheckpointStore (consumerGroup, checkpointInterval): _ -> Propulsion.Feed.IFeedCheckpointStore = function
-        | Store.Context.Cosmos (context, cache) ->
+        | Store.Config.Cosmos (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
-        | Store.Context.Dynamo (context, cache) ->
+        | Store.Config.Dynamo (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
-        | Store.Context.Memory _ | Store.Context.Esdb _ -> Args.missingArg "Unexpected store type"
+        | Store.Config.Memory _ | Store.Config.Esdb _ -> Args.missingArg "Unexpected store type"
 
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]           Verbose
@@ -207,7 +199,7 @@ module Esdb =
         member _.MonitoringParams(log: ILogger) =
             log.Information("EventStoreSource MaxItems {maxItems} ", maxItems)
             startFromTail, maxItems, tailSleepInterval
-        member x.ConnectTarget(cache): Store.Context<_> =
+        member x.ConnectTarget(cache): Store.Config<_> =
             Args.TargetStoreArgs.connectTarget x.TargetStoreArgs cache
         member _.CreateCheckpointStore(group, store): Propulsion.Feed.IFeedCheckpointStore =
             createCheckpointStore (group, checkpointInterval) store 

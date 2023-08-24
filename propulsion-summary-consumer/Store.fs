@@ -24,5 +24,5 @@ module Cosmos =
         createCached name codec initial fold accessStrategy (context, cache)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type Context =
+type Config =
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache

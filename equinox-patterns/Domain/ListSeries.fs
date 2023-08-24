@@ -7,7 +7,7 @@ module private Stream =
     let [<Literal>] Category = "ListSeries"
     // TOCONSIDER: if you need multiple lists series/epochs in a single system, the Series and Epoch streams should have a SeriesId in the stream name
     // See also the implementation in the feedSource template, where the Series aggregate also functions as an index of series held in the system
-    let id () = Equinox.StreamId.gen ListSeriesId.toString ListSeriesId.wellKnownId
+    let id () = FsCodec.StreamId.gen ListSeriesId.toString ListSeriesId.wellKnownId
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -47,7 +47,7 @@ type Service internal (resolve: unit -> Equinox.Decider<Events.Event, Fold.State
     /// Writers are expected to react to having writes to an epoch denied (due to it being Closed) by anointing a successor via this
     member _.MarkIngestionEpochId epochId: Async<unit> =
         let decider = resolve ()
-        decider.Transact(interpret epochId, load = Equinox.AnyCachedValue)
+        decider.Transact(interpret epochId, load = Equinox.LoadOption.AnyCachedValue)
 
 module Factory =
 

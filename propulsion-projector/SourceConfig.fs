@@ -12,7 +12,7 @@ type SourceConfig =
         * tailSleepInterval: TimeSpan
 // #endif
 #if dynamo    
-    | Dynamo of indexStore: Equinox.DynamoStore.DynamoStoreClient
+    | Dynamo of indexContext: Equinox.DynamoStore.DynamoStoreContext
         * checkpoints: Propulsion.Feed.IFeedCheckpointStore
         * loading: Propulsion.DynamoStore.EventLoadMode
         * startFromTail: bool
@@ -71,11 +71,11 @@ module SourceConfig =
     module Dynamo =
         open Propulsion.DynamoStore
         let start (log, storeLog) (sink: Propulsion.Sinks.Sink) categories
-            (indexStore, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+            (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 DynamoStoreSource(
                     log, statsInterval,
-                    indexStore, batchSizeCutoff, tailSleepInterval,
+                    indexContext, batchSizeCutoff, tailSleepInterval,
                     checkpoints, sink, loadMode, categories = categories,
                     startFromTail = startFromTail, storeLog = storeLog)
             let source = source.Start()
@@ -113,8 +113,8 @@ module SourceConfig =
             Cosmos.start log sink categories (monitored, leases, checkpointConfig, tailSleepInterval)
 // #endif
 #if dynamo    
-        | SourceConfig.Dynamo (indexStore, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
-            Dynamo.start (log, storeLog) sink categories (indexStore, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
+        | SourceConfig.Dynamo (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
+            Dynamo.start (log, storeLog) sink categories (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
 #endif
 #if esdb    
         | SourceConfig.Esdb (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval) ->

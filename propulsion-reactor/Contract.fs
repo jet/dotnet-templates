@@ -20,7 +20,8 @@ let ofState (state: Todo.Fold.State): SummaryInfo =
 module Input =
 
     let [<Literal>] Category = "CategoryName"
-    let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
+    let decodeId = FsCodec.StreamId.dec ClientId.parse
+    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
     
     type Value = { field: int }
     type Event =
@@ -29,8 +30,9 @@ module Input =
         interface TypeShape.UnionContract.IUnionContract
     let private dec = Streams.Codec.genWithIndex<Event>
 
-    let [<return: Struct>] (|Parse|_|) = function
-        | struct (StreamName clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
+    let [<return: Struct>] (|For|_|) = tryDecode
+    let [<return: Struct>] (|Decode|_|) = function
+        | struct (For clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
         | _ -> ValueNone
 
 type Data = { value: int }

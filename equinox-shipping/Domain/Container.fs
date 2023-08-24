@@ -2,8 +2,8 @@ module Shipping.Domain.Container
 
 module private Stream =
     let [<Literal>] Category = "Container"
-    let id = Equinox.StreamId.gen ContainerId.toString
-    let name = id >> Equinox.Core.StreamId.toString >> FsCodec.StreamName.create Category
+    let id = FsCodec.StreamId.gen ContainerId.toString
+    let name = id >> FsCodec.StreamName.create Category
    
 module Reactions =
     let streamName = Stream.name
@@ -44,8 +44,8 @@ type Service internal (resolve: ContainerId -> Equinox.Decider<Events.Event, Fol
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Context.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Context.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
     let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

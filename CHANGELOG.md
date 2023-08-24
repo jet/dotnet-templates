@@ -11,7 +11,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ### Added
 ### Changed
 
-- Target `Equinox` v `4.0.0-rc.12.12`, `Propulsion` v `3.0.0-rc.8.4`
+- Target `Equinox` v `4.0.0-rc.13`, `Propulsion` v `3.0.0-rc.8.10`
 
 ### Removed 
 ### Fixed
@@ -51,7 +51,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- Target `Equinox` v `4.0.0-rc.7`, `Propulsion` v `3.0.0-rc.1`, `FsCodec` v `3.0.0-rc.9`, `net6.0` [#126](https://github.com/jet/dotnet-templates/pull/126) [#127](https://github.com/jet/dotnet-templates/pull/127)
+- Target `Equinox` v `4.0.0-rc.7`, `Propulsion` v `3.0.0-rc.1`, `FsCodec` v `3.0.0-rc.8.10`, `net6.0` [#126](https://github.com/jet/dotnet-templates/pull/126) [#127](https://github.com/jet/dotnet-templates/pull/127)
 
 ### Removed
 

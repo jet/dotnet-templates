@@ -10,22 +10,12 @@ type CosmosConnector(connectionString, databaseId, containerId) =
     let connectionMode =                Microsoft.Azure.Cosmos.ConnectionMode.Gateway
     let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, connectionMode)
     let leaseContainerId =              containerId + "-aux"
-    let connectLeases () =              connector.CreateUninitialized(databaseId, leaseContainerId)
     
     new (c: Shipping.Watchdog.SourceArgs.Configuration) = CosmosConnector(c.CosmosConnection, c.CosmosDatabase, c.CosmosContainer)
     new () =                            CosmosConnector(Shipping.Watchdog.SourceArgs.Configuration EnvVar.tryGet)
     
     member val DumpStats =              Equinox.CosmosStore.Core.Log.InternalMetrics.dump
-    member private _.ConnectStoreAndMonitored() = connector.ConnectStoreAndMonitored(databaseId, containerId)
-    member _.ConnectLeases() =
-        let leases: Microsoft.Azure.Cosmos.Container = connectLeases()
-        // Just as ConnectStoreAndMonitored references the global Logger, so do we -> see SerilogLogFixture, _dummy
-        Serilog.Log.Information("ChangeFeed Leases Database {db} Container {container}", leases.Database.Id, leases.Id)
-        leases
     member x.Connect() =
-        let client, monitored = x.ConnectStoreAndMonitored()
-        let storeCfg =
-            let context = client |> CosmosStoreContext.create
-            let cache = Equinox.Cache("Tests", sizeMb = 10)
-            Shipping.Domain.Store.Context.Cosmos (context, cache)
-        storeCfg, monitored
+        let context, monitored, leases = connector.ConnectWithFeed(databaseId, containerId, leaseContainerId) |> Async.RunSynchronously
+        let storeCfg = Store.Config.Cosmos (context, Equinox.Cache("Tests", sizeMb = 10)) 
+        storeCfg, monitored, leases

@@ -7,7 +7,7 @@ module Patterns.Domain.Period
 
 module private Stream =
     let [<Literal>] Category = "Period"
-    let id = Equinox.StreamId.gen PeriodId.toString
+    let id = FsCodec.StreamId.gen PeriodId.toString
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -108,7 +108,7 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
         let decide' s = async {
             let! r, es = decideIngestWithCarryForward rules () s
             return Option.get r.carryForward, es }
-        decider.TransactAsync(decide', load = Equinox.AnyCachedValue)
+        decider.Transact(decide', load = Equinox.LoadOption.AnyCachedValue)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     let tryTransact periodId getIncoming (decide: 'request -> Fold.State -> 'request * 'result * Events.Event list) request shouldClose: Async<Result<'request, 'result>> =
@@ -117,7 +117,7 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
                 decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
                 decideCarryForward  = fun res state -> async { if shouldClose res then return! genBalance state else return None } } // also close, if we should
         let decider = resolve periodId
-        decider.TransactAsync(decideIngestWithCarryForward rules request, load = Equinox.AnyCachedValue)
+        decider.Transact(decideIngestWithCarryForward rules request, load = Equinox.LoadOption.AnyCachedValue)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     /// Processing completes when `decide` yields None for the residual of the 'request

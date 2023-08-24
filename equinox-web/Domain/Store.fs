@@ -5,12 +5,10 @@ let resolveDecider cat = Equinox.Decider.forStream log cat
 
 module Codec =
 
-    open FsCodec.SystemTextJson
-
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.Codec.Create<'t>() // options = Options.Default
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
 module Memory =
@@ -64,10 +62,10 @@ module Esdb =
 //#endif
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
-type Context<'t> =
+type Config<'t> =
     | Memory of Equinox.MemoryStore.VolatileStore<'t>
 #else
-type Context =
+type Config =
 #endif
 //#if cosmos
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache

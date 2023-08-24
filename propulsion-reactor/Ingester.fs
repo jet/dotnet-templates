@@ -29,7 +29,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
     override _.Classify(exn) =
         match exn with
         | OutcomeKind.StoreExceptions kind -> kind 
-        | Equinox_CosmosStore_Exceptions.ServiceUnavailable when not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
+        | Equinox.CosmosStore.Exceptions.ServiceUnavailable when not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
         | x -> base.Classify x
     override _.HandleExn(log, exn) =
         log.Information(exn, "Unhandled")
@@ -40,7 +40,7 @@ let reactionCategories = [| Category |]
     
 let handle stream (events: Propulsion.Sinks.Event[]) = async {
     match stream, events with
-    | FsCodec.StreamName.CategoryAndId (Category, id), _ ->
+    | FsCodec.StreamName.Split (Category, FsCodec.StreamId.Parse1 (ClientId.Parse clientId)), _ ->
         let ok = true
         // "TODO: add handler code"
         match ok with

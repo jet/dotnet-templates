@@ -8,10 +8,8 @@ let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
 module Codec =
 
-    open FsCodec.SystemTextJson
-
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.Codec.Create<'t>() // options = Options.Default
 
 module Memory =
 
@@ -44,7 +42,7 @@ module Mdb =
         create name codec initial fold accessStrategy (context, cache)
 
 [<RequireQualifiedAccess; NoComparison; NoEquality>]
-type Context =
+type Config =
     | Memory of Equinox.MemoryStore.VolatileStore<struct (int * System.ReadOnlyMemory<byte>)>
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
     | Mdb    of Equinox.MessageDb.MessageDbContext * Equinox.Cache

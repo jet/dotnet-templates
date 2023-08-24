@@ -2,7 +2,7 @@ module Domain.GuestStay
 
 module private Stream =
     let [<Literal>] Category = "GuestStay"
-    let id = Equinox.StreamId.gen GuestStayId.toString
+    let id = FsCodec.StreamId.gen GuestStayId.toString
 
 module Events =
 
@@ -101,10 +101,10 @@ type Service internal (resolve: GuestStayId -> Equinox.Decider<Events.Event, Fol
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store ->
+        | Store.Config.Memory store ->
             Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Context.Dynamo (context, cache) ->
+        | Store.Config.Dynamo (context, cache) ->
             Store.Dynamo.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
-        | Store.Context.Mdb (context, cache) ->
+        | Store.Config.Mdb (context, cache) ->
             Store.Mdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
     let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

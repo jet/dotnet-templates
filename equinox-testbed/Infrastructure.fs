@@ -27,20 +27,32 @@ module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
+type Equinox.CosmosStore.CosmosStoreContext with
+
+    member x.LogConfiguration(role: string, databaseId: string, containerId: string) =
+        Log.Information("CosmosStore {role:l} {db}/{container} Tip maxEvents {maxEvents} maxSize {maxJsonLen} Query maxItems {queryMaxItems}",
+                        role, databaseId, containerId, x.TipOptions.MaxEvents, x.TipOptions.MaxJsonLength, x.QueryOptions.MaxItems)
+
+type Equinox.CosmosStore.CosmosStoreClient with
+
+    member x.CreateContext(role, databaseId, containerId, tipMaxEvents, queryMaxItems) =
+        let c = Equinox.CosmosStore.CosmosStoreContext(x, databaseId, containerId, tipMaxEvents, queryMaxItems = queryMaxItems)
+        c.LogConfiguration(role, databaseId, containerId)
+        c
+
 type Equinox.CosmosStore.CosmosStoreConnector with
 
-    member private x.LogConfiguration(connectionName, databaseId, containerId) =
+    member private x.LogConfiguration(role, databaseId: string, containers: string[]) =
         let o = x.Options
         let timeout, retries429, timeout429 = o.RequestTimeout, o.MaxRetryAttemptsOnRateLimitedRequests, o.MaxRetryWaitTimeOnRateLimitedRequests
-        Log.Information("CosmosDb {name} {mode} {endpointUri} timeout {timeout}s; Throttling retries {retries}, max wait {maxRetryWaitTime}s",
-                        connectionName, o.ConnectionMode, x.Endpoint, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
-        Log.Information("CosmosDb {name} Database {database} Container {container}",
-                        connectionName, databaseId, containerId)
-
-    /// Connect a CosmosStoreClient, including warming up
-    member x.ConnectStore(connectionName, databaseId, containerId) =
-        x.LogConfiguration(connectionName, databaseId, containerId)
-        Equinox.CosmosStore.CosmosStoreClient.Connect(x.CreateAndInitialize, databaseId, containerId)
+        Log.Information("CosmosDB {role} {mode} {endpointUri} {db} {containers} timeout {timeout}s Throttling retries {retries}, max wait {maxRetryWaitTime}s",
+                        role, o.ConnectionMode, x.Endpoint, databaseId, containers, timeout.TotalSeconds, retries429, let t = timeout429.Value in t.TotalSeconds)
+    member private x.Connect(role, databaseId, containers) =
+        x.LogConfiguration(role, databaseId, containers)
+        x.Connect(databaseId, containers)
+    member x.ConnectContext(role, databaseId, containerId, tipMaxEvents, queryMaxItems) = async {
+        let! client = x.Connect(role, databaseId, [| containerId |])
+        return client.CreateContext(role, databaseId, containerId, tipMaxEvents, queryMaxItems = queryMaxItems) }
 
 type Exception with
     // https://github.com/fsharp/fslang-suggestions/issues/660

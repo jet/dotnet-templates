@@ -75,7 +75,7 @@ module Cosmos =
         let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
-        member _.Connect() =                connector.ConnectStore("Target", database, container)
+        member _.Connect() =                connector.ConnectContext("Target", database, container)
 
 module Dynamo =
 
@@ -120,7 +120,5 @@ module Dynamo =
                                                 Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
         let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
         member val Verbose =                p.Contains Verbose
-        member _.Connect() =                connector.LogConfiguration()
-                                            let client = connector.CreateClient()
-                                            client.ConnectStore("Main", table)
+        member _.Connect() =                connector.CreateClient().CreateContext("Main", table)
 #endif            

@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module Infrastructure.Helpers
+module Infrastructure
 
 open Serilog
 open System
@@ -33,34 +33,26 @@ type Equinox.DynamoStore.DynamoStoreConnector with
     member x.LogConfiguration() =
         Log.Information("DynamoStore {endpoint} Timeout {timeoutS}s Retries {retries}",
                         x.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries)
+        
+    member x.CreateClient() =
+        x.LogConfiguration()
+        x.CreateDynamoDbClient()
+        |> Equinox.DynamoStore.DynamoStoreClient
 
 type Equinox.DynamoStore.DynamoStoreClient with
 
-    member internal x.LogConfiguration(role, ?log) =
-        (defaultArg log Log.Logger).Information("DynamoStore {role:l} Table {table} Archive {archive}", role, x.TableName, Option.toObj x.ArchiveTableName)
-    member client.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
-        let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
-        let context = Equinox.DynamoStore.DynamoStoreContext(client)
-        Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
-
+    member x.CreateContext(role, table, ?queryMaxItems, ?maxBytes, ?archiveTableName: string) =
+        let queryMaxItems = defaultArg queryMaxItems 100
+        let c = Equinox.DynamoStore.DynamoStoreContext(x, table, queryMaxItems = queryMaxItems, ?maxBytes = maxBytes, ?archiveTableName = archiveTableName)
+        Log.Information("DynamoStore {role:l} Table {table} Archive {archive} Tip thresholds: {maxTipBytes}b {maxTipEvents}e Query paging {queryMaxItems} items",
+                        role, table, Option.toObj archiveTableName, c.TipOptions.MaxBytes, Option.toNullable c.TipOptions.MaxEvents, c.QueryOptions.MaxItems)
+        c
+        
 type Equinox.DynamoStore.DynamoStoreContext with
 
-    member internal x.LogConfiguration(log: ILogger) =
-        log.Information("DynamoStore Tip thresholds: {maxTipBytes}b {maxTipEvents}e Query Paging {queryMaxItems} items",
-                        x.TipOptions.MaxBytes, Option.toNullable x.TipOptions.MaxEvents, x.QueryOptions.MaxItems)
-
-type Amazon.DynamoDBv2.IAmazonDynamoDB with
-
-    member x.ConnectStore(role, table) =
-        let storeClient = Equinox.DynamoStore.DynamoStoreClient(x, table)
-        storeClient.LogConfiguration(role)
-        storeClient
-
-module DynamoStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module DynamoStoreContext` impls for custom variations
-    let create (storeClient: Equinox.DynamoStore.DynamoStoreClient) =
-        Equinox.DynamoStore.DynamoStoreContext(storeClient, queryMaxItems = 100)
+    member context.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
+        let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
+        Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
 
 /// Equinox and Propulsion provide metrics as properties in log emissions
 /// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.

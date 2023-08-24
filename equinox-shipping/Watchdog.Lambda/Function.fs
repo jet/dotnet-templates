@@ -27,11 +27,10 @@ type Configuration(appName, ?tryGet) =
 
 type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheName, consumerGroupName) =
     let dynamo =                        connector.CreateClient()
-    let indexClient =                   DynamoStoreClient(dynamo, indexTable)
-    let client =                        DynamoStoreClient(dynamo, table)
-    let context =                       DynamoStoreContext(client)
+    let indexContext =                  dynamo.CreateContext("Index", indexTable)
+    let context =                       dynamo.CreateContext("Main", table)
     let cache =                         Equinox.Cache(cacheName, sizeMb = 1)
-    let checkpoints =                   indexClient.CreateCheckpointService(consumerGroupName, cache, Store.Metrics.log)
+    let checkpoints =                   indexContext.CreateCheckpointService(consumerGroupName, cache, Store.Metrics.log)
 
     new (c: Configuration, requestTimeout, retries) =
         let conn =
@@ -40,7 +39,7 @@ type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheNa
             | None -> DynamoStoreConnector(c.DynamoServiceUrl, c.DynamoAccessKey, c.DynamoSecretKey, requestTimeout, retries)
         Store(conn, c.DynamoTable, c.DynamoIndexTable, c.CacheName, c.ConsumerGroupName)
 
-    member val Config =                 Store.Context.Dynamo (context, cache)
+    member val Config =                 Store.Config.Dynamo (context, cache)
     member val DumpMetrics =            Equinox.DynamoStore.Core.Log.InternalMetrics.dump
     member x.CreateSource(trancheIds, sink) =
         let batchSizeCutoff =           100
@@ -49,7 +48,7 @@ type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheNa
         let statsInterval =             TimeSpan.FromMinutes 1.
         let streamsDop =                2
         let loadMode =                  Propulsion.DynamoStore.WithData (streamsDop, context)
-        Handler.Factory.CreateDynamoSource(Log.Logger, sink, (indexClient, checkpoints, loadMode, fromTail, batchSizeCutoff, tailSleepInterval, statsInterval), trancheIds)
+        Handler.Factory.CreateDynamoSource(Log.Logger, sink, (indexContext, checkpoints, loadMode, fromTail, batchSizeCutoff, tailSleepInterval, statsInterval), trancheIds)
 
 /// Wiring for Source and Sink running the Watchdog.Handler
 type App(store: Store) =

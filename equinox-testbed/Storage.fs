@@ -22,7 +22,7 @@ module MemoryStore =
             member p.Usage = p |> function
                 | Verbose ->       "Include low level Store logging."
     let config () =
-        Store.Context.Memory (Equinox.MemoryStore.VolatileStore())
+        Store.Config.Memory (Equinox.MemoryStore.VolatileStore())
 
 //#endif
 //#if cosmos
@@ -56,24 +56,22 @@ module Cosmos =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member _.Connect() =                connector.ConnectStore("Main", database, container)
+        member _.Connect(tipMaxEvents, queryMaxItems) = connector.ConnectContext("Main", database, container, tipMaxEvents, queryMaxItems)
 
 
     // Standing up an Equinox instance is necessary to run for test purposes; You'll need to either:
     // 1) replace connection below with a connection string or Uri+Key for an initialized Equinox instance with a database and container named "equinox-test"
     // 2) Set the 3x environment variables and create a local Equinox using tools/Equinox.Tool/bin/Release/net461/eqx.exe `
     //     init -ru 1000 cosmos -s $env:EQUINOX_COSMOS_CONNECTION -d $env:EQUINOX_COSMOS_DATABASE -c $env:EQUINOX_COSMOS_CONTAINER
-    open Equinox.CosmosStore
 
-    let private createContext storeClient maxItems = CosmosStoreContext(storeClient, queryMaxItems = maxItems, tipMaxEvents = 256)
     let config (cache, unfolds, maxItems) (info: Arguments) =
-        let storeClient = info.Connect() |> Async.RunSynchronously
+        let context = info.Connect(tipMaxEvents = 256, queryMaxItems = maxItems) |> Async.RunSynchronously
         let cacheStrategy =
             if cache then
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
                 Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else Equinox.CachingStrategy.NoCaching
-        Store.Context.Cosmos (createContext storeClient maxItems, cacheStrategy, unfolds)
+        Store.Config.Cosmos (context, cacheStrategy, unfolds)
 
 //#endif
 //#if eventStore
@@ -119,5 +117,5 @@ module EventStore =
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
                 Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
             else Equinox.CachingStrategy.NoCaching
-        Store.Context.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)
+        Store.Config.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)
 //#endif

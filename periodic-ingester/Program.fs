@@ -100,7 +100,7 @@ module Args =
         let database =                      p.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     p.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
-        member _.Connect() =                connector.ConnectStore("Main", database, container)
+        member _.Connect() =                connector.ConnectContext("Main", database, container)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv =
@@ -113,7 +113,7 @@ let [<Literal>] AppName = "PeriodicIngesterTemplate"
 let build (args: Args.Arguments) =
     let cache = Equinox.Cache(AppName, sizeMb = 10)
     let feed = args.Feed
-    let context = feed.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+    let context = feed.Cosmos.Connect() |> Async.RunSynchronously
 
     let sink =
         let stats = Ingester.Stats(Log.Logger, args.StatsInterval, args.StateInterval)

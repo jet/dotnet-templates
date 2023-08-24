@@ -4,8 +4,9 @@ open Propulsion.Internal
 
 module private Stream =
     let [<Literal>] Category = "Todos"
-    let id = Equinox.StreamId.gen ClientId.toString
-    let [<return: Struct>] (|For|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
+    let id = FsCodec.StreamId.gen ClientId.toString
+    let decodeId = FsCodec.StreamId.dec ClientId.parse
+    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -31,8 +32,9 @@ module Reactions =
     let private impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
     
     let private dec = Streams.Codec.gen<Events.Event>
+    let [<return: Struct>] (|For|_|) = Stream.tryDecode
     let [<return: Struct>] private (|Parse|_|) = function
-        | struct (Stream.For clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
+        | struct (For clientId, _) & Streams.Decode dec events -> ValueSome struct (clientId, events)
         | _ -> ValueNone
     let (|ImpliesStateChange|NoStateChange|NotApplicable|) = function
         | Parse (clientId, events) ->
@@ -73,10 +75,10 @@ type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.S
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 #if !(sourceKafka && kafka)
-        | Store.Context.Esdb (context, cache) ->   Store.Esdb.create Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
-        | Store.Context.Sss (context, cache) ->    Store.Sss.create Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+        | Store.Config.Esdb (context, cache) ->   Store.Esdb.create Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+        | Store.Config.Sss (context, cache) ->    Store.Sss.create Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
 #endif
     let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

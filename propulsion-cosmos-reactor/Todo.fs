@@ -2,8 +2,9 @@ module ReactorTemplate.Todo
 
 module private Stream =
     let [<Literal>] Category = "Todos"
-    let id = Equinox.StreamId.gen ClientId.toString
-    let [<return: Struct>] (|For|_|) = function FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId | _ -> ValueNone
+    let id = FsCodec.StreamId.gen ClientId.toString
+    let decodeId = FsCodec.StreamId.dec ClientId.parse
+    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -29,8 +30,9 @@ module Reactions =
     let private impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
     
     let dec = Streams.Codec.gen<Events.Event>
+    let [<return: Struct>] (|For|_|) = Stream.tryDecode
     let [<return: Struct>] (|ImpliesStateChange|_|) = function
-        | struct (Stream.For clientId, _) & Streams.Decode dec events when Array.exists impliesStateChange events -> ValueSome clientId
+        | struct (For clientId, _) & Streams.Decode dec events when Array.exists impliesStateChange events -> ValueSome clientId
         | _ -> ValueNone
 
 /// Types and mapping logic used maintain relevant State based on Events observed on the Todo List Stream
@@ -66,6 +68,6 @@ type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.S
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create (Category cat) = Service(Stream.id >> Store.createDecider cat)
     

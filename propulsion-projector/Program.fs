@@ -88,9 +88,9 @@ module Args =
             match x.Store with
             | a ->
 //#if cosmos            
-                let monitored = a.ConnectMonitored()
+                let monitored, leases = a.ConnectFeed() |> Async.RunSynchronously
                 let buildSourceConfig log groupName =
-                    let leases, startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams(log)
+                    let startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams(log)
                     let checkpointConfig = CosmosFeedConfig.Persistent (groupName, startFromTail, maxItems, lagFrequency)
                     SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
                 buildSourceConfig, x.Sink, ignore
@@ -98,10 +98,10 @@ module Args =
 #if dynamo
                 let context = a.Connect()
                 let buildSourceConfig log groupName =
-                    let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
+                    let indexContext, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, cache)
                     let load = Propulsion.DynamoStore.WithData (streamsDop, context)
-                    SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
+                    SourceConfig.Dynamo (indexContext, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 buildSourceConfig, x.Sink, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
 #endif
 #if esdb

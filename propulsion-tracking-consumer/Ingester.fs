@@ -36,7 +36,7 @@ type Stats(log, statsInterval, stateInterval) =
 /// Ingest queued events per sku - each time we handle all the incoming updates for a given stream as a single act
 let ingest
         (service: SkuSummary.Service)
-        (FsCodec.StreamName.CategoryAndId (_, SkuId.Parse skuId)) (events: Propulsion.Sinks.Event[]) = async {
+        (SkuSummary.Reactions.SkuId skuId) (events: Propulsion.Sinks.Event[]) = async {
     let items =
         [ for e in events do
             let x = Contract.parse e.Data

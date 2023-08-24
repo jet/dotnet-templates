@@ -47,8 +47,7 @@ public class EventStoreContext : EquinoxContext
         var cacheStrategy = _cache == null
             ? null
             : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-        var cat = new EventStoreCategory<TEvent, TState, Unit>(_connection, name, codec, FuncConvert.FromFunc(fold),
-            initial, accessStrategy, cacheStrategy);
+        var cat = new EventStoreCategory<TEvent, TState, Unit>(_connection, name, codec, fold, initial, accessStrategy, cacheStrategy);
         return cat.Resolve(handlerLog);
     }
 }

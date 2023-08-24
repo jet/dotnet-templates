@@ -7,7 +7,7 @@ module FeedSourceTemplate.Domain.TicketsEpoch
 
 module private Stream = 
     let [<Literal>] Category = "TicketsEpoch"
-    let id = Equinox.StreamId.gen2 FcId.toString TicketsEpochId.toString
+    let id = FsCodec.StreamId.gen2 FcId.toString TicketsEpochId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -80,13 +80,15 @@ type IngestionService internal (capacity, resolve: FcId * TicketsEpochId -> Equi
         // Accept whatever date is in the cache on the basis that we are doing most of the writing so will more often than not
         // have the correct state already without a roundtrip. What if the data is actually stale? we'll end up needing to resync,
         // but we we need to deal with that as a race condition anyway
-        decider.Transact(decide capacity ticketIds, Equinox.AnyCachedValue)
+        decider.Transact(decide capacity ticketIds, Equinox.LoadOption.AnyCachedValue)
 
     /// Obtains a complete list of all the tickets in the specified fcid/epochId
-    /// NOTE AnyCachedValue option assumes that it's safe to ignore writes from other nodes
-    member _.ReadTickets(fcId, epochId): Async<TicketId[]> =
+    /// Accommodates for Ingest logic running in another process / on another machine
+    member _.ReadTickets(fcId, epochId): Async<TicketId[]> = async {
         let decider = resolve (fcId, epochId)
-        decider.Query(fst, Equinox.AnyCachedValue)
+        match! decider.Query(id, Equinox.LoadOption.AnyCachedValue) with
+        | tickets, true -> return tickets // Once the Epoch is closed, no new tickets ca ever be entered so no re-reads needed
+        | _, false -> return! decider.Query(fst, Equinox.LoadOption.AllowStale (System.TimeSpan.FromSeconds 1)) }
 
 module Factory =
 

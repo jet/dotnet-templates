@@ -5,8 +5,7 @@ open Shipping.Infrastructure
 type DynamoConnector(connector: Equinox.DynamoStore.DynamoStoreConnector, table, indexTable) =
     
     let client =                        connector.CreateClient()
-    let storeClient =                   Equinox.DynamoStore.DynamoStoreClient(client, table)
-    let storeContext =                  storeClient |> DynamoStoreContext.create
+    let storeContext =                  client.CreateContext("Main", table)
     let cache =                         Equinox.Cache("Tests", sizeMb = 10)
     
     new (c: Shipping.Watchdog.SourceArgs.Configuration) =
@@ -18,12 +17,12 @@ type DynamoConnector(connector: Equinox.DynamoStore.DynamoStoreConnector, table,
     new () =                            DynamoConnector(Shipping.Watchdog.SourceArgs.Configuration EnvVar.tryGet)
 
     member val DumpStats =              Equinox.DynamoStore.Core.Log.InternalMetrics.dump
-    member val IndexClient =            Equinox.DynamoStore.DynamoStoreClient(client, match indexTable with Some x -> x | None -> table + "-index")
+    member val IndexContext =           client.CreateContext("Index", match indexTable with Some x -> x | None -> table + "-index")
     member val StoreContext =           storeContext
     member val StoreArgs =              (storeContext, cache)
-    member val Store =                  Shipping.Domain.Store.Context<Equinox.DynamoStore.Core.EncodedBody>.Dynamo (storeContext, cache)
+    member val Store =                  Store.Config<Equinox.DynamoStore.Core.EncodedBody>.Dynamo (storeContext, cache)
     /// Uses an in-memory checkpoint service; the real app will obviously need to store real checkpoints (see SourceArgs.Dynamo.Arguments.CreateCheckpointStore)  
-    member x.CreateCheckpointService(consumerGroupName) =
+    member _.CreateCheckpointService(consumerGroupName) =
         let checkpointInterval =        System.TimeSpan.FromHours 1.
         let store = Equinox.MemoryStore.VolatileStore()
-        Propulsion.Feed.ReaderCheckpoint.MemoryStore.create Shipping.Domain.Store.Metrics.log (consumerGroupName, checkpointInterval) store
+        Propulsion.Feed.ReaderCheckpoint.MemoryStore.create Store.Metrics.log (consumerGroupName, checkpointInterval) store

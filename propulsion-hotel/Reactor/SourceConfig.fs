@@ -1,4 +1,4 @@
-namespace Infrastructure
+namespace Reactor
 
 open System
 open System.Threading.Tasks
@@ -6,7 +6,7 @@ open System.Threading.Tasks
 [<RequireQualifiedAccess; NoEquality; NoComparison>]
 type SourceConfig =
     | Memory of store: Equinox.MemoryStore.VolatileStore<struct (int * ReadOnlyMemory<byte>)>
-    | Dynamo of indexStore: Equinox.DynamoStore.DynamoStoreClient
+    | Dynamo of indexContext: Equinox.DynamoStore.DynamoStoreContext
         * checkpoints: Propulsion.Feed.IFeedCheckpointStore
         * loading: Propulsion.DynamoStore.EventLoadMode
         * startFromTail: bool
@@ -30,15 +30,15 @@ module SourceConfig =
     module Dynamo =
         open Propulsion.DynamoStore
         let private create (log, storeLog) (sink: Propulsion.Sinks.Sink) categories
-            (indexStore, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) trancheIds =
+            (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) trancheIds =
             DynamoStoreSource(
                 log, statsInterval,
-                indexStore, batchSizeCutoff, tailSleepInterval,
+                indexContext, batchSizeCutoff, tailSleepInterval,
                 checkpoints, sink, loadMode, categories = categories,
                 startFromTail = startFromTail, storeLog = storeLog, ?trancheIds = trancheIds)
-        let start (log, storeLog) sink categories (indexStore, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
+        let start (log, storeLog) sink categories (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
             : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
-            let source = create (log, storeLog) sink categories (indexStore, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) None
+            let source = create (log, storeLog) sink categories (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) None
             let source = source.Start()
             source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
     module Mdb =
@@ -57,7 +57,7 @@ module SourceConfig =
     let start (log, storeLog) sink categories: SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) option = function
         | SourceConfig.Memory volatileStore ->
             Memory.start log sink categories volatileStore
-        | SourceConfig.Dynamo (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
-            Dynamo.start (log, storeLog) sink categories (indexStore, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
+        | SourceConfig.Dynamo (indexContext, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
+            Dynamo.start (log, storeLog) sink categories (indexContext, checkpoints, loading, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
         | SourceConfig.Mdb (connectionString, checkpoints, startFromTail, batchSize, tailSleepInterval, statsInterval) ->
             Mdb.start log sink categories (connectionString, checkpoints, startFromTail, batchSize, tailSleepInterval, statsInterval)

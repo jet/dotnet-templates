@@ -6,9 +6,8 @@ module ConsumerTemplate.Ingester
 module Contract =
 
     let [<Literal>] Category = "TodoSummary"
-    let [<return: Struct>] (|StreamName|_|) = function
-        | FsCodec.StreamName.CategoryAndId (Category, ClientId.Parse clientId) -> ValueSome clientId
-        | _ -> ValueNone
+    let decodeId = FsCodec.StreamId.dec ClientId.parse
+    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
     /// A single Item in the list
     type ItemInfo = { id: int; order: int; title: string; completed: bool }
@@ -23,8 +22,9 @@ module Contract =
     // We also want the index (which is the Version of the Summary) whenever we're handling an event
     type VersionAndMessage = int64*Message
     let private dec: Propulsion.Sinks.Codec<VersionAndMessage> = Streams.Codec.genWithIndex<Message>
+    let [<return: Struct>] (|For|_|) = tryDecode
     let [<return: Struct>] (|Parse|_|) = function
-        | struct (StreamName clientId, _) & Streams.DecodeNewest dec (version, update) -> ValueSome struct (clientId, version, update)
+        | struct (For clientId, _) & Streams.DecodeNewest dec (version, update) -> ValueSome struct (clientId, version, update)
         | _ -> ValueNone
 
 [<RequireQualifiedAccess>]

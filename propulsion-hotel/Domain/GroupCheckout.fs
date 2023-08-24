@@ -2,10 +2,9 @@ module Domain.GroupCheckout
 
 module private Stream =
     let [<Literal>] Category = "GroupCheckout"
-    let id = Equinox.StreamId.gen GroupCheckoutId.toString
-    let tryDecode = function
-        | FsCodec.StreamName.CategoryAndId (Category, GroupCheckoutId.Parse id) -> ValueSome id
-        | _ -> ValueNone
+    let id = FsCodec.StreamId.gen GroupCheckoutId.toString
+    let decodeId = FsCodec.StreamId.dec GroupCheckoutId.parse
+    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
 module Reactions =
     let [<Literal>] Category = Stream.Category
@@ -115,7 +114,7 @@ type Service internal (resolve: GroupCheckoutId -> Equinox.Decider<Events.Event,
     /// Used by GroupCheckOutProcess to run any relevant Reaction activities
     member _.React(id, handleReaction: Flow.State -> Async<'R * Events.Event[]>): Async<'R * int64> =
         let decider = resolve id
-        decider.TransactAsyncWithPostVersion(Flow.decide handleReaction)
+        decider.TransactWithPostVersion(Flow.decide handleReaction)
 
     member _.Read(groupCheckoutId): Async<Flow.State>=
         let decider = resolve groupCheckoutId
@@ -124,10 +123,10 @@ type Service internal (resolve: GroupCheckoutId -> Equinox.Decider<Events.Event,
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store ->
+        | Store.Config.Memory store ->
             Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Context.Dynamo (context, cache) ->
+        | Store.Config.Dynamo (context, cache) ->
             Store.Dynamo.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
-        | Store.Context.Mdb (context, cache) ->
+        | Store.Config.Mdb (context, cache) ->
             Store.Mdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
     let create (Category cat) = Stream.id >> Store.createDecider cat |> Service

@@ -1,12 +1,9 @@
 namespace Reactor.Integration
 
-open Infrastructure
-
 type DynamoConnector(connector: Equinox.DynamoStore.DynamoStoreConnector, table, indexTable) =
     
     let client =                        connector.CreateClient()
-    let storeClient =                   Equinox.DynamoStore.DynamoStoreClient(client, table)
-    let storeContext =                  storeClient |> DynamoStoreContext.create
+    let storeContext =                  client.CreateContext("Main", table)
     let cache =                         Equinox.Cache("Tests", sizeMb = 10)
     
     new (c: Reactor.SourceArgs.Configuration) =
@@ -17,9 +14,9 @@ type DynamoConnector(connector: Equinox.DynamoStore.DynamoStoreConnector, table,
         DynamoConnector(connector, c.DynamoTable, c.DynamoIndexTable)
     new () =                            DynamoConnector(Reactor.SourceArgs.Configuration EnvVar.tryGet)
 
-    member val IndexClient =            Equinox.DynamoStore.DynamoStoreClient(client, match indexTable with Some x -> x | None -> table + "-index")
+    member val IndexContext =           client.CreateContext("Index", match indexTable with Some x -> x | None -> table + "-index")
     member val DumpStats =              Equinox.DynamoStore.Core.Log.InternalMetrics.dump
-    member val Store =                  Domain.Store.Context.Dynamo (storeContext, cache)
+    member val Store =                  Domain.Store.Config.Dynamo (storeContext, cache)
     /// Uses an in-memory checkpoint service; the real app will obviously need to store real checkpoints (see SourceArgs.Dynamo.Arguments.CreateCheckpointStore)  
     member x.CreateCheckpointService(consumerGroupName) =
         let checkpointInterval =        System.TimeSpan.FromHours 1.

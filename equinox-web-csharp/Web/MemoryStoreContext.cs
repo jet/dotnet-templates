@@ -22,7 +22,7 @@ public class MemoryStoreContext : EquinoxContext
         Func<TEvent, bool> isOrigin = null,
         Func<TState, TEvent> toSnapshot = null)
     {
-        var cat = new MemoryStoreCategory<TEvent, TState, ReadOnlyMemory<byte>, Unit>(_store, name, codec, FuncConvert.FromFunc(fold), initial);
+        var cat = new MemoryStoreCategory<TEvent, TState, ReadOnlyMemory<byte>, Unit>(_store, name, codec, fold, initial);
         return cat.Resolve(handlerLog);
     }
 

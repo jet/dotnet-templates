@@ -3,7 +3,7 @@
 module private Stream =
     let [<Literal>] Category = "Todos"
     /// Maps a ClientId to the StreamId portion of the StreamName where data for that client will be held
-    let id = Equinox.StreamId.gen ClientId.toString
+    let id = FsCodec.StreamId.gen ClientId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -134,19 +134,19 @@ module Factory =
 
     let private (|Category|) = function
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
-        | Store.Context.Memory store ->
+        | Store.Config.Memory store ->
             Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
 #endif
 //#if cosmos
-        | Store.Context.Cosmos (context, cache) ->
+        | Store.Config.Cosmos (context, cache) ->
             Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if dynamo
-        | Store.Context.Dynamo (context, cache) ->
+        | Store.Config.Dynamo (context, cache) ->
             Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
 //#if eventStore
-        | Store.Context.Esdb (context, cache) ->
+        | Store.Config.Esdb (context, cache) ->
             Store.Esdb.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
     let create (Category cat) = Service(Stream.id >> Store.resolveDecider cat)
