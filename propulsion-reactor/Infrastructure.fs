@@ -1,5 +1,5 @@
 ﻿[<AutoOpen>]
-module ReactorTemplate.Infrastructure
+module Infrastructure
 
 // #if (kafka || !blank)
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings

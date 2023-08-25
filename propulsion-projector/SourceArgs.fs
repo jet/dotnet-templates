@@ -140,8 +140,7 @@ module Dynamo =
         let client =                        lazy connector.CreateClient()
         let indexContext =                  lazy client.Value.CreateContext("Index", indexTable)
         member val Verbose =                p.Contains Verbose
-        member _.Connect() = async {        do! client.Value.Establish(table) // Verify the table exists
-                                            return client.Value.CreateContext("Main", table) }
+        member _.Connect() =                client.Value.CreateContext("Main", table)
         member _.MonitoringParams(log: ILogger) =
             log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} Hydrater parallelism {streamsDop}", batchSizeCutoff, streamsDop)
             let indexContext = indexContext.Value

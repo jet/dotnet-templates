@@ -18,12 +18,12 @@ module Args =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
 #endif
-// #if cosmos
+#if cosmos
         | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
-// #endif
-#if dynamo
-        | [<CliPrefix(CliPrefix.None); Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
 #endif
+// #if dynamo
+        | [<CliPrefix(CliPrefix.None); Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
+// #endif
 #if esdb
         | [<CliPrefix(CliPrefix.None); Last>] Esdb of ParseResults<SourceArgs.Esdb.Parameters>
 #endif
@@ -40,12 +40,12 @@ module Args =
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
 #endif
-// #if cosmos
+#if cosmos
                 | Cosmos _ ->               "specify CosmosDb input parameters"
-// #endif
-#if dynamo
-                | Dynamo _ ->               "specify DynamoDb input parameters"
 #endif
+// #if dynamo
+                | Dynamo _ ->               "specify DynamoDb input parameters"
+// #endif
 #if esdb
                 | Esdb _ ->                 "specify EventStore input parameters."
 #endif
@@ -64,12 +64,12 @@ module Args =
                                                             processorName, maxReadAhead, maxConcurrentProcessors)
                                             (processorName, maxReadAhead, maxConcurrentProcessors)
         member val Store =                  match p.GetSubCommand() with
-// #if cosmos                                            
+#if cosmos                                            
                                             | Cosmos p -> SourceArgs.Cosmos.Arguments(c, p)
-// #endif                                            
-#if dynamo                                            
-                                            | Dynamo p -> SourceArgs.Dynamo.Arguments(c, p)
 #endif                                            
+// #if dynamo                                            
+                                            | Dynamo p -> SourceArgs.Dynamo.Arguments(c, p)
+// #endif                                            
 #if esdb                                            
                                             | Esdb p ->   SourceArgs.Esdb.Arguments(c, p)
 #endif                                            
@@ -87,15 +87,15 @@ module Args =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | a ->
-//#if cosmos            
+#if cosmos            
                 let monitored, leases = a.ConnectFeed() |> Async.RunSynchronously
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams(log)
                     let checkpointConfig = CosmosFeedConfig.Persistent (groupName, startFromTail, maxItems, lagFrequency)
                     SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
                 buildSourceConfig, x.Sink, ignore
-// #endif                
-#if dynamo
+#endif                
+// #if dynamo
                 let context = a.Connect()
                 let buildSourceConfig log groupName =
                     let indexContext, startFromTail, batchSizeCutoff, tailSleepInterval, streamsDop = a.MonitoringParams(log)
@@ -103,7 +103,7 @@ module Args =
                     let load = Propulsion.DynamoStore.WithData (streamsDop, context)
                     SourceConfig.Dynamo (indexContext, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
                 buildSourceConfig, x.Sink, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
-#endif
+// #endif
 #if esdb
                 let connection = a.Connect(appName, EventStore.Client.NodePreference.Leader)
                 let targetStore = a.ConnectTarget(cache)
