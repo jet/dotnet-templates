@@ -24,8 +24,7 @@ namespace TodoBackendTemplate
 
             public abstract class ItemEvent : Event
             {
-                protected ItemEvent() => Data = new ItemData();
-                public ItemData Data { get; set; }
+                public ItemData Data { get; } = new();
             }
 
             public class Added : ItemEvent
