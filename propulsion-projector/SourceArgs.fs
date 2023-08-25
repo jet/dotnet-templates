@@ -254,7 +254,6 @@ module Sss =
     type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let startFromTail =                 p.Contains FromTail
         let tailSleepInterval =             p.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
-        let checkpointEventInterval =       TimeSpan.FromHours 1. // Ignored when storing to Propulsion.SqlStreamStore.ReaderCheckpoint
         let batchSize =                     p.GetResult(BatchSize, 512)
         let connection =                    p.TryGetResult Connection |> Option.defaultWith (fun () -> c.SqlStreamStoreConnection)
         let credentials =                   p.TryGetResult Credentials |> Option.orElseWith (fun () -> c.SqlStreamStoreCredentials) |> Option.toObj
@@ -282,6 +281,6 @@ module Sss =
             startFromTail, batchSize, tailSleepInterval
         member x.CreateCheckpointStoreSql(groupName): Propulsion.Feed.IFeedCheckpointStore =
             let connectionString = x.BuildCheckpointsConnectionString()
-            Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString, groupName, checkpointEventInterval)
+            Propulsion.SqlStreamStore.ReaderCheckpoint.Service(connectionString, groupName)
             
 #endif // sss
