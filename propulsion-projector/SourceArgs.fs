@@ -160,9 +160,9 @@ module Esdb =
 
         For now, we store the Checkpoints in one of the above stores as this sample uses one for the read models anyway *)
     let private createCheckpointStore (consumerGroup, checkpointInterval): _ -> Propulsion.Feed.IFeedCheckpointStore = function
-        | Store.Context.Cosmos (context, cache) ->
+        | Store.Config.Cosmos (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
-        | Store.Context.Dynamo (context, cache) ->
+        | Store.Config.Dynamo (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
 
     type [<NoEquality; NoComparison>] Parameters =
@@ -214,14 +214,14 @@ module Esdb =
             startFromTail, batchSize, tailSleepInterval
         member _.CreateCheckpointStore(group, store): Propulsion.Feed.IFeedCheckpointStore =
             createCheckpointStore (group, checkpointInterval) store 
-        member x.ConnectTarget(cache): Store.Context =
+        member x.ConnectTarget(cache): Store.Config =
             match p.GetSubCommand() with
             | Cosmos a ->
                 let context = Args.Cosmos.Arguments(c, a).Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-                Store.Context.Cosmos (context, cache)
+                Store.Config.Cosmos (context, cache)
             | Dynamo a ->
                 let context = Args.Dynamo.Arguments(c, a).Connect() |> DynamoStoreContext.create
-                Store.Context.Dynamo (context, cache)
+                Store.Config.Dynamo (context, cache)
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` checkpoint store when source is `esdb`"
 
 #endif // esdb

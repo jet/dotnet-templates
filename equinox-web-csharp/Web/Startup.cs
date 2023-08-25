@@ -131,13 +131,14 @@ namespace TodoBackendTemplate.Web
         {
             var resolve =
                 _context.Resolve(
+                    Todo.Event.Category,
                     _handlerLog,
                     EquinoxCodec.Create(Todo.Event.Encode, Todo.Event.TryDecode),
                     Todo.State.Fold,
                     Todo.State.Initial,
                     Todo.State.IsOrigin,
                     Todo.State.Snapshot);
-            return new Todo.Service(ids => resolve(Todo.Event.StreamIds(ids)));
+            return new(id => resolve(Todo.Event.StreamId(id)));
         }
 
 #endif
@@ -146,25 +147,30 @@ namespace TodoBackendTemplate.Web
         {
             var resolve =
                 _context.Resolve(
+                    Aggregate,Event.Category,
                     _handlerLog,
                     EquinoxCodec.Create(Aggregate.Event.Encode, Aggregate.Event.TryDecode),
                     Aggregate.State.Fold,
                     Aggregate.State.Initial,
                     Aggregate.State.IsOrigin,
                     Aggregate.State.Snapshot);
-            return new Aggregate.Service(ids => resolve(Aggregate.Event.StreamIds(ids)));
+            return new Aggregate.Service(id => resolve(Aggregate.Event.StreamId(id)));
         }
 #endif
 #if (!aggregate && !todos)
-//        public Thing.Service CreateThingService() =>
-//            Thing.Service(
+//        public Thing.Service CreateThingService()
+//        {
+//            var resolve =
 //                _context.Resolve(
+//                    Thing.Event.Category.
 //                    _handlerLog,
-//                    EquinoxCodec.Create<Thing.Events.Event>(), // Requires Union following IUnionContract pattern, see https://eiriktsarpalis.wordpress.com/2018/10/30/a-contract-pattern-for-schemaless-datastores/
+//                    EquinoxCodec.Create(Thing.Event.Encode, Thing.Event.TryDecode),
 //                    Thing.Fold.Fold,
 //                    Thing.Fold.Initial,
 //                    Thing.Fold.IsOrigin,
 //                    Thing.Fold.Snapshot));
+//            return new Thing.Service(id => resolve(Thing.Event.StreamId(id)));
+//        }
 #endif
     }
 }

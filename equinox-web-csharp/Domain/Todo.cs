@@ -69,9 +69,9 @@ namespace TodoBackendTemplate
             public static (string, ReadOnlyMemory<byte>) Encode(Event e) =>
                 (e.GetType().Name, Codec.Encode(e));
 
+            public const string Category = "Todos"; 
             /// Maps a ClientId to the Target that specifies the Stream in which the data for that client will be held
-            const string Category = "Todos"; 
-            public static (string, string) StreamIds(ClientId id) => (Category, id?.ToString() ?? "1");
+            public static string StreamId(ClientId id) => id?.ToString() ?? "1";
         }
 
         /// Present state of the Todo List as inferred from the Events we've seen to date
