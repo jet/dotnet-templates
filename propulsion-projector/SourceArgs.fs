@@ -71,10 +71,8 @@ module Cosmos =
         let maxItems =                      p.TryGetResult MaxItems
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         let lagFrequency =                  p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member _.Verbose =                  p.Contains Verbose
-        member _.MonitoringParams(log: ILogger) =
-                                            if fromTail then log.Warning("ChangeFeed (If new projector group) Skipping projection of all existing events.")
-                                            (fromTail, maxItems, tailSleepInterval, lagFrequency)
+        // member _.Verbose =                  p.Contains Verbose
+        member val MonitoringParams =       fromTail, maxItems, tailSleepInterval, lagFrequency
         member x.ConnectFeed() =            connector.ConnectFeed(database, containerId, leaseContainerId)
 
 // #endif // cosmos

@@ -35,6 +35,6 @@ module Cosmos =
         createCached name codec initial fold accessStrategy (context, cache)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type Context<'t> =
+type Config<'t> =
     | Memory of Equinox.MemoryStore.VolatileStore<'t>
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache

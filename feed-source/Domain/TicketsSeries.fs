@@ -71,6 +71,6 @@ module Factory =
         let seriesId = defaultArg seriesId TicketsSeriesId.wellKnownId
         Service(seriesId, Stream.id >> resolve)
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create seriesOverride (Category cat) = create_ seriesOverride (Store.createDecider cat)

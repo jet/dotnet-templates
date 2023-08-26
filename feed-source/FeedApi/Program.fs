@@ -98,7 +98,7 @@ let run (args: Args.Arguments) =
     let cosmos = args.Cosmos
     let context = cosmos.Connect() |> Async.RunSynchronously
     let cache = Equinox.Cache(AppName, sizeMb = 2)
-    let store = FeedSourceTemplate.Domain.Store.Context.Cosmos (context, cache)
+    let store = FeedSourceTemplate.Domain.Store.Config.Cosmos (context, cache)
 
     Hosting.createHostBuilder()
         .ConfigureServices(fun s ->

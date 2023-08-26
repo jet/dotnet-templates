@@ -93,7 +93,7 @@ let start (args: Args.Arguments) =
         let store =
             let context = args.Cosmos.Connect() |> Async.RunSynchronously
             let cache = Equinox.Cache(AppName, sizeMb = 10)
-            Store.Context.Cosmos (context, cache)
+            Store.Config.Cosmos (context, cache)
         SkuSummary.Factory.create store
     let config =
         FsKafka.KafkaConsumerConfig.Create(

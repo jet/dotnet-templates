@@ -52,7 +52,7 @@ type Service internal (resolve: unit -> Equinox.Decider<Events.Event, Fold.State
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store -> Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) ->
+        | Store.Config.Memory store -> Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) ->
             Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

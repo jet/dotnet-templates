@@ -95,8 +95,8 @@ module Factory =
     let private create_ capacity resolve =
         IngestionService(capacity, Stream.id >> resolve)
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)
+        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)
     let create capacity (Category cat) = Store.createDecider cat |> create_ capacity
 
 /// Custom Fold and caching logic compared to the IngesterService
@@ -125,6 +125,6 @@ module Reader =
     module Factory =
 
         let private (|Category|) = function
-            | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec initial fold store
-            | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createUnoptimized Stream.Category Events.codec initial fold (context, cache)
+            | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec initial fold store
+            | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createUnoptimized Stream.Category Events.codec initial fold (context, cache)
         let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

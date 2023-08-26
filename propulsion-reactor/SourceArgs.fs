@@ -72,7 +72,7 @@ module Kafka =
             | Cosmos cosmos -> TargetStoreArgs.Cosmos (Args.Cosmos.Arguments(c, cosmos))
             | Dynamo dynamo -> TargetStoreArgs.Dynamo (Args.Dynamo.Arguments(c, dynamo))
             | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` target store when source is `kafka`"
-        member x.ConnectTarget(cache): Store.Context =
+        member x.ConnectTarget(cache): Store.Config =
             TargetStoreArgs.connectTarget x.TargetStoreArgs cache
 #endif
 #else // !sourceKafka

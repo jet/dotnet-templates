@@ -30,6 +30,19 @@ module CosmosStoreConnector =
     let getSourceAndLeases client databaseId containerId auxContainerId =
         getSource client databaseId containerId, getLeases client databaseId auxContainerId
         
+type Equinox.CosmosStore.CosmosStoreContext with
+
+    member x.LogConfiguration(role: string, databaseId: string, containerId: string) =
+        Log.Information("CosmosStore {role:l} {db}/{container} Tip maxEvents {maxEvents} maxSize {maxJsonLen} Query maxItems {queryMaxItems}",
+                        role, databaseId, containerId, x.TipOptions.MaxEvents, x.TipOptions.MaxJsonLength, x.QueryOptions.MaxItems)
+
+type Equinox.CosmosStore.CosmosStoreClient with
+
+    member x.CreateContext(role: string, databaseId, containerId, tipMaxEvents) =
+        let c = Equinox.CosmosStore.CosmosStoreContext(x, databaseId, containerId, tipMaxEvents)
+        c.LogConfiguration(role, databaseId, containerId)
+        c
+
 type Equinox.CosmosStore.CosmosStoreConnector with
 
     member private x.LogConfiguration(role, databaseId: string, containers: string[]) =
@@ -46,8 +59,9 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     member x.ConnectFeed(databaseId, containerId, auxContainerId, ?role) = async {
         let! cosmosClient = x.CreateAndInitialize(defaultArg role "Source", databaseId, [| containerId; auxContainerId|])
         return CosmosStoreConnector.getSourceAndLeases cosmosClient databaseId containerId auxContainerId }
-    member x.ConnectContext(role, databaseId, containerId) =
-        x.Connect(role, databaseId, [| containerId |])
+    member x.ConnectContext(role, databaseId, containerId) = async {
+        let! client = x.Connect(role, databaseId, [| containerId |])
+        return client.CreateContext(role, databaseId, containerId, 256) }
 
 //#endif
 //#if (dynamo || esdb || sss)

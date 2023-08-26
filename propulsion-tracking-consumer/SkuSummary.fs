@@ -68,5 +68,5 @@ type Service internal (resolve: SkuId -> Equinox.Decider<Events.Event, Fold.Stat
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

@@ -72,8 +72,8 @@ type Service internal
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store -> Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Memory store -> Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create maxItemsPerEpoch (Category cat) =
         let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
         Service(shouldClose, Stream.id >> Store.createDecider cat)

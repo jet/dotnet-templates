@@ -171,11 +171,11 @@ type Startup() =
 
 //#endif
 #if (memoryStore && !cosmos && !dynamo && !eventStore)
-        let storeConfig = Store.Context.Memory
+        let storeConfig = Store.Config.Memory
 
 #endif
 //#if (!memoryStore && !cosmos && !dynamo && !eventStore)
-        //let storeConfig = Store.Context.Memory
+        //let storeConfig = Store.Config.Memory
 
 //#endif
         Services.register(services, storeConfig)

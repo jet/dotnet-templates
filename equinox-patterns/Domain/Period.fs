@@ -142,8 +142,8 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) ->
+        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) ->
             // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
             // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
             Store.Cosmos.createUnoptimized Stream.Category Events.codecJe Fold.initial Fold.fold (context, cache)

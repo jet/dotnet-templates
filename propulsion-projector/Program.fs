@@ -90,7 +90,7 @@ module Args =
 #if cosmos            
                 let monitored, leases = a.ConnectFeed() |> Async.RunSynchronously
                 let buildSourceConfig log groupName =
-                    let startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams(log)
+                    let startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams
                     let checkpointConfig = CosmosFeedConfig.Persistent (groupName, startFromTail, maxItems, lagFrequency)
                     SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
                 buildSourceConfig, x.Sink, ignore
