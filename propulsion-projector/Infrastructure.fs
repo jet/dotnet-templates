@@ -19,7 +19,7 @@ type Logging() =
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
                     c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                     
-// #if (cosmos || esdb || sss)
+//#if (cosmos || esdb || sss)
 module CosmosStoreConnector =
 
     let private get (role: string) (client: Microsoft.Azure.Cosmos.CosmosClient) databaseId containerId =
@@ -40,12 +40,17 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     member private x.CreateAndInitialize(role, databaseId, containers) =
         x.LogConfiguration(role, databaseId, containers)
         x.CreateAndInitialize(databaseId, containers)
+    member private x.Connect(role, databaseId, containers) =
+        x.LogConfiguration(role, databaseId, containers)
+        x.Connect(databaseId, containers)
     member x.ConnectFeed(databaseId, containerId, auxContainerId, ?role) = async {
         let! cosmosClient = x.CreateAndInitialize(defaultArg role "Source", databaseId, [| containerId; auxContainerId|])
         return CosmosStoreConnector.getSourceAndLeases cosmosClient databaseId containerId auxContainerId }
+    member x.ConnectContext(role, databaseId, containerId) =
+        x.Connect(role, databaseId, [| containerId |])
 
-// #endif
-// #if (dynamo || esdb || sss)
+//#endif
+//#if (dynamo || esdb || sss)
 module Dynamo =
 
     open Equinox.DynamoStore
@@ -61,14 +66,9 @@ module Dynamo =
 
 type Equinox.DynamoStore.DynamoStoreConnector with
 
-    member private x.LogConfiguration() =
-        Log.Information("DynamoDB {endpoint} Timeout {timeoutS}s Retries {retries}",
-                        x.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries)
-        
     member x.CreateClient() =
-        x.LogConfiguration()
-        x.CreateDynamoDbClient()
-        |> Equinox.DynamoStore.DynamoStoreClient
+        Log.Information("DynamoDB {endpoint} Timeout {timeoutS}s Retries {retries}", x.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries)
+        Equinox.DynamoStore.DynamoStoreClient <| x.CreateDynamoDbClient() 
 
 type Equinox.DynamoStore.DynamoStoreClient with
 
@@ -84,4 +84,4 @@ type Equinox.DynamoStore.DynamoStoreContext with
         let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
         Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
 
-// #endif
+//#endif

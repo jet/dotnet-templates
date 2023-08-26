@@ -147,7 +147,7 @@ namespace TodoBackendTemplate.Web
         {
             var resolve =
                 _context.Resolve(
-                    Aggregate,Event.Category,
+                    Aggregate.Event.Category,
                     _handlerLog,
                     EquinoxCodec.Create(Aggregate.Event.Encode, Aggregate.Event.TryDecode),
                     Aggregate.State.Fold,
