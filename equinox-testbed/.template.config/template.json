@@ -12,7 +12,7 @@
   },
   "identity": "Equinox.Template.Testbed",
   "name": "Equinox Testbed",
-  "shortName": "eqxtestbed",
+  "shortName": "eqxTestbed",
   "sourceName": "TestbedTemplate",
   "preferNameDirectory": true,
 

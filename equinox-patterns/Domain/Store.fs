@@ -1,37 +1,40 @@
 module Patterns.Domain.Store
 
-let log = Serilog.Log.ForContext("isMetric", true)
-let resolveDecider cat = Equinox.Decider.resolve log cat
+module Metrics = 
+
+    let log = Serilog.Log.ForContext("isMetric", true)
+
+let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
 module Codec =
 
-    open FsCodec.SystemTextJson
-
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.Codec.Create<'t>() // options = Options.Default
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 module Memory =
 
-    let create codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
+    let create name codec initial fold store: Equinox.Category<_, _, _> =
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
+
+let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
+let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
 
 module Cosmos =
 
-    let private createCached codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = Equinox.CosmosStore.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.CosmosStore.CosmosStoreCategory(context, codec, fold, initial, cacheStrategy, accessStrategy)
+    let private createCached name codec initial fold accessStrategy (context, cache) =
+        Equinox.CosmosStore.CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
 
-    let createUnoptimized codec initial fold (context, cache) =
+    let createUnoptimized name codec initial fold (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.Unoptimized
-        createCached codec initial fold accessStrategy (context, cache)
+        createCached name codec initial fold accessStrategy (context, cache)
 
-    let createSnapshotted codec initial fold (isOrigin, toSnapshot) (context, cache) =
+    let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.Snapshot (isOrigin, toSnapshot)
-        createCached codec initial fold accessStrategy (context, cache)
+        createCached name codec initial fold accessStrategy (context, cache)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
-type Context<'t> =
+type Config<'t> =
     | Memory of Equinox.MemoryStore.VolatileStore<'t>
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache

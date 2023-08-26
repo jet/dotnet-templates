@@ -16,9 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.11" />
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.11" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.10" />
+    <!-- Equinox.Core.Batching -->
+    <PackageReference Include="Equinox.Core" Version="4.0.0-rc.13" />
+    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.13" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.13" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.10.1" />
   </ItemGroup>
 
 </Project>

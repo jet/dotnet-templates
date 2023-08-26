@@ -5,8 +5,9 @@
 /// c) if appropriate, the target period may be closed as part of the same decision flow if `decideCarryForward` yields Some
 module Patterns.Domain.Period
 
-let [<Literal>] Category = "Period"
-let streamId = Equinox.StreamId.gen PeriodId.toString
+module private Stream =
+    let [<Literal>] Category = "Period"
+    let id = FsCodec.StreamId.gen PeriodId.toString
 
 // NOTE - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -80,7 +81,7 @@ type Result<'request, 'result> =
 /// 1. Streams must open with a BroughtForward event (obtained via Rules.getIncomingBalance if this is an uninitialized Period)
 /// 2. (If the Period has not closed) Rules.decide gets to map the request to events and a residual
 /// 3. Rules.decideCarryForward may trigger the closing of the Period based on the residual and/or the State by emitting Some balance
-let decideIngestWithCarryForward rules req s: Async<Result<'req, 'result> * Events.Event list> = async {
+let decideIngestWithCarryForward rules req s: Async<Result<'req, 'result> * Events.Event[]> = async {
     let acc = Accumulator(s, Fold.fold)
     do! acc.Transact(Fold.maybeOpen rules.getIncomingBalance)
     let residual, result = acc.Transact(Fold.tryIngest rules.decideIngestion req)
@@ -107,7 +108,7 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
         let decide' s = async {
             let! r, es = decideIngestWithCarryForward rules () s
             return Option.get r.carryForward, es }
-        decider.TransactAsync(decide', load = Equinox.AnyCachedValue)
+        decider.Transact(decide', load = Equinox.LoadOption.AnyCachedValue)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     let tryTransact periodId getIncoming (decide: 'request -> Fold.State -> 'request * 'result * Events.Event list) request shouldClose: Async<Result<'request, 'result>> =
@@ -116,7 +117,7 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
                 decideIngestion     = fun request state -> let residual, result, events = decide request state in residual, result, events
                 decideCarryForward  = fun res state -> async { if shouldClose res then return! genBalance state else return None } } // also close, if we should
         let decider = resolve periodId
-        decider.TransactAsync(decideIngestWithCarryForward rules request, load = Equinox.AnyCachedValue)
+        decider.Transact(decideIngestWithCarryForward rules request, load = Equinox.LoadOption.AnyCachedValue)
 
     /// Runs the decision function on the specified Period, closing and bringing forward balances from preceding Periods if necessary
     /// Processing completes when `decide` yields None for the residual of the 'request
@@ -141,9 +142,9 @@ type Service internal (resolve: PeriodId -> Equinox.Decider<Events.Event, Fold.S
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) ->
+        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) ->
             // Not using snapshots, on the basis that the writes are all coming from this process, so the cache will be sufficient
             // to make reads cheap enough, with the benefit of writes being cheaper as you're not paying to maintain the snapshot
-            Store.Cosmos.createUnoptimized Events.codecJe Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(streamId >> Store.resolveDecider cat Category)
+            Store.Cosmos.createUnoptimized Stream.Category Events.codecJe Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

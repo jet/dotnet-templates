@@ -1,7 +1,8 @@
 module Patterns.Domain.ListEpoch
 
-let [<Literal>] Category = "ListEpoch"
-let streamId = Equinox.StreamId.gen ListEpochId.toString
+module private Stream =
+    let [<Literal>] Category = "ListEpoch"
+    let id = FsCodec.StreamId.gen ListEpochId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -35,16 +36,16 @@ let decide shouldClose candidateIds = function
         let added, events =
             // TOCONSIDER in general, one would expect the inputs to naturally be distinct
             match candidateIds |> Array.except currentIds (*|> Array.distinct*) with
-            | [||] -> [||], []
+            | [||] -> [||], [||]
             | news ->
                 let closing = shouldClose news currentIds
                 let ingestEvent = Events.Ingested {| ids = news |}
-                news, if closing then [ ingestEvent ; Events.Closed ] else [ ingestEvent ]
+                news, [| ingestEvent; if closing then Events.Closed |]
         let _, closed = Fold.fold state events
         let res: ExactlyOnceIngester.IngestResult<_, _> = { accepted = added; closed = closed; residual = [||] }
         res, events
     | currentIds, true ->
-        { accepted = [||]; closed = true; residual = candidateIds |> Array.except currentIds (*|> Array.distinct*) }, []
+        { accepted = [||]; closed = true; residual = candidateIds |> Array.except currentIds (*|> Array.distinct*) }, [||]
 
 // NOTE see feedSource for example of separating Service logic into Ingestion and Read Services in order to vary the folding and/or state held
 type Service internal
@@ -58,18 +59,21 @@ type Service internal
         // NOTE decider which will initially transact against potentially stale cached state, which will trigger a
         // resync if another writer has gotten in before us. This is a conscious decision in this instance; the bulk
         // of writes are presumed to be coming from within this same process
-        decider.Transact(decide shouldClose items, load = Equinox.AnyCachedValue)
+        decider.Transact(decide shouldClose items, load = Equinox.LoadOption.AnyCachedValue)
 
-    /// Returns all the items currently held in the stream (Not using AnyCachedValue on the assumption this needs to see updates from other apps)
-    member _.Read epochId: Async<Fold.State> =
+    /// Returns all the items currently held in the stream
+    /// Accommodates for Ingest logic running in another process / on another machine
+    member _.Read epochId: Async<Fold.State> = async {
         let decider = resolve epochId
-        decider.Query(id, Equinox.AllowStale (System.TimeSpan.FromSeconds 1))
+        let! _, closed as res = decider.Query(id, Equinox.LoadOption.AnyCachedValue)
+        if closed then return res // Once the Epoch is closed, no new tickets ca ever be entered so no re-reads needed
+        else return! decider.Query(id, Equinox.LoadOption.AllowStale (System.TimeSpan.FromSeconds 1)) }
 
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store -> Store.Memory.create Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Memory store -> Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create maxItemsPerEpoch (Category cat) =
         let shouldClose candidateItems currentItems = Array.length currentItems + Array.length candidateItems >= maxItemsPerEpoch
-        Service(shouldClose, streamId >> Store.resolveDecider cat Category)
+        Service(shouldClose, Stream.id >> Store.createDecider cat)

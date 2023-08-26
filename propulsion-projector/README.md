@@ -139,7 +139,7 @@ This project was generated using:
         # (either add environment variables as per step 0 or use -c to specify them)
 
         # generate a SQL Table to store checkpoints in
-        propulsion init ~~~~ms
+        propulsion init ms
 //#endif // sss         
          
 2. To run an instance of the Projector:

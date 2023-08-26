@@ -1,5 +1,5 @@
 /// Commandline arguments and/or secrets loading specifications
-module Infrastructure.Args
+module Args
 
 exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)

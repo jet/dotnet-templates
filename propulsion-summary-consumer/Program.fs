@@ -82,7 +82,7 @@ module Args =
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     p.GetResult Container
-        member _.Connect() =                connector.ConnectStore("Main", database, container)
+        member _.Connect() =                connector.ConnectContext("Main", database, container, 256)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv: Arguments =
@@ -95,9 +95,9 @@ let [<Literal>] AppName = "ConsumerTemplate"
 let start (args: Args.Arguments) =
     let service =
         let store =
-            let context = args.Cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+            let context = args.Cosmos.Connect() |> Async.RunSynchronously
             let cache = Equinox.Cache(AppName, sizeMb = 10)
-            Store.Context.Cosmos (context, cache)
+            Store.Config.Cosmos (context, cache)
         TodoSummary.Factory.create store
     let config =
         FsKafka.KafkaConsumerConfig.Create(

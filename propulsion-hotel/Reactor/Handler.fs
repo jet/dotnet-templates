@@ -7,7 +7,9 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable completed, ignored, failed, succeeded = 0, 0, 0, 0
-
+    override _.HandleOk res = res |> function
+        | Outcome.Merged (ok, denied)-> completed <- completed + 1; succeeded <- succeeded + ok; failed <- failed + denied
+        | Outcome.Noop -> ignored <- ignored + 1
     override _.DumpStats() =
         base.DumpStats()
         if completed <> 0 || ignored <> 0 || failed <> 0 || succeeded <> 0 then
@@ -15,9 +17,6 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
             completed <- 0; failed <- 0; succeeded <- 0; ignored <- 0
         match logExternalStats with None -> () | Some f -> let logWithoutContext = Serilog.Log.Logger in f logWithoutContext
 
-    override _.HandleOk res = res |> function
-        | Outcome.Merged (ok, denied)-> completed <- completed + 1; succeeded <- succeeded + ok; failed <- failed + denied
-        | Outcome.Noop -> ignored <- ignored + 1
     override _.Classify(exn) =
         match exn with
         | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited
@@ -27,7 +26,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 
 open Domain
 
-let private reactionCategories = [| GroupCheckout.Category |]
+let private reactionCategories = [| GroupCheckout.Reactions.Category |]
 
 // Invocation of the handler is prompted by event notifications from the event store's feed.
 // Wherever possible, multiple events get processed together (e.g. in catchup scenarios or where the async checkpointing
@@ -39,7 +38,7 @@ let private reactionCategories = [| GroupCheckout.Category |]
 //   prior to those that will have arrived on the feed. For that reason, the caller does not forward the `events` argument here.
 let private handle (processor: GroupCheckoutProcess.Service) stream _events = async {
     match stream with
-    | GroupCheckout.StreamName groupCheckoutId ->
+    | GroupCheckout.Reactions.For groupCheckoutId ->
         let! outcome, ver' = processor.React(groupCheckoutId)
         // For the reasons noted above, processing is carried out based on the reading of the stream for which the handler was triggered.
         // In some cases, due to the clustered nature of the store (and not requiring consistent reads / leader connections
@@ -53,7 +52,7 @@ let private handle (processor: GroupCheckoutProcess.Service) stream _events = as
         //   (and not even invoke the Handler unless one or more of the feed events are beyond the write position)
         return Propulsion.Sinks.StreamResult.OverrideNextIndex ver', outcome
     | other ->
-        return failwithf "Span from unexpected category %A" other }
+        return failwithf $"Span from unexpected category %s{FsCodec.StreamName.toString other}" }
 
 let private createService store =
     let stays = GuestStay.Factory.create store
@@ -71,4 +70,4 @@ type Factory private () =
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
 
     static member StartSource(log, sink, sourceConfig) =
-        Infrastructure.SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig
+        SourceConfig.start (log, Store.Metrics.log) sink reactionCategories sourceConfig

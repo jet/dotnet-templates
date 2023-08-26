@@ -1,7 +1,5 @@
 namespace Reactor.Integration
 
-open Infrastructure // isStoreMetrics
-
 type XunitOutputSink(?messageSink: Xunit.Abstractions.IMessageSink, ?minLevel: Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =

@@ -1,13 +1,13 @@
 ﻿module TestbedTemplate.Services
 
 open System
-open Equinox
 
 module Domain =
     module Favorites =
 
-        let [<Literal>] Category = "Favorites"
-        let streamId = StreamId.gen ClientId.toString
+        module private Stream =
+            let [<Literal>] Category = "Favorites"
+            let id = FsCodec.StreamId.gen ClientId.toString
 
         // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
         module Events =
@@ -27,6 +27,11 @@ module Domain =
         module Fold =
 
             type State = Events.Favorited []
+            let initial: State = [||]
+            module Snapshot =
+                let generate state = Events.Snapshotted { net = state }
+                let isOrigin = function Events.Snapshotted _ -> true | _ -> false
+                let config = isOrigin, generate
 
             type private InternalState(input: State) =
                 let dict = System.Collections.Generic.Dictionary<SkuId, Events.Favorited>()
@@ -38,7 +43,6 @@ module Domain =
                 member _.Unfavorite id =               dict.Remove id |> ignore
                 member _.AsState() =                   Seq.toArray dict.Values
 
-            let initial: State = [||]
             let private evolve (s: InternalState) = function
                 | Events.Snapshotted { net = net } ->   s.ReplaceAllWith net
                 | Events.Favorited e ->                 s.Favorite e
@@ -47,19 +51,17 @@ module Domain =
                 let s = InternalState state
                 for e in events do evolve s e
                 s.AsState()
-            let isOrigin = function Events.Snapshotted _ -> true | _ -> false
-            let toSnapshot state = Events.Snapshotted { net = state }
 
-        let private doesntHave skuId (state: Fold.State) = state |> Array.exists (fun x -> x.skuId = skuId) |> not
+        let private has skuId (state: Fold.State) = state |> Array.exists (fun x -> x.skuId = skuId)
 
-        let favorite date skuIds (state: Fold.State) =
-            [ for skuId in Seq.distinct skuIds do
-                if state |> doesntHave skuId then
-                    yield Events.Favorited { date = date; skuId = skuId } ]
+        let favorite date skuIds (state: Fold.State) = [|
+            for skuId in Seq.distinct skuIds do
+                if state |> has skuId |> not then
+                    Events.Favorited { date = date; skuId = skuId } |]
 
-        let unfavorite skuId (state: Fold.State) =
-            if state |> doesntHave skuId then [] else
-            [ Events.Unfavorited { skuId = skuId } ]
+        let unfavorite skuId (state: Fold.State) = [|
+            if state |> has skuId then
+                Events.Unfavorited { skuId = skuId } |]
 
         type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
 
@@ -76,27 +78,28 @@ module Domain =
                 decider.Query id
 
         let create cat =
-            streamId >> Store.createDecider cat Category |> Service
+            Stream.id >> Store.createDecider cat |> Service
 
         module Factory =
 
-            let snapshot = Fold.isOrigin, Fold.toSnapshot
             let private (|Category|) = function
 //#if memoryStore || (!cosmos && !eventStore)
-                | Store.Context.Memory store ->
-                    Store.Memory.create Events.codec Fold.initial Fold.fold store
+                | Store.Config.Memory store ->
+                    Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
 //#endif
 //#if cosmos
-                | Store.Context.Cosmos (context, caching, unfolds) ->
-                    let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot snapshot else Equinox.CosmosStore.AccessStrategy.Unoptimized
-                    Store.Cosmos.create Events.codecJe Fold.initial Fold.fold caching accessStrategy context
+                | Store.Config.Cosmos (context, caching, unfolds) ->
+                    let accessStrategy = if unfolds then Equinox.CosmosStore.AccessStrategy.Snapshot Fold.Snapshot.config
+                                         else Equinox.CosmosStore.AccessStrategy.Unoptimized
+                    Store.Cosmos.create Stream.Category Events.codecJe Fold.initial Fold.fold accessStrategy caching context
 //#endif
 //#if eventStore
-                | Store.Context.Esdb (context, caching, unfolds) ->
-                    let accessStrategy = if unfolds then Equinox.EventStoreDb.AccessStrategy.RollingSnapshots snapshot |> Some else None
-                    Store.Esdb.create Events.codec Fold.initial Fold.fold caching accessStrategy context
+                | Store.Config.Esdb (context, caching, unfolds) ->
+                    let accessStrategy = if unfolds then Equinox.EventStoreDb.AccessStrategy.RollingSnapshots Fold.Snapshot.config
+                                         else Equinox.EventStoreDb.AccessStrategy.Unoptimized
+                    Store.Esdb.create Stream.Category Events.codec Fold.initial Fold.fold accessStrategy caching context
 //#endif
-            let create (Category cat) = streamId >> Store.createDecider cat Category |> Service
+            let create (Category cat) = create cat
 
 open Microsoft.Extensions.DependencyInjection
 

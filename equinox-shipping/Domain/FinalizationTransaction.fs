@@ -1,8 +1,10 @@
 module Shipping.Domain.FinalizationTransaction
 
-let [<Literal>] Category = "FinalizationTransaction"
-let streamId = Equinox.StreamId.gen TransactionId.toString
-let [<return: Struct>] (|StreamName|_|) = function FsCodec.StreamName.CategoryAndId (Category, TransactionId.Parse transId) -> ValueSome transId | _ -> ValueNone
+module private Stream =
+    let [<Literal>] Category = "FinalizationTransaction"
+    let id = FsCodec.StreamId.gen TransactionId.toString
+    let decodeId = FsCodec.StreamId.dec TransactionId.parse
+    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -34,6 +36,8 @@ module Reactions =
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
         encoded.EventType = nameof(Events.Completed)
+    let [<Literal>] Category = Stream.Category
+    let [<return: Struct>] (|For|_|) = Stream.tryDecode
 
 module Fold =
 
@@ -74,7 +78,7 @@ module Flow =
         | Fold.State.Assigned s ->  Action.FinalizeContainer (s.container, s.shipments)
         | Fold.State.Completed r -> Action.Finish             r.success
         // As all state transitions are driven by FinalizationProcess, we can rule this out
-        | Fold.State.Initial as s      -> failwith (sprintf "Cannot interpret state %A" s)
+        | Fold.State.Initial as s      -> failwith $"Cannot interpret state %A{s}"
 
     let isValidTransition (event: Events.Event) (state: Fold.State) =
         match state, event with
@@ -86,10 +90,10 @@ module Flow =
         | Fold.State.Assigned _,    Events.Completed -> true
         | _ -> false
 
-    let decide (update: Events.Event option) (state: Fold.State): Events.Event list =
+    let decide (update: Events.Event option) (state: Fold.State) = [|
         match update with
-        | Some e when isValidTransition e state -> [ e ]
-        | _ -> []
+        | Some e when isValidTransition e state -> e
+        | _ -> () |]
 
 type Service internal (resolve: TransactionId -> Equinox.Decider<Events.Event, Fold.State>) =
 
@@ -103,8 +107,8 @@ type Service internal (resolve: TransactionId -> Equinox.Decider<Events.Event, F
 module Factory =
 
     let private (|Category|) = function
-        | Store.Context.Memory store ->            Store.Memory.create Events.codec Fold.initial Fold.fold store
-        | Store.Context.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Context.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Context.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(streamId >> Store.createDecider cat Category)
+        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

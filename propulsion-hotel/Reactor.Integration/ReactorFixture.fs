@@ -56,7 +56,7 @@ module MemoryReactor =
         new(messageSink) =
             let store = Equinox.MemoryStore.VolatileStore()
             let createSourceConfig _groupName = SourceConfig.Memory store
-            new Fixture(messageSink, Domain.Store.Context.Memory store, createSourceConfig)
+            new Fixture(messageSink, Domain.Store.Config.Memory store, createSourceConfig)
         // override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member _.Wait() = base.Await(TimeSpan.MaxValue) // Propagation delay is not applicable for MemoryStore
         member val private Backoff = TimeSpan.FromMilliseconds 1
@@ -77,7 +77,7 @@ module DynamoReactor =
             let createSourceConfig consumerGroupName =
                 let loadMode = Propulsion.DynamoStore.IndexOnly
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
-                SourceConfig.Dynamo (conn.IndexClient, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
+                SourceConfig.Dynamo (conn.IndexContext, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
                                      tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.

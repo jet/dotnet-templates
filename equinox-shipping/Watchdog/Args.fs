@@ -2,8 +2,7 @@
 module Shipping.Infrastructure.Args
 
 open System
-
-module Store = Shipping.Domain.Store
+open FSharp.Control
 
 exception MissingArg of message: string with override this.Message = this.message
 let missingArg msg = raise (MissingArg msg)
@@ -71,7 +70,7 @@ module Cosmos =
         let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
-        member _.Connect() =                connector.ConnectStore("Main", database, container)
+        member _.Connect() =                connector.ConnectContext(database, container)
 
 module Dynamo =
 
@@ -115,10 +114,7 @@ module Dynamo =
                                             | Choice2Of2 (serviceUrl, accessKey, secretKey) ->
                                                 Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
         let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
-        member val Verbose =                p.Contains Verbose
-        member _.Connect() =                connector.LogConfiguration()
-                                            let client = connector.CreateClient()
-                                            client.ConnectStore("Main", table)
+        member _.Connect() =                connector.CreateClient().CreateContext("Main", table)
 
 type [<RequireQualifiedAccess; NoComparison; NoEquality>]
     TargetStoreArgs =
@@ -127,11 +123,11 @@ type [<RequireQualifiedAccess; NoComparison; NoEquality>]
 
 module TargetStoreArgs =
     
-    let connectTarget targetStore cache: Store.Context<_> =
+    let connectTarget targetStore cache: Store.Config<_> =
         match targetStore with
         | TargetStoreArgs.Cosmos a ->
-            let context = a.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-            Store.Context.Cosmos (context, cache)
+            let context = a.Connect() |> Async.RunSynchronously
+            Store.Config.Cosmos (context, cache)
         | TargetStoreArgs.Dynamo a ->
-            let context = a.Connect() |> DynamoStoreContext.create
-            Store.Context.Dynamo (context, cache)
+            let context = a.Connect()
+            Store.Config.Dynamo (context, cache)

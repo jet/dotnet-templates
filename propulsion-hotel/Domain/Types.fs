@@ -10,7 +10,7 @@ type GroupCheckoutId = Guid<groupCheckoutId>
  and [<Measure>] groupCheckoutId
 module GroupCheckoutId =
     let toString: GroupCheckoutId -> string = UMX.untag >> Guid.toString
-    let (|Parse|): string -> GroupCheckoutId = Guid.Parse >> UMX.tag
+    let parse: string -> GroupCheckoutId = Guid.Parse >> UMX.tag
 
 type GuestStayId = Guid<guestStayId>
  and [<Measure>] guestStayId
@@ -29,7 +29,8 @@ type HashSet<'t> = System.Collections.Generic.HashSet<'t>
 [<AutoOpen>]
 module DeciderExtensions =
  
-    type Equinox.Decider<'S, 'E> with
+    type Equinox.Decider<'E, 'S> with
 
-        member x.TransactAsyncWithPostVersion(decide): Async<'R * int64> =
-            x.TransactExAsync((fun c -> decide c.State), (fun r c -> (r, c.Version)))
+        member x.TransactWithPostVersion(decide: 'S -> Async<'R * 'E[]>): Async<'R * int64> =
+            x.TransactEx((fun c -> decide c.State),
+                         (fun r (c: Equinox.ISyncContext<'S>) -> (r, c.Version)))

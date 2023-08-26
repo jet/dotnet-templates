@@ -46,23 +46,7 @@ module Args =
             match p.GetSubCommand() with
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for Source"
-        member x.DeletionTarget = x.Source.Target
-        member x.MonitoringParams() =
-            let srcC = x.Source
-            let leases: Microsoft.Azure.Cosmos.Container =
-                let dstC: CosmosSinkArguments = srcC.Target
-                match srcC.LeaseContainerId, dstC.LeaseContainerId with
-                | None, None ->     srcC.ConnectLeases(srcC.ContainerId + "-aux")
-                | Some sc, None ->  srcC.ConnectLeases(sc)
-                | None, Some dc ->  dstC.ConnectLeases(dc)
-                | Some _, Some _ -> missingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database"
-            Log.Information("Pruning... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
-            Log.Information("ChangeFeed {processorName} Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
-                x.ProcessorName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxItems)
-            if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-            Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
-            let monitored = srcC.MonitoredContainer()
-            (monitored, leases, x.ProcessorName, srcC.FromTail, srcC.MaxItems, srcC.LagFrequency)
+        member x.DeletionTarget =           x.Source.Target
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
@@ -103,18 +87,21 @@ module Args =
         let retries =                       p.GetResult(CosmosSourceParameters.Retries, 5)
         let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        member val DatabaseId =             p.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val ContainerId =            p.GetResult CosmosSourceParameters.Container
-        member x.MonitoredContainer() =     connector.ConnectMonitored(x.DatabaseId, x.ContainerId)
-
-        member val Verbose =                p.Contains Verbose
-        member val FromTail =               p.Contains CosmosSourceParameters.FromTail
-        member val MaxItems =               p.TryGetResult MaxItems
-        member val LagFrequency: TimeSpan = p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
-        member val LeaseContainerId =       p.TryGetResult CosmosSourceParameters.LeaseContainer
-        member x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
-
-        member val Target =
+        let databaseId =                    p.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let containerId =                   p.GetResult CosmosSourceParameters.Container
+       
+        let fromTail =                      p.Contains CosmosSourceParameters.FromTail
+        let maxItems =                      p.TryGetResult MaxItems
+        let lagFrequency: TimeSpan =        p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
+        member val Verbose =                p.Contains CosmosSourceParameters.Verbose
+        member val MonitoringParams =       fromTail, maxItems, lagFrequency
+        member x.ConnectFeed() =            if x.Target.Is(databaseId, containerId) then missingArg "Danger! Can not prune a target based on itself"
+                                            match x.Target.MaybeLeasesContainer with
+                                            | Some leasesContainerInTarget -> connector.ConnectFeed(databaseId, containerId, leasesContainerInTarget)
+                                            | None ->
+                                                let leaseContainerId = p.GetResult(CosmosSourceParameters.LeaseContainer, containerId + "-aux")
+                                                connector.ConnectFeed(databaseId, containerId, leaseContainerId)
+        member val Target: CosmosSinkArguments =
             match p.GetSubCommand() with
             | DstCosmos cosmos -> CosmosSinkArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for Target"
@@ -144,14 +131,13 @@ module Args =
         let retries =                       p.GetResult(CosmosSinkParameters.Retries, 0)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-
-        member val DatabaseId =             p.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        member val ContainerId =            p.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
-        member x.Connect() =                connector.ConnectStore("DELETION Target", x.DatabaseId, x.ContainerId)
-
-        member val LeaseContainerId =       p.TryGetResult LeaseContainer
-        member x.ConnectLeases containerId = connector.CreateUninitialized(x.DatabaseId, containerId)
-
+        let databaseId =                    p.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let containerId =                   p.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let leaseContainerId =              p.TryGetResult LeaseContainer
+        member _.Is(d, c) =                 databaseId = d && containerId = c
+        member _.Connect() = async {        let! context = connector.ConnectContext("DELETION Target", databaseId, containerId, tipMaxEvents = 256, ?auxContainerId = leaseContainerId)
+                                            return Equinox.CosmosStore.Core.EventsContext(context, Store.log) }
+        member _.MaybeLeasesContainer: Microsoft.Azure.Cosmos.Container option = leaseContainerId |> Option.map (fun id -> connector.LeasesContainer(databaseId, id))
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv: Arguments =
@@ -163,19 +149,19 @@ let [<Literal>] AppName = "PrunerTemplate"
 
 let build (args: Args.Arguments, log: ILogger) =
     let archive = args.Source
+    let processorName = args.ProcessorName
     // NOTE - DANGEROUS - events submitted to this sink get DELETED from the supplied Context!
     let deletingEventsSink =
         let target = args.DeletionTarget
-        if (target.DatabaseId, target.ContainerId) = (archive.DatabaseId, archive.ContainerId) then
-            missingArg "Danger! Can not prune a target based on itself"
-        let context = target.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
-        let eventsContext = Equinox.CosmosStore.Core.EventsContext(context, Store.log)
-        CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, args.StatsInterval, args.StateInterval)
+        let eventsContext = target.Connect() |> Async.RunSynchronously
+        let stats = CosmosStorePrunerStats(Log.Logger, args.StatsInterval, args.StateInterval)
+        CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, stats)
+    let monitored, leases = archive.ConnectFeed() |> Async.RunSynchronously
     let source =
         let observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
-        let monitored, leases, processorName, startFromTail, maxItems, lagFrequency = args.MonitoringParams()
+        let startFromTail, maxItems, lagFrequency = args.Source.MonitoringParams
         CosmosStoreSource.Start(log, monitored, leases, processorName, observer,
-                                startFromTail = startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+                                startFromTail = startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
     deletingEventsSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly

@@ -42,12 +42,12 @@ type Properties(testOutput) =
                 nameof(Container.Events.Finalized)] // Container
         test <@ res1 && set eventTypes = set expectedEvents @>
         let containerEvents =
-            buffer.Queue(Container.Category, Container.streamId containerId1)
+            buffer.Queue(Container.Reactions.streamName containerId1)
             |> Seq.chooseV (FsCodec.Deflate.EncodeUncompressed Container.Events.codec).TryDecode 
             |> List.ofSeq
         test <@ match containerEvents with
                 | [ Container.Events.Finalized e ] -> e.shipmentIds = requestedShipmentIds
-                | xs -> failwithf "Unexpected %A" xs @>
+                | xs -> xs |> failwithf "Unexpected %A" @>
         (* Next, we run an overlapping finalize - this should
            a) yield a fail result
            b) result in triggering of Revert flow with associated Shipment revoke events *)

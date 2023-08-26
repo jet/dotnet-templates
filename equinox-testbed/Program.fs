@@ -142,7 +142,7 @@ module LoadTest =
     let private createResultLog fileName = LoggerConfiguration().WriteTo.File(fileName).CreateLogger()
     let run (log: ILogger) (verbose, verboseConsole, maybeSeq) reportFilename (a: Args.TestArguments) =
         let createStoreLog verboseStore = createStoreLog verboseStore verboseConsole maybeSeq
-        let _storeLog, storeConfig: ILogger * Store.Context = a.ConfigureStore(log, createStoreLog)
+        let _storeLog, storeConfig: ILogger * Store.Config = a.ConfigureStore(log, createStoreLog)
         let runSingleTest: ClientId -> Async<unit> =
             let services = ServiceCollection()
             Services.register(services, storeConfig)
@@ -163,11 +163,11 @@ module LoadTest =
 
         match storeConfig with
 //#if cosmos
-        | Store.Context.Cosmos _ ->
+        | Store.Config.Cosmos _ ->
             Equinox.CosmosStore.Core.Log.InternalMetrics.dump log
 //#endif
 //#if eventStore
-        | Store.Context.Esdb _ ->
+        | Store.Config.Esdb _ ->
             Equinox.EventStoreDb.Log.InternalMetrics.dump log
 //#endif
 //#if memory

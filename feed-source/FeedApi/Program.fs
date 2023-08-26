@@ -1,5 +1,6 @@
 module FeedSourceTemplate.Program
 
+open Equinox.CosmosStore
 open Serilog
 open System
 
@@ -61,7 +62,7 @@ module Args =
         let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
         let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
-        member _.Connect() =                connector.ConnectStore("Main", database, container)
+        member _.Connect() =                connector.ConnectContext("Main", database, container)
 
     /// Parse the commandline; can throw MissingArg or Argu.ArguParseException in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv =
@@ -93,18 +94,11 @@ type AppDependenciesExtensions() =
 
 open Microsoft.Extensions.Hosting
 
-module CosmosStoreContext =
-
-    /// Create with default packing and querying policies. Search for other `module CosmosStoreContext` impls for custom variations
-    let create (storeClient: Equinox.CosmosStore.CosmosStoreClient) =
-        let maxEvents = 256
-        Equinox.CosmosStore.CosmosStoreContext(storeClient, tipMaxEvents=maxEvents)
-
 let run (args: Args.Arguments) =
     let cosmos = args.Cosmos
-    let context = cosmos.Connect() |> Async.RunSynchronously |> CosmosStoreContext.create
+    let context = cosmos.Connect() |> Async.RunSynchronously
     let cache = Equinox.Cache(AppName, sizeMb = 2)
-    let store = FeedSourceTemplate.Domain.Store.Context.Cosmos (context, cache)
+    let store = FeedSourceTemplate.Domain.Store.Config.Cosmos (context, cache)
 
     Hosting.createHostBuilder()
         .ConfigureServices(fun s ->

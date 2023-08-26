@@ -62,22 +62,19 @@ module Dynamo =
         let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
         let indexSuffix =                   p.GetResult(IndexSuffix, "-index")
         let indexTable =                    p.TryGetResult IndexTable |> Option.orElseWith  (fun () -> c.DynamoIndexTable) |> Option.defaultWith (fun () -> table + indexSuffix)
+        let client =                        lazy connector.CreateClient()
+        let indexContext =                  lazy client.Value.CreateContext("Index", indexTable)
         let fromTail =                      p.Contains FromTail
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         let batchSizeCutoff =               p.GetResult(MaxItems, 100)
-        let client =                        connector.CreateClient()
-        let indexStoreClient =              lazy client.ConnectStore("Index", indexTable)
-        member _.Connect() =
-            connector.LogConfiguration()
-            client.ConnectStore("Main", table) |> DynamoStoreContext.create
+        member _.Connect() =                client.Value.CreateContext("Main", table)
         member _.MonitoringParams(log: ILogger) =
             log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} No event hydration", batchSizeCutoff)
-            let indexStoreClient = indexStoreClient.Value
+            let indexContext = indexContext.Value
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
-            indexStoreClient, fromTail, batchSizeCutoff, tailSleepInterval
+            indexContext, fromTail, batchSizeCutoff, tailSleepInterval
         member _.CreateCheckpointStore(group, cache) =
-            let indexTable = indexStoreClient.Value
-            indexTable.CreateCheckpointService(group, cache, Domain.Store.log)
+            indexContext.Value.CreateCheckpointService(group, cache, Store.Metrics.log)
 
 module Mdb =
     
@@ -122,4 +119,4 @@ module Mdb =
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
             readConnStr, fromTail, batchSize, tailSleepInterval
         member _.CreateCheckpointStore(group) =
-            Propulsion.MessageDb.ReaderCheckpoint.CheckpointStore(checkpointConnStr, schema, group, TimeSpan.FromSeconds 5.)
+            Propulsion.MessageDb.ReaderCheckpoint.CheckpointStore(checkpointConnStr, schema, group)

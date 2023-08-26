@@ -20,8 +20,8 @@ type Accumulator<'e, 's>(originState: 's, fold: 's -> seq<'e> -> 's) =
         let r, Apply = decide state in r
 
     /// Accumulated events based on the Decisions applied to date
-    member _.Events: 'e list =
-        List.ofSeq pendingEvents
+    member _.Events: 'e[] =
+        pendingEvents.ToArray()
 
 //    /// Run a decision function that does not yield a result
 //    member x.Transact(interpret): unit =

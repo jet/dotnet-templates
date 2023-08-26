@@ -19,27 +19,23 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 #endif
 
     let mutable ok, skipped, na = 0, 0, 0
-
     override _.HandleOk res = res |> function
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
-    override _.Classify(exn) =
-        match exn with
-        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited
-        | :? Microsoft.Azure.Cosmos.CosmosException as e
-            when (e.StatusCode = System.Net.HttpStatusCode.TooManyRequests
-                  || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
-                 && not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
-        | x -> base.Classify x
-    override _.HandleExn(log, exn) = log.Information(exn, "Unhandled")
-
     override _.DumpStats() =
         base.DumpStats()
         if ok <> 0 || skipped <> 0 || na <> 0 then
             log.Information(" used {ok} skipped {skipped} n/a {na}", ok, skipped, na)
             ok <- 0; skipped <- 0; na <- 0
         logExternalStats |> Option.iter (fun dumpTo -> dumpTo log)
+
+    override _.Classify(exn) =
+        match exn with
+        | OutcomeKind.StoreExceptions kind -> kind 
+        | Equinox.CosmosStore.Exceptions.ServiceUnavailable when not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
+        | x -> base.Classify x
+    override _.HandleExn(log, exn) = log.Information(exn, "Unhandled")
 
 let generate stream version summary =
     let event = Contract.encode summary
@@ -52,7 +48,7 @@ let handle
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         stream events = async {
     match struct (stream, events) with
-    | Contract.Input.Parse (_clientId, events) ->
+    | Contract.Input.Decode (_clientId, events) ->
         for version, event in events do
             let summary =
                 match event with
@@ -89,5 +85,5 @@ type Factory private () =
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Store.log) sink categories sourceConfig
+        SourceConfig.start (log, Store.Metrics.log) sink categories sourceConfig
 //#endif

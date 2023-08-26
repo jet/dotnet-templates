@@ -28,7 +28,7 @@ type Custom =
 
 let [<Property>] properties shouldUseSameSut (Gap gap) (initialEpochId, NonEmptyArray (Ids initialItems)) (NonEmptyArray (Ids items)) = async {
 
-    let store = Equinox.MemoryStore.VolatileStore() |> Store.Context.Memory
+    let store = Equinox.MemoryStore.VolatileStore() |> Store.Config.Memory
 
     let mutable nextEpochId = initialEpochId
     for _ in 1 .. gap do nextEpochId <- ExactlyOnceIngester.Internal.next nextEpochId

@@ -1,48 +1,48 @@
 module Domain.Store
 
-let log = Serilog.Log.ForContext("isMetric", true)
-let resolve cat = Equinox.Decider.resolve log cat
+module Metrics = 
+
+    let log = Serilog.Log.ForContext("isMetric", true)
+
+let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
 module Codec =
 
-    open FsCodec.SystemTextJson
-
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        Codec.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.Codec.Create<'t>() // options = Options.Default
 
 module Memory =
 
-    let create codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
+    let create name codec initial fold store: Equinox.Category<_, _, _> =
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
 
-let defaultCacheDuration = System.TimeSpan.FromMinutes 20.
+let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
+let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
 
 module Dynamo =
 
     open Equinox.DynamoStore
 
-    let private create codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        DynamoStoreCategory(context, FsCodec.Deflate.EncodeUncompressed codec, fold, initial, cacheStrategy, accessStrategy)
+    let private create name codec initial fold accessStrategy (context, cache) =
+        DynamoStoreCategory(context, name, FsCodec.Deflate.EncodeUncompressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
-    let createUnoptimized codec initial fold (context, cache) =
+    let createUnoptimized name codec initial fold (context, cache) =
         let accessStrategy = AccessStrategy.Unoptimized
-        create codec initial fold accessStrategy (context, cache)
+        create name codec initial fold accessStrategy (context, cache)
 
 module Mdb =
 
     open Equinox.MessageDb
 
-    let private create codec initial fold accessStrategy (context, cache) =
-        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        MessageDbCategory(context, codec, fold, initial, cacheStrategy, ?access = accessStrategy)
+    let private create name codec initial fold accessStrategy (context, cache) =
+        MessageDbCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
 
-    let createUnoptimized codec initial fold (context, cache) =
-        let accessStrategy = None
-        create codec initial fold accessStrategy (context, cache)
+    let createUnoptimized name codec initial fold (context, cache) =
+        let accessStrategy = AccessStrategy.Unoptimized
+        create name codec initial fold accessStrategy (context, cache)
 
 [<RequireQualifiedAccess; NoComparison; NoEquality>]
-type Context =
+type Config =
     | Memory of Equinox.MemoryStore.VolatileStore<struct (int * System.ReadOnlyMemory<byte>)>
     | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
     | Mdb    of Equinox.MessageDb.MessageDbContext * Equinox.Cache

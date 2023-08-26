@@ -15,22 +15,10 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
     inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
 
     let mutable ok, skipped, na = 0, 0, 0
-
     override _.HandleOk res = res |> function
         | Outcome.Ok (used, unused) -> ok <- ok + used; skipped <- skipped + unused
         | Outcome.Skipped count -> skipped <- skipped + count
         | Outcome.NotApplicable count -> na <- na + count
-    override _.Classify(exn) =
-        match exn with
-        | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded -> Propulsion.Streams.OutcomeKind.RateLimited
-        | :? Microsoft.Azure.Cosmos.CosmosException as e
-            when (e.StatusCode = System.Net.HttpStatusCode.TooManyRequests
-                  || e.StatusCode = System.Net.HttpStatusCode.ServiceUnavailable)
-                 && not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
-        | x -> base.Classify x
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
-
     override _.DumpStats() =
         base.DumpStats()
         if ok <> 0 || skipped <> 0 || na <> 0 then
@@ -38,13 +26,21 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
             ok <- 0; skipped <- 0; na <- 0
         logExternalStats |> Option.iter (fun dumpTo -> dumpTo log)
 
+    override _.Classify(exn) =
+        match exn with
+        | OutcomeKind.StoreExceptions kind -> kind 
+        | Equinox.CosmosStore.Exceptions.ServiceUnavailable when not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
+        | x -> base.Classify x
+    override _.HandleExn(log, exn) =
+        log.Information(exn, "Unhandled")
+
 #if blank
 let [<Literal>] Category = "Todos"
 let reactionCategories = [| Category |]
     
 let handle stream (events: Propulsion.Sinks.Event[]) = async {
     match stream, events with
-    | FsCodec.StreamName.CategoryAndId (Category, id), _ ->
+    | FsCodec.StreamName.Split (Category, FsCodec.StreamId.Parse1 (ClientId.Parse clientId)), _ ->
         let ok = true
         // "TODO: add handler code"
         match ok with
@@ -78,4 +74,4 @@ type Factory private () =
                                                  ?wakeForResults = wakeForResults, ?idleDelay = idleDelay, ?purgeInterval = purgeInterval)
     
     static member StartSource(log, sink, sourceConfig) =
-        SourceConfig.start (log, Store.log) sink reactionCategories sourceConfig
+        SourceConfig.start (log, Store.Metrics.log) sink reactionCategories sourceConfig

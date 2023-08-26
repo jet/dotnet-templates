@@ -57,17 +57,17 @@ module Args =
                                             | Dynamo a -> Choice1Of2 <| SourceArgs.Dynamo.Arguments(c, a)
                                             | Mdb a ->    Choice2Of2 <| SourceArgs.Mdb.Arguments(c, a)
                                             | a ->        Args.missingArg $"Unexpected Store subcommand %A{a}"
-        member x.ConnectStoreAndSource(appName): Store.Context * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
+        member x.ConnectStoreAndSource(appName): Store.Config * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
             | Choice1Of2 a ->
                 let context = a.Connect()
                 let buildSourceConfig log groupName =
-                    let indexStore, startFromTail, batchSizeCutoff, tailSleepInterval = a.MonitoringParams(log)
+                    let indexContext, startFromTail, batchSizeCutoff, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName, cache)
                     let load = Propulsion.DynamoStore.EventLoadMode.IndexOnly
-                    SourceConfig.Dynamo (indexStore, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
-                let store = Store.Context.Dynamo (context, cache)
+                    SourceConfig.Dynamo (indexContext, checkpoints, load, startFromTail, batchSizeCutoff, tailSleepInterval, x.StatsInterval)
+                let store = Store.Config.Dynamo (context, cache)
                 store, buildSourceConfig, Equinox.DynamoStore.Core.Log.InternalMetrics.dump
             | Choice2Of2 a ->
                 let context = a.Connect()
@@ -75,7 +75,7 @@ module Args =
                     let connectionString, startFromTail, batchSize, tailSleepInterval = a.MonitoringParams(log)
                     let checkpoints = a.CreateCheckpointStore(groupName)
                     SourceConfig.Mdb (connectionString, checkpoints, startFromTail, batchSize, tailSleepInterval, x.StatsInterval)
-                let store = Store.Context.Mdb (context, cache)
+                let store = Store.Config.Mdb (context, cache)
                 store, buildSourceConfig, Equinox.MessageDb.Log.InternalMetrics.dump
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args

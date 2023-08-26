@@ -2,54 +2,52 @@ using Equinox;
 using Equinox.EventStoreDb;
 using Microsoft.FSharp.Core;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace TodoBackendTemplate
+namespace TodoBackendTemplate;
+
+public record EventStoreConfig(string ConnectionString, int CacheMb);
+
+public class EventStoreContext : EquinoxContext
 {
-    public record EventStoreConfig(string ConnectionString, int CacheMb);
+    readonly Cache _cache;
 
-    public class EventStoreContext : EquinoxContext
+    Equinox.EventStoreDb.EventStoreContext _connection;
+    readonly Func<Task> _connect;
+
+    public EventStoreContext(EventStoreConfig config)
     {
-        readonly Cache _cache;
+        _cache = new Cache("Es", config.CacheMb);
+        _connect = async () => _connection = await Connect(config);
+    }
 
-        Equinox.EventStoreDb.EventStoreContext _connection;
-        readonly Func<Task> _connect;
+    internal override async Task Connect() => await _connect();
 
-        public EventStoreContext(EventStoreConfig config)
-        {
-            _cache = new Cache("Es", config.CacheMb);
-            _connect = async () => _connection = await Connect(config);
-        }
+    static Task<Equinox.EventStoreDb.EventStoreContext> Connect(EventStoreConfig config)
+    {
+        var c = new EventStoreConnector(reqTimeout: TimeSpan.FromSeconds(5));
 
-        internal override async Task Connect() => await _connect();
+        var conn = c.Establish("Twin", Discovery.NewConnectionString(config.ConnectionString), ConnectionStrategy.ClusterTwinPreferSlaveReads);
+        return Task.FromResult(new Equinox.EventStoreDb.EventStoreContext(conn));
+    }
 
-        static Task<Equinox.EventStoreDb.EventStoreContext> Connect(EventStoreConfig config)
-        {
-            var c = new EventStoreConnector(reqTimeout: TimeSpan.FromSeconds(5), reqRetries: 1);
-
-            var conn = c.Establish("Twin", Discovery.NewConnectionString(config.ConnectionString), ConnectionStrategy.ClusterTwinPreferSlaveReads);
-            return Task.FromResult(new Equinox.EventStoreDb.EventStoreContext(conn));
-        }
-
-        public override Func<(string, string), DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
-            Serilog.ILogger handlerLog,
-            FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
-            Func<TState, IEnumerable<TEvent>, TState> fold,
-            TState initial,
-            Func<TEvent, bool> isOrigin = null,
-            Func<TState, TEvent> toSnapshot = null)
-        {
-            var accessStrategy =
-                isOrigin == null && toSnapshot == null
-                    ? null
-                    : AccessStrategy<TEvent, TState>.NewRollingSnapshots(FuncConvert.FromFunc(isOrigin), FuncConvert.FromFunc(toSnapshot));
-            var cacheStrategy = _cache == null
+    public override Func<string, DeciderCore<TEvent, TState>> Resolve<TEvent, TState>(
+        string name,
+        Serilog.ILogger handlerLog,
+        FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
+        Func<TState, TEvent[], TState> fold,
+        TState initial,
+        Func<TEvent, bool> isOrigin = null,
+        Func<TState, TEvent> toSnapshot = null)
+    {
+        var accessStrategy =
+            isOrigin == null && toSnapshot == null
                 ? null
-                : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-            var cat = new EventStoreCategory<TEvent, TState, Unit>(_connection, codec, FuncConvert.FromFunc(fold),
-                initial, cacheStrategy, accessStrategy);
-            return args => cat.Resolve(handlerLog).Invoke(args.Item1, args.Item2);
-        }
+                : AccessStrategy<TEvent, TState>.NewRollingSnapshots(FuncConvert.FromFunc(isOrigin), FuncConvert.FromFunc(toSnapshot));
+        var cacheStrategy = _cache == null
+            ? null
+            : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
+        var cat = new EventStoreCategory<TEvent, TState, Unit>(_connection, name, codec, fold, initial, accessStrategy, cacheStrategy);
+        return cat.Resolve(handlerLog);
     }
 }

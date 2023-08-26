@@ -10,6 +10,9 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 ### Changed
+
+- Target `Equinox` v `4.0.0-rc.13`, `Propulsion` v `3.0.0-rc.8.10`
+
 ### Removed 
 ### Fixed
 
@@ -18,7 +21,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Changed
 
-- Target `Equinox` v `4.0.0-rc.11`, `Propulsion` v `3.0.0-rc.6~~~~`
+- Target `Equinox` v `4.0.0-rc.11`, `Propulsion` v `3.0.0-rc.6`
 
 - <a name="6.3.0"></a>
 ## [6.3.0] - 2023-06-08
