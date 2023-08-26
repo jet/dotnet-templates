@@ -55,17 +55,3 @@ type Logging() =
         |> fun c -> let theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code
                     let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
                     c.WriteTo.Console(theme=theme, outputTemplate=t)
-
-
-
-
-
-
-
-
-
-
-
-
-
-

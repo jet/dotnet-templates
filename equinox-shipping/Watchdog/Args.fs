@@ -114,7 +114,6 @@ module Dynamo =
                                             | Choice2Of2 (serviceUrl, accessKey, secretKey) ->
                                                 Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
         let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
-        // member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.CreateClient().CreateContext("Main", table)
 
 type [<RequireQualifiedAccess; NoComparison; NoEquality>]
