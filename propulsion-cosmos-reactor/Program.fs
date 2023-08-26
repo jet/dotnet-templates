@@ -89,7 +89,7 @@ module Args =
         let maxItems =                      p.TryGetResult MaxItems
         let lagFrequency =                  p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val Verbose =                p.Contains Verbose
-        member _.MonitoringParams() =       fromTail, maxItems, lagFrequency
+        member val MonitoringParams =       fromTail, maxItems, lagFrequency
         member _.ConnectWithFeed() =        connector.ConnectWithFeed(database, containerId, leaseContainerId)
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
@@ -113,7 +113,7 @@ let build (args: Args.Arguments) =
     let source =
         let parseFeedDoc = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumCategoryEvents Reactor.reactionCategories
         let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect parseFeedDoc)
-        let startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams()
+        let startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams
         Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer,
                                                        startFromTail = startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
     sink, source
