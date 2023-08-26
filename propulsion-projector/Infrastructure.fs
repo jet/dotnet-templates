@@ -1,5 +1,5 @@
 [<AutoOpen>]
-module ProjectorTemplate.Infrastructure
+module Infrastructure
 
 open Serilog
 open System
@@ -19,7 +19,6 @@ type Logging() =
         |> fun c -> let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
                     c.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                     
-//#if (cosmos || esdb || sss)
 module CosmosStoreConnector =
 
     let private get (role: string) (client: Microsoft.Azure.Cosmos.CosmosClient) databaseId containerId =
@@ -63,8 +62,6 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let! client = x.Connect(role, databaseId, [| containerId |])
         return client.CreateContext(role, databaseId, containerId, 256) }
 
-//#endif
-//#if (dynamo || esdb || sss)
 module Dynamo =
 
     open Equinox.DynamoStore
@@ -97,5 +94,3 @@ type Equinox.DynamoStore.DynamoStoreContext with
     member context.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
         let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
         Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
-
-//#endif
