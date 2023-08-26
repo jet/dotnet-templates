@@ -69,7 +69,7 @@ module Dynamo =
         let batchSizeCutoff =               p.GetResult(MaxItems, 100)
         member _.Connect() =                client.Value.CreateContext("Main", table)
         member _.MonitoringParams(log: ILogger) =
-            log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} Hydrater parallelism {streamsDop}", batchSizeCutoff)
+            log.Information("DynamoStoreSource BatchSizeCutoff {batchSizeCutoff} No event hydration", batchSizeCutoff)
             let indexContext = indexContext.Value
             if fromTail then log.Warning("(If new projector group) Skipping projection of all existing events.")
             indexContext, fromTail, batchSizeCutoff, tailSleepInterval

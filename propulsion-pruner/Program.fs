@@ -46,25 +46,7 @@ module Args =
             match p.GetSubCommand() with
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
             | _ -> missingArg "Must specify cosmos for Source"
-        member x.DeletionTarget = x.Source.Target
-        member x.Parameters() =
-            x.ProcessorName
-        // member x.MonitoringParams() =
-        //     let srcC = x.Source
-        //     let leases: Microsoft.Azure.Cosmos.Container =
-        //         let dstC: CosmosSinkArguments = srcC.Target
-        //         match srcC.LeaseContainerId, dstC.LeaseContainerId with
-        //         | None, None ->     srcC.ConnectLeases(srcC.ContainerId + "-aux")
-        //         | Some sc, None ->  srcC.ConnectLeases(sc)
-        //         | None, Some dc ->  dstC.ConnectLeases(dc)
-        //         | Some _, Some _ -> missingArg "LeaseContainerSource and LeaseContainerDestination are mutually exclusive - can only store in one database"
-        //     Log.Information("Pruning... {dop} writers, max {maxReadAhead} batches read ahead", x.MaxWriters, x.MaxReadAhead)
-        //     Log.Information("ChangeFeed {processorName} Leases Database {db} Container {container}. MaxItems limited to {maxItems}",
-        //         x.ProcessorName, leases.Database.Id, leases.Id, Option.toNullable srcC.MaxItems)
-        //     if srcC.FromTail then Log.Warning("(If new projector group) Skipping projection of all existing events.")
-        //     Log.Information("ChangeFeed Lag stats interval {lagS:n0}s", let f = srcC.LagFrequency in f.TotalSeconds)
-        //     let monitored = srcC.MonitoredContainer()
-        //     (monitored, leases, x.ProcessorName, srcC.FromTail, srcC.MaxItems, srcC.LagFrequency)
+        member x.DeletionTarget =           x.Source.Target
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-Z"; Unique>]   FromTail
@@ -167,7 +149,7 @@ let [<Literal>] AppName = "PrunerTemplate"
 
 let build (args: Args.Arguments, log: ILogger) =
     let archive = args.Source
-    let processorName = args.Parameters()
+    let processorName = args.ProcessorName
     // NOTE - DANGEROUS - events submitted to this sink get DELETED from the supplied Context!
     let deletingEventsSink =
         let target = args.DeletionTarget
