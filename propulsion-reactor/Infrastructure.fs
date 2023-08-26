@@ -1,13 +1,10 @@
 ﻿[<AutoOpen>]
-module Infrastructure
+module ReactorTemplate.Infrastructure
 
-// #if (kafka || !blank)
 open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
-// #endif
 open Serilog
 open System
 
-// #if (kafka || !blank)
 module Guid =
 
     let inline toStringN (x: Guid) = x.ToString "N"
@@ -20,7 +17,6 @@ module ClientId =
     let parse (value: string): ClientId = let raw = Guid.Parse value in % raw
     let (|Parse|) = parse
 
-// #endif
 module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj

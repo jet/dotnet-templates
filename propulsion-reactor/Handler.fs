@@ -48,7 +48,7 @@ let handle
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         stream events = async {
     match struct (stream, events) with
-    | Contract.Input.Parse (_clientId, events) ->
+    | Contract.Input.Decode (_clientId, events) ->
         for version, event in events do
             let summary =
                 match event with
