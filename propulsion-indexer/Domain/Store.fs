@@ -1,4 +1,4 @@
-module ReactorTemplate.Store
+module Store
 
 module Metrics = 
 

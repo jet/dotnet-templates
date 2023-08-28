@@ -1,4 +1,4 @@
-module ReactorTemplate.Todo
+module IndexerTemplate.Domain.Todo
 
 module private Stream =
     let [<Literal>] Category = "Todos"

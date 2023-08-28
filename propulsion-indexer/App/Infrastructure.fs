@@ -1,50 +1,17 @@
-[<AutoOpen>]
-module ReactorTemplate.Infrastructure
+[<AutoOpen>] 
+module Infrastructure
 
-open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
 open Serilog
 open System
-
-module Guid =
-
-    let inline toStringN (x: Guid) = x.ToString "N"
-
-/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
-type ClientId = Guid<clientId>
-and [<Measure>] clientId
-module ClientId =
-    let toString (value: ClientId): string = Guid.toStringN %value
-    let parse (value: string): ClientId = let raw = Guid.Parse value in % raw
-    let (|Parse|) = parse
 
 module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module Streams =
-
-    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
-    // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
-    let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
-        match codec.TryDecode event with
-        | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
-            Log.ForContext("eventData", renderBody event.Data)
-                .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
-            ValueNone
-        | x -> x
-    let (|Decode|) codec struct (stream, events: Propulsion.Sinks.Event[]): 'E[] =
-        events |> Propulsion.Internal.Array.chooseV (tryDecode codec stream)
-        
-    module Codec =
-        
-        let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
-            FsCodec.SystemTextJson.Codec.Create<'E>() // options = Options.Default
-
 module Log =
 
     /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
     let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
-
 
 /// Equinox and Propulsion provide metrics as properties in log emissions
 /// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
@@ -131,3 +98,24 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let! cosmosClient, context = x.Connect("Main", databaseId, containerId, auxContainerId)
         let source, leases = CosmosStoreConnector.getSourceAndLeases cosmosClient databaseId containerId auxContainerId
         return context, source, leases }
+
+type Factory private () =
+    
+    static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats)
+
+module OutcomeKind =
+
+    let [<return: Struct>] (|StoreExceptions|_|) (exn: exn) =
+        match exn with
+        | Equinox.CosmosStore.Exceptions.RateLimited -> Propulsion.Streams.OutcomeKind.RateLimited |> ValueSome
+        | Equinox.CosmosStore.Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
+        | :? System.Threading.Tasks.TaskCanceledException -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
+        | _ -> ValueNone
+
+// A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
+let startMetricsServer port: IDisposable =
+    let metricsServer = new Prometheus.KestrelMetricServer(port = port)
+    let ms = metricsServer.Start()
+    Log.Information("Prometheus /metrics endpoint on port {port}", port)
+    { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }

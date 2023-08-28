@@ -9,11 +9,17 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+- 
+- `proIndexer`: Template demonstrating a reactor app that reacts to events by storing a summarised form of an Aggregate's information in `RollingState` mode
+
 ### Changed
 
 - Target `Equinox` v `4.0.0-rc.13`, `Propulsion` v `3.0.0-rc.8.10`, `FsCodec` v `3.0.0-rc.11.1`
 
 ### Removed 
+ 
+- `proCosmosReactor`: Extended/split to become `proIndexer`
+
 ### Fixed
 
 <a name="6.3.1"></a>

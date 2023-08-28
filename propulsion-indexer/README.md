@@ -1,9 +1,9 @@
-# Propulsion CosmosDb ChangeFeedProcessor Reactor
+# Equinox/Propulsion Indexer application
 
 This project was generated using:
 
     dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
-    dotnet new proCosmosReactor # use --help to see options
+    dotnet new proIndexer # use --help to see options
 
 ## Usage instructions
 
