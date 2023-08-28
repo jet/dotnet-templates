@@ -23,7 +23,7 @@
     <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.13" />
     <PackageReference Include="Equinox.DynamoStore" Version="4.0.0-rc.13" />
     <!--#endif-->
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.10.1" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.11.1" />
     <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.8.10" />
     <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.8.10" />
     <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.8.10" />
