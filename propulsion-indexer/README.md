@@ -11,7 +11,8 @@ This project was generated using:
 
         $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
         $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
-        $env:EQUINOX_COSMOS_CONTAINER="equinox-test" # or use -c
+        $env:EQUINOX_COSMOS_CONTAINER="app" # or use -c
+        $env:EQUINOX_COSMOS_VIEWS="app-views" # or use -c
 
 1. Use the `eqx` tool to initialize a CosmosDb container
 
@@ -27,11 +28,11 @@ This project was generated using:
         # default name is "($EQUINOX_COSMOS_CONTAINER)-aux"
         propulsion init -ru 400 cosmos
 
-3. To run an instance of the Reactor from a CosmosDb ChangeFeed
+3. To run an instance of the Indexer from a CosmosDb ChangeFeed
 
         # `-g default` defines the `processorName` - each processor group name has separated state in the leases store
-        # `-c MyContainer` specifies the source Container to monitor (if you have specified EQUINOX_COSMOS_* environment
+        # `-c app` specifies the source Container to monitor (if you have specified EQUINOX_COSMOS_* environment
         #   vars, no connection/database/container arguments are needed.)
         # For this template, this same container is also used to wire up the Connection used for the Reactions processing.
         # See the `proReactor` template for a more complex variant that lets you specify them separately.
-        dotnet run -- -g default cosmos -c MyContainer
+        dotnet run --project Indexer -- -g default cosmos -c app

@@ -18,7 +18,7 @@ module Events =
         | Updated       of ItemData
         | Deleted       of DeletedData
         | Cleared       of ClearedData
-        | Snapshotted   of SnapshotData
+        | [<DataMember(Name = "Snapshotted")>] Snapshotted of SnapshotData
         interface TypeShape.UnionContract.IUnionContract
     let codec = Store.Codec.genJsonElement<Event>
 
@@ -42,19 +42,25 @@ module Fold =
     type State = { items: Events.ItemData list; nextId: int }
     /// State implied by the absence of any events on this stream
     let initial = { items = []; nextId = 0 }
-    /// Compute State change implied by a giveC:\Users\f0f00db\Projects\dotnet-templates\propulsion-summary-projector\Todo.fsn Event
+
+    module Snapshot = 
+        /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
+        let generate state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
+        /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
+        let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
+        let config = isOrigin, generate
+        let internal hydrate (e: Events.SnapshotData): State =
+            { nextId = e.nextId; items = List.ofArray e.items }
+            
+    /// Compute State change implied by a given Event
     let evolve s = function
         | Events.Added item -> { s with items = item :: s.items; nextId = s.nextId + 1 }
         | Events.Updated value -> { s with items = s.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
         | Events.Deleted e -> { s with items = s.items |> List.filter (fun x -> x.id <> e.id) }
         | Events.Cleared e -> { nextId = e.nextId; items = [] }
-        | Events.Snapshotted s -> { nextId = s.nextId; items = List.ofArray s.items }
+        | Events.Snapshotted e -> Snapshot.hydrate e
     /// Folds a set of events from the store into a given `state`
     let fold: State -> Events.Event seq -> State = Seq.fold evolve
-    /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
-    let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
-    /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-    let toSnapshot state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
 
 /// Defines operations that a Controller or Projector can perform on a Todo List
 type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.State>) =
@@ -67,7 +73,7 @@ type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.S
 
 module Factory =
 
+    let createSnapshotter = Store.Cosmos.Snapshotter.create Events.codec Fold.initial Fold.fold Fold.Snapshot.config Stream.id Stream.Category
     let private (|Category|) = function
-        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)
     let create (Category cat) = Service(Stream.id >> Store.createDecider cat)
-    

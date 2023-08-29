@@ -30,7 +30,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore) =
 
 open IndexerTemplate.Domain
 
-let reactionCategories = Todo.Reactions.categories
+let sourceCategories = Todo.Reactions.categories
 
 let toSummaryEventData (x: Todo.Fold.State): TodoIndex.Events.SummaryData =
     { items =
@@ -52,4 +52,3 @@ module Factory =
         let srcService = Todo.Factory.create store
         let dstService = TodoIndex.Factory.create store
         handle srcService dstService
-

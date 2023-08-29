@@ -146,6 +146,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proIndexer", "proIndexer", 
 ProjectSection(SolutionItems) = preProject
 	propulsion-indexer\README.md = propulsion-indexer\README.md
 	propulsion-indexer\.template.config\template.json = propulsion-indexer\.template.config\template.json
+	propulsion-indexer\propulsion-indexer.sln = propulsion-indexer\propulsion-indexer.sln
 EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "periodicIngester", "periodicIngester", "{4738344F-839D-4B82-8417-1B2D298E76C2}"

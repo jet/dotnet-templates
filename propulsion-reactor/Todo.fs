@@ -49,7 +49,7 @@ module Fold =
     type State = { items: Events.ItemData list; nextId: int }
     /// State implied by the absence of any events on this stream
     let initial = { items = []; nextId = 0 }
-    /// Compute State change implied by a giveC:\Users\f0f00db\Projects\dotnet-templates\propulsion-summary-projector\Todo.fsn Event
+    /// Compute State change implied by a given Event
     let evolve s = function
         | Events.Added item -> { s with items = item :: s.items; nextId = s.nextId + 1 }
         | Events.Updated value -> { s with items = s.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }

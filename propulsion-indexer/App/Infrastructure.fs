@@ -76,9 +76,9 @@ type Equinox.CosmosStore.CosmosStoreContext with
 
 type Equinox.CosmosStore.CosmosStoreClient with
 
-    member x.CreateContext(role: string, databaseId, containerId, tipMaxEvents) =
-        let c = Equinox.CosmosStore.CosmosStoreContext(x, databaseId, containerId, tipMaxEvents)
-        c.LogConfiguration(role, databaseId, containerId)
+    member x.CreateContext(role: string, databaseId, containerId, tipMaxEvents, ?queryMaxItems, ?tipMaxJsonLength, ?skipLog) =
+        let c = Equinox.CosmosStore.CosmosStoreContext(x, databaseId, containerId, tipMaxEvents, ?queryMaxItems = queryMaxItems, ?tipMaxJsonLength = tipMaxJsonLength)
+        if skipLog = Some true then () else c.LogConfiguration(role, databaseId, containerId)
         c
 
 type Equinox.CosmosStore.CosmosStoreConnector with
@@ -91,13 +91,35 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     member private x.CreateAndInitialize(role, databaseId, containers) =
         x.LogConfiguration(role, databaseId, containers)
         x.CreateAndInitialize(databaseId, containers)
-    member private x.Connect(role, databaseId, containerId: string, ?auxContainerId) = async {
-        let! cosmosClient = x.CreateAndInitialize(role, databaseId, [| containerId; yield! Option.toList auxContainerId |])
-        return cosmosClient, Equinox.CosmosStore.CosmosStoreClient(cosmosClient).CreateContext(role, databaseId, containerId, tipMaxEvents = 256) }
-    member x.ConnectWithFeed(databaseId, containerId, auxContainerId) = async {
-        let! cosmosClient, context = x.Connect("Main", databaseId, containerId, auxContainerId)
+    member private x.Connect(role, databaseId, containers) =
+        x.LogConfiguration(role, databaseId, containers)
+        x.Connect(databaseId, containers)
+    member private x.Connect(role, databaseId, containerId, viewsContainerId, ?auxContainerId, ?logSnapshotConfig) = async {
+        let! cosmosClient = x.CreateAndInitialize(role, databaseId, [| yield containerId; yield viewsContainerId; yield! Option.toList auxContainerId |])
+        let client = Equinox.CosmosStore.CosmosStoreClient(cosmosClient)
+        let contexts =
+            client.CreateContext(role, databaseId, containerId, tipMaxEvents = 256, queryMaxItems = 500),
+            client.CreateContext(role, databaseId, viewsContainerId, tipMaxEvents = 256, queryMaxItems = 500),
+            // NOTE the tip limits for this connection are set to be effectively infinite in order to ensure that writes never trigger calving from the tip
+            client.CreateContext("snapshotUpdater", databaseId, containerId, tipMaxEvents = 1024, tipMaxJsonLength = 1024 * 1024,
+                                 skipLog = not (logSnapshotConfig = Some true))
+        return cosmosClient, contexts }
+    member x.ConnectWithFeed(databaseId, containerId, viewsContainerId, auxContainerId, ?logSnapshotConfig) = async {
+        let! cosmosClient, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId, auxContainerId, ?logSnapshotConfig = logSnapshotConfig)
         let source, leases = CosmosStoreConnector.getSourceAndLeases cosmosClient databaseId containerId auxContainerId
-        return context, source, leases }
+        return contexts, source, leases }
+
+    /// Indexer Sync mode: When using a ReadOnly connection string, the leases need to be maintained alongside the target
+    member x.ConnectWithFeedReadOnly(databaseId, containerId: string, viewsContainerId, auxClient, auxDatabaseId, auxContainerId) = async {
+        let! client, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId = viewsContainerId)
+        let source = CosmosStoreConnector.getSource client databaseId containerId
+        let leases = CosmosStoreConnector.getLeases auxClient auxDatabaseId auxContainerId
+        return contexts, source, leases }
+
+    /// Indexer Sync mode: Connects to an External Store that we want to Sync into
+    member x.ConnectExternal(role, databaseId, containerId) = async {
+        let! client = x.Connect(role, databaseId, [| containerId |])
+        return client.CreateContext(role, databaseId, containerId, tipMaxEvents = 128) }
 
 type Factory private () =
     
