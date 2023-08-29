@@ -1,7 +1,7 @@
-module ReactorTemplate.Metrics
+module IndexerTemplate.Indexer.Metrics
 
-let baseName stat = "ReactorTemplate_reactor_" + stat
-let baseDesc desc = "ReactorTemplate: Reactor " + desc
+let baseName stat = "IndexerTemplate_reactor_" + stat
+let baseDesc desc = "IndexerTemplate: Reactor " + desc
 
 module private Counter =
 

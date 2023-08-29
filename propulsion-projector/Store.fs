@@ -35,18 +35,6 @@ module Dynamo =
         let accessStrategy = Equinox.DynamoStore.AccessStrategy.RollingState toSnapshot
         createCached name codec initial fold accessStrategy (context, cache)
 
-module Esdb =
-
-    let create name codec initial fold (context, cache) =
-        let accessStrategy = Equinox.EventStoreDb.AccessStrategy.Unoptimized
-        Equinox.EventStoreDb.EventStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
-
-module Sss =
-
-    let create name codec initial fold (context, cache) =
-        let accessStrategy = Equinox.SqlStreamStore.AccessStrategy.Unoptimized
-        Equinox.SqlStreamStore.SqlStreamStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
-
 #if esdb
 [<NoComparison; NoEquality; RequireQualifiedAccess>]
 type Config =

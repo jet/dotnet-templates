@@ -1,7 +1,7 @@
-module ReactorTemplate.TodoSummary
+module IndexerTemplate.Domain.TodoIndex
 
 module private Stream =
-    let [<Literal>] Category = "TodoSummary"
+    let [<Literal>] Category = "$TodoIndex"
     let id = FsCodec.StreamId.gen ClientId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care

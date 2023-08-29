@@ -1,50 +1,17 @@
-[<AutoOpen>]
-module ReactorTemplate.Infrastructure
+[<AutoOpen>] 
+module Infrastructure
 
-open FSharp.UMX // see https://github.com/fsprojects/FSharp.UMX - % operator and ability to apply units of measure to Guids+strings
 open Serilog
 open System
-
-module Guid =
-
-    let inline toStringN (x: Guid) = x.ToString "N"
-
-/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
-type ClientId = Guid<clientId>
-and [<Measure>] clientId
-module ClientId =
-    let toString (value: ClientId): string = Guid.toStringN %value
-    let parse (value: string): ClientId = let raw = Guid.Parse value in % raw
-    let (|Parse|) = parse
 
 module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module Streams =
-
-    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
-    // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
-    let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
-        match codec.TryDecode event with
-        | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
-            Log.ForContext("eventData", renderBody event.Data)
-                .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
-            ValueNone
-        | x -> x
-    let (|Decode|) codec struct (stream, events: Propulsion.Sinks.Event[]): 'E[] =
-        events |> Propulsion.Internal.Array.chooseV (tryDecode codec stream)
-        
-    module Codec =
-        
-        let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
-            FsCodec.SystemTextJson.Codec.Create<'E>() // options = Options.Default
-
 module Log =
 
     /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
     let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
-
 
 /// Equinox and Propulsion provide metrics as properties in log emissions
 /// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
@@ -109,9 +76,9 @@ type Equinox.CosmosStore.CosmosStoreContext with
 
 type Equinox.CosmosStore.CosmosStoreClient with
 
-    member x.CreateContext(role: string, databaseId, containerId, tipMaxEvents) =
-        let c = Equinox.CosmosStore.CosmosStoreContext(x, databaseId, containerId, tipMaxEvents)
-        c.LogConfiguration(role, databaseId, containerId)
+    member x.CreateContext(role: string, databaseId, containerId, tipMaxEvents, ?queryMaxItems, ?tipMaxJsonLength, ?skipLog) =
+        let c = Equinox.CosmosStore.CosmosStoreContext(x, databaseId, containerId, tipMaxEvents, ?queryMaxItems = queryMaxItems, ?tipMaxJsonLength = tipMaxJsonLength)
+        if skipLog = Some true then () else c.LogConfiguration(role, databaseId, containerId)
         c
 
 type Equinox.CosmosStore.CosmosStoreConnector with
@@ -124,10 +91,53 @@ type Equinox.CosmosStore.CosmosStoreConnector with
     member private x.CreateAndInitialize(role, databaseId, containers) =
         x.LogConfiguration(role, databaseId, containers)
         x.CreateAndInitialize(databaseId, containers)
-    member private x.Connect(role, databaseId, containerId: string, ?auxContainerId) = async {
-        let! cosmosClient = x.CreateAndInitialize(role, databaseId, [| containerId; yield! Option.toList auxContainerId |])
-        return cosmosClient, Equinox.CosmosStore.CosmosStoreClient(cosmosClient).CreateContext(role, databaseId, containerId, tipMaxEvents = 256) }
-    member x.ConnectWithFeed(databaseId, containerId, auxContainerId) = async {
-        let! cosmosClient, context = x.Connect("Main", databaseId, containerId, auxContainerId)
+    member private x.Connect(role, databaseId, containers) =
+        x.LogConfiguration(role, databaseId, containers)
+        x.Connect(databaseId, containers)
+    member private x.Connect(role, databaseId, containerId, viewsContainerId, ?auxContainerId, ?logSnapshotConfig) = async {
+        let! cosmosClient = x.CreateAndInitialize(role, databaseId, [| yield containerId; yield viewsContainerId; yield! Option.toList auxContainerId |])
+        let client = Equinox.CosmosStore.CosmosStoreClient(cosmosClient)
+        let contexts =
+            client.CreateContext(role, databaseId, containerId, tipMaxEvents = 256, queryMaxItems = 500),
+            client.CreateContext(role, databaseId, viewsContainerId, tipMaxEvents = 256, queryMaxItems = 500),
+            // NOTE the tip limits for this connection are set to be effectively infinite in order to ensure that writes never trigger calving from the tip
+            client.CreateContext("snapshotUpdater", databaseId, containerId, tipMaxEvents = 1024, tipMaxJsonLength = 1024 * 1024,
+                                 skipLog = not (logSnapshotConfig = Some true))
+        return cosmosClient, contexts }
+    member x.ConnectWithFeed(databaseId, containerId, viewsContainerId, auxContainerId, ?logSnapshotConfig) = async {
+        let! cosmosClient, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId, auxContainerId, ?logSnapshotConfig = logSnapshotConfig)
         let source, leases = CosmosStoreConnector.getSourceAndLeases cosmosClient databaseId containerId auxContainerId
-        return context, source, leases }
+        return contexts, source, leases }
+
+    /// Indexer Sync mode: When using a ReadOnly connection string, the leases need to be maintained alongside the target
+    member x.ConnectWithFeedReadOnly(databaseId, containerId: string, viewsContainerId, auxClient, auxDatabaseId, auxContainerId) = async {
+        let! client, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId = viewsContainerId)
+        let source = CosmosStoreConnector.getSource client databaseId containerId
+        let leases = CosmosStoreConnector.getLeases auxClient auxDatabaseId auxContainerId
+        return contexts, source, leases }
+
+    /// Indexer Sync mode: Connects to an External Store that we want to Sync into
+    member x.ConnectExternal(role, databaseId, containerId) = async {
+        let! client = x.Connect(role, databaseId, [| containerId |])
+        return client.CreateContext(role, databaseId, containerId, tipMaxEvents = 128) }
+
+type Factory private () =
+    
+    static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead) =
+        Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats)
+
+module OutcomeKind =
+
+    let [<return: Struct>] (|StoreExceptions|_|) (exn: exn) =
+        match exn with
+        | Equinox.CosmosStore.Exceptions.RateLimited -> Propulsion.Streams.OutcomeKind.RateLimited |> ValueSome
+        | Equinox.CosmosStore.Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
+        | :? System.Threading.Tasks.TaskCanceledException -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
+        | _ -> ValueNone
+
+// A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
+let startMetricsServer port: IDisposable =
+    let metricsServer = new Prometheus.KestrelMetricServer(port = port)
+    let ms = metricsServer.Start()
+    Log.Information("Prometheus /metrics endpoint on port {port}", port)
+    { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }

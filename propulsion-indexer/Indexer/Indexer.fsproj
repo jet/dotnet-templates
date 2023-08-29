@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net6.0</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="Metrics.fs" />
+        <Compile Include="Indexer.fs" />
+        <Compile Include="Snapshotter.fs" />
+        <Compile Include="Program.fs" />
+        <Content Include="README.md" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Argu" Version="6.1.1" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\App\App.fsproj" />
+      <ProjectReference Include="..\Domain\Domain.fsproj" />
+    </ItemGroup>
+</Project>

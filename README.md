@@ -83,13 +83,17 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
     
     - It is necessary to reset the CFP checkpoint (delete the checkpoint documents, or use a new Consumer Group Name) to trigger a re-traversal if events have expired since the lsat time a traversal took place.
 
-- [`proCosmosReactor`](propulsion-cosmos-reactor/README.md) - Stripped down derivative of `proReactor` template. :pray: [@ragiano215](https://github.com/ragiano215)
+- [`proIndexer`](propulsion-cosmos-reactor/README.md) - Derivative of `proReactor` template. :pray: [@ragiano215](https://github.com/ragiano215)
 
-    - Specific to CosmosDb
+    - Specific to CosmosDB, though it would be easy to make it support DynamoDB
 
     - For applications where the reactions using the same Container, credentials etc as the one being Monitored by the change feed processor (simpler config wiring and less argument processing)
 
     - includes full wiring for Prometheus metrics emission from the Handler outcomes
+
+    - Demonstrates notion of an `App` project that hosts common wiring common to a set of applications without having the Domain layer reference any of it. 
+  
+    - Implements `sync` and `snapshot` subcommands to enable updating snapshots and/or keeping a cloned database in sync
 
 <a name="eqxShipping"></a>
 - [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey).
@@ -189,11 +193,11 @@ To use from the command line, the outline is:
     dotnet new eqxShipping
 
     # ... to add a Reactor against a Cosmos container for both listening and writing
-    md -p ../CosmosReactor | Set-Location
-    dotnet new proCosmosReactor
+    md -p ../Indexer | Set-Location
+    dotnet new proIndexer
 
     # ... to add a Hotel Sample for use with MessageDb or DynamoDb
-    md -p ../ProGotel | Set-Location
+    md -p ../ProHotel | Set-Location
     dotnet new proHotel
 
 ## TESTING

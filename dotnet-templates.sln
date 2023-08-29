@@ -142,12 +142,12 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "FeedConsumer", "feed-consum
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain.Tests", "feed-source\Domain.Tests\Domain.Tests.fsproj", "{E0F63351-FADB-4972-BDE7-D5F5731B8EE4}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proReactorCosmos", "proReactorCosmos", "{3E4CC1AC-FFA2-457E-9103-ACB497BCB270}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "proIndexer", "proIndexer", "{3E4CC1AC-FFA2-457E-9103-ACB497BCB270}"
 ProjectSection(SolutionItems) = preProject
-	propulsion-cosmos-reactor\.template.config\template.json = propulsion-cosmos-reactor\.template.config\template.json
+	propulsion-indexer\README.md = propulsion-indexer\README.md
+	propulsion-indexer\.template.config\template.json = propulsion-indexer\.template.config\template.json
+	propulsion-indexer\propulsion-indexer.sln = propulsion-indexer\propulsion-indexer.sln
 EndProjectSection
-EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Reactor", "propulsion-cosmos-reactor\Reactor.fsproj", "{3A22EA30-C741-41EA-9499-7C93E5EE29FA}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "periodicIngester", "periodicIngester", "{4738344F-839D-4B82-8417-1B2D298E76C2}"
 ProjectSection(SolutionItems) = preProject
@@ -180,6 +180,12 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Reactor", "propulsion-hotel\Reactor\Reactor.fsproj", "{0F4E4FF4-0471-4D1E-B80D-F6AB8EA87DD5}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Reactor.Integration", "propulsion-hotel\Reactor.Integration\Reactor.Integration.fsproj", "{36D15020-4ED7-49FE-B0C3-FC89C45655D2}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Indexer", "propulsion-indexer\Indexer\Indexer.fsproj", "{17DF28A5-3A3A-474F-B4E8-2AF30CE73C38}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "App", "propulsion-indexer\App\App.fsproj", "{233053E0-41B3-45CE-8EB0-93CCBCB8FF0D}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Domain", "propulsion-indexer\Domain\Domain.fsproj", "{4A9F4729-12F7-4423-8A27-012913E39A53}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -287,10 +293,6 @@ Global
 		{E0F63351-FADB-4972-BDE7-D5F5731B8EE4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E0F63351-FADB-4972-BDE7-D5F5731B8EE4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E0F63351-FADB-4972-BDE7-D5F5731B8EE4}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3A22EA30-C741-41EA-9499-7C93E5EE29FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3A22EA30-C741-41EA-9499-7C93E5EE29FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3A22EA30-C741-41EA-9499-7C93E5EE29FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3A22EA30-C741-41EA-9499-7C93E5EE29FA}.Release|Any CPU.Build.0 = Release|Any CPU
 		{AB0C8BC0-4C30-4177-9469-C06E97C9568E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{AB0C8BC0-4C30-4177-9469-C06E97C9568E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AB0C8BC0-4C30-4177-9469-C06E97C9568E}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -323,6 +325,18 @@ Global
 		{36D15020-4ED7-49FE-B0C3-FC89C45655D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{36D15020-4ED7-49FE-B0C3-FC89C45655D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{36D15020-4ED7-49FE-B0C3-FC89C45655D2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17DF28A5-3A3A-474F-B4E8-2AF30CE73C38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17DF28A5-3A3A-474F-B4E8-2AF30CE73C38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17DF28A5-3A3A-474F-B4E8-2AF30CE73C38}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17DF28A5-3A3A-474F-B4E8-2AF30CE73C38}.Release|Any CPU.Build.0 = Release|Any CPU
+		{233053E0-41B3-45CE-8EB0-93CCBCB8FF0D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{233053E0-41B3-45CE-8EB0-93CCBCB8FF0D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{233053E0-41B3-45CE-8EB0-93CCBCB8FF0D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{233053E0-41B3-45CE-8EB0-93CCBCB8FF0D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4A9F4729-12F7-4423-8A27-012913E39A53}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4A9F4729-12F7-4423-8A27-012913E39A53}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4A9F4729-12F7-4423-8A27-012913E39A53}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4A9F4729-12F7-4423-8A27-012913E39A53}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -351,7 +365,6 @@ Global
 		{28EBD7E4-6130-4444-B44F-BB741172A233} = {CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}
 		{FE141E84-1AA3-4136-BD7C-318AE7BD84A5} = {EDC5EB0D-EE6D-489A-B0B0-DA85ECDF04B2}
 		{E0F63351-FADB-4972-BDE7-D5F5731B8EE4} = {CF54228E-4DC5-4CE4-B5BC-B9A5D438B03F}
-		{3A22EA30-C741-41EA-9499-7C93E5EE29FA} = {3E4CC1AC-FFA2-457E-9103-ACB497BCB270}
 		{AB0C8BC0-4C30-4177-9469-C06E97C9568E} = {4738344F-839D-4B82-8417-1B2D298E76C2}
 		{B3B0C203-2648-432F-B49B-F9F8E1A4B4F1} = {A3A3AA9F-E039-4D1A-BA64-A8291A239861}
 		{2D673A49-19A2-41E9-B32E-E73FE05A8457} = {DAE9E2B9-EDA2-4064-B0CE-FD5294549374}
@@ -360,6 +373,9 @@ Global
 		{DE76D4BF-619A-4553-A113-6F8D83CE63D6} = {C76DEE36-C648-4351-9BB6-F4470D72D473}
 		{0F4E4FF4-0471-4D1E-B80D-F6AB8EA87DD5} = {C76DEE36-C648-4351-9BB6-F4470D72D473}
 		{36D15020-4ED7-49FE-B0C3-FC89C45655D2} = {C76DEE36-C648-4351-9BB6-F4470D72D473}
+		{17DF28A5-3A3A-474F-B4E8-2AF30CE73C38} = {3E4CC1AC-FFA2-457E-9103-ACB497BCB270}
+		{233053E0-41B3-45CE-8EB0-93CCBCB8FF0D} = {3E4CC1AC-FFA2-457E-9103-ACB497BCB270}
+		{4A9F4729-12F7-4423-8A27-012913E39A53} = {3E4CC1AC-FFA2-457E-9103-ACB497BCB270}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D8B64643-4049-466D-BAFC-0437B8C1E508}
