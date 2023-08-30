@@ -253,7 +253,7 @@ One can also do it manually:
 6. ❌ DONT [use `Result`](#dont-result) or a per-Aggregate `type Error`. ✅ [DO use minimal result types per decision function](#do-simplest-result)
 7. ❌ DONT [expose your `Fold.State`](#dont-expose-state) outside your Aggregate.
 8. ❌ DONT be a slave to CQRS for all read paths. ✅ [DO `AllowStale`](#do-allowstale) 🤔 [CONSIDER `QueryCurrent`](#consider-querycurrent)
-9. ❌ [DONT be a slave to the Command pattern](#dont-commands)
+9. ❌ [DONT be a slave to the Command pattern](#dont-commands) or Mediatr
 
 ## High level
 
