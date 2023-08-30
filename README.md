@@ -252,7 +252,7 @@ One can also do it manually:
 1. ✅ DO have global strongly typed id types in `namespace Domain`
 2. ❌ DONT have global `module Types`. AVOID per Aggregate `module Types` or top level `type` definitions
 3. ✅ DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decide, Service, Factory`. And keep grouping within that.
-4. ❌ DONT `open <Aggregate>`, `open <Aggregate>.Events`, `open <Aggregate>.Fold`
+4. ❌ DONT [`open <Aggregate>`](#dont-open-aggregate), [`open <Aggregate>.Events`](#dont-open-events) or [`open <Aggregate>.Fold`](#dont-open-fold)
 5. ✅ DO design for idempotency everywhere
 6. ❌ DONT use `Result` or a per-Aggregate `type Error`. DO use minimal result types per decision function
 7. ❌ DONT pass out `Fold.State` from a `Service`
@@ -598,11 +598,14 @@ member service.QueryCurrentState(tenantId) =
 
 ## Outside `module <Aggregate>`
 
+<a name="dont-open-aggregate"></a>
 ### ❌ DONT `open <Aggregate>`
 
-Ideally use the full name. If you can't help it, [use `module` aliases as outlined below](#outside-dont-open-events) instead. If you are opening it because you also need to touch the Fold State, [don't do that either](#outside-dont-open-fold).
+Ideally use the full name. If you can't help it, [use `module` aliases as outlined below](#dont-open-events) instead. If you are opening it because you also need to touch the Fold State, [don't do that either](#dont-open-fold).
 
-<a name="outside-dont-open-events"></a>
+Exception: for the unit tests associated with a single Aggregate, `open Aggregate` may make sense. As long as it's exactly that one `Aggregate`
+
+<a name="dont-open-events"></a>
 ### ❌ DONT `open <Aggregate>.Events`
 
 If you have logic in another module that is coupled to an event contract, you want that to stick out.
@@ -610,7 +613,49 @@ If you have logic in another module that is coupled to an event contract, you wa
 2. If the module is concerned with more than one Aggregate and there are less than 10 usages, prefix the consumption with `Aggregate.Events.`
 3. If the module is concerned with more than one Aggregate and there are many usages, or the name is long, alias it via `module AggEvents = AggregateWithLongName.Events.`
 
-<a name="outside-dont-open-fold"></a>
+Exception: In some cases, an `open Events`, _inside_ `module Fold` might be reasonable:
+
+```fsharp
+module Events = 
+
+    ...
+    
+ module Fold = 
+     open Events
+     let evolve state = function
+         | Increment -> state + 1
+         | Decrement -> state - 1
+```
+
+BUT, how much worse is it to have to read or type:
+
+```fsharp
+module Events = 
+
+    ...
+    
+module Fold = 
+
+    let evolve state = function
+        | Events.Increment -> state + 1
+        | Events.Decrement -> state - 1
+```
+
+Within `module Decisions`, it's normally best not to open it. i.e. whenever producing Events, simply prefix it:
+
+```fsharp
+module Events = 
+
+    ...
+    
+ module Decisions = 
+
+     module Counting =
+     
+         let increment state = [| if state < 10 then Events.Incremented |]
+```
+
+<a name="dont-open-fold"></a>
 ### ❌ DONT `open <Aggregate>.Fold`
 
 If you have external logic that is coupled to the State of an Aggregate and/or the related types, be explicit about that coupling; refer to `Aggregate.Fold.State` to make it clear. Or use the `ReadCached*` or `QueryCurrent*` patterns, which by definition return a specific type that is not the full `State` (and is not in the `Fold` namespace/module).
