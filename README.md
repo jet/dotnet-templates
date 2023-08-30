@@ -252,7 +252,7 @@ One can also do it manually:
 5. ✅ DO design for idempotency everywhere
 6. ❌ DONT use `Result` or a per-Aggregate `type Error`. DO use minimal result types per decision function
 7. ❌ DONT pass out `Fold.State` from a `Service`
-8. ❌ DONT be a slave to CQRS for all read paths. CONSIDER AllowStale. AVOID Query
+8. ❌ DONT be a slave to CQRS for all read paths. ✅[DO `AllowStale`](#do-allowstale). [CONSIDER `QueryCurrent`](#consider-querycurrent).
 9. ❌ [DONT be a slave to the Command pattern](#dont-commands)
 
 ## High level
@@ -539,13 +539,14 @@ member service.Read(tenantId) =
     decider.Query(fun state -> state)
 ```
 
+<a name="do-allowstale"></a>
 #### CONSIDER `ReadCached*` methods delegating to an internal generic `Query` with a `maxAge`:
 
 `LoadOption.AllowStale` is the preferred default strategy for all queries. This is for two reasons:
 1. if a cached version of the state fresher than the `maxAge` tolerance is available, you produce a result immediately and your store does less work
 2. even if a sufficiently fresh state is not available, all such reads are coalesced into a single store roundtrip. This means that the impact of read traffic on the workload hitting the store itself is limited to one read round trip per `maxAge` interval. 
 
-```fs
+```fsharp
 module Queries =
 
     let infoCachingPeriod = TimeSpan.FromSeconds 10.
@@ -566,6 +567,7 @@ type Service(resolve: ...)
         service.Query(Queries.infoCachingPeriod, Queries.renderPendingApprovals)      
 ```
 
+<a name="consider-querycurrent"></a>
 #### CONSIDER `QueryCurrent*` methods delegating to a `QueryRaw` helper
 
 While the `ReadCached*` pattern above is preferred, as it protect the store from unconstrained read traffic, there are cases where it's deemed necessary to be able to [Read Your Writes](https://www.allthingsdistributed.com/2007/12/eventually_consistent.html) 'as much as possible' at all costs.
