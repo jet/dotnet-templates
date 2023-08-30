@@ -253,9 +253,9 @@ One can also do it manually:
 2. ❌ DONT have global `module Types`. AVOID per Aggregate `module Types` or top level `type` definitions
 3. ✅ DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decide, Service, Factory`. And keep grouping within that.
 4. ❌ DONT [`open <Aggregate>`](#dont-open-aggregate), [`open <Aggregate>.Events`](#dont-open-events) or [`open <Aggregate>.Fold`](#dont-open-fold)
-5. ✅ DO design for idempotency everywhere
-6. ❌ DONT use `Result` or a per-Aggregate `type Error`. DO use minimal result types per decision function
-7. ❌ DONT pass out `Fold.State` from a `Service`
+5. ✅ DO design for idempotency everywhere. ❌ DONT [return TMI](#dont-return-tmi) that the world should not be taking a dependency on. 
+6. ❌ DONT [use `Result`](#dont-result) or a per-Aggregate `type Error`. ✅ [DO use minimal result types per decision function](#do-simplest-result)
+7. ❌ DONT [expose your `Fold.State`](#dont-expose-state) outside your Aggregate.
 8. ❌ DONT be a slave to CQRS for all read paths. ✅[DO `AllowStale`](#do-allowstale). [CONSIDER `QueryCurrent`](#consider-querycurrent).
 9. ❌ [DONT be a slave to the Command pattern](#dont-commands)
 
@@ -405,7 +405,7 @@ See [Events: AVOID including egregious identity information](#events-no-ids).
 
 ### 4. `module Decisions`
 
-<a name="decide-results-simple"></a>
+<a name="do-simplest-result"></a>
 #### ✅ DO use the simplest result type possible
 
 [Railway Oriented programming](https://fsharpforfunandprofit.com/rop) is a fantastic thinking tool. [Designing with types](https://fsharpforfunandprofit.com/series/designing-with-types/) is an excellent implementation strategy. [_Domain Modelling Made Functional_](https://fsharpforfunandprofit.com/books/) is a must read book. But it's critical to also consider the other side of the coin to avoid a lot of mess:
@@ -432,6 +432,7 @@ Each Decision function should have as specific a result contract as possible. In
 
 It's always sufficient to return a `bool` or `enum` to convey an outcome (but try to avoid even that). See [Fold: DONT log](#fold-no-log)
 
+<a name="dont-result"></a>
 #### ❌ DONT use a `Result` type
 
 Combining success and failures into one type because something will need to know suggests that there is a workflow. It's better to model that explicitly.
@@ -439,6 +440,43 @@ Combining success and failures into one type because something will need to know
 If your API has a common set of result codes that it can return, map to those later - the job here is to model the decisions.
 
 See [use the simplest result possible](#decide-results-simple).
+
+<a name="dont-return-tmi"></a>
+#### ❌ DONT return more status than necessary
+
+A corollary of designing for idempotency is that we don't want to have the caller care about whether a request triggered a change. If we need to test that, we can call the decision function and simply assert against the events it produced.
+
+```fsharp
+// ❌ DONT DO THIS!
+module Decisions =
+
+    let create name state =
+        if state <> Initial then AlreadyCreated, [||]
+        else Ok, [| Created { name = name } |] 
+```
+The world does not need to know that you correctly handled at least once delivery of a request that was retried when the wifi reconnected.
+
+Instead:
+```fsharp
+let create name = function
+    | Fold.Initial -> [| Events.Created { name = name } |]
+    | Fold.Running _ -> [||]
+
+...
+
+module ThingTests
+
+let [<Fact>] ``create generates Created`` () =
+    let state = Fold.Initial
+    let events = Decisions.create "tim" state
+    events =! [| Events.Created { name = "tim" } |]
+    
+let [<Fact>] ``create is idempotent`` () =
+    let state = Fold.Running ()
+    let events = Decisions.create "tim" state
+    events =! [||]
+```
+
 
 #### ❌ DONT share a common result type across multiple decision functions
 
@@ -527,7 +565,7 @@ Unless there is a single obvious boring rendition for a boring aggregate, you sh
 
 As with the guidance on [not using Lowest Common Denominator representations for results](#decide-results-simple), you want to avoid directly exposing the State
 
-<a name="query-no-state"></a>
+<a name="dont-expose-state"></a>
 ##### ❌ DONT having a public generic `Read` function that exposes the `Fold.State`
 
 The purpose of the Fold State is to facilitate making decisions correctly. It often has other concerns such as:
