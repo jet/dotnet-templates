@@ -243,7 +243,200 @@ One can also do it manually:
 
       $ dotnet new -u Equinox.Templates
 
+<a name="guidance"></a>
 # PATTERNS / GUIDANCE
+
+## Absolutes
+
+### 1. `module Aggregate`
+
+Having the Event Contracts, State and Decision logic in a single module can feel wrong when you get over e.g. 1000 lines of code; instincts to split the file on some basis will kick in. Don't do it; splitting the file is hiding complexity under the carpet.
+
+- ❌ DONT move the `module Events` out
+
+The Event Contracts are the most important contract that an Aggregate has - decision logic will churn endlessly. You might even implement logic against it in other languages. But the Event Contracts you define are permanent. As a developer fresh to a project, the event contracts are often the best starting point as you try to understand what a given aggregate is responsible for. 
+
+- ❌ DONT move the `module State`, or `evolve` logic out
+
+The State type and the associated `evolve` and `fold` functions are intimately tied to the Event Contracts. Over time, ugliness and upconversion can lead to noise, and temptation to move it out. Don't do it; being able to understand the full coupling is critical to understanding how things work, and equally critical to being able to change or add functions.
+
+- ❌ DONT move the decision logic out
+
+Decision logic bridges between the two worlds of State and Events. The State being held exists only to serve the Decision logic. The only reason for Event Contracts is to record Decisions. Trying to pretend that some of the Decisions are less important and hence should live elsewhere is rarely a good idea. How decisions are made, and how those decisions are encoded as Events should be encapsulated within the Aggregate.
+
+### 2. `module Events`
+
+Having the Event Contracts be their own `module` is a critical forcing function for good aggregate design. Having all types and all cases live in one place and being able to quickly determine where each Event is produced is key to being able to understand the moving parts of a system.
+
+<a name="events-no-ids"></a>
+- ❌ AVOID including egregious identity information
+
+When modelling, it's common to include primary identifiers (e.g. a user id), or contextual identifiers (e.g. a tenant id) in an Event in order to convey the relationships between events in the systems as a whole; you want the correlations to stand out. In the implementation however, repeating the identity information in every event is a major liability:
+1. the State needs to contain the values - that's more noise
+2. Event versioning gets messier - imagine extending a system to make it multi-tenant, you'd need to be able to handle all the historic events that predated the concept
+
+The alternative is for a workflow to react to the events in the context of a stream - if some logic needs to know the userid let the User reactor handing the User event on a User Stream pass thgat context forward if relevant in that context.
+
+- ❌ DONT `open Events` in an aggregate module
+
+Having to prefix types and/or Event Type names with `Events.` is a feature, not a bug. 
+
+## 3. `module Fold`
+
+<a name="fold-no-log"></a>
+- ❌ DONT log
+
+If Fold logic is not incredibly boring, that's a design smell. In general, you want to [make illegal States unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/). If you must, unit test it to satisfy yourself things can't go wrong.
+
+- ❌ DONT maintain identifiers and other information not required for decisions
+
+See [Events: AVOID including egregious identity information](#events-no-ids).
+
+## 4. `module Decisions`
+
+<a name="decide-results-simple"></a>
+- DO use the simplest result type possible
+
+[Railway Oriented programming](https://fsharpforfunandprofit.com/rop) is a fantastic thinking tool. [Designing with types](https://fsharpforfunandprofit.com/series/designing-with-types/) is an excellent implementation strategy. [_Domain Modelling Made Functional_](https://fsharpforfunandprofit.com/books/) is a must read book. But it's critical to also consider the other side of the coin to avoid a lot of mess:
+- [_Against Railway Oriented Programming_ by Scott Wlaschin](https://fsharpforfunandprofit.com/posts/against-railway-oriented-programming/). Scott absolutely understands the tradeoffs, but it's easy to forget them when reading the series 
+- [_you're better off using Exceptions_ by Eirik Tsarpalis)(https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
+
+Each Decision function should have as specific a result contract as possible. In order of preference:
+- `unit`: A function that idempotently maps the intent or request to internal Events based solely on the State is the ideal. Telling the world about what you did is not better. Logging what it did is not better than being able to trust it to do it's job. Unit tests should assert based on the produced Events as much as possible rather than relying on a return value.
+- `throw`: if something can go wrong, but it's not an anticipated first class part of the workflow, there's no point returning an `Error` result; [_you're better off using Exceptions_)(https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
+- `bool`: in some cases, an external system may need to know whether something is permitted or necessary. If that's all that's needed, don't return identifiers or messages give away extra information
+- _simple discriminated union_: the next step after a `true`/`false` is to make a simple discriminated union - you get a chance to name it, and the cases involved.
+- `string`: A string can be anything in any language. It can be `null`. It should not be used to convey a decision outcome.
+- `Result`: A result can be a success or a failure. both sides are generic. Its the very definition of a lowest common denominator.
+  - if it's required in a response transmission, map it out there; don't make the implementation logic messier and harder to test in order to facilitate that need.
+  - if it's because you want to convey some extra information that the event cannot convey, use a tuple, a record or a Discriminated Union 
+
+- ❌ DONT Log
+
+It's always sufficient to return a `bool` or `enum` to convey an outcome (but try to avoid even that). See [Fold: DONT log](#fold-no-log)
+
+- ❌ DONT use a `Result` type
+
+Combining success and failures into one type because something will need to know suggests that there is a workflow. It's better to model that explicitly.
+
+If your API has a common set of result codes that it can return, map to those later - the job here is to model the decisions.
+
+See [use the simplest result possible](#decide-results-simple).
+
+- ❌ DONT share a common result type across multiple decision functions
+
+If you have three outcomes for one decision, don't borrow that result type for a separate decision that only needs two. Just give it it's own type. See [use the simplest result possible](#decide-results-simple).
+
+- DO partition decision logic
+
+Most systems will have a significant number of Aggregates with low numbers of Events and Decisions. Having the Decision functions at the top level of the Aggregate Module can work well for those. Many people like to group such logic within a `module Decisions`, as it gives a good outline (`module Stream`, `module Events`, `module Reactions`, `module Fold`, `type Service`, `module Factory`) that allows one to quickly locate relevant artifacts and orient oneself in a less familiar area of the code. A key part of managing the complexity is to start looking for ways to group them into clumps of 3-10 related decision functions in a `module` within the overall `module Decisions` (or at top level in the file) as early as possible.
+
+<a name="module-queries"></a>
+## 5. `module Queries`
+
+The primary purpose of an Aggregate is to gather State and produce Events to facilitate making and recording of Decisions. There is no Law Of Event Sourcing that says you must at all times use CQRS to split all reads out to some secondary derived read model.
+
+In fact, in the the context of Equinox, the `AccessStrategy.RollingState`, `LoadOption.AllowStale` and `LoadOption.AnyCachedState` features each encourage borrowing the Decision State to facilitate rendering that state to users of the system directly.
+
+However, making pragmatic choices can also become unfettered hacking very quickly. As such the following apply.
+
+- DO use a `module Queries`
+
+Unless there is a single obvious boring rendition for a boring aggregate, you should have a type per Queyr
+
+- DO use view DTOs
+
+As with the guidance on [not using Lowest Common Denominator representations for results](#decide-results-simple), you want to avoid directly exposing the State
+
+<a name="query-no-state"></a>
+- ❌ DONT having a public generic `Read` function that exposes the `Fold.State`
+
+    The purpose of the Fold State is to facilitate making decisions correctly. It often has other concerns such as:
+    - being able to store and reload from a snapshot
+    - being able to validate inferences being made based on events are being made correctly in the context of tests
+    
+    Having it also be a read model DTO is a bridge too far:
+
+    ```fs
+      // ❌ DONT DO THIS!
+      member service.Read(tenantId) =
+          let decider = resolve tenantId
+          decider.Query(fun state -> state)
+   ```
+
+- CONSIDER `ReadCached*` methods delegating to an internal generic `Query` with a `maxAge`:
+
+   `LoadOption.AllowStale` is the preferred default strategy for all queries. This is for two reasons:
+    1. if a cached version of the state fresher than the `maxAge` tolerance is available, you produce a result immediately and your store does less work
+    2. even if a sufficiently fresh state is not available, all such reads are coalesced into a single store roundtrip. This means that the impact of read traffic on the workload hitting the store itself is limited to one read round trip per `maxAge` interval. 
+
+    ```fs
+    module Queries =
+  
+        let infoCachingPeriod = TimeSpan.FromSeconds 10.
+        type NameInfo = { name: string; contact: ContactInfo }
+        let renderName (state: Fold.State) = { name = state.originalName; contact = state.contactDetails } 
+        let renderPendingApprovals (state: Fold.State) = Fold.calculatePendingApprovals state
+  
+    type Service(resolve: ...)
+  
+        // NOTE: Query should be private
+        member private service.Query(maxAge: TimeSpan, tenantId, render: Fold.State -> 'r): Async<'r> =
+            let decider = resolve tenantId
+            decider.Query(render, load = Equinox.LoadOption.AllowStale maxAge)
+      
+        member service.ReadCachedName(tenantId): Async<Queries.NameInfo> =
+            service.Query(Queries.infoCachingPeriod, Queries.renderName)      
+        member service.ReadPending(tenantId): Async<int> =
+            service.Query(Queries.infoCachingPeriod, Queries.renderPendingApprovals)      
+    ```
+
+- CONSIDER `QueryCurrent*` methods delegating to a `QueryRaw` helper
+
+  While the `ReadCached*` pattern above is preferred, as it protect the store from unconstrained read traffic, there are cases where it's deemed necessary to be able to [Read Your Writes](https://www.allthingsdistributed.com/2007/12/eventually_consistent.html) 'as much as possible' at all costs.
+
+  TL;DR you should really be doing the `ReadCached` pattern.
+
+  The first thing to note is that you need to be sure you're actually meeting that requirement. For instance, if you are using EventStoreDB, DynamoDB or MessageDB, you will want to `RequireLeader` for it to be meaningful (otherwise a read, (yes, even one served from the same application instance) might be read from a replica that has yet to see the latest state). For [CosmosDB in `Session` consistency mode, similar concerns apply](https://github.com/jet/equinox/issues/192)
+
+  It's also important to consider the fact that any read, no matter how consistent it is at the point of reading, is also instantly stale data the instant it's been performed. 
+
+  :warning: `QueryRaw` should stay `private`
+  
+   ```fs
+        // NOTE: the QueryRaw helper absolutely needs to stay private 
+        member private service.QueryRaw(tenantId, render) =
+            let decider = resolve tenantId
+            decider.Query(render, Equinox.LoadOption.RequireLeader)
+
+        member service.QueryCurrentState(tenantId) =
+            service.QueryRaw(Queries.renderState)        
+   ```
+
+## Outside `module <Aggregate>`
+
+- ❌ DONT `open <Aggregate>`
+
+Ideally use the full name. If you can't help it, [use `module` aliases as outlined below](#outside-dont-open-events) instead. If you are opening it because you also need to touch the Fold State, [don't do that either](#outside-dont-open-fold).
+
+<a name="outside-dont-open-events"></a>
+- ❌ DONT `open <Aggregate>.Events`
+
+If you have logic in another module that is coupled to an event contract, you want that to stick out.
+1. If the module is concerned with exactly one Aggregate, you can alias it via: `module Events = Aggregate.Events`
+2. If the module is concerned with more than one Aggregate and there are less than 10 usages, prefix the consumption with `Aggregate.Events.`
+3. If the module is concerned with more than one Aggregate and there are many usages, or the name is long, alias it via `module AggEvents = AggregateWithLongName.Events.`
+
+<a name="outside-dont-open-fold"></a>
+- ❌ DONT `open <Aggregate>.Fold`
+
+If you have external logic that is coupled to the State of an Aggregate and/or the related types, be explicit about that coupling; refer to `Aggregate.Fold.State` to make it clear. Or use the `ReadCached*` or `QueryCurrent*` patterns, which by definition return a specific type that is not the full `State` (and is not in the `Fold` namespace/module).
+
+## General
+
+### DONT use global types
+
+While it's tempting to have a `Types.fs` that centralizes and summarizes 
 
 ## Use Strongly typed ids
 
