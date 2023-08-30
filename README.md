@@ -256,7 +256,7 @@ One can also do it manually:
 5. DO design for idempotency everywhere
 6. DONT use `Result` or a per-Aggregate `type Error`. DO use minimal result types per decision function
 7. DONT pass out `Fold.State` from a `Service`
-8. DONT be a slave to CQRS for all read paths. CONSIDER AllowState. AVOID Query
+8. DONT be a slave to CQRS for all read paths. CONSIDER AllowStale. AVOID Query
 9. DONT be a slave to the Command pattern
 
 ## High level
