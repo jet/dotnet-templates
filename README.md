@@ -245,19 +245,19 @@ One can also do it manually:
 <a name="tldr"></a>
 ## TL;DR
 
-1. DO have global strongly typed id types in `namespace Domain`
-2. DON'T have global `module Types`. AVOID per Aggregate `module Types` or top level `type` definitions
-3. DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decide, Service, Factory`. And keep grouping within that.
-4. DONT `open <Aggregate>`, `open <Aggregate>.Events`, `open <Aggregate>.Fold`
-5. DO design for idempotency everywhere
-6. DONT use `Result` or a per-Aggregate `type Error`. DO use minimal result types per decision function
-7. DONT pass out `Fold.State` from a `Service`
-8. DONT be a slave to CQRS for all read paths. CONSIDER AllowStale. AVOID Query
-9. DONT be a slave to the Command pattern
+1. ✅ DO have global strongly typed id types in `namespace Domain`
+2. ❌ DONT have global `module Types`. AVOID per Aggregate `module Types` or top level `type` definitions
+3. ✅ DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decide, Service, Factory`. And keep grouping within that.
+4. ❌ DONT `open <Aggregate>`, `open <Aggregate>.Events`, `open <Aggregate>.Fold`
+5. ✅ DO design for idempotency everywhere
+6. ❌ DONT use `Result` or a per-Aggregate `type Error`. DO use minimal result types per decision function
+7. ❌ DONT pass out `Fold.State` from a `Service`
+8. ❌ DONT be a slave to CQRS for all read paths. CONSIDER AllowStale. AVOID Query
+9. ❌ [DONT be a slave to the Command pattern](#dont-commands)
 
 ## High level
 
-- ❌ DONT have a global `Types.fs`
+### ❌ DONT have a global `Types.fs`
 
 F# really shines at succinctly laying out a high level design for a system; see [_Designing with types_ by Scott Wlaschin for many examples](https://fsharpforfunandprofit.com/series/designing-with-types/).
 
@@ -266,7 +266,7 @@ For an event sourced system, if anything, this is even more true - it's not unco
 It's important not to take this too far though - ultimately as a system grows, the key constraint of the fact that Events ultimately need to be Grouped in Categories of Streams needs to become then organising function.
 
 <a name="global-dont-share-types"></a>
-- ❌ DONT share types across Aggregates / Categories
+### ❌ DONT share types across Aggregates / Categories
 
 There are sometimes legitimate when cases where two Aggregates have overlapping concerns. It can be very tempting to put the common types into a central place and Just Share the contracts. This should be avoided. Instead:
 
@@ -283,10 +283,12 @@ type EntityContext = { name: string; area: string }
 // <Aggregate>.fs
 module Aggregate
 
+open Domain.Types
+
 module Events =
 
     type Event =
-        | Created of {| creator: UserId; context: Types.EntityContext |}
+        | Created of {| creator: UserId; context: EntityContext |}
         ...
 
 // <Aggregate2>.fs
@@ -304,9 +306,25 @@ Instead:
 - [sharing id types is fine](#global-do-share-ids)
 
 <a name="global-do-share-ids"></a>
-- DO have global strongly typed ids
+### ✅ DO have global strongly typed ids
 
 While [sharing the actual types is a no-no](#global-dont-share-types), having common id types is perfectly reasonable
+
+```fsharp
+module Domain.Types
+
+type UserId = ...
+type TenantId = ...
+
+...
+
+module Domain.User
+
+module Events =
+
+    type Joined = { tenant: TenantId; authorizedBy: UserId }
+
+```
 
 - CONSIDER UMX for non-serialized ids
 
@@ -317,15 +335,15 @@ Wherever possible, the templates use use strongly type identifiers, particularly
     - Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them is not a central concern as we load and fold these incontrovertible Facts)
     - Model binding in ASP.NET (because the types de-sugar to the primitives, no special support is required). _Unlike events, there are more considerations in play in this context though; often you'll want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/). Often, Single Case Discriminated Unions can be a better tool inb that context_
 
-- DO Have a helper `module` per id type
+### ✅ DO Have a helper `module` per id type
 
 TODO write this up
 
-- CONSIDER UMX `Guid`s for serialized ids
+### CONSIDER UMX `Guid`s for serialized ids
 
 TODO write this up
 
-- CONSIDER UMX `strings` for serialized ids
+### CONSIDER UMX `strings` for serialized ids
 
 TODO write this up
 
@@ -334,7 +352,7 @@ TODO write this up
 ### 1. `module Aggregate`
 
 <a name="aggregate-module"></a>
-#### DO stick to the `module <Aggregate>` conventions
+#### ✅ DO stick to the `module <Aggregate>` conventions
 
 There are established conventions documented in [Equinox's `module Aggregate` overview](https://github.com/jet/equinox/blob/master/DOCUMENTATION.md#aggregate-module)
 
@@ -384,7 +402,7 @@ See [Events: AVOID including egregious identity information](#events-no-ids).
 ### 4. `module Decisions`
 
 <a name="decide-results-simple"></a>
-#### DO use the simplest result type possible
+#### ✅ DO use the simplest result type possible
 
 [Railway Oriented programming](https://fsharpforfunandprofit.com/rop) is a fantastic thinking tool. [Designing with types](https://fsharpforfunandprofit.com/series/designing-with-types/) is an excellent implementation strategy. [_Domain Modelling Made Functional_](https://fsharpforfunandprofit.com/books/) is a must read book. But it's critical to also consider the other side of the coin to avoid a lot of mess:
 - [_Against Railway Oriented Programming_ by Scott Wlaschin](https://fsharpforfunandprofit.com/posts/against-railway-oriented-programming/). Scott absolutely understands the tradeoffs, but it's easy to forget them when reading the series 
@@ -395,6 +413,12 @@ Each Decision function should have as specific a result contract as possible. In
 - `throw`: if something can go wrong, but it's not an anticipated first class part of the workflow, there's no point returning an `Error` result; [_you're better off using Exceptions_](https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
 - `bool`: in some cases, an external system may need to know whether something is permitted or necessary. If that's all that's needed, don't return identifiers or messages give away extra information
 - _simple discriminated union_: the next step after a `true`/`false` is to make a simple discriminated union - you get a chance to name it, and the cases involved.
+- record, anonymous record, tuple: returning multiple items is normally best accomplished via a named record type.
+  - the caller gets to use a clear name per field
+  - how it's encoded in the State type can vary over time without consumption sites needing to be revisited
+  - extra fields can be added later, without each layer through which the response travels needing to be adjusted
+  - the caller gets to pin the exact result type via a type annotation (either in the `Service`'s `member` return type, or at the call site) - this is not possible if it's an anonymous record
+  :bulb: in some cases it a tuple can be a better encoding if it's important that each call site explicitly consume each part of the result
 - `string`: A string can be anything in any language. It can be `null`. It should not be used to convey a decision outcome.
 - `Result`: A result can be a success or a failure. both sides are generic. Its the very definition of a lowest common denominator.
   - if it's required in a response transmission, map it out there; don't make the implementation logic messier and harder to test in order to facilitate that need.
@@ -416,9 +440,71 @@ See [use the simplest result possible](#decide-results-simple).
 
 If you have three outcomes for one decision, don't borrow that result type for a separate decision that only needs two. Just give it it's own type. See [use the simplest result possible](#decide-results-simple).
 
-#### DO partition decision logic
+#### ✅ DO partition decision logic
 
 Most systems will have a significant number of Aggregates with low numbers of Events and Decisions. Having the Decision functions at the top level of the Aggregate Module can work well for those. Many people like to group such logic within a `module Decisions`, as it gives a good outline (`module Stream`, `module Events`, `module Reactions`, `module Fold`, `type Service`, `module Factory`) that allows one to quickly locate relevant artifacts and orient oneself in a less familiar area of the code. A key part of managing the complexity is to start looking for ways to group them into clumps of 3-10 related decision functions in a `module` within the overall `module Decisions` (or at top level in the file) as early as possible.
+
+<a name="dont-commands"></a>
+#### ❌ DONT be a slave to the Command pattern
+
+The bulk of introductory material on the Decider pattern, and event sourcing in general uses the Command pattern as if it's a central part of the architecture. That's not unreasonable; it's a proven pattern that's useful in a variety of contexts.
+
+Some positives of the pattern are:
+- one can route any number of commands through any number of layers without having to change anything to add a new command
+- it can be enable applying cross-cutting logic uniformly
+- when implemented as Discriminated Unions in F#, the code can be very terse, and you can lean on total matching etc.
+- In some cases it can work well with property based testing; the entirety of an Aggregate's Command Handling can be covered via Property Based Testing etc
+
+However, it's also just a pattern. It has negatives; some:
+- if you have a single command handler, the result type is forced to be a lowest common denominator
+- the code can actually end up longer and harder to read, but still anaemic in terms of modelling the domain properly
+
+    ```fsharp
+    module Decisions =
+        type Command = Increment | Decrement
+        let decide command state =
+            match command with
+            | Increment by -> if state = 10 then [||] else [| Events.Incremented |]
+            | Decrement -> if state = 0 then [|] else [| Events.Decremented |]
+            | Reset -> if state = 0 then [||] else [| Events.Reset |]
+    type Service(resolve: ...) =
+        member _.Execute(id, c) =
+            let decider = resolve id
+            decider.Transact(Decisions.decide c)
+    type App(service: Service, otherService: ...) =
+        member _.Execute(id, cmd) =
+            if otherService.Handle(id, cmd) then 
+                service.Execute(id, cmd)
+    type Controller(app: App) =
+        member _.Reset(id) =
+            app.Execute(id, Aggregate.Command.Reset)
+    ```
+
+    If you instead use methods with argument lists to convey the same information, there's more opportunity to let the intention be conveyed in the code.
+
+    ```fsharp
+    module Decisions =
+        let increment state = [| if state < 10 then Events.Incremented |]
+        let reset _state = [| if state <> 0 then Events.Reset |]
+    type Service(resolve: ...) =
+        member _.Reset id =
+            let decider = resolve id
+            decider.Transact Decisions.reset
+        member _.Increment(id, ?by) =
+            let decider = resolve id
+            decider.Transact Decisions.increment
+    type App(service: Service, otherService: ...) =
+        member _.HandleFrob(id) =
+            if otherService.AttemptFrob() then
+                service.Increment(id)
+        member _.Reset(id) =
+            service.Reset(id)
+    type Controller(app: App) =
+        member _.Frob() =
+            app.HandleFrob id
+        member _.Reset() =
+            app.Reset id
+    ```
 
 <a name="module-queries"></a>
 ### 5. `module Queries`
@@ -429,11 +515,11 @@ In fact, in the the context of Equinox, the `AccessStrategy.RollingState`, `Load
 
 However, making pragmatic choices can also become unfettered hacking very quickly. As such the following apply.
 
-#### DO use a `module Queries`
+#### ✅ DO use a `module Queries`
 
 Unless there is a single obvious boring rendition for a boring aggregate, you should have a type per Queyr
 
-#### DO use view DTOs
+#### ✅ DO use view DTOs
 
 As with the guidance on [not using Lowest Common Denominator representations for results](#decide-results-simple), you want to avoid directly exposing the State
 
