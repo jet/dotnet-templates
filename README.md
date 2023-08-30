@@ -392,11 +392,11 @@ See [Events: AVOID including egregious identity information](#events-no-ids).
 
 [Railway Oriented programming](https://fsharpforfunandprofit.com/rop) is a fantastic thinking tool. [Designing with types](https://fsharpforfunandprofit.com/series/designing-with-types/) is an excellent implementation strategy. [_Domain Modelling Made Functional_](https://fsharpforfunandprofit.com/books/) is a must read book. But it's critical to also consider the other side of the coin to avoid a lot of mess:
 - [_Against Railway Oriented Programming_ by Scott Wlaschin](https://fsharpforfunandprofit.com/posts/against-railway-oriented-programming/). Scott absolutely understands the tradeoffs, but it's easy to forget them when reading the series 
-- [_you're better off using Exceptions_ by Eirik Tsarpalis)(https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
+- [_you're better off using Exceptions_ by Eirik Tsarpalis](https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
 
 Each Decision function should have as specific a result contract as possible. In order of preference:
 - `unit`: A function that idempotently maps the intent or request to internal Events based solely on the State is the ideal. Telling the world about what you did is not better. Logging what it did is not better than being able to trust it to do it's job. Unit tests should assert based on the produced Events as much as possible rather than relying on a return value.
-- `throw`: if something can go wrong, but it's not an anticipated first class part of the workflow, there's no point returning an `Error` result; [_you're better off using Exceptions_)(https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
+- `throw`: if something can go wrong, but it's not an anticipated first class part of the workflow, there's no point returning an `Error` result; [_you're better off using Exceptions_](https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
 - `bool`: in some cases, an external system may need to know whether something is permitted or necessary. If that's all that's needed, don't return identifiers or messages give away extra information
 - _simple discriminated union_: the next step after a `true`/`false` is to make a simple discriminated union - you get a chance to name it, and the cases involved.
 - `string`: A string can be anything in any language. It can be `null`. It should not be used to convey a decision outcome.
@@ -473,7 +473,7 @@ module Queries =
 
 type Service(resolve: ...)
 
-    // NOTE: Query should be private
+    // NOTE: Query should remain private; expose each relevant projection as a `Read*` method
     member private service.Query(maxAge: TimeSpan, tenantId, render: Fold.State -> 'r): Async<'r> =
         let decider = resolve tenantId
         decider.Query(render, load = Equinox.LoadOption.AllowStale maxAge)
@@ -497,7 +497,7 @@ It's also important to consider the fact that any read, no matter how consistent
 :warning: `QueryRaw` should stay `private`
   
 ```fs
-// NOTE: the QueryRaw helper absolutely needs to stay private 
+// NOTE: the QueryRaw helper absolutely needs to stay private. Expose queries only as specific `QueryCurrent*` methods  
 member private service.QueryRaw(tenantId, render) =
     let decider = resolve tenantId
     decider.Query(render, Equinox.LoadOption.RequireLeader)
