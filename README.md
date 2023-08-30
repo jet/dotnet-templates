@@ -247,7 +247,7 @@ One can also do it manually:
 
 1. DO have global strongly typed id types in `namespace Domain`
 2. DONT have global `module Types`. AVOID per Aggregate `module Types` or top level `type` definitions
-3. DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decisions, Service, Factory`. And keep grouping within that.
+3. DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decide, Service, Factory`. And keep grouping within that.
 4. DONT `open <Aggregate>`, `open <Aggregate>.Events`, `open <Aggregate>.Fold`
 5. DO design for idempotency everywhere
 6. DONT use `Result` or a per-Aggregate `type Error`. DO use minimal result types per decision function
