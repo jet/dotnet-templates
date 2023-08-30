@@ -242,7 +242,87 @@ One can also do it manually:
 <a name="guidance"></a>
 # PATTERNS / GUIDANCE
 
-## Absolutes
+<a name="tldr"></a>
+## TL;DR
+
+1. DO have global id types in `namespace Domain`
+2. DONT have global `module Types`. AVOID per Aggregate `module Types` or top level `type` definitions
+3. DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decisions, Service, Factory`. And keep grouping within that.
+4. DONT `open <Aggregate>`, `open <Aggregate>.Events`, `open <Aggregate>.Fold`
+5. DO design for idempotency everywhere
+6. DONT use `Result` or a per-Aggregate `type Error`. DO use minimal result types per decision function
+7. DONT pass out `Fold.State` from a `Service`
+8. DONT be a slave to CQRS for all read paths. CONSIDER AllowState. AVOID Query
+9. DONT be a slave to the Command pattern
+
+## High level
+
+- ❌ DONT have a global `Types.fs`
+
+F# really shines at succinctly laying out a high level design for a system; see [_Designing with types_ by Scott Wlaschin for many examples](https://fsharpforfunandprofit.com/series/designing-with-types/).
+
+For an event sourced system, if anything, this is even more true - it's not uncommon to be able to convey the key moving parts of a system in a manner that's legible for both technical and non-technical stakeholders.
+
+It's important not to take this too far though - ultimately as a system grows, the key constraint of the fact that Events ultimately need to be Grouped in Categories of Streams needs to become then organising function.
+
+<a name="global-dont-share-types"></a>
+- ❌ DONT share types across Aggregates / Categories
+
+There are sometimes legitimate when cases where two Aggregates have overlapping concerns. It can be very tempting to put the common types into a central place and Just Share the contracts. This should be avoided. Instead:
+
+```fs
+❌ DONT DO THIS
+
+// <Types.fs>
+module Domain.Types
+
+type EntityContext = { name: string; area: string }
+
+...
+
+// <Aggregate>.fs
+module Aggregate
+
+module Events =
+
+    type Event =
+        | Created of {| creator: UserId; context: Types.EntityContext |}
+        ...
+
+// <Aggregate2>.fs
+module Aggregate2
+
+module Events =
+
+    type Event =
+        | Copied of {| by: UserId; context: Types.EntityContext |}
+        ...
+```
+
+Instead:
+- have each `module <Aggregate>` have its own version of each type that will be used in an event _within its `module Events`_. (The `decide` function can map from an input type if desired, but the important thing is that the Aggregate will need to be able to roundtrip its types in perpetuity, and having to disentangle the overlap between more than on Aggregate is simply never a good tradeoff) 
+- [sharing id types is fine](#global-do-share-ids)
+
+<a name="global-do-share-ids"></a>
+- DO have global generic id types
+
+While [sharing the actual types is a no-no](#global-dont-share-types), having common id types is perfectly reasonable
+
+- DO Have a helper `module` per id type
+
+- CONSIDER UMX for non-serialized ids
+
+TODO write this up
+
+- CONSIDER UMX `Guid`s for serialized ids
+
+TODO write this up
+
+- CONSIDER UMX `strings` for serialized ids
+
+TODO write this up
+
+## Code structure
 
 ### 1. `module Aggregate`
 
