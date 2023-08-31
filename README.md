@@ -400,9 +400,28 @@ The Event Contracts are the most important contract that an Aggregate has - deci
 
 The State type and the associated `evolve` and `fold` functions are intimately tied to the Event Contracts. Over time, ugliness and upconversion can lead to noise, and temptation to move it out. Don't do it; being able to understand the full coupling is critical to understanding how things work, and equally critical to being able to change or add functions.
 
+<a name="dont-remove-decisions"></a>
 #### ❌ DONT move the decision logic out
 
-Decision logic bridges between the two worlds of State and Events. The State being held exists only to serve the Decision logic. The only reason for Event Contracts is to record Decisions. Trying to pretend that some of the Decisions are less important and hence should live elsewhere is rarely a good idea. How decisions are made, and how those decisions are encoded as Events should be encapsulated within the Aggregate.
+Decision logic bridges between the two worlds of State and Events.
+The State being held exists only to serve the Decision logic.
+The only reason for Event Contracts is to record Decisions.
+Trying to pretend that some of the Decisions are less important and hence should live elsewhere is rarely a good idea.
+How decisions are made, and how those decisions are encoded as Events should be encapsulated within the Aggregate.
+
+In some cases, it can make sense for a decision function to be a skeleton function that passes out to some helper functions that it's passed to assist in the decision making and/or composing some details that go into the event body.
+Sometimes these functions are best passed as arguments to the Service Method that will call the decision function.
+In other cases, the relevant helper functions can be passed to the `type Service` as arguments when it's being constructed in the `Factory`.
+
+The critical bit is that the bits that need to touch the State and/or generate Events should not leave the `module Aggregate`, as there is not better place in the system for that to live.
+
+This is akin to the maxim (from [the GOOS book](http://www.growing-object-oriented-software.com) of _Listen to your Tests_: If a given Aggregate has too many responsibilities, that's feedback you should be using to your advantage, not lamenting or ignoring:
+
+- if an aggregate consumes or produces an extraordinary number of event types, maybe there's an axis on which they can be split?
+- if there are multiple splittable pieces of state in the overall State, maybe you need two aggregates over the same stream? Or two sibling categories that share an id?
+- should some of the logic and/or events be part of an adjacent aggregate? (why should a Cart have Checkout flow elements in it?)
+- if there are many decision functions, is that a sign that there's a missing workflow or process manager that should be delegating some (cohesive) responsibolities to this aggregate?
+- if a decision function is 300 lines, but only 5 lines touch the state and only 4 lines produce an event, can you extract just that logic to a single boring module that can be unit tested independent of how the State and Events are ultimately maintained?
 
 ### 2. `module Events`
 
