@@ -245,7 +245,7 @@ One can also do it manually:
 <a name="tldr"></a>
 ## TL;DR
 
-1. ✅ DO have global strongly typed id types in `namespace Domain`
+1. ✅ DO define [strongly typed ids](#do-id-type) and a `type Store.Config` in `namespace Domain`
 2. ❌ DONT have global `module Types`. AVOID per Aggregate `module Types` or top level `type` definitions
 3. ✅ DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decide, Service, Factory`. And keep grouping within that.
 4. ❌ DONT [`open <Aggregate>`](#dont-open-aggregate), [`open <Aggregate>.Events`](#dont-open-events) or [`open <Aggregate>.Fold`](#dont-open-fold)
@@ -373,12 +373,40 @@ TODO write up the fact that while UMX is a good default, there are nuances wrt G
 - not actually part of JSON
 - provides some XSS/null protection but is that worth it
 
-### DONT use SCDUs for ids
+### ❌ DONT use SCDUs for ids
 
 TODO write something in more depth
 
 - https://paul.blasuc.ci/posts/really-scu.html
 - https://paul.blasuc.ci/posts/even-more-scu.html
+
+<a name="do-store-config"></a>
+#### ✅ DO define a `Store.Config` type
+
+It's correct to say that few systems actually switch databases in real life. Defining a `type` that holds only a `*StoreContext` and a `Cache` can feel like pointless abstraction.
+
+In `populsion-hotel`, we have:
+
+```fsharp
+[<RequireQualifiedAccess; NoComparison; NoEquality>]
+type Config =
+    | Memory of Equinox.MemoryStore.VolatileStore<struct (int * System.ReadOnlyMemory<byte>)>
+    | Dynamo of Equinox.DynamoStore.DynamoStoreContext * Equinox.Cache
+    | Mdb    of Equinox.MessageDb.MessageDbContext * Equinox.Cache
+```
+
+Clearly, not many systems are deployed that arbitrarily target MessageDB or DynamoDB
+
+More common is the configuration in: `propulsion-cosmos-reactor`:
+
+```fsharp
+[<NoComparison; NoEquality; RequireQualifiedAccess>]
+type Config =
+    | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
+```
+
+The advantage of still having a `type Config` in place is to be able to step in and generalize things 
+
 
 ## Code structure
 
