@@ -518,7 +518,7 @@ let [<Fact>] ``generated correct events` () =
     let streamName = FsCodec.StreamName.create Tenant.Stream.Category id
 ```
 
-Instead, keep the `module Streams` private, expose things via a `module Reactions`, and have clearer consumption code:
+Instead, keep the `module Streams` private:
 
 ```fsharp
 module private Stream =
@@ -530,6 +530,8 @@ module private Stream =
     let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 ```
 
+selectively expose a relevant interface via a `module Reactions` facade:
+
 ```fsharp
 // ✅ GOOD expose all reactions and test integration helpers via a Reactions facade
 module Reactions =
@@ -540,11 +542,16 @@ module Reactions =
     let streamName = Stream.name
     let [<return: Struct>] (|For|_|) = Stream.tryDecode
     // ✅ OK generic decoding function (but next ones are better...)
+    let dec = Streams.Codec.dec<Events.Event>
     let [<return: Struct>] (|Decode|_|) = function
         | struct (For id, _) & Streams.Decode dec events -> ValueSome struct (id, events)
         | _ -> ValueNone
     let deletionNamePrefix tenantIdStr = $"%s{Stream.Category}-%s{tenantIdStr}"
+```
 
+in some cases, the filtering and/or classification functions can be more than just simple forwarding functions:
+
+```fsharp
     // ✅ GOOD - better than sprinkling `nameof(Aggregate..Events.Completed)` in an adjacent `module`
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
@@ -557,11 +564,9 @@ module Reactions =
             if events |> Array.exists impliesStateChange then ImpliesStateChange (tenantId, events.Length)
             else NoStateChange events.Length
         | _, events -> NotApplicable events.Length
-
-    let dec = Streams.Codec.dec<Events.Event>
 ```
 
-And the consumption logic looks cleaner:
+Ultimately, the consumption logic becomes clearer, and is less intimately intertwined with the implementation:
 
 ```fsharp
 // ✅ GOOD
@@ -575,18 +580,28 @@ let handle (stream, events) = async {
         // ... 
 ```
 
+or:
+
 ```fsharp
-// ✅ BETTER - intention revealing names, classification encapslated close to the events
+// ✅ BETTER - intention revealing names, classification encapsulated close to the events
 module TenantNotifications
 
 let categories = [ Tenant.Reactions.categoryName ]
 
 let handle (stream, events) = async {
-    match stream, events with
-    | Tenant.Reactions.ImpliesStateChange tenantId ->
-        // ... 
+    match struct (stream, events) with
+    | Todo.Reactions.ImpliesStateChange (clientId, eventCount) ->
+        let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
+        let wrapped = generate stream version' (Contract.Summary summary)
+        let! _ = produceSummary wrapped
+        return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
+    | Todo.Reactions.NoStateChange eventCount ->
+        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped eventCount
+    | Todo.Reactions.NotApplicable eventCount ->
+        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable eventCount }
 ```
-And the tests:
+
+The helpers can make tests terser, and make it easier to :
 
 ```fsharp
 // ✅ BETTER - intention revealing names, classification encapslated close to the events
@@ -597,7 +612,7 @@ let [<Fact>] ``generated correct events` () =
     let streamName = Tenant.Reactions.streamName id
 ```
 
-### 4. `module Fold`
+### 5. `module Fold`
 
 <a name="fold-dont-log"></a>
 #### ❌ DONT log
@@ -612,7 +627,7 @@ In general, you want to [make illegal States unrepresentable](https://fsharpforf
 
 See [Events: AVOID including egregious identity information](#events-no-ids).
 
-### 5. `module Decisions`
+### 6. `module Decisions`
 
 <a name="do-simplest-result"></a>
 #### ✅ DO use the simplest result type possible
@@ -758,7 +773,7 @@ However, it's also just a pattern. It has negatives; some:
     ```
 
 <a name="module-queries"></a>
-### 6. `module Queries`
+### 7. `module Queries`
 
 The primary purpose of an Aggregate is to gather State and produce Events to facilitate making and recording of Decisions. There is no Law Of Event Sourcing that says you must at all times use CQRS to split all reads out to some secondary derived read model.
 
