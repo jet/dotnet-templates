@@ -309,10 +309,10 @@ Instead:
 - have each `module <Aggregate>` have its own version of each type that will be used in an event _within its `module Events`_. (The `decide` function can map from an input type if desired, but the important thing is that the Aggregate will need to be able to roundtrip its types in perpetuity, and having to disentangle the overlap between more than on Aggregate is simply never a good tradeoff) 
 - [sharing id types is fine](#global-do-share-ids)
 
-<a name="global-do-share-ids"></a>
+<a name="do-id-type"></a>
 ### ✅ DO have global strongly typed ids
 
-While [sharing the actual types is a no-no](#global-dont-share-types), having common id types is perfectly reasonable
+While [sharing the actual types is a no-no](#global-dont-share-types), having common id types is perfectly reasonable. It's extremely valuable for these to be strongly typed.
 
 ```fsharp
 module Domain.Types
@@ -330,7 +330,27 @@ module Events =
 
 ```
 
-- CONSIDER UMX for non-serialized ids
+<a name="do-id-module"></a>
+### ✅ DO Have a helper `module` per id type
+
+Per [strongly-typed id `type`](#do-id-type), having an associated `module` with the same name alongside works well.
+This enables one to quickly identify and/or navigate the various ways in which such ids are generated/parsed and/or validated.
+
+```fsharp
+namespace Domain
+
+type UserId = Guid<userId>
+and [<Measure>] userId
+
+module UserId =
+    let private ofGuid (id: Guid): UserId = %id 
+    let private toGuid (id: UserId): Guid = %id
+
+    let parse (input: string): UserId = input |> Guid.Parse |> ofGuid
+    let toString (x: UserId): string = (toGuid x).ToString "N"
+```
+
+### CONSIDER UMX for ids not used in storage contracts
 
 Wherever possible, the templates use use strongly type identifiers, particularly ones that might naturally be represented as primitives, i.e. `string` etc.
 
@@ -339,17 +359,30 @@ Wherever possible, the templates use use strongly type identifiers, particularly
     - Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them is not a central concern as we load and fold these incontrovertible Facts)
     - Model binding in ASP.NET (because the types de-sugar to the primitives, no special support is required). _Unlike events, there are more considerations in play in this context though; often you'll want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/). Often, Single Case Discriminated Unions can be a better tool inb that context_
 
-### ✅ DO Have a helper `module` per id type
+### CONSIDER UMX `strings` for serialized ids
 
-TODO write this up
+TODO write up the fact that while UMX is a good default, there are nuances wrt string ones
+
+- case sensitive
+- works transparently for most serializers, also works for model binding
+- how/do you validate nulls/lengths, xss protection, rejecting massive ones
+- if you use UMX, when/how will you validate
 
 ### CONSIDER UMX `Guid`s for serialized ids
 
-TODO write this up
+TODO write up the fact that while UMX is a good default, there are nuances wrt Guid ones
 
-### CONSIDER UMX `strings` for serialized ids
+- parsing needs to not be sensitive to case
+- rendering with or without dashes/braces - can be messy with configuring json serializers
+- not actually part of JSON
+- provides some XSS/null protection but is that worth it
 
-TODO write this up
+### DONT use SCDUs for ids
+
+TODO write something in more depth
+
+- https://paul.blasuc.ci/posts/really-scu.html
+- https://paul.blasuc.ci/posts/even-more-scu.html
 
 ## Code structure
 
