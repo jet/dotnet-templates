@@ -7,7 +7,7 @@ module private Stream =
     let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
 
 module Reactions =
-    let [<Literal>] Category = Stream.Category
+    let [<Literal>] categoryName = Stream.Category
     let [<return: Struct>] (|For|_|) = Stream.tryDecode
     
 module Events =

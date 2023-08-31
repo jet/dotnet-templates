@@ -26,7 +26,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 
 open Domain
 
-let private reactionCategories = [| GroupCheckout.Reactions.Category |]
+let private reactionCategories = [| GroupCheckout.Reactions.categoryName |]
 
 // Invocation of the handler is prompted by event notifications from the event store's feed.
 // Wherever possible, multiple events get processed together (e.g. in catchup scenarios or where the async checkpointing

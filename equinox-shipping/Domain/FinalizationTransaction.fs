@@ -36,7 +36,7 @@ module Reactions =
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
         encoded.EventType = nameof(Events.Completed)
-    let [<Literal>] Category = Stream.Category
+    let [<Literal>] categoryName = Stream.Category
     let [<return: Struct>] (|For|_|) = Stream.tryDecode
 
 module Fold =
