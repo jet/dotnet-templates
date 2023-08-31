@@ -382,7 +382,7 @@ When modelling, it's common to include primary identifiers (e.g. a user id), or 
 1. the State needs to contain the values - that's more noise
 2. Event versioning gets messier - imagine extending a system to make it multi-tenant, you'd need to be able to handle all the historic events that predated the concept
 
-The alternative is for a workflow to react to the events in the context of a stream - if some logic needs to know the userid let the User reactor handing the User event on a User Stream pass thgat context forward if relevant in that context.
+The alternative is for a workflow to react to the events in the context of a stream - if some logic needs to know the userid let the `User` reactor handling the `User` event on a `User` Stream pass that context forward if relevant in that context.
 
 #### ❌ DONT `open Events` in an aggregate module
 
