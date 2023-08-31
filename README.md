@@ -427,10 +427,14 @@ Having to prefix types and/or Event Type names with `Events.` is a feature, not 
 
 ### 3. `module Fold`
 
-<a name="fold-no-log"></a>
+<a name="fold-dont-log"></a>
 #### ❌ DONT log
 
-If Fold logic is not incredibly boring, that's a design smell. In general, you want to [make illegal States unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/). If you must, unit test it to satisfy yourself things can't go wrong.
+If your `Fold` logic is anything but incredibly boring, that's a design smell.
+If you must, unit test it to satisfy yourself things can't go wrong, but logging is never the answer.
+Fold logic should not be deciding anything - just summarizing facts.
+If anything needs to be massaged prior to making a decision, do that explicitly; don't pollute the `Fold` logic.
+In general, you want to [make illegal States unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/).
 
 #### ❌ DONT maintain identifiers and other information not required for decisions
 
@@ -463,7 +467,7 @@ Each Decision function should have as specific a result contract as possible. In
 
 #### ❌ DONT Log
 
-It's always sufficient to return a `bool` or `enum` to convey an outcome (but try to avoid even that). See [Fold: DONT log](#fold-no-log)
+It's always sufficient to return a `bool` or `enum` to convey an outcome (but try to avoid even that). See also [Fold: DONT log](#fold-dont-log)
 
 <a name="dont-result"></a>
 #### ❌ DONT use a `Result` type
