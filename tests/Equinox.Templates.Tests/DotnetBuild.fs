@@ -74,7 +74,7 @@ type DotnetBuild(output: ITestOutputHelper, folder: EquinoxTemplatesFixture) =
     let [<Theory>] proReactor args              = run "proReactor" args
     let [<Fact>] proReactorDefault ()           = run "proReactor" []
 
-    let [<Fact>] proCosmosReactor ()            = run "proCosmosReactor" []
+    let [<Fact>] proIndexer ()                  = run "proIndexer" []
     
     let [<Fact>] proIndexerCdk ()               = run "proDynamoStoreCdk" []
     let [<Fact>] proHotel ()                    = run "proHotel" []

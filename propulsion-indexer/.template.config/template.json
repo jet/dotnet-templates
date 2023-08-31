@@ -1,6 +1,6 @@
 {
   "$schema": "http://json.schemastore.org/template",
-  "author": "@jet @ragiano215 @bartelink",
+  "author": "@jet @rockwell-automation-inc @ragiano215 @bartelink",
   "classifications": [
     "CosmosDb",
     "ChangeFeed",
@@ -12,11 +12,11 @@
   ],
   "tags": {
     "language": "F#",
-    "type": "project"
+    "type": "solution"
   },
-  "identity": "Propulsion.Template.CosmosReactor",
-  "name": "Propulsion Cosmos Reactor",
-  "shortName": "proCosmosReactor",
-  "sourceName": "ReactorTemplate",
+  "identity": "Propulsion.Indexer",
+  "name": "Propulsion Indexer",
+  "shortName": "proIndexer",
+  "sourceName": "IndexerTemplate",
   "preferNameDirectory": true
 }
