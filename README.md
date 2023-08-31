@@ -385,7 +385,7 @@ TODO write something in more depth
 - https://paul.blasuc.ci/posts/even-more-scu.html
 
 <a name="do-store-config"></a>
-#### ✅ DO define a `Store.Config` type
+#### ✅ DO define a `Store.Config` type, and wire it up in the aggregate's `module Factory`
 
 It's correct to say that few systems actually switch databases in real life. Defining a `type` that holds only a `*StoreContext` and a `Cache` can feel like pointless abstraction.
 
@@ -409,8 +409,23 @@ type Config =
     | Cosmos of Equinox.CosmosStore.CosmosStoreContext * Equinox.Cache
 ```
 
-The advantage of still having a `type Config` in place is to be able to step in and generalize things 
+The advantage of still having a `type Config` in place is to be able to step in and generalize things.
 
+For instance, [when such a system expands from having a single store to also having a separated views store](https://github.com/jet/dotnet-templates/pull/132), it can become:
+
+```fsharp
+[<NoComparison; NoEquality; RequireQualifiedAccess>]
+type Config =
+    | Cosmos of contexts: CosmosContexts * cache: Equinox.Cache
+and [<NoComparison; NoEquality>] CosmosContexts =
+    { main: Equinox.CosmosStore.CosmosStoreContext
+      views: Equinox.CosmosStore.CosmosStoreContext
+      /// Variant of `main` that's configured such that `module Snapshotter` updates will never trigger a calve
+      snapshotUpdate: Equinox.CosmosStore.CosmosStoreContext }
+```
+
+:bulb: This does mean that the `Domain` project will need to reference the concrete store packages (i.e., `Equinox.CosmosStore`, `Equinox.MemoryStore` etc).
+:bulb: the wiring that actually establishes the `Context`s should be external to the `Domain` project in [an `App` project, as `propulsion-indexer` does](https://github.com/jet/dotnet-templates/tree/master/propulsion-indexer/App), and should only be triggered within a Host application's Composition root
 
 ## Code structure
 
@@ -472,7 +487,117 @@ The alternative is for a workflow to react to the events in the context of a str
 
 Having to prefix types and/or Event Type names with `Events.` is a feature, not a bug. 
 
-### 3. `module Fold`
+### 4. `module Reactions`
+
+✅ DO encapsulate inferences from events and `Stream` names in a `module Reactions` facade
+
+`module Stream` should be always be `private`.
+Any classification of events, parsing of stream names, should be via helpers within the `module Reactions`, e.g.: 
+
+```fsharp
+// ❌ BAD Stream module is `public`
+module Stream =
+
+    let [<Literal>] Category = "tenant"
+    
+// ❌ BAD
+module TenantNotifications
+
+let categories = [ Tenant.Stream.Category]
+
+let handle (stream, events) = async {
+    if StreamName.category stream = Tenant.Stream.Category then
+        let tenantId = FsCodec.StreamName.Split stream |> snd |> TenantId.parse
+         
+// ❌ BAD
+module Tenant.Tests
+
+let [<Fact>] ``generated correct events` () =
+    let id = TenantId.generate()
+    // ❌ BAD boilerplate, referencing multipple modules
+    let streamName = FsCodec.StreamName.create Tenant.Stream.Category id
+```
+
+Instead, keep the `module Streams` private, expose things via a `module Reactions`, and have clearer consumption code:
+
+```fsharp
+module private Stream =
+
+    let [<Literal>] Category = "tenant"
+    let id (id: TenantId) = FsCodec.StreamId.gen TenantId.toString id
+    let decodeId = FsCodec.StreamId.dec TenantId.parse
+    let name = id >> FsCodec.StreamName.create Category
+    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
+```
+
+```fsharp
+// ✅ GOOD expose all reactions and test integration helpers via a Reactions facade
+module Reactions =
+
+    // ✅ GOOD - F12 can show us all reaction logic
+    let categoryName = Stream.Category
+    // ✅ GOOD - if a unit test needs to generate a stream name, it can supply the tenant id    
+    let streamName = Stream.name
+    let [<return: Struct>] (|For|_|) = Stream.tryDecode
+    // ✅ OK generic decoding function (but next ones are better...)
+    let [<return: Struct>] (|Decode|_|) = function
+        | struct (For id, _) & Streams.Decode dec events -> ValueSome struct (id, events)
+        | _ -> ValueNone
+    let deletionNamePrefix tenantIdStr = $"%s{Stream.Category}-%s{tenantIdStr}"
+
+    // ✅ GOOD - better than sprinkling `nameof(Aggregate..Events.Completed)` in an adjacent `module`
+    /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
+    let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
+        encoded.EventType = nameof(Events.Completed)
+    let private impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
+
+    // ✅ BETTER specific pattern that extracts relevant items, keeping it close to the Event definitiosn
+    let (|ImpliesStateChange|NoStateChange|NotApplicable|) = function
+        | Parse (tenantId, events) ->
+            if events |> Array.exists impliesStateChange then ImpliesStateChange (tenantId, events.Length)
+            else NoStateChange events.Length
+        | _, events -> NotApplicable events.Length
+
+    let dec = Streams.Codec.dec<Events.Event>
+```
+
+And the consumption logic looks cleaner:
+
+```fsharp
+// ✅ GOOD
+module TenantNotifications
+
+let categories = [ Tenant.Reactions.categoryName ]
+
+let handle (stream, events) = async {
+    match stream, events with
+    | Tenant.Reactions.Decode (tenantId, events) ->
+        // ... 
+```
+
+```fsharp
+// ✅ BETTER - intention revealing names, classification encapslated close to the events
+module TenantNotifications
+
+let categories = [ Tenant.Reactions.categoryName ]
+
+let handle (stream, events) = async {
+    match stream, events with
+    | Tenant.Reactions.ImpliesStateChange tenantId ->
+        // ... 
+```
+And the tests:
+
+```fsharp
+// ✅ BETTER - intention revealing names, classification encapslated close to the events
+module Tenant.Tests
+
+let [<Fact>] ``generated correct events` () =
+    let id = TenantId.generate()
+    let streamName = Tenant.Reactions.streamName id
+```
+
+### 4. `module Fold`
 
 <a name="fold-dont-log"></a>
 #### ❌ DONT log
@@ -487,7 +612,7 @@ In general, you want to [make illegal States unrepresentable](https://fsharpforf
 
 See [Events: AVOID including egregious identity information](#events-no-ids).
 
-### 4. `module Decisions`
+### 5. `module Decisions`
 
 <a name="do-simplest-result"></a>
 #### ✅ DO use the simplest result type possible
@@ -633,7 +758,7 @@ However, it's also just a pattern. It has negatives; some:
     ```
 
 <a name="module-queries"></a>
-### 5. `module Queries`
+### 6. `module Queries`
 
 The primary purpose of an Aggregate is to gather State and produce Events to facilitate making and recording of Decisions. There is no Law Of Event Sourcing that says you must at all times use CQRS to split all reads out to some secondary derived read model.
 
