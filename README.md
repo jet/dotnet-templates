@@ -251,38 +251,40 @@ One can also do it manually:
 
 1. ✅ DO define [strongly typed ids](#do-id-type) and a `type Store.Config` in `namespace Domain`
 2. ❌ DONT have global `module Types`. AVOID per Aggregate `module Types` or top level `type` definitions
-3. ✅ DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decide, Service, Factory`. And keep grouping within that.
+3. ✅ DO group stuff predictably per `module Aggregate`: `Stream, Events, Reactions, Fold, Decisions, Service, Factory`. Keep grouping within that.
 4. ❌ DONT [`open <Aggregate>`](#dont-open-aggregate), [`open <Aggregate>.Events`](#dont-open-events) or [`open <Aggregate>.Fold`](#dont-open-fold)
 5. ✅ DO design for idempotency everywhere. ❌ DONT [return TMI](#dont-return-tmi) that the world should not be taking a dependency on. 
 6. ❌ DONT [use `Result`](#dont-result) or a per-Aggregate `type Error`. ✅ [DO use minimal result types per decision function](#do-simplest-result)
 7. ❌ DONT [expose your `Fold.State`](#dont-expose-state) outside your Aggregate.
 8. ❌ DONT be a slave to CQRS for all read paths. ✅ [DO `AllowStale`](#do-allowstale) 🤔 [CONSIDER `QueryCurrent`](#consider-querycurrent)
 9. ❌ [DONT be a slave to the Command pattern](#dont-commands) or Mediatr
+10. ✅ DO maintain common wiring in [an `App` project, as per `propulsion-indexer`](https://github.com/jet/dotnet-templates/tree/master/propulsion-indexer/App)
 
 ## High level
 
-### ❌ DONT have a global `Types.fs`
+### ❌ DONT have shared types in `Types.fs`
 
-F# really shines at succinctly laying out a high level design for a system; see [_Designing with types_ by Scott Wlaschin for many examples](https://fsharpforfunandprofit.com/series/designing-with-types/).
+F# excels at succinctly expressing a high level design for a system; see [_Designing with types_ by Scott Wlaschin](https://fsharpforfunandprofit.com/series/designing-with-types/) for many examples. 
 
-For an event sourced system, if anything, this is even more true - it's not uncommon to be able to convey the key moving parts of a system in a manner that's legible for both technical and non-technical stakeholders.
+For an event sourced system, it gets even better: it's not uncommon to be able to, using only a screen or two of types, convey a system's significant events in a manner that's legible for both technical and non-technical stakeholders.
 
-It's important not to take this too far though - ultimately as a system grows, the key constraint of the fact that Events ultimately need to be Grouped in Categories of Streams needs to become then organising function.
+It's important not to take this too far though; ultimately, as a system grows, the need for Events to be grouped into Categories must become the organizing constraint.
+
+That means letting go of something that feels _almost_ perfect...
 
 <a name="global-dont-share-types"></a>
 ### ❌ DONT share types across Aggregates / Categories
 
-There are sometimes legitimate when cases where two Aggregates have overlapping concerns. It can be very tempting to put the common types into a central place and Just Share the contracts. This should be avoided. Instead:
+In some cases, Aggregates have overlapping concerns that can mean soe aspects of Event Contracts are common. It can be very tempting to keep this [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) as shared types in a central place. These benefits must unfortunately be relinquished. Instead:
 
 ```fs
-❌ DONT DO THIS
-
+❌ BAD shared types
 // <Types.fs>
 module Domain.Types
 
 type EntityContext = { name: string; area: string }
 
-...
+..
 
 // <Aggregate>.fs
 module Aggregate
@@ -292,8 +294,9 @@ open Domain.Types
 module Events =
 
     type Event =
+        // ❌ BAD defines a contract that can be changed by someone adding or renaming a field in a shared type
         | Created of {| creator: UserId; context: EntityContext |}
-        ...
+        ..
 
 // <Aggregate2>.fs
 module Aggregate2
@@ -302,25 +305,27 @@ module Events =
 
     type Event =
         | Copied of {| by: UserId; context: Types.EntityContext |}
-        ...
+        ..
 ```
 
-Instead:
-- have each `module <Aggregate>` have its own version of each type that will be used in an event _within its `module Events`_. (The `decide` function can map from an input type if desired, but the important thing is that the Aggregate will need to be able to roundtrip its types in perpetuity, and having to disentangle the overlap between more than on Aggregate is simply never a good tradeoff) 
-- [sharing id types is fine](#global-do-share-ids)
+Instead, let each `module <Aggregate>` maintain its own version of each type that will be used in an event _within its `module Events`_.
+
+The `decide` function can map from an input type if desired. The important thing is that the Aggregate will need to be able to roundtrip its types in perpetuity, and having to disentangle the overlaps between types shared across multiple Aggregates is simply never worth it.
 
 <a name="do-id-type"></a>
 ### ✅ DO have global strongly typed ids
 
-While [sharing the actual types is a no-no](#global-dont-share-types), having common id types is perfectly reasonable. It's extremely valuable for these to be strongly typed.
+While [sharing the actual types is a no-no](#global-dont-share-types), having common id types, and using those for references across streams is valid.
+
+It's extremely valuable for these to be strongly typed.
 
 ```fsharp
 module Domain.Types
 
-type UserId = ...
-type TenantId = ...
+type UserId = ..
+type TenantId = ..
 
-...
+..
 
 module Domain.User
 
@@ -354,10 +359,12 @@ module UserId =
 
 Wherever possible, the templates use use strongly type identifiers, particularly ones that might naturally be represented as primitives, i.e. `string` etc.
 
-- [`FSharp.UMX`](https://github.com/fsprojects/FSharp.UMX) is useful to transparently pin types in a message contract cheaply - it works well for a number of contexts:
+[`FSharp.UMX`](https://github.com/fsprojects/FSharp.UMX) is useful to transparently pin types in a message contract cheaply - it works well for a number of contexts:
 
-    - Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them is not a central concern as we load and fold these incontrovertible Facts)
-    - Model binding in ASP.NET (because the types de-sugar to the primitives, no special support is required). _Unlike events, there are more considerations in play in this context though; often you'll want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/). Often, Single Case Discriminated Unions can be a better tool inb that context_
+- Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them is not a central concern as we load and fold these incontrovertible Facts)
+- Model binding in ASP.NET; because the types de-sugar to the primitives, no special support is required.
+
+  _Unlike events, there are more considerations in play in this context though; often you'll want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/).
 
 ### CONSIDER UMX `strings` for serialized ids
 
