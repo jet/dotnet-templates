@@ -58,3 +58,8 @@ module TicketsCheckpoint =
     let toEpochAndOffset (value: TicketsCheckpoint): TicketsEpochId * int =
         let d, r = System.Math.DivRem(%value, 1_000_000L)
         (%int %d: TicketsEpochId), int r
+
+type internal CategoryId<'ids>(name, gen: 'ids -> FsCodec.StreamId) =
+    member val Category = name
+    member _.Gen = gen
+    member _.Name = gen >> FsCodec.StreamName.create name

@@ -1,10 +1,8 @@
 module Shipping.Domain.FinalizationTransaction
 
-module private Stream =
-    let [<Literal>] Category = "FinalizationTransaction"
-    let id = FsCodec.StreamId.gen TransactionId.toString
-    let decodeId = FsCodec.StreamId.dec TransactionId.parse
-    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
+let private sid = CategoryIdParseable("FinalizationTransaction",
+                                      FsCodec.StreamId.gen TransactionId.toString,
+                                      FsCodec.StreamId.dec TransactionId.parse)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -36,8 +34,8 @@ module Reactions =
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
         encoded.EventType = nameof(Events.Completed)
-    let [<Literal>] categoryName = Stream.Category
-    let [<return: Struct>] (|For|_|) = Stream.tryDecode
+    let categoryName = sid.Category
+    let [<return: Struct>] (|For|_|) = sid.TryDecode
 
 module Fold =
 
@@ -107,8 +105,8 @@ type Service internal (resolve: TransactionId -> Equinox.Decider<Events.Event, F
 module Factory =
 
     let private (|Category|) = function
-        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)
+        | Store.Config.Memory store ->            Store.Memory.create sid.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted sid.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted sid.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized sid.Category Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(sid.Gen >> Store.createDecider cat)

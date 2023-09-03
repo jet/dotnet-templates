@@ -4,9 +4,7 @@
 /// Can also be used to walk back through time to visit every ticket there has ever been for correlation purposes
 module FeedSourceTemplate.Domain.TicketsSeries
 
-module private Stream =
-    let [<Literal>] Category = "Tickets"
-    let id = FsCodec.StreamId.gen TicketsSeriesId.toString
+let private sid = CategoryId("Tickets", FsCodec.StreamId.gen TicketsSeriesId.toString)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -69,8 +67,8 @@ module Factory =
         // For now we have a single global sequence. This provides us an extension point should we ever need to reprocess
         // NOTE we use a custom id in order to isolate data for acceptance tests
         let seriesId = defaultArg seriesId TicketsSeriesId.wellKnownId
-        Service(seriesId, Stream.id >> resolve)
+        Service(seriesId, sid.Gen >> resolve)
     let private (|Category|) = function
-        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Memory store ->            Store.Memory.create sid.Category Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted sid.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
     let create seriesOverride (Category cat) = create_ seriesOverride (Store.createDecider cat)

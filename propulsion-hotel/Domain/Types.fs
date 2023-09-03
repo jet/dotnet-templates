@@ -26,6 +26,14 @@ type PaymentId = Guid<paymentId>
 type DateTimeOffset = System.DateTimeOffset
 type HashSet<'t> = System.Collections.Generic.HashSet<'t>
 
+type internal CategoryId<'ids>(name, gen: 'ids -> FsCodec.StreamId) =
+    member val Category = name
+    member _.CreateId = gen
+type internal CategoryIdParseable<'ids>(name, gen: 'ids -> FsCodec.StreamId, dec: FsCodec.StreamId -> 'ids) =
+    inherit CategoryId<'ids>(name, gen)
+    member _.DecodeId = dec
+    member _.TryDecode = FsCodec.StreamName.tryFind name >> ValueOption.map dec
+
 [<AutoOpen>]
 module DeciderExtensions =
  

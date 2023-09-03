@@ -1,14 +1,11 @@
 module Domain.GroupCheckout
 
-module private Stream =
-    let [<Literal>] Category = "GroupCheckout"
-    let id = FsCodec.StreamId.gen GroupCheckoutId.toString
-    let decodeId = FsCodec.StreamId.dec GroupCheckoutId.parse
-    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
-
+let private sid = CategoryIdParseable("GroupCheckout",
+                                      FsCodec.StreamId.gen GroupCheckoutId.toString,
+                                      FsCodec.StreamId.dec GroupCheckoutId.parse) 
 module Reactions =
-    let [<Literal>] categoryName = Stream.Category
-    let [<return: Struct>] (|For|_|) = Stream.tryDecode
+    let categoryName = sid.Category
+    let [<return: Struct>] (|For|_|) = sid.TryDecode
     
 module Events =
 
@@ -124,9 +121,9 @@ module Factory =
 
     let private (|Category|) = function
         | Store.Config.Memory store ->
-            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+            Store.Memory.create sid.Category Events.codec Fold.initial Fold.fold store
         | Store.Config.Dynamo (context, cache) ->
-            Store.Dynamo.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+            Store.Dynamo.createUnoptimized sid.Category Events.codec Fold.initial Fold.fold (context, cache)
         | Store.Config.Mdb (context, cache) ->
-            Store.Mdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Stream.id >> Store.createDecider cat |> Service
+            Store.Mdb.createUnoptimized sid.Category Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = sid.CreateId >> Store.createDecider cat |> Service

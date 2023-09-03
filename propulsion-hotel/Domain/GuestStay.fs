@@ -1,8 +1,7 @@
 module Domain.GuestStay
 
-module private Stream =
-    let [<Literal>] Category = "GuestStay"
-    let id = FsCodec.StreamId.gen GuestStayId.toString
+let private sid = CategoryId("GuestStay",
+                             FsCodec.StreamId.gen GuestStayId.toString) 
 
 module Events =
 
@@ -102,9 +101,9 @@ module Factory =
 
     let private (|Category|) = function
         | Store.Config.Memory store ->
-            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
+            Store.Memory.create sid.Category Events.codec Fold.initial Fold.fold store
         | Store.Config.Dynamo (context, cache) ->
-            Store.Dynamo.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
+            Store.Dynamo.createUnoptimized sid.Category Events.codec Fold.initial Fold.fold (context, cache)
         | Store.Config.Mdb (context, cache) ->
-            Store.Mdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)
+            Store.Mdb.createUnoptimized sid.Category Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(sid.CreateId >> Store.createDecider cat)
