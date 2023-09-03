@@ -1,9 +1,10 @@
 module Shipping.Domain.Container
 
-let private sid = CategoryId("Container", FsCodec.StreamId.gen ContainerId.toString)
+let [<Literal>] private CategoryName = "Container"
+let private streamId = FsCodec.StreamId.gen ContainerId.toString
    
 module Reactions =
-    let streamName = sid.Name
+    let streamName = streamId >> FsCodec.StreamName.create CategoryName
     
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -41,8 +42,8 @@ type Service internal (resolve: ContainerId -> Equinox.Decider<Events.Event, Fol
 module Factory =
 
     let private (|Category|) = function
-        | Store.Config.Memory store ->            Store.Memory.create sid.Category Events.codec Fold.initial Fold.fold store
-        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted sid.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted sid.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized sid.Category Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(sid.Gen >> Store.createDecider cat)
+        | Store.Config.Memory store ->            Store.Memory.create CategoryName Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted CategoryName Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted CategoryName Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized CategoryName Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat)

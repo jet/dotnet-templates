@@ -19,15 +19,6 @@ module TransactionId =
     let parse (x: string): TransactionId = %x
     let (|Parse|) = parse
 
-type internal CategoryId<'ids>(name, gen: 'ids -> FsCodec.StreamId) =
-    member val Category = name
-    member _.Gen = gen
-    member _.Name = gen >> FsCodec.StreamName.create name
-type internal CategoryIdParseable<'ids>(name, gen: 'ids -> FsCodec.StreamId, dec: FsCodec.StreamId -> 'ids) =
-    inherit CategoryId<'ids>(name, gen)
-    member _.DecodeId = dec
-    member _.TryDecode = FsCodec.StreamName.tryFind name >> ValueOption.map dec
-
 module Guid =
 
     let inline toStringN (x: System.Guid) = x.ToString "N"
