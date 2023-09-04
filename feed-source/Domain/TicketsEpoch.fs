@@ -71,7 +71,7 @@ let decide capacity candidates (currentIds, closed as state) =
         { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, events
 
 /// Service used for the write side; manages ingestion of items into the series of epochs
-type IngestionService internal (capacity, resolve: FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
+type IngestionService internal (capacity, resolve: struct (FcId * TicketsEpochId) -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Handles idempotent deduplicated insertion into the set of items held within the epoch
     member _.Ingest(fcId, epochId, ticketIds): Async<Result> =

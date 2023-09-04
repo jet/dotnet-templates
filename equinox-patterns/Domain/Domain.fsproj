@@ -20,7 +20,7 @@
     <PackageReference Include="Equinox.Core" Version="4.0.0-rc.13" />
     <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.13" />
     <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.13" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.11.1" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.12" />
   </ItemGroup>
 
 </Project>

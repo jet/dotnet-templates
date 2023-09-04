@@ -21,7 +21,7 @@
     <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.13" />
     <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.13" />
     <PackageReference Include="Equinox.Tools.TestHarness" Version="4.0.0-rc.13" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.11.1" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.12" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.2" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     <PackageReference Include="Serilog.Sinks.Seq" Version="4.0.0" />
