@@ -442,10 +442,10 @@ let transformV0 catFilter v0SchemaDocument: Propulsion.Streams.StreamEvent<_> se
         yield parsed }
 //#else
 let transformOrFilter catFilter changeFeedDocument: Propulsion.Sinks.StreamEvent seq = seq {
-    for FsCodec.StreamName.Category cat, _ as x in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents catFilter changeFeedDocument do
-        // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-        if catFilter cat then
-            yield x }
+    for se in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.whereCategory catFilter changeFeedDocument do
+        // NB the `index` needs to be contiguous with existing events, so filtering at stream or category level is OK
+        // However, individual events must feed through to the Sink or the Scheduler will be awaiting them
+        yield (*transform*) se }
 //#endif
 
 let [<Literal>] AppName = "SyncTemplate"

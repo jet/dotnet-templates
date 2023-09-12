@@ -156,11 +156,11 @@ let build (args: Args.Arguments) = async {
     let! contexts, monitored, leases = args.ConnectWithFeed(args.IsSnapshotting)
     let store = (contexts, Equinox.Cache(AppName, sizeMb = 10)) ||> Store.Cosmos.createConfig
     let parseFeedDoc, sink =
-        let mkParseAll () = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents (fun _ -> true)
+        let mkParseAll () = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.whereCategory (fun _ -> true)
         let mkSink stats handle = Factory.StartSink(Log.Logger, stats, maxConcurrentStreams, handle, maxReadAhead)
         match args.Action with
         | Args.Action.Index _ ->
-            let mkParseCats = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumCategoryEvents
+            let mkParseCats = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.ofCategories
             let stats = Indexer.Stats(Log.Logger, args.StatsInterval, args.StateInterval, args.Cosmos.Verbose)
             let handle = Indexer.Factory.createHandler store
             mkParseCats Indexer.sourceCategories, mkSink stats handle

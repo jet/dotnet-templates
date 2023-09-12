@@ -15,8 +15,8 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.12" />
-    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.8.10" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.13" />
+    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.8.12" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
   </ItemGroup>
 

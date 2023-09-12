@@ -14,7 +14,7 @@ module Codec =
 module Memory =
 
     let create name codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Deflate.EncodeUncompressed codec, fold, initial)
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial)
 
 let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
@@ -24,7 +24,7 @@ module Dynamo =
     open Equinox.DynamoStore
 
     let private create name codec initial fold accessStrategy (context, cache) =
-        DynamoStoreCategory(context, name, FsCodec.Deflate.EncodeUncompressed codec, fold, initial, accessStrategy, cacheStrategy cache)
+        DynamoStoreCategory(context, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createUnoptimized name codec initial fold (context, cache) =
         let accessStrategy = AccessStrategy.Unoptimized

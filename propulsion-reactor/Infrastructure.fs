@@ -100,7 +100,7 @@ module Dynamo =
     let defaultCacheDuration = TimeSpan.FromMinutes 20.
     let private createCached name codec initial fold accessStrategy (context, cache) =
         let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        DynamoStoreCategory(context, name, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, accessStrategy, cacheStrategy)
+        DynamoStoreCategory(context, name, FsCodec.Compression.EncodeTryCompress codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)

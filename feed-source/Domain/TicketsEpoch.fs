@@ -114,7 +114,7 @@ module Reader =
 
     type StateDto = { closed: bool; tickets: Events.Item[] }
 
-    type Service internal (resolve: FcId * TicketsEpochId -> Equinox.Decider<Events.Event, State>) =
+    type Service internal (resolve: struct (FcId * TicketsEpochId) -> Equinox.Decider<Events.Event, State>) =
 
         /// Returns all the items currently held in the stream
         member _.Read(fcId, epochId): Async<StateDto> =
