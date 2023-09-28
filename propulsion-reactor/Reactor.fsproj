@@ -35,14 +35,14 @@
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.1" />
-        <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.14" />
-        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.8.12" />
-        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.8.12" />
-        <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.8.12" />
-        <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.8.12" />
+        <PackageReference Include="Equinox.SqlStreamStore.MsSql" Version="4.0.0-rc.14.1" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.9.1" />
+        <PackageReference Include="Propulsion.DynamoStore" Version="3.0.0-rc.9.1" />
+        <PackageReference Include="Propulsion.EventStoreDb" Version="3.0.0-rc.9.1" />
+        <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.9.1" />
         <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.13" />
         <!--#if (kafka || sourceKafka) -->
-        <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.8.12" />
+        <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.9.1" />
         <!--#endif-->
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>
