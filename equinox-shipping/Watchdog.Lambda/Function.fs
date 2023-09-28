@@ -5,7 +5,6 @@ open Amazon.Lambda.SQSEvents
 open Equinox.DynamoStore
 open Serilog
 open Shipping.Domain
-open Shipping.Infrastructure
 open Shipping.Watchdog
 open System
 

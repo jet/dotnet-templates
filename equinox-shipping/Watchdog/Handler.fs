@@ -1,6 +1,5 @@
 module Shipping.Watchdog.Handler
 
-open Shipping.Infrastructure
 open System
 
 [<RequireQualifiedAccess>]

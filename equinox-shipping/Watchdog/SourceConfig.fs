@@ -1,4 +1,4 @@
-namespace Shipping.Infrastructure
+namespace global
 
 open System
 open System.Threading.Tasks

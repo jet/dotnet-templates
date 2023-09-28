@@ -2,7 +2,6 @@ namespace Shipping.Watchdog.Integration
 
 open Propulsion.Internal // IntervalTimer etc
 open Shipping.Domain.Tests
-open Shipping.Infrastructure
 open Shipping.Watchdog
 open System
 

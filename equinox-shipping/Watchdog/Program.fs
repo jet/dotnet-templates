@@ -1,7 +1,6 @@
 ﻿module Shipping.Watchdog.Program
 
 open Serilog
-open Shipping.Infrastructure
 open System
 
 module Args =

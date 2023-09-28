@@ -1,7 +1,5 @@
 namespace Shipping.Watchdog.Integration
 
-open Shipping.Infrastructure
-
 type DynamoConnector(connector: Equinox.DynamoStore.DynamoStoreConnector, table, indexTable) =
     
     let client =                        connector.CreateClient()

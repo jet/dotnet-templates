@@ -2,7 +2,6 @@ module Shipping.Watchdog.SourceArgs
 
 open Argu
 open Shipping.Domain // Config etc
-open Shipping.Infrastructure // Args etc
 open Serilog
 open System
 

@@ -1,6 +1,5 @@
 namespace Shipping.Watchdog.Integration
 
-open Shipping.Infrastructure
 open System
 
 type EsdbConnector(connection, credentials) =
