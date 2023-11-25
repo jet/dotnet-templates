@@ -117,7 +117,7 @@ module Args =
 
                 | Verbose ->                "request Verbose Logging from ChangeFeedProcessor and Store. Default: off"
                 | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `<SourceContainer>` + `-aux`."
-                | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to request from the feed. Default: unlimited."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
     and CosmosArguments(c: Args.Configuration, p: ParseResults<CosmosParameters>) =

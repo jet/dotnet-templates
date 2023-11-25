@@ -37,10 +37,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
         if stats.StatsInterval.RemainingMs > 3000 then
             stats.StatsInterval.Trigger()
             stats.StatsInterval.SleepUntilTriggerCleared()
-    member _.Await(propagationDelay) =
-        match awaitReactions with
-        | Some f -> f propagationDelay |> Async.ofTask
-        | None -> async { ()  }
+    member _.Await(propagationDelay) = awaitReactions propagationDelay |> Async.ofTask
 
     interface IDisposable with
 
