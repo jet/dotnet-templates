@@ -29,34 +29,36 @@ module Fold =
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot (state: State) = Events.Snapshotted {| reservation = state.reservation; association = state.association |}
 
-let decideReserve transactionId: Fold.State -> bool * Events.Event[] = function
-    | { reservation = Some r } when r = transactionId -> true, [||]
-    | { reservation = None } -> true, [| Events.Reserved {| transaction = transactionId |} |]
-    | _ -> false, [||]
+module Decisions =
+    
+    let reserve transactionId: Fold.State -> bool * Events.Event[] = function
+        | { reservation = Some r } when r = transactionId -> true, [||]
+        | { reservation = None } -> true, [| Events.Reserved {| transaction = transactionId |} |]
+        | _ -> false, [||]
 
-let interpretRevoke transactionId: Fold.State -> Events.Event[] = function
-    | { reservation = Some r; association = None } when r = transactionId ->
-        [| Events.Revoked |]
-    | _ -> [||] // Ignore if a) already revoked/never reserved b) not reserved for this transactionId
+    let revoke transactionId: Fold.State -> Events.Event[] = function
+        | { reservation = Some r; association = None } when r = transactionId ->
+            [| Events.Revoked |]
+        | _ -> [||] // Ignore if a) already revoked/never reserved b) not reserved for this transactionId
 
-let interpretAssign transactionId containerId: Fold.State -> Events.Event[] = function
-    | { reservation = Some r; association = None } when r = transactionId ->
-        [| Events.Assigned {| container = containerId |} |]
-    | _ -> [||] // Ignore if a) this transaction was not the one reserving it or b) it's already been assigned
+    let assign transactionId containerId: Fold.State -> Events.Event[] = function
+        | { reservation = Some r; association = None } when r = transactionId ->
+            [| Events.Assigned {| container = containerId |} |]
+        | _ -> [||] // Ignore if a) this transaction was not the one reserving it or b) it's already been assigned
 
 type Service internal (resolve: ShipmentId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.TryReserve(shipmentId, transactionId): Async<bool> =
         let decider = resolve shipmentId
-        decider.Transact(decideReserve transactionId)
+        decider.Transact(Decisions.reserve transactionId)
 
     member _.Revoke(shipmentId, transactionId): Async<unit> =
         let decider = resolve shipmentId
-        decider.Transact(interpretRevoke transactionId)
+        decider.Transact(Decisions.revoke transactionId)
 
     member _.Assign(shipmentId, containerId, transactionId): Async<unit> =
         let decider = resolve shipmentId
-        decider.Transact(interpretAssign transactionId containerId)
+        decider.Transact(Decisions.assign transactionId containerId)
 
 module Factory =
 

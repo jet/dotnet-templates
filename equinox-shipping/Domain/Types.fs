@@ -27,3 +27,8 @@ module Guid =
 
     let inline toStringN (x: System.Guid) = x.ToString "N"
     let generateStringN () = let g = System.Guid.NewGuid() in toStringN g
+
+/// Handles symmetric generation and decoding of StreamNames composed of a series of elements via the FsCodec.StreamId helpers
+type internal CategoryId<'elements>(name, gen: 'elements -> FsCodec.StreamId, dec: FsCodec.StreamId -> 'elements) =
+    member _.StreamName = gen >> FsCodec.StreamName.create name
+    member _.TryDecode = FsCodec.StreamName.tryFind name >> ValueOption.map dec

@@ -2,12 +2,11 @@ module Domain.GroupCheckout
 
 let [<Literal>] private CategoryName = "GroupCheckout"
 let private streamId = FsCodec.StreamId.gen GroupCheckoutId.toString
-let private decodeId = FsCodec.StreamId.dec GroupCheckoutId.parse
-let private tryDecodeId = FsCodec.StreamName.tryFind CategoryName >> ValueOption.map decodeId
+let private catId = CategoryId(CategoryName, streamId, FsCodec.StreamId.dec GroupCheckoutId.parse)
 
 module Reactions =
     let [<Literal>] categoryName = CategoryName
-    let [<return: Struct>] (|For|_|) = tryDecodeId
+    let [<return: Struct>] (|For|_|) = catId.TryDecode
     
 module Events =
 

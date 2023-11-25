@@ -2,8 +2,7 @@ module Shipping.Domain.FinalizationTransaction
 
 let [<Literal>] private CategoryName = "FinalizationTransaction"
 let private streamId = FsCodec.StreamId.gen TransactionId.toString
-let private decodeId = FsCodec.StreamId.dec TransactionId.parse
-let private tryDecodeId = FsCodec.StreamName.tryFind CategoryName >> ValueOption.map decodeId
+let private catId = CategoryId(CategoryName, streamId, FsCodec.StreamId.dec TransactionId.parse)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -36,7 +35,7 @@ module Reactions =
     let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
         encoded.EventType = nameof(Events.Completed)
     let [<Literal>] categoryName = CategoryName
-    let [<return: Struct>] (|For|_|) = tryDecodeId
+    let [<return: Struct>] (|For|_|) = catId.TryDecode
 
 module Fold =
 

@@ -26,6 +26,11 @@ type PaymentId = Guid<paymentId>
 type DateTimeOffset = System.DateTimeOffset
 type HashSet<'t> = System.Collections.Generic.HashSet<'t>
 
+/// Handles symmetric generation and decoding of StreamNames composed of a series of elements via the FsCodec.StreamId helpers
+type internal CategoryId<'elements>(name, gen: 'elements -> FsCodec.StreamId, dec: FsCodec.StreamId -> 'elements) =
+    member _.StreamName = gen >> FsCodec.StreamName.create name
+    member _.TryDecode = FsCodec.StreamName.tryFind name >> ValueOption.map dec
+
 [<AutoOpen>]
 module DeciderExtensions =
  
