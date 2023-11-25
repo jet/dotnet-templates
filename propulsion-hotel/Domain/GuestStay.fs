@@ -38,7 +38,7 @@ module Fold =
             | Events.Paid e ->      Active { bal with balance = bal.balance - e.amount; payments = [| yield! bal.payments; e.paymentId |] }
             | Events.CheckedOut _ -> Closed
             | Events.TransferredToGroup e -> TransferredToGroup {| groupId = e.groupId; amount = e.residualBalance |}
-        | Closed _ | TransferredToGroup _ -> invalidOp "No events allowed after CheckedOut/TransferredToGroup"
+        | Closed | TransferredToGroup _ -> invalidOp "No events allowed after CheckedOut/TransferredToGroup"
     let fold: State -> Events.Event seq -> State = Seq.fold evolve
 
 module Decide =
@@ -48,16 +48,16 @@ module Decide =
     let checkin at = function
         | Active { checkedInAt = None } -> [ Events.CheckedIn {| at = at |}  ]
         | Active { checkedInAt = Some t } when t = at -> []
-        | Active _ | Closed _ | TransferredToGroup _ -> invalidOp "Invalid checkin"
+        | Active _ | Closed | TransferredToGroup _ -> invalidOp "Invalid checkin"
 
     let charge at chargeId amount = function
-        | Closed _ | TransferredToGroup _ -> invalidOp "Cannot record charge for Closed account"
+        | Closed | TransferredToGroup _ -> invalidOp "Cannot record charge for Closed account"
         | Active bal ->
             if bal.charges |> Array.contains chargeId then [||]
             else [| Events.Charged {| at = at; chargeId = chargeId; amount = amount |} |]
 
     let payment at paymentId amount = function
-        | Closed _ | TransferredToGroup _ -> invalidOp "Cannot record payment for not opened account" // TODO fix message at source
+        | Closed | TransferredToGroup _ -> invalidOp "Cannot record payment for not opened account" // TODO fix message at source
         | Active bal ->
             if bal.payments |> Array.contains paymentId then [||]
             else [| Events.Paid {| at = at; paymentId = paymentId; amount = amount |} |]

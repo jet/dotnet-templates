@@ -41,7 +41,7 @@ module Dynamo =
                 | IndexTable _ ->           "specify a table name for the index store. (optional if environment variable " + INDEX_TABLE + " specified. default: `Table`+`IndexSuffix`)"
                 | IndexSuffix _ ->          "specify a suffix for the index store. (optional if environment variable " + INDEX_TABLE + " specified. default: \"-index\")"
                 | MaxItems _ ->             "maximum events to load in a batch. Default: 100"
-                | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
 
     type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
         let conn =                          match p.TryGetResult RegionProfile |> Option.orElseWith (fun () -> c.DynamoRegion) with
@@ -95,7 +95,7 @@ module Mdb =
                 | CheckpointSchema _ ->     $"Schema that should contain the checkpoints table. Optional if environment variable {SCHEMA} is defined"
                 | BatchSize _ ->            "maximum events to load in a batch. Default: 1000"
                 | TailSleepIntervalMs _ ->  "How long to sleep in ms once the consumer has hit the tail (default: 100ms)"
-                | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
     type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
         let writeConnStr =                  p.TryGetResult ConnectionString |> Option.defaultWith (fun () -> c.MdbConnectionString)
         let readConnStr =                   p.TryGetResult ReadConnectionString |> Option.orElseWith (fun () -> c.MdbReadConnectionString) |> Option.defaultValue writeConnStr

@@ -178,7 +178,7 @@ let build (args: Args.Arguments) = async {
     let source =
         let startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams
         Propulsion.CosmosStore.CosmosStoreSource(Log.Logger, args.StatsInterval, monitored, leases, processorName, parseFeedDoc, sink,
-                                                 startFromTail = startFromTail, ?maxItems = maxItems,  lagEstimationInterval = lagFrequency).Start()
+                                                 startFromTail = startFromTail, ?maxItems = maxItems, lagEstimationInterval = lagFrequency).Start()
     return sink, source }
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException

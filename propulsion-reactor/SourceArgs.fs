@@ -106,7 +106,7 @@ module Cosmos =
                 | Retries _ ->              "specify operation retries. Default: 9."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
                 | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `SourceContainer` + `-aux`."
-                | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to supply for the Change Feed query. Default: use response size limit"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
 #if !(kafka && blank)
@@ -177,7 +177,7 @@ module Dynamo =
                 | IndexTable _ ->           "specify a table name for the index store. (optional if environment variable " + Args.INDEX_TABLE + " specified. default: `Table`+`IndexSuffix`)"
                 | IndexSuffix _ ->          "specify a suffix for the index store. (optional if environment variable " + Args.INDEX_TABLE + " specified. default: \"-index\")"
                 | MaxItems _ ->             "maximum events to load in a batch. Default: 100"
-                | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | StreamsDop _ ->           "parallelism when loading events from Store Feed Source. Default 4"
 #if !(kafka && blank)
                 | Cosmos _ ->               "CosmosDb Sink parameters."

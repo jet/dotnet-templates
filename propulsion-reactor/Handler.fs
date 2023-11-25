@@ -42,7 +42,7 @@ let generate stream version summary =
     Propulsion.Codec.NewtonsoftJson.RenderedSummary.ofStreamEvent stream version event
 
 #if blank
-let categories = [| Contract.Input.Category |]
+let categories = [| Contract.Input.CategoryName |]
     
 let handle
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)

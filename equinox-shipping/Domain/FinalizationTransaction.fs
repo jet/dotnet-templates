@@ -83,9 +83,9 @@ module Flow =
         match state, event with
         | Fold.State.Initial,       Events.FinalizationRequested _
         | Fold.State.Reserving _,   Events.RevertCommenced _
-        | Fold.State.Reserving _,   Events.ReservationCompleted _
+        | Fold.State.Reserving _,   Events.ReservationCompleted
         | Fold.State.Reverting _,   Events.Completed
-        | Fold.State.Assigning _,   Events.AssignmentCompleted _
+        | Fold.State.Assigning _,   Events.AssignmentCompleted
         | Fold.State.Assigned _,    Events.Completed -> true
         | _ -> false
 

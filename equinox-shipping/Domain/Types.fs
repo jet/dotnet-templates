@@ -19,6 +19,10 @@ module TransactionId =
     let parse (x: string): TransactionId = %x
     let (|Parse|) = parse
 
+module Seq =
+
+    let inline chooseV f xs = seq { for x in xs do match f x with ValueSome v -> yield v | ValueNone -> () }
+
 module Guid =
 
     let inline toStringN (x: System.Guid) = x.ToString "N"

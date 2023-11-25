@@ -92,7 +92,7 @@ module Args =
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams
                     let checkpointConfig = CosmosFeedConfig.Persistent (groupName, startFromTail, maxItems, lagFrequency)
-                    SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
+                    SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, x.StatsInterval)
                 buildSourceConfig, x.Sink, ignore
 #endif                
 // #if dynamo
@@ -165,15 +165,13 @@ let build (args: Args.Arguments) =
 #if (cosmos && parallelOnly)
     // Custom logic for establishing the source, as we're not projecting StreamEvents - TODO could probably be generalized
     let source =
-        let mapToStreamItems (x: System.Collections.Generic.IReadOnlyCollection<'a>): seq<'a> = upcast x
-        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Handler.mapToStreamItems)
-        match buildSourceConfig Log.Logger consumerGroupName with SourceConfig.Cosmos (monitoredContainer, leasesContainer, checkpoints, tailSleepInterval: TimeSpan) ->
+        match buildSourceConfig Log.Logger consumerGroupName with SourceConfig.Cosmos (monitoredContainer, leasesContainer, checkpoints, tailSleepInterval: TimeSpan, statsInterval) ->
         match checkpoints with
         | Ephemeral _ -> failwith "Unexpected"
         | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
 
-        Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitoredContainer, leasesContainer, consumerGroupName, observer,
-                                                       startFromTail = startFromTail, ?maxItems=maxItems, lagReportFreq=lagFrequency)
+        Propulsion.CosmosStore.CosmosStoreSource(Log.Logger, statsInterval, monitoredContainer, leasesContainer, consumerGroupName, Handler.mapToStreamItems, sink,
+                                                 startFromTail = startFromTail, ?maxItems = maxItems, lagEstimationInterval = lagFrequency).Start()
 #else
     let source, _awaitReactions =
         let sourceConfig = buildSourceConfig Log.Logger consumerGroupName

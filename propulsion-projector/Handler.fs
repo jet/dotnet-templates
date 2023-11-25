@@ -4,7 +4,7 @@ open Propulsion.Internal
 //#if cosmos
 #if     parallelOnly
 // Here we pass the items directly through to the handler without parsing them
-let mapToStreamItems (x: System.Collections.Generic.IReadOnlyCollection<'a>): seq<'a> = upcast x
+let mapToStreamItems (x: System.Collections.Generic.IReadOnlyCollection<Propulsion.CosmosStore.ChangeFeedItem>): seq<Propulsion.CosmosStore.ChangeFeedItem> = upcast x
 let categories = [||] // TODO add category names
 #else // cosmos && !parallelOnly
 #endif // !parallelOnly

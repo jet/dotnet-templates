@@ -10,6 +10,7 @@ type SourceConfig =
         * leasesContainer: Microsoft.Azure.Cosmos.Container
         * checkpoints: CosmosFeedConfig
         * tailSleepInterval: TimeSpan
+        * statsInterval: TimeSpan
 #endif
 // #if dynamo    
     | Dynamo of indexContext: Equinox.DynamoStore.DynamoStoreContext
@@ -83,7 +84,7 @@ module SourceConfig =
 #if esdb    
     module Esdb =
         open Propulsion.EventStoreDb
-        let start log (sink: Propulsion.Sinks.Sink) (categories: string[])
+        let start log (sink: Propulsion.Sinks.SinkPipeline) (categories: string[])
             (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) =
             let source =
                 EventStoreSource(
@@ -96,7 +97,7 @@ module SourceConfig =
 #if sss    
     module Sss =
         open Propulsion.SqlStreamStore
-        let start log (sink: Propulsion.Sinks.Sink) (categories: string[])
+        let start log (sink: Propulsion.Sinks.SinkPipeline) (categories: string[])
             (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) =
             let source =
                 SqlStreamStoreSource(
@@ -108,8 +109,8 @@ module SourceConfig =
 #endif            
     let start (log, storeLog) sink categories: SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) = function
 #if cosmos    
-        | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval) ->
-            Cosmos.start log sink categories (monitored, leases, checkpointConfig, tailSleepInterval)
+        | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, statsInterval) ->
+            Cosmos.start log sink categories (monitored, leases, checkpointConfig, tailSleepInterval, statsInterval)
 #endif
 // #if dynamo    
         | SourceConfig.Dynamo (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
