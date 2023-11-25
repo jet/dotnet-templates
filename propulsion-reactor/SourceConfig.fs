@@ -54,7 +54,7 @@ module SourceConfig =
                     CosmosStoreSource(log, statsInterval, monitoredContainer, leasesContainer, processorName, parseFeedDoc, sink,
                                       startFromTail = startFromTail, ?maxItems = maxItems, tailSleepInterval = tailSleepInterval,
                                       lagEstimationInterval = lagFrequency).Start()
-            source, None
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
     module Dynamo =
         open Propulsion.DynamoStore
         let start (log, storeLog) (sink: Propulsion.Sinks.SinkPipeline) categories

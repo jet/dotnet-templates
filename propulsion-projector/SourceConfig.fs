@@ -64,7 +64,7 @@ module SourceConfig =
                     CosmosStoreSource(log, statsInterval, monitoredContainer, leasesContainer, processorName, parseFeedDoc, sink,
                                       startFromTail = startFromTail, ?maxItems = maxItems, tailSleepInterval = tailSleepInterval,
                                       lagEstimationInterval = lagFrequency).Start()
-            source, None
+            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
 // #endif            
 // #if dynamo    
     module Dynamo =
