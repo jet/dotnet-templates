@@ -48,29 +48,28 @@ module SourceConfig =
 // #if cosmos    
     module Cosmos =
         open Propulsion.CosmosStore
-        let start log (sink: Propulsion.Sinks.Sink) categories
-            (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+        let start log (sink: Propulsion.Sinks.SinkPipeline) categories
+            (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let parseFeedDoc = EquinoxSystemTextJsonParser.ofCategories categories
-            let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect parseFeedDoc)
             let source =
                 match checkpointConfig with
                 | Ephemeral processorName ->
                     let withStartTime1sAgo (x: Microsoft.Azure.Cosmos.ChangeFeedProcessorBuilder) =
                         x.WithStartTime(let t = DateTime.UtcNow in t.AddSeconds -1.)
                     let lagFrequency = TimeSpan.FromMinutes 1.
-                    CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer,
-                                            startFromTail = true, customize = withStartTime1sAgo, tailSleepInterval = tailSleepInterval,
-                                            lagReportFreq = lagFrequency)
+                    CosmosStoreSource(log, statsInterval, monitoredContainer, leasesContainer, processorName, parseFeedDoc, sink,
+                                      startFromTail = true, customize = withStartTime1sAgo, tailSleepInterval = tailSleepInterval,
+                                      lagEstimationInterval = lagFrequency).Start()
                 | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
-                    CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer,
-                                            startFromTail = startFromTail, ?maxItems = maxItems, tailSleepInterval = tailSleepInterval,
-                                            lagReportFreq = lagFrequency)
+                    CosmosStoreSource(log, statsInterval, monitoredContainer, leasesContainer, processorName, parseFeedDoc, sink,
+                                      startFromTail = startFromTail, ?maxItems = maxItems, tailSleepInterval = tailSleepInterval,
+                                      lagEstimationInterval = lagFrequency).Start()
             source, None
 // #endif            
 // #if dynamo    
     module Dynamo =
         open Propulsion.DynamoStore
-        let start (log, storeLog) (sink: Propulsion.Sinks.Sink) categories
+        let start (log, storeLog) (sink: Propulsion.Sinks.SinkPipeline) categories
             (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
             let source =
                 DynamoStoreSource(

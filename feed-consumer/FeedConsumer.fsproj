@@ -16,11 +16,11 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.14.1" />
-    <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.0.0-rc.14.1" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.13" />
-    <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.9.1" />
-    <PackageReference Include="Propulsion.Feed" Version="3.0.0-rc.9.1" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.14.5" />
+    <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.0.0-rc.14.5" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.14.1" />
+    <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.9.11" />
+    <PackageReference Include="Propulsion.Feed" Version="3.0.0-rc.9.11" />
     <PackageReference Include="Serilog.Sinks.Async" Version="1.5.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
   </ItemGroup>

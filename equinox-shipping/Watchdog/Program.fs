@@ -68,7 +68,7 @@ module Args =
                 let buildSourceConfig _log groupName =
                     let startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams
                     let checkpointConfig = CosmosFeedConfig.Persistent (groupName, startFromTail, maxItems, lagFrequency)
-                    SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
+                    SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, x.StatsInterval)
                 let store = Store.Config.Cosmos (context, cache)
                 store, buildSourceConfig, Equinox.CosmosStore.Core.Log.InternalMetrics.dump
             | Choice2Of3 a ->

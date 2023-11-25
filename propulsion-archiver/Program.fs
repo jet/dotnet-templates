@@ -169,10 +169,9 @@ let build (args: Args.Arguments) =
                               purgeInterval = TimeSpan.FromMinutes 10., maxBytes = maxBytes)
     let monitored, leases = args.Source.ConnectFeed() |> Async.RunSynchronously
     let source =
-        let observer = CosmosStoreSource.CreateObserver(log, archiverSink.StartIngester, Seq.collect Handler.selectArchivable)
         let startFromTail, maxItems, lagFrequency = args.Source.MonitoringParams
-        CosmosStoreSource.Start(log, monitored, leases, processorName, observer,
-                                startFromTail = startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
+        CosmosStoreSource(log, args.StatsInterval, monitored, leases, processorName, Handler.selectArchivable, archiverSink,
+                          startFromTail = startFromTail, ?maxItems = maxItems, lagEstimationInterval = lagFrequency).Start()
     archiverSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly

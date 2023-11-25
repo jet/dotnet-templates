@@ -79,7 +79,7 @@ module CosmosReactor =
             let store, monitored, leases = conn.Connect()
             let createSourceConfig consumerGroupName =
                 let checkpointConfig = CosmosFeedConfig.Ephemeral consumerGroupName
-                SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
+                SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, TimeSpan.FromSeconds 60.)
             new Fixture(messageSink, store, createSourceConfig)
         member _.NullWait(_arguments) = async.Zero () // We could wire up a way to await all tranches having caught up, but not implemented yet
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.

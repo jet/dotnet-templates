@@ -124,7 +124,7 @@ module MultiStreams =
         inherit Propulsion.Streams.Stats<Stat>(log, statsInterval, stateInterval)
 
         let mutable faves, saves = 0, 0
-        let otherCats = Stats.CatStats()
+        let otherCats = Stats.Counters()
         override _.HandleOk res = res |> function
             | Faves count -> faves <- faves + count
             | Saves count -> saves <- saves + count
@@ -162,7 +162,7 @@ module MultiMessages =
 
     type Processor() =
         let mutable favorited, unfavorited, saved, removed, cleared = 0, 0, 0, 0, 0
-        let cats, keys = Stats.CatStats(), ConcurrentDictionary()
+        let cats, keys = Stats.Counters(), ConcurrentDictionary()
 
         // `BatchedConsumer` holds a `Processor` instance per in-flight batch (there will likely be a batch in flight per partition assigned to this consumer)
         //   and waits for the work to complete before calling this
