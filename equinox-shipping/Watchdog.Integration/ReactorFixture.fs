@@ -2,7 +2,6 @@ namespace Shipping.Watchdog.Integration
 
 open Propulsion.Internal // IntervalTimer etc
 open Shipping.Domain.Tests
-open Shipping.Infrastructure
 open Shipping.Watchdog
 open System
 
@@ -38,10 +37,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
         if stats.StatsInterval.RemainingMs > 3000 then
             stats.StatsInterval.Trigger()
             stats.StatsInterval.SleepUntilTriggerCleared()
-    member _.Await(propagationDelay) =
-        match awaitReactions with
-        | Some f -> f propagationDelay |> Async.ofTask
-        | None -> async { ()  }
+    member _.Await(propagationDelay) = awaitReactions propagationDelay |> Async.ofTask
 
     interface IDisposable with
 
@@ -80,7 +76,7 @@ module CosmosReactor =
             let store, monitored, leases = conn.Connect()
             let createSourceConfig consumerGroupName =
                 let checkpointConfig = CosmosFeedConfig.Ephemeral consumerGroupName
-                SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
+                SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, TimeSpan.FromSeconds 60.)
             new Fixture(messageSink, store, createSourceConfig)
         member _.NullWait(_arguments) = async.Zero () // We could wire up a way to await all tranches having caught up, but not implemented yet
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.

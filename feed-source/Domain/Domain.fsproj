@@ -14,11 +14,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- AsyncCacheCell-->
-    <PackageReference Include="Equinox.Core" Version="4.0.0-rc.13" />
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.13" />
-    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.13" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.11.1" />
+    <!-- TaskCell-->
+    <PackageReference Include="Equinox.Core" Version="4.0.0-rc.14.5" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.14.5" />
+    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.14.5" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.14.1" />
   </ItemGroup>
 
 </Project>

@@ -36,8 +36,7 @@ type Equinox.DynamoStore.DynamoStoreConnector with
         
     member x.CreateClient() =
         x.LogConfiguration()
-        x.CreateDynamoDbClient()
-        |> Equinox.DynamoStore.DynamoStoreClient
+        x.CreateDynamoStoreClient()
 
 type Equinox.DynamoStore.DynamoStoreClient with
 

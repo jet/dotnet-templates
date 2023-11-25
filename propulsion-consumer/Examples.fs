@@ -87,7 +87,8 @@ module MultiStreams =
             | SavedForLater.Reactions.Decode (id, events) ->
                 let s = match saves.TryGetValue id with true, value -> value | false, _ -> []
                 SavedForLaterEvents (id, s, events)
-            | FsCodec.StreamName.Split (categoryName, _), events -> OtherCategory struct (categoryName, Array.length events)
+            | FsCodec.StreamName.Split (categoryName, _), events ->
+                OtherCategory struct (categoryName, Array.length events)
 
         // each event is guaranteed to only be supplied once by virtue of having been passed through the Streams Scheduler
         member _.Handle(streamName: FsCodec.StreamName, events: Propulsion.Sinks.Event[]) = async {
@@ -124,7 +125,7 @@ module MultiStreams =
         inherit Propulsion.Streams.Stats<Stat>(log, statsInterval, stateInterval)
 
         let mutable faves, saves = 0, 0
-        let otherCats = Stats.CatStats()
+        let otherCats = Stats.Counters()
         override _.HandleOk res = res |> function
             | Faves count -> faves <- faves + count
             | Saves count -> saves <- saves + count
@@ -162,7 +163,7 @@ module MultiMessages =
 
     type Processor() =
         let mutable favorited, unfavorited, saved, removed, cleared = 0, 0, 0, 0, 0
-        let cats, keys = Stats.CatStats(), ConcurrentDictionary()
+        let cats, keys = Stats.Counters(), ConcurrentDictionary()
 
         // `BatchedConsumer` holds a `Processor` instance per in-flight batch (there will likely be a batch in flight per partition assigned to this consumer)
         //   and waits for the work to complete before calling this
@@ -182,7 +183,7 @@ module MultiMessages =
             match struct (streamName, Array.ofSeq raw) with
             | Favorites.Reactions.Decode (_, events) -> yield! events |> Seq.map Fave
             | SavedForLater.Reactions.Decode (_, events) -> yield! events |> Seq.map Save
-            | FsCodec.StreamName.Split (otherCategoryName, _), events -> yield OtherCat (otherCategoryName, events.Length) }
+            | FsCodec.StreamName.Split (otherCategoryName, _), events -> OtherCat (otherCategoryName, events.Length) }
 
         // NB can be called in parallel, so must be thread-safe
         member x.Handle(streamName: FsCodec.StreamName, spanJson: string) =

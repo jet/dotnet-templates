@@ -4,9 +4,7 @@ open Propulsion.Internal
 //#if cosmos
 #if     parallelOnly
 // Here we pass the items directly through to the handler without parsing them
-let mapToStreamItems (x: System.Collections.Generic.IReadOnlyCollection<'a>): seq<'a> = upcast x
 let categories = [||] // TODO add category names
-#else // cosmos && !parallelOnly
 #endif // !parallelOnly
 //#endif // cosmos
 
@@ -15,7 +13,8 @@ let categories = [||] // TODO add category names
 type ExampleOutput = { id: string }
 
 let serdes = FsCodec.SystemTextJson.Options.Default |> FsCodec.SystemTextJson.Serdes
-let render (doc: System.Text.Json.JsonDocument) =
+let render ((_s,e): Propulsion.Sinks.StreamEvent) =
+    let doc = unbox<System.Text.Json.JsonDocument> e.Context
     let r = doc.RootElement
     let gs (name: string) = let x = r.GetProperty name in x.GetString()
     let equinoxPartition, itemId = gs "p", gs "id"

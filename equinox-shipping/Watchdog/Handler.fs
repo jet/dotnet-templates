@@ -1,6 +1,5 @@
 module Shipping.Watchdog.Handler
 
-open Shipping.Infrastructure
 open System
 
 [<RequireQualifiedAccess>]
@@ -32,7 +31,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, ?logExternalStats) =
 
 open Shipping.Domain
 
-let private reactionCategories = [| FinalizationTransaction.Reactions.Category |]
+let private reactionCategories = [| FinalizationTransaction.Reactions.categoryName |]
 
 let handle
         (processingTimeout: TimeSpan)

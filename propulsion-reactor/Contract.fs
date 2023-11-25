@@ -19,9 +19,9 @@ let ofState (state: Todo.Fold.State): SummaryInfo =
 #if blank
 module Input =
 
-    let [<Literal>] Category = "CategoryName"
+    let [<Literal>] CategoryName = "CategoryName"
     let decodeId = FsCodec.StreamId.dec ClientId.parse
-    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
+    let tryDecode = FsCodec.StreamName.tryFind CategoryName >> ValueOption.map decodeId
     
     type Value = { field: int }
     type Event =

@@ -329,7 +329,7 @@ let start (args : Args.Arguments) =
     (yields a started application loop)
 ```
 
-### `run`,  `main` functions
+### `run`,  `main` function
 
 The `run` function formalizes the overall pattern. It is responsible for:
 

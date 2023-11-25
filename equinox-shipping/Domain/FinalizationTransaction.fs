@@ -1,10 +1,8 @@
 module Shipping.Domain.FinalizationTransaction
 
-module private Stream =
-    let [<Literal>] Category = "FinalizationTransaction"
-    let id = FsCodec.StreamId.gen TransactionId.toString
-    let decodeId = FsCodec.StreamId.dec TransactionId.parse
-    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
+let [<Literal>] private CategoryName = "FinalizationTransaction"
+let private streamId = FsCodec.StreamId.gen TransactionId.toString
+let private catId = CategoryId(CategoryName, streamId, FsCodec.StreamId.dec TransactionId.parse)
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -36,8 +34,8 @@ module Reactions =
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
         encoded.EventType = nameof(Events.Completed)
-    let [<Literal>] Category = Stream.Category
-    let [<return: Struct>] (|For|_|) = Stream.tryDecode
+    let [<Literal>] categoryName = CategoryName
+    let [<return: Struct>] (|For|_|) = catId.TryDecode
 
 module Fold =
 
@@ -84,9 +82,9 @@ module Flow =
         match state, event with
         | Fold.State.Initial,       Events.FinalizationRequested _
         | Fold.State.Reserving _,   Events.RevertCommenced _
-        | Fold.State.Reserving _,   Events.ReservationCompleted _
+        | Fold.State.Reserving _,   Events.ReservationCompleted
         | Fold.State.Reverting _,   Events.Completed
-        | Fold.State.Assigning _,   Events.AssignmentCompleted _
+        | Fold.State.Assigning _,   Events.AssignmentCompleted
         | Fold.State.Assigned _,    Events.Completed -> true
         | _ -> false
 
@@ -107,8 +105,8 @@ type Service internal (resolve: TransactionId -> Equinox.Decider<Events.Event, F
 module Factory =
 
     let private (|Category|) = function
-        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)
+        | Store.Config.Memory store ->            Store.Memory.create CategoryName Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted CategoryName Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted CategoryName Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized CategoryName Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat)

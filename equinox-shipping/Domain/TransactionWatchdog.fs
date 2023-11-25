@@ -43,7 +43,7 @@ let fold: Events.Categorization seq -> Fold.State =
 
 let (|TransactionStatus|) (codec: #FsCodec.IEventCodec<_, _, _>) events: Fold.State =
     events
-    |> Seq.choose (codec.TryDecode >> function ValueSome x -> Some x | ValueNone -> None)
+    |> Seq.chooseV codec.Decode
     |> fold
 
 module Finalization =

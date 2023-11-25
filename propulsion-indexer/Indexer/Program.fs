@@ -117,7 +117,7 @@ module Args =
 
                 | Verbose ->                "request Verbose Logging from ChangeFeedProcessor and Store. Default: off"
                 | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `<SourceContainer>` + `-aux`."
-                | FromTail _ ->             "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
+                | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
                 | MaxItems _ ->             "maximum item count to request from the feed. Default: unlimited."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
     and CosmosArguments(c: Args.Configuration, p: ParseResults<CosmosParameters>) =
@@ -156,11 +156,11 @@ let build (args: Args.Arguments) = async {
     let! contexts, monitored, leases = args.ConnectWithFeed(args.IsSnapshotting)
     let store = (contexts, Equinox.Cache(AppName, sizeMb = 10)) ||> Store.Cosmos.createConfig
     let parseFeedDoc, sink =
-        let mkParseAll () = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents (fun _ -> true)
+        let mkParseAll () = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.whereCategory (fun _ -> true)
         let mkSink stats handle = Factory.StartSink(Log.Logger, stats, maxConcurrentStreams, handle, maxReadAhead)
         match args.Action with
         | Args.Action.Index _ ->
-            let mkParseCats = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumCategoryEvents
+            let mkParseCats = Propulsion.CosmosStore.EquinoxSystemTextJsonParser.ofCategories
             let stats = Indexer.Stats(Log.Logger, args.StatsInterval, args.StateInterval, args.Cosmos.Verbose)
             let handle = Indexer.Factory.createHandler store
             mkParseCats Indexer.sourceCategories, mkSink stats handle
@@ -176,10 +176,9 @@ let build (args: Args.Arguments) = async {
                 Log.Logger, maxReadAhead, eventsContext, maxConcurrentStreams, stats,
                 purgeInterval = TimeSpan.FromHours 1, maxBytes = a.MaxBytes)
     let source =
-        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect parseFeedDoc)
         let startFromTail, maxItems, lagFrequency = args.Cosmos.MonitoringParams
-        Propulsion.CosmosStore.CosmosStoreSource.Start(Log.Logger, monitored, leases, processorName, observer,
-                                                       startFromTail = startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
+        Propulsion.CosmosStore.CosmosStoreSource(Log.Logger, args.StatsInterval, monitored, leases, processorName, parseFeedDoc, sink,
+                                                 startFromTail = startFromTail, ?maxItems = maxItems, lagEstimationInterval = lagFrequency).Start()
     return sink, source }
 
 open Propulsion.Internal // AwaitKeyboardInterruptAsTaskCanceledException

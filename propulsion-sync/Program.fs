@@ -442,10 +442,10 @@ let transformV0 catFilter v0SchemaDocument: Propulsion.Streams.StreamEvent<_> se
         yield parsed }
 //#else
 let transformOrFilter catFilter changeFeedDocument: Propulsion.Sinks.StreamEvent seq = seq {
-    for FsCodec.StreamName.Category cat, _ as x in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents catFilter changeFeedDocument do
-        // NB the `index` needs to be contiguous with existing events - IOW filtering needs to be at stream (and not event) level
-        if catFilter cat then
-            yield x }
+    for se in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.whereCategory catFilter changeFeedDocument do
+        // NB the `index` needs to be contiguous with existing events, so filtering at stream or category level is OK
+        // However, individual events must feed through to the Sink or the Scheduler will be awaiting them
+        yield (*transform*) se }
 //#endif
 
 let [<Literal>] AppName = "SyncTemplate"
@@ -515,14 +515,14 @@ let build (args: Args.Arguments, log) =
     match args.SourceParams() with
     | Choice1Of2 (monitored, leases, processorName, startFromTail, maxItems, lagFrequency) ->
 #if marveleqx
-        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformV0 streamFilter))
+        let parseFeedDoc = transformV0 streamFilter
 #else
-        let observer = Propulsion.CosmosStore.CosmosStoreSource.CreateObserver(Log.Logger, sink.StartIngester, Seq.collect (transformOrFilter streamFilter))
+        let parseFeedDoc = transformOrFilter streamFilter
 #endif
         let source =
-            Propulsion.CosmosStore.CosmosStoreSource.Start(
-                Log.Logger, monitored, leases, processorName, observer, startFromTail = startFromTail,
-                ?maxItems = maxItems, lagReportFreq = lagFrequency)
+            Propulsion.CosmosStore.CosmosStoreSource(
+                Log.Logger, args.StatsInterval, monitored, leases, processorName, parseFeedDoc, sink, startFromTail = startFromTail,
+                ?maxItems = maxItems, lagEstimationInterval = lagFrequency).Start()
         [ Async.AwaitKeyboardInterruptAsTaskCanceledException(); source.AwaitWithStopOnCancellation(); sink.AwaitWithStopOnCancellation() ]
     | Choice2Of2 (srcE, spec) ->
         match maybeDstCosmos with

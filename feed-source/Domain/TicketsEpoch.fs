@@ -5,9 +5,8 @@
 /// Each successive epoch is identified by an index, i.e. TicketsEpoch-FC001_0, then TicketsEpoch-FC001_1
 module FeedSourceTemplate.Domain.TicketsEpoch
 
-module private Stream = 
-    let [<Literal>] Category = "TicketsEpoch"
-    let id = FsCodec.StreamId.gen2 FcId.toString TicketsEpochId.toString
+let [<Literal>] CategoryName = "TicketsEpoch"
+let private streamId = FsCodec.StreamId.gen2 FcId.toString TicketsEpochId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 [<RequireQualifiedAccess>]
@@ -72,7 +71,7 @@ let decide capacity candidates (currentIds, closed as state) =
         { accepted = addedItemIds; residual = residualItems; content = currentIds; closed = closed }, events
 
 /// Service used for the write side; manages ingestion of items into the series of epochs
-type IngestionService internal (capacity, resolve: FcId * TicketsEpochId -> Equinox.Decider<Events.Event, Fold.State>) =
+type IngestionService internal (capacity, resolve: struct (FcId * TicketsEpochId) -> Equinox.Decider<Events.Event, Fold.State>) =
 
     /// Handles idempotent deduplicated insertion into the set of items held within the epoch
     member _.Ingest(fcId, epochId, ticketIds): Async<Result> =
@@ -93,10 +92,10 @@ type IngestionService internal (capacity, resolve: FcId * TicketsEpochId -> Equi
 module Factory =
 
     let private create_ capacity resolve =
-        IngestionService(capacity, Stream.id >> resolve)
+        IngestionService(capacity, streamId >> resolve)
     let private (|Category|) = function
-        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)
+        | Store.Config.Memory store ->            Store.Memory.create CategoryName Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted CategoryName Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)
     let create capacity (Category cat) = Store.createDecider cat |> create_ capacity
 
 /// Custom Fold and caching logic compared to the IngesterService
@@ -115,7 +114,7 @@ module Reader =
 
     type StateDto = { closed: bool; tickets: Events.Item[] }
 
-    type Service internal (resolve: FcId * TicketsEpochId -> Equinox.Decider<Events.Event, State>) =
+    type Service internal (resolve: struct (FcId * TicketsEpochId) -> Equinox.Decider<Events.Event, State>) =
 
         /// Returns all the items currently held in the stream
         member _.Read(fcId, epochId): Async<StateDto> =
@@ -125,6 +124,6 @@ module Reader =
     module Factory =
 
         let private (|Category|) = function
-            | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec initial fold store
-            | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createUnoptimized Stream.Category Events.codec initial fold (context, cache)
-        let create (Category cat) = Service(Stream.id >> Store.createDecider cat)
+            | Store.Config.Memory store ->            Store.Memory.create CategoryName Events.codec initial fold store
+            | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createUnoptimized CategoryName Events.codec initial fold (context, cache)
+        let create (Category cat) = Service(streamId >> Store.createDecider cat)

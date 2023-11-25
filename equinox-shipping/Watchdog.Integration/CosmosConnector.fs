@@ -1,7 +1,5 @@
 namespace Shipping.Watchdog.Integration
 
-open Shipping.Infrastructure
-
 type CosmosConnector(connectionString, databaseId, containerId) =
 
     let discovery =                     connectionString |> Equinox.CosmosStore.Discovery.ConnectionString

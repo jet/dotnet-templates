@@ -106,7 +106,7 @@ module Args =
                 let buildSourceConfig log groupName =
                     let startFromTail, maxItems, tailSleepInterval, lagFrequency = a.MonitoringParams
                     let checkpointConfig = CosmosFeedConfig.Persistent (groupName, startFromTail, maxItems, lagFrequency)
-                    SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval)
+                    SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, x.StatsInterval)
                 let store = Store.Config.Cosmos (context, cache)
 #if blank
                 let targetStore = store

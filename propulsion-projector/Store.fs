@@ -25,7 +25,7 @@ module Cosmos =
 module Dynamo =
 
     let private createCached name codec initial fold accessStrategy (context, cache): Equinox.Category<_, _, _> =
-        Equinox.DynamoStore.DynamoStoreCategory(context, name, FsCodec.Deflate.EncodeUncompressed codec, fold, initial, accessStrategy, cacheStrategy cache)
+        Equinox.DynamoStore.DynamoStoreCategory(context, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = Equinox.DynamoStore.AccessStrategy.Snapshot (isOrigin, toSnapshot)

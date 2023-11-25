@@ -1,4 +1,4 @@
-namespace Shipping.Infrastructure
+namespace global
 
 open System
 open System.Threading.Tasks
@@ -10,6 +10,7 @@ type SourceConfig =
         * leasesContainer: Microsoft.Azure.Cosmos.Container
         * checkpoints: CosmosFeedConfig
         * tailSleepInterval: TimeSpan
+        * statsInterval: TimeSpan
     | Dynamo of indexContext: Equinox.DynamoStore.DynamoStoreContext
         * checkpoints: Propulsion.Feed.IFeedCheckpointStore
         * loading: Propulsion.DynamoStore.EventLoadMode
@@ -31,33 +32,32 @@ and [<NoEquality; NoComparison>] CosmosFeedConfig =
 module SourceConfig =
     module Memory =
         open Propulsion.MemoryStore
-        let start log (sink: Propulsion.Sinks.Sink) (categories: string[])
-            (store: Equinox.MemoryStore.VolatileStore<_>): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+        let start log (sink: Propulsion.Sinks.SinkPipeline) (categories: string[])
+            (store: Equinox.MemoryStore.VolatileStore<_>): Propulsion.Pipeline * (TimeSpan -> Task<unit>) =
             let source = MemoryStoreSource(log, store, categories, sink)
-            source.Start(), Some (fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false))
+            source.Start(), fun _propagationDelay -> source.Monitor.AwaitCompletion(ignoreSubsequent = false)
     module Cosmos =
         open Propulsion.CosmosStore
-        let start log (sink: Propulsion.Sinks.Sink) categories
-            (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
-            let parseFeedDoc = EquinoxSystemTextJsonParser.enumCategoryEvents categories
-            let observer = CosmosStoreSource.CreateObserver(log, sink.StartIngester, Seq.collect parseFeedDoc)
+        let start log (sink: Propulsion.Sinks.SinkPipeline) categories
+            (monitoredContainer, leasesContainer, checkpointConfig, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) =
+            let parseFeedDoc = EquinoxSystemTextJsonParser.ofCategories categories
             let source =
                 match checkpointConfig with
                 | Ephemeral processorName ->
                     let withStartTime1sAgo (x: Microsoft.Azure.Cosmos.ChangeFeedProcessorBuilder) =
                         x.WithStartTime(let t = DateTime.UtcNow in t.AddSeconds -1.)
                     let lagFrequency = TimeSpan.FromMinutes 1.
-                    CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer,
-                                            startFromTail = true, customize = withStartTime1sAgo, tailSleepInterval = tailSleepInterval,
-                                            lagReportFreq = lagFrequency)
+                    CosmosStoreSource(log, statsInterval, monitoredContainer, leasesContainer, processorName, parseFeedDoc, sink,
+                                      startFromTail = true, customize = withStartTime1sAgo, tailSleepInterval = tailSleepInterval,
+                                      lagEstimationInterval = lagFrequency).Start()
                 | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
-                    CosmosStoreSource.Start(log, monitoredContainer, leasesContainer, processorName, observer,
-                                            startFromTail = startFromTail, ?maxItems = maxItems, tailSleepInterval = tailSleepInterval,
-                                            lagReportFreq = lagFrequency)
-            source, None
+                    CosmosStoreSource(log, statsInterval, monitoredContainer, leasesContainer, processorName, parseFeedDoc, sink,
+                                      startFromTail = startFromTail, ?maxItems = maxItems, tailSleepInterval = tailSleepInterval,
+                                      lagEstimationInterval = lagFrequency).Start()
+            source, fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false)
     module Dynamo =
         open Propulsion.DynamoStore
-        let create (log, storeLog) (sink: Propulsion.Sinks.Sink) categories
+        let create (log, storeLog) (sink: Propulsion.Sinks.SinkPipeline) categories
             (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) trancheIds =
             DynamoStoreSource(
                 log, statsInterval,
@@ -65,27 +65,27 @@ module SourceConfig =
                 checkpoints, sink, loadMode, categories = categories,
                 startFromTail = startFromTail, storeLog = storeLog, ?trancheIds = trancheIds)
         let start (log, storeLog) sink categories (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
-            : Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+            : Propulsion.Pipeline * (TimeSpan -> Task<unit>) =
             let source = create (log, storeLog) sink categories (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) None
             let source = source.Start()
-            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            source, fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false)
     module Esdb =
         open Propulsion.EventStoreDb
-        let start log (sink: Propulsion.Sinks.Sink) categories
-            (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) option =
+        let start log (sink: Propulsion.Sinks.SinkPipeline) categories
+            (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval): Propulsion.Pipeline * (TimeSpan -> Task<unit>) =
             let source =
                 EventStoreSource(
                     log, statsInterval,
                     client, batchSize, tailSleepInterval,
                     checkpoints, sink, categories, withData = withData, startFromTail = startFromTail)
             let source = source.Start()
-            source, Some (fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false))
+            source, fun propagationDelay -> source.Monitor.AwaitCompletion(propagationDelay, ignoreSubsequent = false)
 
-    let start (log, storeLog) sink categories: SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) option = function
+    let start (log, storeLog) sink categories: SourceConfig -> Propulsion.Pipeline * (TimeSpan -> Task<unit>) = function
         | SourceConfig.Memory volatileStore ->
             Memory.start log sink categories volatileStore
-        | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval) ->
-            Cosmos.start log sink categories (monitored, leases, checkpointConfig, tailSleepInterval)
+        | SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, statsInterval) ->
+            Cosmos.start log sink categories (monitored, leases, checkpointConfig, tailSleepInterval, statsInterval)
         | SourceConfig.Dynamo (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval) ->
             Dynamo.start (log, storeLog) sink categories (indexContext, checkpoints, loadMode, startFromTail, batchSizeCutoff, tailSleepInterval, statsInterval)
         | SourceConfig.Esdb (client, checkpoints, withData, startFromTail, batchSize, tailSleepInterval, statsInterval) ->

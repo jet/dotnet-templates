@@ -27,7 +27,7 @@ module Streams =
     let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
     // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
     let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
-        match codec.TryDecode event with
+        match codec.Decode event with
         | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
             Log.ForContext("eventData", renderBody event.Data)
                 .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
@@ -100,7 +100,7 @@ module Dynamo =
     let defaultCacheDuration = TimeSpan.FromMinutes 20.
     let private createCached name codec initial fold accessStrategy (context, cache) =
         let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        DynamoStoreCategory(context, name, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, accessStrategy, cacheStrategy)
+        DynamoStoreCategory(context, name, FsCodec.Compression.EncodeTryCompress codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
@@ -114,8 +114,7 @@ type Equinox.DynamoStore.DynamoStoreConnector with
         
     member x.CreateClient() =
         x.LogConfiguration()
-        x.CreateDynamoDbClient()
-        |> Equinox.DynamoStore.DynamoStoreClient
+        x.CreateDynamoStoreClient()
 
 type Equinox.DynamoStore.DynamoStoreClient with
 

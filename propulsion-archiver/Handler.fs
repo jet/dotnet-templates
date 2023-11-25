@@ -19,9 +19,8 @@ let (|Archivable|NotArchivable|) = function
         NotArchivable
 
 let selectArchivable changeFeedDocument: Propulsion.Sinks.StreamEvent seq = seq {
-    for struct (s, _e) as batch in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.enumStreamEvents categoryFilter changeFeedDocument do
-        let (FsCodec.StreamName.Category cat) = s
-        match cat with
-        | Archivable -> yield batch
+    for s, _e as se in Propulsion.CosmosStore.EquinoxSystemTextJsonParser.whereCategory categoryFilter changeFeedDocument do
+        match FsCodec.StreamName.Category.ofStreamName s with
+        | Archivable -> yield se
         | NotArchivable -> ()
 }

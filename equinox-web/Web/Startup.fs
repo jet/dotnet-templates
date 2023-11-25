@@ -60,7 +60,7 @@ module Store =
     module private Dynamo =
         open Equinox.DynamoStore
         let connect (region, table) (timeout, retries) =
-            let c = DynamoStoreConnector(region, timeout, retries).CreateDynamoDbClient() |> DynamoStoreClient
+            let c = DynamoStoreConnector(region, timeout, retries).CreateDynamoStoreClient()
             DynamoStoreContext.Establish(c, table) |> Async.RunSynchronously
 
 //#endif

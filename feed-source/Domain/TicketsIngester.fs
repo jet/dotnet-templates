@@ -46,11 +46,11 @@ type ServiceForFc internal (log: Serilog.ILogger, fcId, epochs: TicketsEpoch.Ing
             return! Async.Parallel(seq { for epochId in (max 0 (%startingId - lookBack)) .. (%startingId - 1) -> readEpoch %epochId }, loadDop) }
 
     // Tickets cache - used to maintain a list of tickets that have already been ingested in order to avoid db round-trips
-    let previousTickets: AsyncCacheCell<IdsCache> =
+    let previousTickets: TaskCell<IdsCache> =
         let aux = async {
             let! batches = loadPreviousEpochs 4
             return IdsCache.Create(Seq.concat batches) }
-        AsyncCacheCell(fun ct -> Async.StartAsTask(aux, cancellationToken = ct))
+        TaskCell(fun ct -> Async.StartAsTask(aux, cancellationToken = ct))
 
     let tryIngest items = async {
         let! previousTickets = previousTickets.Await()

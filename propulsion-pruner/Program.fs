@@ -158,10 +158,9 @@ let build (args: Args.Arguments, log: ILogger) =
         CosmosStorePruner.Start(Log.Logger, args.MaxReadAhead, eventsContext, args.MaxWriters, stats)
     let monitored, leases = archive.ConnectFeed() |> Async.RunSynchronously
     let source =
-        let observer = CosmosStoreSource.CreateObserver(log.ForContext<CosmosStoreSource>(), deletingEventsSink.StartIngester, Seq.collect Handler.selectPrunable)
         let startFromTail, maxItems, lagFrequency = args.Source.MonitoringParams
-        CosmosStoreSource.Start(log, monitored, leases, processorName, observer,
-                                startFromTail = startFromTail, ?maxItems = maxItems, lagReportFreq = lagFrequency)
+        CosmosStoreSource(log, args.StatsInterval, monitored, leases, processorName, Handler.selectPrunable, deletingEventsSink,
+                          startFromTail = startFromTail, ?maxItems = maxItems, lagEstimationInterval = lagFrequency).Start()
     deletingEventsSink, source
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly

@@ -1,8 +1,7 @@
 ﻿module Shipping.Domain.Shipment
 
-module private Stream =
-    let [<Literal>] Category = "Shipment"
-    let id = FsCodec.StreamId.gen ShipmentId.toString
+let [<Literal>] private CategoryName = "Shipment"
+let private streamId = FsCodec.StreamId.gen ShipmentId.toString
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -30,40 +29,42 @@ module Fold =
     let isOrigin = function Events.Snapshotted _ -> true | _ -> false
     let toSnapshot (state: State) = Events.Snapshotted {| reservation = state.reservation; association = state.association |}
 
-let decideReserve transactionId: Fold.State -> bool * Events.Event[] = function
-    | { reservation = Some r } when r = transactionId -> true, [||]
-    | { reservation = None } -> true, [| Events.Reserved {| transaction = transactionId |} |]
-    | _ -> false, [||]
+module Decisions =
+    
+    let reserve transactionId: Fold.State -> bool * Events.Event[] = function
+        | { reservation = Some r } when r = transactionId -> true, [||]
+        | { reservation = None } -> true, [| Events.Reserved {| transaction = transactionId |} |]
+        | _ -> false, [||]
 
-let interpretRevoke transactionId: Fold.State -> Events.Event[] = function
-    | { reservation = Some r; association = None } when r = transactionId ->
-        [| Events.Revoked |]
-    | _ -> [||] // Ignore if a) already revoked/never reserved b) not reserved for this transactionId
+    let revoke transactionId: Fold.State -> Events.Event[] = function
+        | { reservation = Some r; association = None } when r = transactionId ->
+            [| Events.Revoked |]
+        | _ -> [||] // Ignore if a) already revoked/never reserved b) not reserved for this transactionId
 
-let interpretAssign transactionId containerId: Fold.State -> Events.Event[] = function
-    | { reservation = Some r; association = None } when r = transactionId ->
-        [| Events.Assigned {| container = containerId |} |]
-    | _ -> [||] // Ignore if a) this transaction was not the one reserving it or b) it's already been assigned
+    let assign transactionId containerId: Fold.State -> Events.Event[] = function
+        | { reservation = Some r; association = None } when r = transactionId ->
+            [| Events.Assigned {| container = containerId |} |]
+        | _ -> [||] // Ignore if a) this transaction was not the one reserving it or b) it's already been assigned
 
 type Service internal (resolve: ShipmentId -> Equinox.Decider<Events.Event, Fold.State>) =
 
     member _.TryReserve(shipmentId, transactionId): Async<bool> =
         let decider = resolve shipmentId
-        decider.Transact(decideReserve transactionId)
+        decider.Transact(Decisions.reserve transactionId)
 
     member _.Revoke(shipmentId, transactionId): Async<unit> =
         let decider = resolve shipmentId
-        decider.Transact(interpretRevoke transactionId)
+        decider.Transact(Decisions.revoke transactionId)
 
     member _.Assign(shipmentId, containerId, transactionId): Async<unit> =
         let decider = resolve shipmentId
-        decider.Transact(interpretAssign transactionId containerId)
+        decider.Transact(Decisions.assign transactionId containerId)
 
 module Factory =
 
     let private (|Category|) = function
-        | Store.Config.Memory store ->            Store.Memory.create Stream.Category Events.codec Fold.initial Fold.fold store
-        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
-        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized Stream.Category Events.codec Fold.initial Fold.fold (context, cache)
-    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)
+        | Store.Config.Memory store ->            Store.Memory.create CategoryName Events.codec Fold.initial Fold.fold store
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted CategoryName Events.codecJe Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Dynamo (context, cache) -> Store.Dynamo.createSnapshotted CategoryName Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
+        | Store.Config.Esdb (context, cache) ->   Store.Esdb.createUnoptimized CategoryName Events.codec Fold.initial Fold.fold (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat)

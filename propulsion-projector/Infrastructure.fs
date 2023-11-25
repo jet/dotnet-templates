@@ -69,7 +69,7 @@ module Dynamo =
     let defaultCacheDuration = TimeSpan.FromMinutes 20.
     let private createCached name codec initial fold accessStrategy (context, cache) =
         let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        DynamoStoreCategory(context, name, FsCodec.Deflate.EncodeTryDeflate codec, fold, initial, accessStrategy, cacheStrategy)
+        DynamoStoreCategory(context, name, FsCodec.Compression.EncodeTryCompress codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
@@ -77,9 +77,13 @@ module Dynamo =
 
 type Equinox.DynamoStore.DynamoStoreConnector with
 
+    member x.LogConfiguration() =
+        Log.Information("DynamoStore {endpoint} Timeout {timeoutS}s Retries {retries}",
+                        x.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries)
+
     member x.CreateClient() =
-        Log.Information("DynamoDB {endpoint} Timeout {timeoutS}s Retries {retries}", x.Endpoint, (let t = x.Timeout in t.TotalSeconds), x.Retries)
-        Equinox.DynamoStore.DynamoStoreClient <| x.CreateDynamoDbClient() 
+        x.LogConfiguration()
+        x.CreateDynamoStoreClient()
 
 type Equinox.DynamoStore.DynamoStoreClient with
 

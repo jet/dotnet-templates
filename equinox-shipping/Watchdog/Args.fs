@@ -1,5 +1,5 @@
 /// Commandline arguments and/or secrets loading specifications
-module Shipping.Infrastructure.Args
+module Args
 
 open System
 open FSharp.Control
