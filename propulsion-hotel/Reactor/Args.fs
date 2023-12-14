@@ -1,9 +1,6 @@
 /// Commandline arguments and/or secrets loading specifications
 module Args
 
-exception MissingArg of message: string with override this.Message = this.message
-let missingArg msg = raise (MissingArg msg)
-
 module Configuration =
 
     module Dynamo =
@@ -24,7 +21,7 @@ module Configuration =
 type Configuration(tryGet: string -> string option) =
 
     member val tryGet =                     tryGet
-    member _.get key =                      match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
+    member _.get key =                      match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
 
     member x.DynamoRegion =                 tryGet Configuration.Dynamo.REGION

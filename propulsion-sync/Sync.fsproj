@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Argu" Version="6.1.1" />
+    <PackageReference Include="Argu" Version="6.1.4" />
     <PackageReference Include="Propulsion.EventStore" Version="3.0.0-rc.9.11" />
     <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.9.11" />
     <!--#if (kafka || marveleqx)-->

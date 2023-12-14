@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Argu" Version="6.1.1" />
+    <PackageReference Include="Argu" Version="6.1.4" />
     <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.0.0-rc.14.5" />
     <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.9.11" />
     <PackageReference Include="prometheus-net.AspNetCore" Version="3.6.0" />

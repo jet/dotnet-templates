@@ -58,14 +58,14 @@ module Cosmos =
                 | MaxItems _ ->             "maximum item count to supply for the Change Feed query. Default: use response size limit"
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
     type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
-        let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 9)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      p.TryGetResult Database  |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let containerId =                   p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
+        let containerId =                   p.GetResult(Container, fun () -> c.CosmosContainer)
         let leaseContainerId =              p.GetResult(LeaseContainer, containerId + "-aux")
         let fromTail =                      p.Contains FromTail
         let maxItems =                      p.TryGetResult MaxItems
@@ -117,9 +117,9 @@ module Dynamo =
                                             | Some systemName ->
                                                 Choice1Of2 systemName
                                             | None ->
-                                                let serviceUrl =  p.TryGetResult ServiceUrl |> Option.defaultWith (fun () -> c.DynamoServiceUrl)
-                                                let accessKey =   p.TryGetResult AccessKey  |> Option.defaultWith (fun () -> c.DynamoAccessKey)
-                                                let secretKey =   p.TryGetResult SecretKey  |> Option.defaultWith (fun () -> c.DynamoSecretKey)
+                                                let serviceUrl =  p.GetResult(ServiceUrl, fun () -> c.DynamoServiceUrl)
+                                                let accessKey =   p.GetResult(AccessKey, fun () -> c.DynamoAccessKey)
+                                                let secretKey =   p.GetResult(SecretKey, fun () -> c.DynamoSecretKey)
                                                 Choice2Of2 (serviceUrl, accessKey, secretKey)
         let connector =                     let timeout = p.GetResult(RetriesTimeoutS, 60.) |> TimeSpan.FromSeconds
                                             let retries = p.GetResult(Retries, 9)
@@ -128,9 +128,9 @@ module Dynamo =
                                                 Equinox.DynamoStore.DynamoStoreConnector(systemName, timeout, retries)
                                             | Choice2Of2 (serviceUrl, accessKey, secretKey) ->
                                                 Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
-        let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
+        let table =                         p.GetResult(Table, fun () -> c.DynamoTable)
         let indexSuffix =                   p.GetResult(IndexSuffix, "-index")
-        let indexTable =                    p.TryGetResult IndexTable |> Option.orElseWith  (fun () -> c.DynamoIndexTable) |> Option.defaultWith (fun () -> table + indexSuffix)
+        let indexTable =                    p.GetResult(IndexTable, fun () -> defaultArg c.DynamoIndexTable (table + indexSuffix))
         let fromTail =                      p.Contains FromTail
         let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
         let batchSizeCutoff =               p.GetResult(MaxItems, 100)
@@ -163,7 +163,7 @@ module Esdb =
         | Store.Config.Dynamo (context, cache) ->
             Propulsion.Feed.ReaderCheckpoint.DynamoStore.create Store.Metrics.log (consumerGroup, checkpointInterval) (context, cache)
 
-    type [<NoEquality; NoComparison>] Parameters =
+    type [<NoEquality; NoComparison; RequireSubcommand>] Parameters =
         | [<AltCommandLine "-V">]           Verbose
         | [<AltCommandLine "-b"; Unique>]   BatchSize of int
         | [<AltCommandLine "-c">]           Connection of string
@@ -173,8 +173,8 @@ module Esdb =
 
         | [<AltCommandLine "-Z"; Unique>]   FromTail
 
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<Args.Cosmos.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Dynamo of ParseResults<Args.Dynamo.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Cosmos of ParseResults<Args.Cosmos.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Dynamo of ParseResults<Args.Dynamo.Parameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "Include low level Store logging."
@@ -193,7 +193,7 @@ module Esdb =
         let startFromTail =                 p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 100)
         let tailSleepInterval =             TimeSpan.FromSeconds 0.5
-        let connectionStringLoggable =      p.TryGetResult Connection |> Option.defaultWith (fun () -> c.EventStoreConnection)
+        let connectionStringLoggable =      p.GetResult(Connection, fun () -> c.EventStoreConnection)
         let credentials =                   p.TryGetResult Credentials |> Option.orElseWith (fun () -> c.MaybeEventStoreCredentials)
         let discovery =                     match credentials with Some x -> String.Join(";", connectionStringLoggable, x) | None -> connectionStringLoggable
                                             |> Equinox.EventStoreDb.Discovery.ConnectionString
@@ -220,7 +220,7 @@ module Esdb =
             | Dynamo a ->
                 let context = Args.Dynamo.Arguments(c, a).CreateContext()
                 Store.Config.Dynamo (context, cache)
-            | _ -> Args.missingArg "Must specify `cosmos` or `dynamo` checkpoint store when source is `esdb`"
+            | _ -> p.Raise "Must specify `cosmos` or `dynamo` checkpoint store when source is `esdb`"
 
 #endif // esdb
 #if sss
@@ -253,7 +253,7 @@ module Sss =
         let startFromTail =                 p.Contains FromTail
         let tailSleepInterval =             p.GetResult(Tail, 1.) |> TimeSpan.FromSeconds
         let batchSize =                     p.GetResult(BatchSize, 512)
-        let connection =                    p.TryGetResult Connection |> Option.defaultWith (fun () -> c.SqlStreamStoreConnection)
+        let connection =                    p.GetResult(Connection, fun () -> c.SqlStreamStoreConnection)
         let credentials =                   p.TryGetResult Credentials |> Option.orElseWith (fun () -> c.SqlStreamStoreCredentials) |> Option.toObj
         let schema =                        p.GetResult(Schema, null)
         member val Verbose =                false

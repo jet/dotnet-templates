@@ -10,13 +10,13 @@ open System.Threading
 [<AutoOpen>]
 module Args =
 
-    type [<NoEquality; NoComparison>]
+    type [<NoEquality; NoComparison; RequireSubcommand>]
         Parameters =
         | [<AltCommandLine "-V">]       Verbose
         | [<AltCommandLine "-C">]       VerboseConsole
         | [<AltCommandLine "-S">]       LocalSeq
         | [<AltCommandLine "-l">]       LogFile of string
-        | [<CliPrefix(CliPrefix.None); Last; Unique>] Run of ParseResults<TestParameters>
+        | [<CliPrefix(CliPrefix.None)>] Run of ParseResults<TestParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->            "Include low level logging regarding specific test runs."
@@ -24,7 +24,7 @@ module Args =
                 | LocalSeq ->           "Configures writing to a local Seq endpoint at http://localhost:5341, see https://getseq.net"
                 | LogFile _ ->          "specify a log file to write the result breakdown into. Default: TestbedTemplate.log."
                 | Run _ ->              "Run a load test"
-    and [<NoEquality; NoComparison>]
+    and [<NoEquality; NoComparison; RequireSubcommand>]
         TestParameters =
         | [<AltCommandLine "-t"; Unique>] Name of Tests.Test
         | [<AltCommandLine "-s">]       Size of int
@@ -36,13 +36,13 @@ module Args =
         | [<AltCommandLine "-e">]       ErrorCutoff of int64
         | [<AltCommandLine "-i">]       ReportIntervalS of int
 //#if (memoryStore || (!cosmos && !eventStore))
-        | [<CliPrefix(CliPrefix.None); Last; Unique>] Memory of ParseResults<Storage.MemoryStore.Parameters>
+        | [<CliPrefix(CliPrefix.None)>] Memory of ParseResults<Storage.MemoryStore.Parameters>
 //#endif
 //#if eventStore
-        | [<CliPrefix(CliPrefix.None); Last; Unique>] Es of ParseResults<Storage.EventStore.Parameters>
+        | [<CliPrefix(CliPrefix.None)>] Es of ParseResults<Storage.EventStore.Parameters>
 //#endif
 //#if cosmos
-        | [<CliPrefix(CliPrefix.None); Last; Unique>] Cosmos of ParseResults<Storage.Cosmos.Parameters>
+        | [<CliPrefix(CliPrefix.None)>] Cosmos of ParseResults<Storage.Cosmos.Parameters>
 //#endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
@@ -99,13 +99,13 @@ module Args =
                 storeLog, Storage.Cosmos.config (x.Cache, x.Unfolds, x.BatchSize) (Storage.Cosmos.Arguments(c, sargs))
 //#endif
 #if ((!cosmos && !eventStore) || (cosmos && eventStore))
-            | _ -> Storage.missingArg "Please identify a valid store: memory, es, cosmos"
+            | _ -> p.Raise "Please identify a valid store: memory, es, cosmos"
 #endif
 #if eventStore
-            | _ -> Storage.missingArg "Please identify a valid store: memory, es"
+            | _ -> p.Raise "Please identify a valid store: memory, es"
 #endif
 #if cosmos
-            | _ -> Storage.missingArg "Please identify a valid store: memory, cosmos"
+            | _ -> p.Raise "Please identify a valid store: memory, cosmos"
 #endif
 
 let createStoreLog verbose verboseConsole maybeSeqEndpoint =
@@ -203,9 +203,8 @@ let main argv =
             let log = createDomainLog verbose verboseConsole maybeSeq
             let reportFilename = args.GetResult(LogFile, programName+".log") |> fun n -> System.IO.FileInfo(n).FullName
             LoadTest.run log (verbose, verboseConsole, maybeSeq) reportFilename (TestArguments(Storage.Configuration EnvVar.tryGet, rargs))
-        | _ -> failwith "Please specify a valid subcommand :- run"
+        | _ -> args.Raise "Please specify a valid subcommand :- run"
         0
     with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | :? Argu.ArguException as e -> eprintf "Argument parsing exception %s" e.Message; 1
-        | Storage.MissingArg msg -> eprintfn "%s" msg; 1
         | e -> eprintfn "%s" e.Message; 1

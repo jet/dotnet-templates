@@ -7,7 +7,7 @@ module Args =
 
     open Argu
 
-    [<NoEquality; NoComparison>]
+    [<NoEquality; NoComparison; RequireSubcommand>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
@@ -19,16 +19,16 @@ module Args =
         | [<AltCommandLine "-t"; Unique>]   Topic of string
 #endif
 // #if cosmos
-        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
 // #endif
 #if dynamo
-        | [<CliPrefix(CliPrefix.None); Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
 #endif
 #if esdb
-        | [<CliPrefix(CliPrefix.None); Last>] Esdb of ParseResults<SourceArgs.Esdb.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Esdb of ParseResults<SourceArgs.Esdb.Parameters>
 #endif
 #if sss
-        | [<CliPrefix(CliPrefix.None); Last>] SqlMs of ParseResults<SourceArgs.Sss.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     SqlMs of ParseResults<SourceArgs.Sss.Parameters>
 #endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
@@ -76,7 +76,7 @@ module Args =
 #if sss                                            
                                             | SqlMs p ->  SourceArgs.Sss.Arguments(c, p)
 #endif                                            
-                                            | p ->        Args.missingArg $"Unexpected Store subcommand %A{p}"
+                                            | p ->        failwith $"Unexpected Store subcommand %A{p}"
         member x.VerboseStore =             x.Store.Verbose
 #if kafka        
         member val Sink =                   KafkaSinkArguments(c, p)
@@ -131,8 +131,8 @@ module Args =
 #if kafka
     
     and KafkaSinkArguments(c: SourceArgs.Configuration, p: ParseResults<Parameters>) =
-        member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
-        member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
+        member val Broker =                 p.GetResult(Broker, fun () -> c.Broker)
+        member val Topic =                  p.GetResult(Topic, fun () -> c.Topic)
         member x.BuildTargetParams() =      x.Broker, x.Topic
 #endif
 
@@ -190,8 +190,7 @@ let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? Args.MissingArg) && not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1
