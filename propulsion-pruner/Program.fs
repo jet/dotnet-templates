@@ -4,12 +4,9 @@ open Propulsion.CosmosStore
 open Serilog
 open System
 
-exception MissingArg of message: string with override this.Message = this.message
-let missingArg msg = raise (MissingArg msg)
-
 type Configuration(tryGet) =
 
-    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
+    let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -18,14 +15,14 @@ type Configuration(tryGet) =
 module Args =
 
     open Argu
-    [<NoEquality; NoComparison>]
+    [<NoEquality; NoComparison; RequireSubcommand>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-p"; Unique>]   PrometheusPort of int
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
+        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos">] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off"
@@ -45,7 +42,7 @@ module Args =
         member val Source: CosmosSourceArguments =
             match p.GetSubCommand() with
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
-            | _ -> missingArg "Must specify cosmos for Source"
+            | _ -> p.Raise "Must specify cosmos for Source"
         member x.DeletionTarget =           x.Source.Target
     and [<NoEquality; NoComparison>] CosmosSourceParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
@@ -62,7 +59,7 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] DstCosmos of ParseResults<CosmosSinkParameters>
+        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos">] DstCosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Change Feed Processor Logging. Default: off"
@@ -81,13 +78,13 @@ module Args =
 
                 | DstCosmos _ ->            "CosmosDb Pruning Target parameters."
     and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
-        let discovery =                     p.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                     p.GetResult(CosmosSourceParameters.Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
         let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSourceParameters.Retries, 5)
         let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let databaseId =                    p.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let databaseId =                    p.GetResult(CosmosSourceParameters.Database, fun () -> c.CosmosDatabase)
         let containerId =                   p.GetResult CosmosSourceParameters.Container
        
         let fromTail =                      p.Contains CosmosSourceParameters.FromTail
@@ -95,7 +92,7 @@ module Args =
         let lagFrequency: TimeSpan =        p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val Verbose =                p.Contains CosmosSourceParameters.Verbose
         member val MonitoringParams =       fromTail, maxItems, lagFrequency
-        member x.ConnectFeed() =            if x.Target.Is(databaseId, containerId) then missingArg "Danger! Can not prune a target based on itself"
+        member x.ConnectFeed() =            if x.Target.Is(databaseId, containerId) then p.Raise "Danger! Can not prune a target based on itself"
                                             match x.Target.MaybeLeasesContainer with
                                             | Some leasesContainerInTarget -> connector.ConnectFeed(databaseId, containerId, leasesContainerInTarget)
                                             | None ->
@@ -104,7 +101,7 @@ module Args =
         member val Target: CosmosSinkArguments =
             match p.GetSubCommand() with
             | DstCosmos cosmos -> CosmosSinkArguments(c, cosmos)
-            | _ -> missingArg "Must specify cosmos for Target"
+            | _ -> p.Raise "Must specify cosmos for Target"
     and [<NoEquality; NoComparison>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -125,14 +122,14 @@ module Args =
                 | Retries _ ->              "specify operation retries. Default: 0."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
     and CosmosSinkArguments(c: Configuration, p: ParseResults<CosmosSinkParameters>) =
-        let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSinkParameters.Retries, 0)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let databaseId =                    p.TryGetResult Database   |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let containerId =                   p.TryGetResult Container  |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let databaseId =                    p.GetResult(Database, fun () -> c.CosmosDatabase)
+        let containerId =                   p.GetResult(Container, fun () -> c.CosmosContainer)
         let leaseContainerId =              p.TryGetResult LeaseContainer
         member _.Is(d, c) =                 databaseId = d && containerId = c
         member _.Connect() = async {        let! context = connector.ConnectContext("DELETION Target", databaseId, containerId, tipMaxEvents = 256, ?auxContainerId = leaseContainerId)
@@ -187,8 +184,7 @@ let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(AppName, args.Verbose, args.Source.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1

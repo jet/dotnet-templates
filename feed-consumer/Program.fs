@@ -3,12 +3,9 @@
 open Serilog
 open System
 
-exception MissingArg of message: string with override this.Message = this.message
-let missingArg msg = raise (MissingArg msg)
-
 type Configuration(tryGet) =
 
-    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
+    let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -20,7 +17,7 @@ type Configuration(tryGet) =
 module Args =
 
     open Argu
-    [<NoEquality; NoComparison>]
+    [<NoEquality; NoComparison; RequireSubcommand>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
 
@@ -32,10 +29,10 @@ module Args =
         | [<AltCommandLine "-w"; Unique>]   FcsDop of int
         | [<AltCommandLine "-t"; Unique>]   TicketsDop of int
 
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None)>] Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
-                | Verbose _ ->              "request verbose logging."
+                | Verbose ->                "request verbose logging."
                 | Group _ ->                "specify Api Consumer Group Id. (optional if environment variable API_CONSUMER_GROUP specified)"
                 | SourceId _ ->             "specify Api SourceId. Default: 'default'"
                 | BaseUri _ ->              "specify Api endpoint. (optional if environment variable API_BASE_URI specified)"
@@ -45,12 +42,12 @@ module Args =
                 | Cosmos _ ->               "Cosmos Store parameters."
     and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Verbose =                p.Contains Parameters.Verbose
-        member val GroupId =                p.TryGetResult Group        |> Option.defaultWith (fun () -> c.Group)
-        member val SourceId =               p.GetResult(SourceId,"default") |> Propulsion.Feed.SourceId.parse
-        member val BaseUri =                p.TryGetResult BaseUri      |> Option.defaultWith (fun () -> c.BaseUri) |> Uri
-        member val MaxReadAhead =           p.GetResult(MaxReadAhead,8)
-        member val FcsDop =                 p.TryGetResult FcsDop       |> Option.defaultValue 4
-        member val TicketsDop =             p.TryGetResult TicketsDop   |> Option.defaultValue 4
+        member val GroupId =                p.GetResult(Group, fun () -> c.Group)
+        member val SourceId =               p.GetResult(SourceId, "default") |> Propulsion.Feed.SourceId.parse
+        member val BaseUri =                p.GetResult(BaseUri, fun () -> c.BaseUri) |> Uri
+        member val MaxReadAhead =           p.GetResult(MaxReadAhead, 8)
+        member val FcsDop =                 p.GetResult(FcsDop, 4)
+        member val TicketsDop =             p.GetResult(TicketsDop, 4)
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
         member val CheckpointInterval =     TimeSpan.FromHours 1.
@@ -58,8 +55,8 @@ module Args =
         member val Cosmos: CosmosArguments =
             match p.GetSubCommand() with
             | Cosmos cosmos -> CosmosArguments(c, cosmos)
-            | _ -> missingArg "Must specify cosmos"
-    and [<NoEquality; NoComparison>] CosmosParameters =
+            | _ -> p.Raise "Must specify cosmos"
+    and [<NoEquality; NoComparison; RequireSubcommand>] CosmosParameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-cm">]          ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
@@ -70,7 +67,7 @@ module Args =
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member p.Usage = p |> function
-                | Verbose _ ->              "request verbose logging."
+                | Verbose ->                "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
@@ -79,14 +76,14 @@ module Args =
                 | Retries _ ->              "specify operation retries (default: 9)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 30)"
     and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
-        let discovery =                     p.TryGetResult Connection   |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 30.)   |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 9)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
-        let database =                      p.TryGetResult Database     |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     p.TryGetResult Container    |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
+        let container =                     p.GetResult(Container, fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
         member _.Connect(maxEvents) =       connector.ConnectContext("Main", database, container, maxEvents)
 
@@ -130,8 +127,7 @@ let main argv =
         try let metrics = Sinks.equinoxAndPropulsionFeedConsumerMetrics (Sinks.tags AppName) args.SourceId
             Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Cosmos.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously
-            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2 
         finally Log.CloseAndFlush()
-    with MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | e -> eprintf "Exception %s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn $"%s{e.Message}"; 1
+        | e -> eprintf $"Exception %s{e.Message}"; 1

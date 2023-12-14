@@ -9,7 +9,7 @@ module Store = Domain.Store
 module Args =
 
     open Argu
-    [<NoEquality; NoComparison>]
+    [<NoEquality; NoComparison; RequireSubcommand>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
@@ -21,8 +21,8 @@ module Args =
         | [<AltCommandLine "-i"; Unique>]   IdleDelayMs of int
         | [<AltCommandLine "-W"; Unique>]   WakeForResults
 
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Mdb of ParseResults<SourceArgs.Mdb.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Mdb of ParseResults<SourceArgs.Mdb.Parameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off."
@@ -33,7 +33,7 @@ module Args =
                 | TimeoutS _ ->             "Timeout (in seconds) before Watchdog should step in to process transactions. Default: 10."
 
                 | IdleDelayMs _ ->          "Idle delay for scheduler. Default 1000ms"
-                | WakeForResults _ ->       "Wake for all results to provide optimal throughput"
+                | WakeForResults ->         "Wake for all results to provide optimal throughput"
 
                 | Dynamo _ ->               "specify DynamoDB input parameters"
                 | Mdb _ ->                  "specify MessageDb input parameters"
@@ -56,7 +56,7 @@ module Args =
                                             match p.GetSubCommand() with
                                             | Dynamo a -> Choice1Of2 <| SourceArgs.Dynamo.Arguments(c, a)
                                             | Mdb a ->    Choice2Of2 <| SourceArgs.Mdb.Arguments(c, a)
-                                            | a ->        Args.missingArg $"Unexpected Store subcommand %A{a}"
+                                            | a ->        failwith $"Unexpected Store subcommand %A{a}"
         member x.ConnectStoreAndSource(appName): Store.Config * (ILogger -> string -> SourceConfig) * (ILogger -> unit) =
             let cache = Equinox.Cache (appName, sizeMb = x.CacheSizeMb)
             match x.Store with
@@ -124,8 +124,7 @@ let main argv =
         try let metrics = Sinks.equinoxAndPropulsionFeedMetrics (Sinks.tags AppName) args.ProcessorName
             Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? Args.MissingArg) && not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | e -> eprintf "Exception %s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn $"%s{e.Message}"; 1
+        | e -> eprintf $"Exception %s{e.Message}"; 1

@@ -3,12 +3,9 @@
 open Serilog
 open System
 
-exception MissingArg of message: string with override this.Message = this.message
-let missingArg msg = raise (MissingArg msg)
-
 type Configuration(tryGet) =
 
-    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
+    let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -20,7 +17,7 @@ type Configuration(tryGet) =
 module Args =
 
     open Argu
-    type [<NoEquality; NoComparison>] Parameters =
+    type [<NoEquality; NoComparison; RequireSubcommand>] Parameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
         | [<AltCommandLine "-g"; Unique>]   Group of string
@@ -29,11 +26,11 @@ module Args =
 
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
         | [<AltCommandLine "-V"; Unique>]   Verbose
-        | [<CliPrefix(CliPrefix.None); Last>] Cosmos of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None)>]     Cosmos of ParseResults<CosmosParameters>
 
         interface IArgParserTemplate with
             member p.Usage = p |> function
-                | Verbose _ ->              "request verbose logging."
+                | Verbose ->                "request verbose logging."
                 | Broker _ ->               "specify Kafka Broker, in host:port format. (optional if environment variable PROPULSION_KAFKA_BROKER specified)"
                 | Topic _ ->                "specify Kafka Topic name. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)"
                 | Group _ ->                "specify Kafka Consumer Group Id. (optional if environment variable PROPULSION_KAFKA_GROUP specified)"
@@ -43,9 +40,9 @@ module Args =
                 | Cosmos _ ->               "specify CosmosDb input parameters"
     and Arguments(c: Configuration, p: ParseResults<Parameters>) =
         member val Verbose =                p.Contains Verbose
-        member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
-        member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
-        member val Group =                  p.TryGetResult Group  |> Option.defaultWith (fun () -> c.Group)
+        member val Broker =                 p.GetResult(Broker, fun () -> c.Broker)
+        member val Topic =                  p.GetResult(Topic, fun () -> c.Topic)
+        member val Group =                  p.GetResult(Group, fun () -> c.Group)
         member val MaxInFlightBytes =       p.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member val LagFrequency =           p.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member val MaxConcurrentStreams =   p.GetResult(MaxWriters, 8)
@@ -70,13 +67,13 @@ module Args =
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
     and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
-        let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
         let container =                     p.GetResult Container
         member _.Connect() =                connector.ConnectContext("Main", database, container)
 
@@ -118,8 +115,7 @@ let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | e -> eprintf "Exception %s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn $"%s{e.Message}"; 1
+        | e -> eprintf $"Exception %s{e.Message}"; 1

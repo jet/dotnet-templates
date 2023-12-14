@@ -7,16 +7,16 @@ open System
 module Args =
 
     open Argu
-    [<NoEquality; NoComparison>]
+    [<NoEquality; NoComparison; RequireSubcommand>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-p"; Unique>]   PrometheusPort of int
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
-        | [<CliPrefix(CliPrefix.None); Last>] Index of ParseResults<CosmosParameters>
-        | [<CliPrefix(CliPrefix.None); Last>] Snapshot of ParseResults<CosmosParameters>
-        | [<CliPrefix(CliPrefix.None); Last>] Sync of ParseResults<SyncParameters>
+        | [<CliPrefix(CliPrefix.None)>]     Index of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None)>]     Snapshot of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None)>]     Sync of ParseResults<SyncParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off."
@@ -50,7 +50,7 @@ module Args =
                                                             x.ActionLabel, x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
                                             (x.ProcessorName, maxReadAhead, maxConcurrentProcessors)
     and [<NoEquality; NoComparison>] Action = Index of CosmosArguments | Snapshot of CosmosArguments | Sync of SyncArguments
-    and [<NoEquality; NoComparison>] SyncParameters =
+    and [<NoEquality; NoComparison; RequireSubcommand>] SyncParameters =
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c"; Mandatory>] Container of string
@@ -59,7 +59,7 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         | [<AltCommandLine "-kb">]          MaxKiB of int
-        | [<CliPrefix(CliPrefix.None); Last>] Source of ParseResults<CosmosParameters>
+        | [<CliPrefix(CliPrefix.None)>] Source of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Connection _ ->           "specify a connection string for the destination Cosmos account. Default: Same as Source"
@@ -80,7 +80,7 @@ module Args =
         let retries =                       p.GetResult(SyncParameters.Retries, 1)
         let maxRetryWaitTime =              p.GetResult(SyncParameters.RetriesWaitTime, 5) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime)
-        let database =                      p.TryGetResult SyncParameters.Database |> Option.defaultWith (fun () -> source.Database)
+        let database =                      p.GetResult(SyncParameters.Database, fun () -> source.Database)
         let container =                     p.GetResult SyncParameters.Container
         member val MaxBytes =               p.GetResult(MaxKiB, 128) * 1024
         member val Source =                 source
@@ -121,15 +121,15 @@ module Args =
                 | MaxItems _ ->             "maximum item count to request from the feed. Default: unlimited."
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: 1"
     and CosmosArguments(c: Args.Configuration, p: ParseResults<CosmosParameters>) =
-        let discovery =                     p.TryGetResult CosmosParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                     p.GetResult(CosmosParameters.Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      p.TryGetResult Database  |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let containerId =                   p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
-        let viewsContainerId =              p.TryGetResult Views     |> Option.defaultWith (fun () -> c.CosmosViews)
+        let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
+        let containerId =                   p.GetResult(Container, fun () -> c.CosmosContainer)
+        let viewsContainerId =              p.GetResult(Views, fun () -> c.CosmosViews)
 
         let leaseContainerId =              p.GetResult(LeaseContainer, containerId + "-aux")
         let fromTail =                      p.Contains FromTail
@@ -197,8 +197,7 @@ let main argv =
         try let metrics = Sinks.equinoxAndPropulsionCosmosConsumerMetrics (Sinks.tags AppName) args.ProcessorName
             Log.Logger <- LoggerConfiguration().Configure(args.Verbose).Sinks(metrics, args.Cosmos.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? Args.MissingArg) && not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn $"%s{msg}"; 1
-        | :? Argu.ArguParseException as e -> eprintfn $"%s{e.Message}"; 1
-        | e -> eprintfn $"Exception %s{e.Message}"; 1
+    with :? Argu.ArguParseException as e -> eprintfn $"%s{e.Message}"; 1
+        | e -> eprintf $"Exception %s{e.Message}"; 1

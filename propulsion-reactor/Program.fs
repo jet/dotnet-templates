@@ -31,22 +31,22 @@ module Args =
 #endif
 
     open Argu
-    [<NoEquality; NoComparison>]
+    [<NoEquality; NoComparison; RequireSubcommand>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-g"; Mandatory>] ProcessorName of string
         | [<AltCommandLine "-r"; Unique>]   MaxReadAhead of int
         | [<AltCommandLine "-w"; Unique>]   MaxWriters of int
 #if kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
+        | [<CliPrefix(CliPrefix.None)>]     Kafka of ParseResults<KafkaSinkParameters>
 #else
 #if     sourceKafka // && kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<SourceArgs.Kafka.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Kafka of ParseResults<SourceArgs.Kafka.Parameters>
 #else   // kafka && !sourceKafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Esdb of ParseResults<SourceArgs.Esdb.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] SqlMs of ParseResults<SourceArgs.Sss.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Esdb of ParseResults<SourceArgs.Esdb.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     SqlMs of ParseResults<SourceArgs.Sss.Parameters>
 #endif
 #endif
         interface IArgParserTemplate with
@@ -170,31 +170,31 @@ module Args =
 #if sourceKafka
         member val Source: Source =         match p.GetSubCommand() with
                                             | Kafka p -> Source.Kafka <| SourceArgs.Kafka.Arguments(c, p)
-                                            | p -> Args.missingArg $"Unexpected Source subcommand %A{p}"
+                                            | x -> p.Raise $"Unexpected Source subcommand %A{x}"
 #else        
         member val Source: Source =         match p.GetSubCommand() with
                                             | Cosmos p -> Source.Cosmos <| SourceArgs.Cosmos.Arguments(c, p)
                                             | Dynamo p -> Source.Dynamo <| SourceArgs.Dynamo.Arguments(c, p)
                                             | Esdb p ->   Source.Esdb   <| SourceArgs.Esdb.Arguments(c, p)
                                             | SqlMs p ->  Source.SqlMs  <| SourceArgs.Sss.Arguments(c, p)
-                                            | p ->        Args.missingArg $"Unexpected Source subcommand %A{p}"
+                                            | x ->        p.Raise $"Unexpected Source subcommand %A{x}"
 #endif
 #else // kafka                                            
         member val Sink =                   match p.GetSubCommand() with
                                             | Parameters.Kafka p -> KafkaSinkArguments(c, p)
-                                            | p -> Args.missingArg $"Unexpected Sink subcommand %A{p}"
+                                            | x -> p.Raise $"Unexpected Sink subcommand %A{x}"
         member x.Source: Source =           x.Sink.Source
 
-    and [<NoEquality; NoComparison>] KafkaSinkParameters =
+    and [<NoEquality; NoComparison; RequireSubcommand>] KafkaSinkParameters =
         | [<AltCommandLine "-b"; Unique>]   Broker of string
         | [<AltCommandLine "-t"; Unique>]   Topic of string
 #if     sourceKafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<SourceArgs.Kafka.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Kafka of ParseResults<SourceArgs.Kafka.Parameters>
 #else   
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Esdb of ParseResults<SourceArgs.Esdb.Parameters>
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] SqlMs of ParseResults<SourceArgs.Sss.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Cosmos of ParseResults<SourceArgs.Cosmos.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Dynamo of ParseResults<SourceArgs.Dynamo.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     Esdb of ParseResults<SourceArgs.Esdb.Parameters>
+        | [<CliPrefix(CliPrefix.None)>]     SqlMs of ParseResults<SourceArgs.Sss.Parameters>
 #endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
@@ -210,20 +210,20 @@ module Args =
 #endif
 
     and KafkaSinkArguments(c: Configuration, p: ParseResults<KafkaSinkParameters>) =
-        member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
-        member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
+        member val Broker =                 p.GetResult(Broker, fun () -> c.Broker)
+        member val Topic =                  p.GetResult(Topic, fun () -> c.Topic)
         member x.BuildTargetParams() =      x.Broker, x.Topic
 #if sourceKafka
         member val Source =                 match p.GetSubCommand() with
                                             | KafkaSinkParameters.Kafka p -> Source.Kafka <| SourceArgs.Kafka.Arguments(c, p)
-                                            | p -> Args.missingArg $"Unexpected Source subcommand %A{p}"
+                                            | x -> p.Raise $"Unexpected Source subcommand %A{x}"
 #else        
         member val Source: Source =         match p.GetSubCommand() with
                                             | Cosmos p -> Source.Cosmos <| SourceArgs.Cosmos.Arguments(c, p)
                                             | Dynamo p -> Source.Dynamo <| SourceArgs.Dynamo.Arguments(c, p)
                                             | Esdb p ->   Source.Esdb   <| SourceArgs.Esdb.Arguments(c, p)
                                             | SqlMs p ->  Source.SqlMs  <| SourceArgs.Sss.Arguments(c, p)
-                                            | p ->        Args.missingArg $"Unexpected Source subcommand %A{p}"
+                                            | x ->        p.Raise $"Unexpected Source subcommand %A{x}"
 #endif
 #endif
 
@@ -312,8 +312,7 @@ let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
             try build args |> Async.Parallel |> Async.Ignore<unit[]> |> Async.RunSynchronously; 0
-            with e when not (e :? Args.MissingArg) && not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with Args.MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
         | e -> eprintf "Exception %s" e.Message; 1

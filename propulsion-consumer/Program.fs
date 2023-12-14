@@ -3,12 +3,9 @@
 open Serilog
 open System
 
-exception MissingArg of message: string with override this.Message = this.message
-let missingArg msg = raise (MissingArg msg)
-
 type Configuration(tryGet) =
 
-    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
+    let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
     member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
@@ -40,11 +37,11 @@ module Args =
                 | LagFreqM _ ->             "specify frequency (minutes) to dump lag stats. Default: off."
 
                 | MaxDop _ ->               "maximum number of items to process in parallel. Default: 8"
-                | Verbose _ ->              "request verbose logging."
+                | Verbose ->                "request verbose logging."
     type Arguments(c: Configuration, p: ParseResults<Parameters>) =
-        member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
-        member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
-        member val Group =                  p.TryGetResult Group  |> Option.defaultWith (fun () -> c.Group)
+        member val Broker =                 p.GetResult(Broker, fun () -> c.Broker)
+        member val Topic =                  p.GetResult(Topic, fun () -> c.Topic)
+        member val Group =                  p.GetResult(Group, fun () -> c.Group)
         member val MaxInFlightBytes =       p.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member val LagFrequency =           p.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
 
@@ -80,8 +77,7 @@ let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(verbose=args.Verbose).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | e -> eprintf "Exception %s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn $"%s{e.Message}"; 1
+        | e -> eprintf $"Exception %s{e.Message}"; 1

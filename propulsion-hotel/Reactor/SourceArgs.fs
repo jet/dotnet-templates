@@ -48,9 +48,9 @@ module Dynamo =
                                             | Some systemName ->
                                                 Choice1Of2 systemName
                                             | None ->
-                                                let serviceUrl =  p.TryGetResult ServiceUrl |> Option.defaultWith (fun () -> c.DynamoServiceUrl)
-                                                let accessKey =   p.TryGetResult AccessKey  |> Option.defaultWith (fun () -> c.DynamoAccessKey)
-                                                let secretKey =   p.TryGetResult SecretKey  |> Option.defaultWith (fun () -> c.DynamoSecretKey)
+                                                let serviceUrl =  p.GetResult(ServiceUrl, fun () -> c.DynamoServiceUrl)
+                                                let accessKey =   p.GetResult(AccessKey, fun () -> c.DynamoAccessKey)
+                                                let secretKey =   p.GetResult(SecretKey, fun () -> c.DynamoSecretKey)
                                                 Choice2Of2 (serviceUrl, accessKey, secretKey)
         let connector =                     let timeout = p.GetResult(RetriesTimeoutS, 60.) |> TimeSpan.FromSeconds
                                             let retries = p.GetResult(Retries, 9)
@@ -59,9 +59,9 @@ module Dynamo =
                                                 Equinox.DynamoStore.DynamoStoreConnector(systemName, timeout, retries)
                                             | Choice2Of2 (serviceUrl, accessKey, secretKey) ->
                                                 Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
-        let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
+        let table =                         p.GetResult(Table, fun () -> c.DynamoTable)
         let indexSuffix =                   p.GetResult(IndexSuffix, "-index")
-        let indexTable =                    p.TryGetResult IndexTable |> Option.orElseWith  (fun () -> c.DynamoIndexTable) |> Option.defaultWith (fun () -> table + indexSuffix)
+        let indexTable =                    p.GetResult(IndexTable, fun () -> defaultArg c.DynamoIndexTable (table + indexSuffix)) 
         let client =                        lazy connector.CreateClient()
         let indexContext =                  lazy client.Value.CreateContext("Index", indexTable)
         let fromTail =                      p.Contains FromTail
@@ -97,10 +97,10 @@ module Mdb =
                 | TailSleepIntervalMs _ ->  "How long to sleep in ms once the consumer has hit the tail (default: 100ms)"
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
     type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
-        let writeConnStr =                  p.TryGetResult ConnectionString |> Option.defaultWith (fun () -> c.MdbConnectionString)
+        let writeConnStr =                  p.GetResult(ConnectionString, fun () -> c.MdbConnectionString)
         let readConnStr =                   p.TryGetResult ReadConnectionString |> Option.orElseWith (fun () -> c.MdbReadConnectionString) |> Option.defaultValue writeConnStr
-        let checkpointConnStr =             p.TryGetResult CheckpointConnectionString |> Option.defaultValue writeConnStr
-        let schema =                        p.TryGetResult CheckpointSchema |> Option.defaultWith (fun () -> c.MdbSchema)
+        let checkpointConnStr =             p.GetResult(CheckpointConnectionString, writeConnStr)
+        let schema =                        p.GetResult(CheckpointSchema, fun () -> c.MdbSchema)
         let fromTail =                      p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 1000)
         let tailSleepInterval =             p.GetResult(TailSleepIntervalMs, 100) |> TimeSpan.FromMilliseconds

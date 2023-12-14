@@ -4,9 +4,6 @@ module Args
 open System
 open FSharp.Control
 
-exception MissingArg of message: string with override this.Message = this.message
-let missingArg msg = raise (MissingArg msg)
-
 let [<Literal>] REGION =                    "EQUINOX_DYNAMO_REGION"
 let [<Literal>] SERVICE_URL =               "EQUINOX_DYNAMO_SERVICE_URL"
 let [<Literal>] ACCESS_KEY =                "EQUINOX_DYNAMO_ACCESS_KEY_ID"
@@ -16,20 +13,20 @@ let [<Literal>] INDEX_TABLE =               "EQUINOX_DYNAMO_TABLE_INDEX"
 
 type Configuration(tryGet: string -> string option) =
 
+    let get key =                           match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
     member val tryGet =                     tryGet
-    member _.get key =                      match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
 
-    member x.CosmosConnection =             x.get "EQUINOX_COSMOS_CONNECTION"
-    member x.CosmosDatabase =               x.get "EQUINOX_COSMOS_DATABASE"
-    member x.CosmosContainer =              x.get "EQUINOX_COSMOS_CONTAINER"
+    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
+    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
+    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
 
-    member x.DynamoServiceUrl =             x.get SERVICE_URL
-    member x.DynamoAccessKey =              x.get ACCESS_KEY
-    member x.DynamoSecretKey =              x.get SECRET_KEY
-    member x.DynamoTable =                  x.get TABLE
-    member x.DynamoRegion =                 x.tryGet REGION
+    member _.DynamoServiceUrl =             get SERVICE_URL
+    member _.DynamoAccessKey =              get ACCESS_KEY
+    member _.DynamoSecretKey =              get SECRET_KEY
+    member _.DynamoTable =                  get TABLE
+    member _.DynamoRegion =                 tryGet REGION
 
-    member x.EventStoreConnection =         x.get "EQUINOX_ES_CONNECTION"
+    member _.EventStoreConnection =         get "EQUINOX_ES_CONNECTION"
     member _.MaybeEventStoreConnection =    tryGet "EQUINOX_ES_CONNECTION"
     member _.MaybeEventStoreCredentials =   tryGet "EQUINOX_ES_CREDENTIALS"
 
@@ -50,7 +47,7 @@ module Cosmos =
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member p.Usage = p |> function
-                | Verbose _ ->              "request verbose logging."
+                | Verbose ->                "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
                 | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
                 | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
@@ -60,15 +57,15 @@ module Cosmos =
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
 
     type Arguments(c: Configuration, p: ParseResults<Parameters>) =
-        let connection =                    p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection)
+        let connection =                    p.GetResult(Connection, fun () -> c.CosmosConnection)
         let discovery =                     Equinox.CosmosStore.Discovery.ConnectionString connection
         let mode =                          p.TryGetResult ConnectionMode
         let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
+        let container =                     p.GetResult(Container, fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose
         member _.Connect() =                connector.ConnectContext(database, container)
 
@@ -102,9 +99,9 @@ module Dynamo =
                                             | Some systemName ->
                                                 Choice1Of2 systemName
                                             | None ->
-                                                let serviceUrl =  p.TryGetResult ServiceUrl |> Option.defaultWith (fun () -> c.DynamoServiceUrl)
-                                                let accessKey =   p.TryGetResult AccessKey  |> Option.defaultWith (fun () -> c.DynamoAccessKey)
-                                                let secretKey =   p.TryGetResult SecretKey  |> Option.defaultWith (fun () -> c.DynamoSecretKey)
+                                                let serviceUrl =  p.GetResult(ServiceUrl, fun () -> c.DynamoServiceUrl)
+                                                let accessKey =   p.GetResult(AccessKey, fun () -> c.DynamoAccessKey)
+                                                let secretKey =   p.GetResult(SecretKey, fun () -> c.DynamoSecretKey)
                                                 Choice2Of2 (serviceUrl, accessKey, secretKey)
         let connector =                     let timeout = p.GetResult(RetriesTimeoutS, 5.) |> TimeSpan.FromSeconds
                                             let retries = p.GetResult(Retries, 1)
@@ -113,7 +110,7 @@ module Dynamo =
                                                 Equinox.DynamoStore.DynamoStoreConnector(systemName, timeout, retries)
                                             | Choice2Of2 (serviceUrl, accessKey, secretKey) ->
                                                 Equinox.DynamoStore.DynamoStoreConnector(serviceUrl, accessKey, secretKey, timeout, retries)
-        let table =                         p.TryGetResult Table      |> Option.defaultWith (fun () -> c.DynamoTable)
+        let table =                         p.GetResult(Table, fun () -> c.DynamoTable)
         member _.Connect() =                connector.CreateClient().CreateContext("Main", table)
 
 type [<RequireQualifiedAccess; NoComparison; NoEquality>]

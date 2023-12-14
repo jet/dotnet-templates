@@ -9,12 +9,9 @@ open Serilog
 open System
 open System.Threading
 
-exception MissingArg of message: string with override this.Message = this.message
-let missingArg msg = raise (MissingArg msg)
-
 type Configuration(tryGet) =
 
-    let get key = match tryGet key with Some value -> value | None -> missingArg $"Missing Argument/Environment Variable %s{key}"
+    let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
     let isTrue varName = tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
 
     member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
@@ -33,7 +30,7 @@ type Configuration(tryGet) =
 module Args =
 
     open Argu
-    [<NoEquality; NoComparison>]
+    [<NoEquality; NoComparison; RequireSubcommand>]
     type Parameters =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<AltCommandLine "-I"; Unique>]   VerboseStore
@@ -44,8 +41,8 @@ module Args =
         | [<AltCommandLine "-c"; Unique>]   MaxConnections of int
         | [<AltCommandLine "-e">]           CategoryBlacklist of string
         | [<AltCommandLine "-i">]           CategoryWhitelist of string
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] SrcEs of ParseResults<EsSourceParameters>
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] SrcCosmos of ParseResults<CosmosSourceParameters>
+        | [<CliPrefix(CliPrefix.None); AltCommandLine "es">] SrcEs of ParseResults<EsSourceParameters>
+        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos">] SrcCosmos of ParseResults<CosmosSourceParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging. Default: off"
@@ -73,7 +70,7 @@ module Args =
             match p.GetSubCommand() with
             | SrcCosmos cosmos -> Choice1Of2 (CosmosSourceArguments(c, cosmos))
             | SrcEs es -> Choice2Of2 (EsSourceArguments(c, es))
-            | _ -> missingArg "Must specify one of cosmos or es for Src"
+            | _ -> p.Raise "Must specify one of cosmos or es for Src"
 
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 5.
@@ -101,7 +98,7 @@ module Args =
                 fun x -> not (black.Contains x) && (not << isCheckpoint) x && (not excludeLong || (not << isLong) x)
             | bad, [] ->    let black = Set.ofList bad in Log.Warning("Excluding categories: {cats}", black); fun x -> not (black.Contains x)
             | [], good ->   let white = Set.ofList good in Log.Warning("Only copying categories: {cats}", white); fun x -> white.Contains x
-            | _, _ -> missingArg "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed"
+            | _, _ -> p.Raise "BlackList and Whitelist are mutually exclusive; inclusions and exclusions cannot be mixed"
 
         member x.Sink: Choice<CosmosSinkArguments, EsSinkArguments> =
             match x.Source with
@@ -124,7 +121,7 @@ module Args =
                     {   groupName = x.ProcessorName; start = startPos; checkpointInterval = srcE.CheckpointInterval; tailInterval = srcE.TailInterval
                         forceRestart = srcE.ForceRestart
                         batchSize = srcE.StartingBatchSize; minBatchSize = srcE.MinBatchSize; gorge = srcE.Gorge; streamReaders = srcE.StreamReaders })
-    and [<NoEquality; NoComparison>] CosmosSourceParameters =
+    and [<NoEquality; NoComparison; RequireSubcommand>] CosmosSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-b"; Unique>]   MaxItems of int
         | [<AltCommandLine "-l"; Unique>]   LagFreqM of float
@@ -138,8 +135,8 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "es"; Unique(*ExactlyOnce is not supported*); Last>] DstEs of ParseResults<EsSinkParameters>
-        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos"; Unique(*ExactlyOnce is not supported*); Last>] DstCosmos of ParseResults<CosmosSinkParameters>
+        | [<CliPrefix(CliPrefix.None); AltCommandLine "es">] DstEs of ParseResults<EsSinkParameters>
+        | [<CliPrefix(CliPrefix.None); AltCommandLine "cosmos">] DstCosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."
@@ -158,13 +155,13 @@ module Args =
                 | DstEs _ ->                "EventStore Sink parameters."
                 | DstCosmos _ ->            "CosmosDb Sink parameters."
     and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
-        let discovery =                     p.TryGetResult CosmosSourceParameters.Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                     p.GetResult(CosmosSourceParameters.Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
         let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSourceParameters.Retries, 1)
         let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
-        let database =                      p.TryGetResult CosmosSourceParameters.Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
+        let database =                      p.GetResult(CosmosSourceParameters.Database, fun () -> c.CosmosDatabase)
         let containerId: string =           p.GetResult CosmosSourceParameters.Container
         let leaseContainerId =              p.GetResult(CosmosSourceParameters.LeaseContainer, containerId + "-aux")
 
@@ -182,8 +179,8 @@ module Args =
             match p.GetSubCommand() with
             | DstCosmos cosmos -> Choice1Of2 (CosmosSinkArguments(c, cosmos))
             | DstEs es -> Choice2Of2 (EsSinkArguments(c, es))
-            | _ -> missingArg "Must specify one of cosmos or es for Sink"
-    and [<NoEquality; NoComparison>] EsSourceParameters =
+            | _ -> p.Raise "Must specify one of cosmos or es for Sink"
+    and [<NoEquality; NoComparison; RequireSubcommand>] EsSourceParameters =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         | [<AltCommandLine "-g"; Unique>]   Gorge of int
         | [<AltCommandLine "-i"; Unique>]   StreamReaders of int
@@ -205,8 +202,8 @@ module Args =
         | [<AltCommandLine "-u">]           Username of string
         | [<AltCommandLine "-p">]           Password of string
 
-        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Es of ParseResults<EsSinkParameters>
-        | [<CliPrefix(CliPrefix.None); Unique(*ExactlyOnce is not supported*); Last>] Cosmos of ParseResults<CosmosSinkParameters>
+        | [<CliPrefix(CliPrefix.None)>]     Es of ParseResults<EsSinkParameters>
+        | [<CliPrefix(CliPrefix.None)>]     Cosmos of ParseResults<CosmosSinkParameters>
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | FromTail ->               "Start the processing from the Tail"
@@ -255,9 +252,9 @@ module Args =
             | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", x.Host, p).Uri)
         member val Tcp =                    p.Contains EsSourceParameters.Tcp || c.EventStoreTcp
         member val Port =                   match p.TryGetResult EsSourceParameters.Port with Some x -> Some x | None -> c.EventStorePort
-        member val Host =                   p.TryGetResult EsSourceParameters.Host     |> Option.defaultWith (fun () -> c.EventStoreHost)
-        member val User =                   p.TryGetResult EsSourceParameters.Username |> Option.defaultWith (fun () -> c.EventStoreUsername)
-        member val Password =               p.TryGetResult EsSourceParameters.Password |> Option.defaultWith (fun () -> c.EventStorePassword)
+        member val Host =                   p.GetResult(EsSourceParameters.Host, fun () -> c.EventStoreHost)
+        member val User =                   p.GetResult(EsSourceParameters.Username, fun () -> c.EventStoreUsername)
+        member val Password =               p.GetResult(EsSourceParameters.Password, fun () -> c.EventStorePassword)
         member val Retries =                p.GetResult(EsSourceParameters.Retries, 3)
         member val Timeout =                p.GetResult(EsSourceParameters.Timeout, 20.) |> TimeSpan.FromSeconds
         member val Heartbeat =              p.GetResult(EsSourceParameters.HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
@@ -276,8 +273,8 @@ module Args =
         member val Sink =
             match p.GetSubCommand() with
             | Cosmos cosmos -> CosmosSinkArguments(c, cosmos)
-            | _ -> missingArg "Must specify cosmos for Sink if source is `es`"
-    and [<NoEquality; NoComparison>] CosmosSinkParameters =
+            | _ -> p.Raise "Must specify cosmos for Sink if source is `es`"
+    and [<NoEquality; NoComparison; RequireSubcommand>] CosmosSinkParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
@@ -287,7 +284,7 @@ module Args =
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 #if kafka
-        | [<CliPrefix(CliPrefix.None); Unique; Last>] Kafka of ParseResults<KafkaSinkParameters>
+        | [<CliPrefix(CliPrefix.None)>]     Kafka of ParseResults<KafkaSinkParameters>
 #endif
         interface IArgParserTemplate with
             member p.Usage = p |> function
@@ -303,14 +300,14 @@ module Args =
                 | Kafka _ ->                "specify Kafka target for non-Synced categories. Default: None."
 #endif
     and CosmosSinkArguments(c: Configuration, p: ParseResults<CosmosSinkParameters>) =
-        let discovery =                     p.TryGetResult Connection |> Option.defaultWith (fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
+        let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.GetResult(ConnectionMode, Microsoft.Azure.Cosmos.ConnectionMode.Direct)
         let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSinkParameters.Retries, 0)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, mode)
-        let database =                      p.TryGetResult Database |> Option.defaultWith (fun () -> c.CosmosDatabase)
-        let container =                     p.TryGetResult Container |> Option.defaultWith (fun () -> c.CosmosContainer)
+        let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
+        let container =                     p.GetResult(Container, fun () -> c.CosmosContainer)
         let leaseContainerId =              p.TryGetResult LeaseContainer
         member _.ConnectTarget(maxEvents) = connector.ConnectTarget("Destination", database, container, maxEvents)
         member _.MaybeLeasesContainer: Microsoft.Azure.Cosmos.Container option = leaseContainerId |> Option.map (fun id -> connector.LeasesContainer(database, id))
@@ -351,9 +348,9 @@ module Args =
             | true, Some p ->  Discovery.Uri                 (UriBuilder("tcp", x.Host, p).Uri)
         member val Tcp =                    p.Contains EsSinkParameters.Tcp || c.EventStoreTcp
         member val Port =                   match p.TryGetResult Port with Some x -> Some x | None -> c.EventStorePort
-        member val Host =                   p.TryGetResult Host     |> Option.defaultWith (fun () -> c.EventStoreHost)
-        member val User =                   p.TryGetResult Username |> Option.defaultWith (fun () -> c.EventStoreUsername)
-        member val Password =               p.TryGetResult Password |> Option.defaultWith (fun () -> c.EventStorePassword)
+        member val Host =                   p.GetResult(Host, fun () -> c.EventStoreHost)
+        member val User =                   p.GetResult(Username, fun () -> c.EventStoreUsername)
+        member val Password =               p.GetResult(Password, fun () -> c.EventStorePassword)
         member val Retries =                p.GetResult(Retries, 3)
         member val Timeout =                p.GetResult(Timeout, 20.) |> TimeSpan.FromSeconds
         member val Heartbeat =              p.GetResult(HeartbeatTimeout, 1.5) |> TimeSpan.FromSeconds
@@ -378,8 +375,8 @@ module Args =
                 | Topic _ ->                "specify Kafka Topic Id. (optional if environment variable PROPULSION_KAFKA_TOPIC specified)."
                 | Producers _ ->            "specify number of Kafka Producer instances to use. Default: 1."
     and KafkaSinkArguments(c: Configuration, p: ParseResults<KafkaSinkParameters>) =
-        member val Broker =                 p.TryGetResult Broker |> Option.defaultWith (fun () -> c.Broker)
-        member val Topic =                  p.TryGetResult Topic  |> Option.defaultWith (fun () -> c.Topic)
+        member val Broker =                 p.GetResult(Broker, fun () -> c.Broker)
+        member val Topic =                  p.GetResult(Topic, fun () -> c.Topic)
         member val Producers =              p.GetResult(Producers, 1)
         member x.BuildTargetParams() =      x.Broker, x.Topic, x.Producers
 #endif
@@ -563,8 +560,7 @@ let main argv =
     try let args = Args.parse EnvVar.tryGet argv
         try Log.Logger <- LoggerConfiguration().Configure(args.Verbose, args.VerboseStore, ?maybeSeqEndpoint = args.MaybeSeqEndpoint).CreateLogger()
             try run args |> Async.RunSynchronously; 0
-            with e when not (e :? MissingArg) -> Log.Fatal(e, "Exiting"); 2
+            with e when not (e :? System.Threading.Tasks.TaskCanceledException) -> Log.Fatal(e, "Exiting"); 2
         finally Log.CloseAndFlush()
-    with MissingArg msg -> eprintfn "%s" msg; 1
-        | :? Argu.ArguParseException as e -> eprintfn "%s" e.Message; 1
-        | e -> eprintf "Exception %s" e.Message; 1
+    with :? Argu.ArguParseException as e -> eprintfn $"%s{e.Message}"; 1
+        | e -> eprintf $"Exception %s{e.Message}"; 1
