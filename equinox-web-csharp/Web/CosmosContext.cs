@@ -56,7 +56,7 @@ public class CosmosContext : EquinoxContext
         var cacheStrategy = _cache == null
             ? null
             : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-        var cat = new CosmosStoreCategory<TEvent, TState, Unit>(_store, name, codec.ToJsonElementCodec(), fold, initial, accessStrategy, cacheStrategy, compressUnfolds:FSharpOption<bool>.None);
+        var cat = new CosmosStoreCategory<TEvent, TState, Unit>(_store, name, codec.ToJsonElementCodec(), fold, initial, accessStrategy, cacheStrategy);
         return cat.Resolve(handlerLog);
     }
 }
