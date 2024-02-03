@@ -2,14 +2,15 @@ module Store
 
 module Metrics = 
 
-    let log = Serilog.Log.ForContext("isMetric", true)
+    let [<Literal>] PropertyTag = "isMetric"
+    let log = Serilog.Log.ForContext(PropertyTag, true)
 
 let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
 module Codec =
 
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
+       FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 /// Implements a Service with a single method that visits the identified stream, with the following possible outcomes:
 /// 1) stream has a 'current' snapshot (per the `isCurrentSnapshot` predicate supplied to `Snapshot.create` and/or `fold'`:-

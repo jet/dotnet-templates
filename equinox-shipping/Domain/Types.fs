@@ -19,14 +19,16 @@ module TransactionId =
     let parse (x: string): TransactionId = %x
     let (|Parse|) = parse
 
+namespace global
+
 module Seq =
 
     let inline chooseV f xs = seq { for x in xs do match f x with ValueSome v -> yield v | ValueNone -> () }
 
 module Guid =
 
+    let inline gen () = System.Guid.NewGuid()
     let inline toStringN (x: System.Guid) = x.ToString "N"
-    let generateStringN () = let g = System.Guid.NewGuid() in toStringN g
 
 /// Handles symmetric generation and decoding of StreamNames composed of a series of elements via the FsCodec.StreamId helpers
 type internal CategoryId<'elements>(name, gen: 'elements -> FsCodec.StreamId, dec: FsCodec.StreamId -> 'elements) =

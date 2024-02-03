@@ -1,19 +1,14 @@
 namespace Reactor.Integration
 
-open Infrastructure
 open Propulsion.Internal
 open Reactor
 open System
-
-module Guid =
-    
-    let generateStringN () = Guid.NewGuid() |> Domain.Guid.toString
 
 /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and the source passed from the concrete fixture 
 /// See SerilogLogFixture for details of how to expose complete diagnostic messages
 type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     let serilogLog = new SerilogLogFixture(messageSink) // create directly to ensure correct sequencing and no loss of messages
-    let contextId = Guid.generateStringN ()
+    let contextId = Guid.gen () |> Guid.toStringN
     let handler = Handler.create store
     let log = Serilog.Log.Logger
     let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1, stateInterval = TimeSpan.FromMinutes 2,

@@ -19,8 +19,7 @@ module Args =
         | [<AltCommandLine "-V"; Unique>]   Verbose
         | [<CliPrefix(CliPrefix.None)>]     Cosmos of ParseResults<CosmosParameters>
         interface IArgParserTemplate with
-            member a.Usage =
-                match a with
+            member a.Usage = a |> function
                 | Verbose ->                "request Verbose Logging. Default: off."
                 | Cosmos _ ->               "specify CosmosDB input parameters."
     and Arguments(config: Configuration, p: ParseResults<Parameters>) =

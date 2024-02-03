@@ -1,7 +1,6 @@
 namespace Patterns.Domain
 
 open FSharp.UMX
-open System
 
 /// Identifies a single period within a temporally linked chain of periods
 /// Each Period commences with a Balance `BroughtForward` based on what the predecessor Period
@@ -44,6 +43,8 @@ module ListSeriesId =
     let wellKnownId: ListSeriesId = UMX.tag "0"
     let toString: ListSeriesId -> string = UMX.untag
 
+namespace global
+
 module Guid =
 
-    let toStringN (g: Guid) = g.ToString "N"
+    let toStringN (g: System.Guid) = g.ToString "N"

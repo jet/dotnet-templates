@@ -9,7 +9,7 @@ open System
 /// See SerilogLogFixture for details of how to expose complete diagnostic messages
 type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     let serilogLog = new SerilogLogFixture(messageSink) // create directly to ensure correct sequencing and no loss of messages
-    let contextId = Shipping.Domain.Guid.generateStringN ()
+    let contextId = Guid.gen () |> Guid.toStringN
     let manager =
         let maxDop = 4
         Shipping.Domain.FinalizationProcess.Factory.create maxDop store

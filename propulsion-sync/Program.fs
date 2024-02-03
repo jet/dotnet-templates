@@ -7,7 +7,6 @@ open Propulsion.Kafka
 #endif
 open Serilog
 open System
-open System.Threading
 
 type Configuration(tryGet) =
 
@@ -210,7 +209,7 @@ module Args =
                 | Gorge _ ->                "Request Parallel readers phase during initial catchup, running one chunk (256MB) apart. Default: off"
                 | StreamReaders _ ->        "number of concurrent readers that will fetch a missing stream when in tailing mode. Default: 1. TODO: IMPLEMENT!"
                 | Tail _ ->                 "attempt to read from tail at specified interval in Seconds. Default: 1"
-                | ForceRestart _ ->         "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
+                | ForceRestart ->           "Forget the current committed position; start from (and commit) specified position. Default: start from specified position or resume from committed."
                 | BatchSize _ ->            "maximum item count to request from feed. Default: 4096"
                 | MinBatchSize _ ->         "minimum item count to drop down to in reaction to read failures. Default: 512"
                 | Position _ ->             "EventStore $all Stream Position to commence from"

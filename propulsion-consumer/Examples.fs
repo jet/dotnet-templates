@@ -118,8 +118,8 @@ module MultiStreams =
 
         // Dump stats relating to how much information is being held - note it's likely for requests to be in flighht during the call
         member _.DumpState(log: ILogger) =
-            log.Information(" Favorited {total}/{users}", faves.Values |> Seq.sumBy (fun x -> x.Count), faves.Count)
-            log.Information(" SavedForLater {total}/{users}", saves.Values |> Seq.sumBy (fun x -> x.Length), saves.Count)
+            log.Information(" Favorited {total}/{users}", faves.Values |> Seq.sumBy _.Count, faves.Count)
+            log.Information(" SavedForLater {total}/{users}", saves.Values |> Seq.sumBy _.Length, saves.Count)
 
     type Stats(log, statsInterval, stateInterval) =
         inherit Propulsion.Streams.Stats<Stat>(log, statsInterval, stateInterval)

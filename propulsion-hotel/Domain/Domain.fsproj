@@ -16,6 +16,7 @@
     </ItemGroup>
 
     <ItemGroup>
+      <Compile Include="Infrastructure.fs" />
       <Compile Include="Store.fs" />
       <Compile Include="Types.fs" />
       <Compile Include="GuestStay.fs" />

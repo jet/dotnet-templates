@@ -34,7 +34,7 @@ module Fold =
     let initial = { items = []; nextId = 0 }
     /// Compute State change implied by a given Event
     let evolve state = function
-        | Events.Added item    -> { state with items = item :: state.items; nextId = state.nextId + 1 }
+        | Events.Added item    -> { items = item :: state.items; nextId = state.nextId + 1 }
         | Events.Updated value -> { state with items = state.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
         | Events.Deleted e     -> { state with items = state.items  |> List.filter (fun x -> x.id <> e.id) }
         | Events.Cleared e     -> { nextId = e.nextId; items = [] }

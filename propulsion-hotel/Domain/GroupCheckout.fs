@@ -44,7 +44,7 @@ module Fold =
         | StaysMerged e ->
             { removePending (seq { for s in e.residuals -> s.stay }) state with
                 checkedOut = Array.append state.checkedOut e.residuals
-                balance = state.balance + (e.residuals |> Seq.sumBy (fun x -> x.residual)) }
+                balance = state.balance + (e.residuals |> Seq.sumBy _.residual) }
         | MergesFailed e ->
             { removePending e.stays state with
                 failed = Array.append state.failed e.stays }

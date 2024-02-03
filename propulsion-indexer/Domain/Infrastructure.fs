@@ -12,14 +12,6 @@ module TimeSpan =
 
     let seconds value = TimeSpan.FromSeconds value
 
-/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
-type ClientId = Guid<clientId>
-and [<Measure>] clientId
-module ClientId =
-    let toString (value: ClientId): string = Guid.toStringN %value
-    let parse (value: string): ClientId = let raw = Guid.Parse value in % raw
-    let (|Parse|) = parse
-
 type Equinox.Decider<'e, 's> with
 
     member x.TransactWithPostVersion(decide: 's -> 'r * 'e[]) =
@@ -27,3 +19,11 @@ type Equinox.Decider<'e, 's> with
                      (fun res (c: Equinox.ISyncContext<_>) -> res, c.Version))
 
 type DataMemberAttribute = System.Runtime.Serialization.DataMemberAttribute
+
+/// ClientId strongly typed id; represented internally as a Guid; not used for storage so rendering is not significant
+type ClientId = Guid<clientId>
+and [<Measure>] clientId
+module ClientId =
+    let toString (value: ClientId): string = Guid.toStringN %value
+    let parse (value: string): ClientId = let raw = Guid.Parse value in % raw
+    let (|Parse|) = parse

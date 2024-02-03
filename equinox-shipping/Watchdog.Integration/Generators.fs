@@ -12,6 +12,6 @@ let genDefault<'t> = ArbMap.defaults |> ArbMap.generate<'t>
 
 type Custom =
 
-    static member GuidStringN() = genDefault |> Gen.map (Shipping.Domain.Guid.toStringN >> GuidStringN) |> Arb.fromGen
+    static member GuidStringN() = genDefault |> Gen.map (Guid.toStringN >> GuidStringN) |> Arb.fromGen
 
 [<assembly: Properties( Arbitrary = [| typeof<Custom> |] )>] do()
