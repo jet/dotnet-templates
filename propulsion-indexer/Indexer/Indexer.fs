@@ -3,8 +3,8 @@ module IndexerTemplate.Indexer.Indexer
 type Outcome = Metrics.Outcome
 
 /// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
-type Stats(log, statsInterval, stateInterval, verboseStore) =
-    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
+type Stats(log, statsInterval, stateInterval, verboseStore, abendThreshold) =
+    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval, abendThreshold = abendThreshold)
 
     let mutable ok, skipped, na = 0, 0, 0
     override _.HandleOk res =
@@ -48,7 +48,7 @@ let handle (sourceService: Todo.Service) (summaryService: TodoIndex.Service) str
 
 module Factory =
 
-    let createHandler store =
+    let create store =
         let srcService = Todo.Factory.create store
         let dstService = TodoIndex.Factory.create store
-        handle srcService dstService
+        Some sourceCategories, handle srcService dstService
