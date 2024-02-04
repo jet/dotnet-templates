@@ -1,46 +1,58 @@
 module IndexerTemplate.Indexer.Snapshotter
 
-type Outcome = bool
+open Visitor
+open Propulsion.Internal
 
-type Stats(log, statsInterval, stateInterval, verboseStore) =
-    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
+type Outcome = (struct (string * System.TimeSpan * Store.Snapshotter.Result))
+module Outcome = let create sn ts res: Outcome = struct (FsCodec.StreamName.Category.ofStreamName sn, ts, res)
 
-    let mutable handled, skipped = 0, 0
-    override _.HandleOk(updated) = if updated then handled <- handled + 1 else skipped <- skipped + 1
+/// Gathers counts of snapshots updated vs skipped
+type Stats(log, statsInterval, stateInterval, verboseStore, abendThreshold) =
+    inherit StatsBase<Outcome>(log, statsInterval, stateInterval, verboseStore, abendThreshold = abendThreshold)
+    let lats, accLats = Stats.LatencyStatsSet(), Stats.LatencyStatsSet()
+    let counts, accCounts = CategoryCounters(), CategoryCounters()
+    override _.HandleOk((cat, ts, res)) =
+        lats.Record(cat, ts)
+        accLats.Record(cat, ts)
+        let count = [ FsCodec.Union.caseName res, 1 ]
+        counts.Ingest(cat, count)
+        accCounts.Ingest(cat, count)
+
     override _.DumpStats() =
+        counts.DumpGrouped(log, "OUTCOMES")
+        counts.Clear()
+        lats.DumpGrouped(id, log, totalLabel = "CATEGORIES")
+        lats.Clear()
         base.DumpStats()
-        log.Information(" Snapshotted {handled}, skipped {skipped}", handled, skipped)
-        handled <- 0; skipped <- 0
-        Equinox.CosmosStore.Core.Log.InternalMetrics.dump Serilog.Log.Logger
-
-    override _.Classify(e) =
-        match e with
-        | OutcomeKind.StoreExceptions kind -> kind
-        | Equinox.CosmosStore.Exceptions.ServiceUnavailable when not verboseStore -> Propulsion.Streams.OutcomeKind.RateLimited
-        | x -> base.Classify x
-    override _.HandleExn(log, exn) =
-        log.Information(exn, "Unhandled")
+    override _.DumpState(prune) =
+        accCounts.DumpGrouped(log, "ΣOUTCOMES")
+        accLats.DumpGrouped(id, log, totalLabel = "ΣCATEGORIES")
+        if prune then accLats.Clear()
+        base.DumpState(prune)
 
 open IndexerTemplate.Domain
 
-let handle
-        tryUpdateTodo
+let handle todo
         stream _events: Async<_ * Outcome> = async {
+    let ts = Stopwatch.timestamp ()
     let! res, pos' =
         match stream with
-        | Todo.Reactions.For id -> tryUpdateTodo id
+        | Todo.Reactions.For id -> todo id
         | sn -> failwith $"Unexpected category %A{sn}"
     // a) if the tryUpdate saw a version beyond what (Propulsion.Sinks.Events.nextIndex events) would suggest, then we pass that information out
     //    in order to have the scheduler drop all events until we meet an event that signifies we may need to re-update
     // b) the fact that we use the same Microsoft.Azure.Cosmos.CosmosClient for the Change Feed and the Equinox-based Services means we are guaranteed
     //    to always see all the _events we've been supplied. (Even if this were not the case, the scheduler would retain the excess events, and that
     //    would result in an immediate re-triggering of the handler with those events)
-    return Propulsion.Sinks.StreamResult.OverrideNextIndex pos', res }
+    let elapsed = Stopwatch.elapsed ts
+    return Propulsion.Sinks.StreamResult.OverrideNextIndex pos', Outcome.create stream elapsed res }
 
 module Factory =
 
-    let createHandler context =
+    let createHandler dryRun store =
 
-        let todo = Todo.Factory.createSnapshotter context
+        let todo = Todo.Factory.createSnapshotter store
+
+        let h svc = Store.Snapshotter.Service.tryUpdate dryRun svc
         handle
-            todo.TryUpdate
+            (   h todo)

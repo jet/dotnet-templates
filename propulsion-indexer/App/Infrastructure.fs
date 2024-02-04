@@ -10,8 +10,9 @@ module EnvVar =
 
 module Log =
 
+    let [<Literal>] PropertyTag = "isMetric"
     /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
+    let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 /// Equinox and Propulsion provide metrics as properties in log emissions
 /// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
@@ -25,15 +26,22 @@ module Sinks =
 
     let equinoxAndPropulsionConsumerMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+          |> _.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+          |> _.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
 
-    let equinoxAndPropulsionCosmosConsumerMetrics tags group (l: LoggerConfiguration) =
-        l |> equinoxAndPropulsionConsumerMetrics tags group
-          |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
+    let private removeMetrics (e: Serilog.Events.LogEvent) =
+        e.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
+        e.RemovePropertyIfPresent Propulsion.CosmosStore.Log.PropertyTag
+        e.RemovePropertyIfPresent Propulsion.Feed.Core.Log.PropertyTag
+        e.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
+        e.RemovePropertyIfPresent Log.PropertyTag
 
     let console (configuration: LoggerConfiguration) =
-        let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
-        configuration.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
+        let t = "{Timestamp:HH:mm:ss} {Level:u1} {Message:lj} {Properties:j}{NewLine}{Exception}"
+        configuration
+            .WriteTo.Logger(fun l ->
+                l.Enrich.With({ new Serilog.Core.ILogEventEnricher with member _.Enrich(evt, _) = removeMetrics evt })
+                 .WriteTo.Console(outputTemplate = t, theme = Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code) |> ignore)
 
 [<System.Runtime.CompilerServices.Extension>]
 type Logging() =
@@ -43,6 +51,8 @@ type Logging() =
         configuration
             .Enrich.FromLogContext()
         |> fun c -> if verbose = Some true then c.MinimumLevel.Debug() else c
+        |> fun c -> let generalLevel = if verbose = Some true then Events.LogEventLevel.Information else Events.LogEventLevel.Warning
+                    c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
 
     [<System.Runtime.CompilerServices.Extension>]
     static member private Sinks(configuration: LoggerConfiguration, configureMetricsSinks, configureConsoleSink, ?isMetric) =
@@ -50,13 +60,14 @@ type Logging() =
             a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
             a.Logger(fun l -> // but filter what gets emitted to the console sink
                 let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
+                let l = l.Filter.ByExcluding(fun e -> match e.Properties.TryGetValue "SourceContext" with true, (:? Serilog.Events.ScalarValue as v) -> string v.Value = "LeMans.Common.CosmosRepository" | _ -> false)
                 configureConsoleSink l |> ignore)
             |> ignore
-        configuration.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)
+        configuration.WriteTo.Async(bufferSize = 65536, blockWhenFull = true, configure = System.Action<_> configure)
 
     [<System.Runtime.CompilerServices.Extension>]
     static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
-        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.logEventIsMetric)
 
 module CosmosStoreConnector =
 
@@ -99,19 +110,27 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let client = Equinox.CosmosStore.CosmosStoreClient(cosmosClient)
         let contexts =
             client.CreateContext(role, databaseId, containerId, tipMaxEvents = 256, queryMaxItems = 500),
-            client.CreateContext(role, databaseId, viewsContainerId, tipMaxEvents = 256, queryMaxItems = 500),
+            // In general, the views container won't write events. We also know we generally won't attach a CFP, so we keep events in tip
+            client.CreateContext($"{role}(Views)", databaseId, viewsContainerId, tipMaxEvents = 128),
             // NOTE the tip limits for this connection are set to be effectively infinite in order to ensure that writes never trigger calving from the tip
             client.CreateContext("snapshotUpdater", databaseId, containerId, tipMaxEvents = 1024, tipMaxJsonLength = 1024 * 1024,
                                  skipLog = not (logSnapshotConfig = Some true))
         return cosmosClient, contexts }
+
+    /// Connect to the database (including verifying and warming up relevant containers), establish relevant CosmosStoreContexts required by Domain
+    member x.Connect(databaseId, containerId, viewsContainerId) = async {
+        let! _client, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId)
+        return contexts }
+
+    /// Indexer: Connects to a Store as both a CosmosStoreClient and a ChangeFeedProcessor Monitored Container
     member x.ConnectWithFeed(databaseId, containerId, viewsContainerId, auxContainerId, ?logSnapshotConfig) = async {
-        let! cosmosClient, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId, auxContainerId, ?logSnapshotConfig = logSnapshotConfig)
-        let source, leases = CosmosStoreConnector.getSourceAndLeases cosmosClient databaseId containerId auxContainerId
+        let! client, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId, auxContainerId, ?logSnapshotConfig = logSnapshotConfig)
+        let source, leases = CosmosStoreConnector.getSourceAndLeases client databaseId containerId auxContainerId
         return contexts, source, leases }
 
     /// Indexer Sync mode: When using a ReadOnly connection string, the leases need to be maintained alongside the target
-    member x.ConnectWithFeedReadOnly(databaseId, containerId: string, viewsContainerId, auxClient, auxDatabaseId, auxContainerId) = async {
-        let! client, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId = viewsContainerId)
+    member x.ConnectWithFeedReadOnly(databaseId, containerId, viewsContainerId, auxClient, auxDatabaseId, auxContainerId) = async {
+        let! client, contexts = x.Connect("Main", databaseId, containerId, viewsContainerId)
         let source = CosmosStoreConnector.getSource client databaseId containerId
         let leases = CosmosStoreConnector.getLeases auxClient auxDatabaseId auxContainerId
         return contexts, source, leases }
@@ -123,7 +142,7 @@ type Equinox.CosmosStore.CosmosStoreConnector with
 
 type Factory private () =
     
-    static member StartSink(log, stats, maxConcurrentStreams, handle, maxReadAhead) =
+    static member StartStreamsSink(log, stats, maxConcurrentStreams, handle, maxReadAhead) =
         Propulsion.Sinks.Factory.StartConcurrent(log, maxReadAhead, maxConcurrentStreams, handle, stats)
 
 module OutcomeKind =
@@ -131,8 +150,9 @@ module OutcomeKind =
     let [<return: Struct>] (|StoreExceptions|_|) (exn: exn) =
         match exn with
         | Equinox.CosmosStore.Exceptions.RateLimited -> Propulsion.Streams.OutcomeKind.RateLimited |> ValueSome
-        | Equinox.CosmosStore.Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
-        | :? System.Threading.Tasks.TaskCanceledException -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
+        | Equinox.CosmosStore.Exceptions.CosmosStatus System.Net.HttpStatusCode.RequestEntityTooLarge -> Propulsion.Streams.OutcomeKind.Tagged "cosmosTooLarge" |> ValueSome
+        | Equinox.CosmosStore.Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Tagged "cosmosTimeout" |> ValueSome
+        | :? System.Threading.Tasks.TaskCanceledException -> Propulsion.Streams.OutcomeKind.Tagged "taskCancelled" |> ValueSome
         | _ -> ValueNone
 
 // A typical app will likely have health checks etc, implying the wireup would be via `endpoints.MapMetrics()` and thus not use this ugly code directly
