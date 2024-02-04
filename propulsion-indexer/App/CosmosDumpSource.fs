@@ -15,17 +15,15 @@ type [<Sealed; AbstractClass>] CosmosDumpSource private () =
         let isNonCommentLine line = System.Text.RegularExpressions.Regex.IsMatch(line, "^\s*#") |> not
         let truncate = match truncateTo with Some count -> Seq.truncate count | None -> id
         let lines = Seq.append (System.IO.File.ReadLines filePath |> truncate) (Seq.singleton null) // Add a trailing EOF sentinel so checkpoint positions can be line numbers even when finished reading
-        let mapLine isEof lineNo (line: string) = // TODO inline in F#7 when seq exprs support try/withs
-            try let items = if isEof then Array.empty
-                                     else System.Text.Json.JsonDocument.Parse line |> parseFeedDoc |> Seq.toArray
-                struct (TimeSpan.Zero, ({ items = items; isTail = isEof; checkpoint = Position.parse lineNo }: Core.Batch<_>))
-            with e -> exn($"File Parse error on L{lineNo}: '{line.Substring(0, 200)}'", e) |> raise
-        let crawl _ _ _ = TaskSeq.ofSeq <| seq {
+        let crawl _ _ _ = taskSeq {
             for i, line in lines |> Seq.indexed do
                 let isEof = line = null
                 if isEof || (i >= skip && isNonCommentLine line) then
                     let lineNo = int64 i + 1L
-                    mapLine isEof lineNo line }
+                    try let items = if isEof then Array.empty
+                                    else System.Text.Json.JsonDocument.Parse line |> parseFeedDoc |> Seq.toArray
+                        struct (TimeSpan.Zero, ({ items = items; isTail = isEof; checkpoint = Position.parse lineNo }: Core.Batch<_>))
+                    with e -> raise <| exn($"File Parse error on L{lineNo}: '{line.Substring(0, 200)}'", e) }
         let source =
             let checkpointStore = Equinox.MemoryStore.VolatileStore()
             let checkpoints = ReaderCheckpoint.MemoryStore.create log ("consumerGroup", TimeSpan.FromMinutes 1) checkpointStore
