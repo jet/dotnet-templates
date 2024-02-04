@@ -95,9 +95,10 @@ module EventStoreContext =
 
  module OutcomeKind =
     
-    let [<return: Struct>] (|StoreExceptions|_|) exn =
+    let [<return: Struct>] (|StoreExceptions|_|) (exn: exn) =
         match exn with
         | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded
         | Equinox.CosmosStore.Exceptions.RateLimited -> Propulsion.Streams.OutcomeKind.RateLimited |> ValueSome
-        | Equinox.CosmosStore.Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
+        | Equinox.CosmosStore.Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Tagged "cosmosTimeout" |> ValueSome
+        | :? System.Threading.Tasks.TaskCanceledException -> Propulsion.Streams.OutcomeKind.Tagged "taskCancelled" |> ValueSome
         | _ -> ValueNone

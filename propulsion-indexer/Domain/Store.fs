@@ -25,28 +25,68 @@ module Codec =
 ///   - The Sync Stored procedure then processes the ensuing request, replacing the current (missing or outdated) `'u`nfolds with the fresh snapshot
 module Snapshotter =
 
+    type Result =
+        | Valid // No-op case: no update required as the stream already has a correct snapshot
+        | Invalid // Update skipped due to running in dryRun mode; we avoided running the update
+        | Updated // Update required: yield a tentative event (which transmuteAllEventsToUnfolds will flip to being an unfold)
+    let decide generate dryRun (hasSnapshot, state) =
+        if hasSnapshot then Valid, Array.empty
+        elif dryRun then Invalid, Array.empty
+        // Note Updated is a synthetic/tentative event, which transmuteAllEventsToUnfolds will use as a signal to a) update the unfolds b) drop the event
+        else Updated, generate state
     type private StateWithSnapshottedFlag<'s> = bool * 's
-    type Service<'id, 'e, 's> internal (resolve: 'id -> Equinox.Decider<'e, StateWithSnapshottedFlag<'s>>, generate: 's -> 'e) =
-
-        member _.TryUpdate(id): Async<bool * int64> =
+    type Service<'id, 'e, 's> internal (resolve: 'id -> Equinox.Decider<'e, StateWithSnapshottedFlag<'s>>, generate: 's -> 'e[]) =
+        member _.TryUpdate(id, dryRun): Async<Result * int64> =
             let decider = resolve id
-            let decide (hasSnapshot, state) =
-                if hasSnapshot then false, Array.empty // case 1: no update required as the stream already has a correct snapshot
-                else true, generate state |> Array.singleton // case 2: yield a tentative event (which transmuteAllEventsToUnfolds will flip to being an unfold)
-            decider.TransactWithPostVersion(decide)
-
+            decider.TransactWithPostVersion(decide generate dryRun)
+    module Service =
+        let tryUpdate dryRun (x: Service<_, _, _>) id = x.TryUpdate(id, dryRun)
     let internal createService streamId generate cat =
         let resolve = streamId >> createDecider cat
         Service(resolve, generate)
 
     let internal initial'<'s> initial: StateWithSnapshottedFlag<'s> = false, initial
-    let internal fold' isCurrentSnapshot fold (_wasOrigin, s) xs: StateWithSnapshottedFlag<'s> =
+    let internal fold' isValidUnfolds fold (_wasOrigin, s) xs: StateWithSnapshottedFlag<'s> =
         // NOTE ITimelineEvent.IsUnfold and/or a generic isOrigin event would be insufficient for our needs
         // The tail event encountered by the fold could either be:
         // - an 'out of date' snapshot (which the normal load process would be able to upconvert from, but is not what we desire)
         // - another event (if there is no snapshot of any kind)
-        isCurrentSnapshot (Array.last xs), fold s xs
-        
+        isValidUnfolds xs, fold s xs
+
+module Ingester =
+
+    open FsCodec
+    type internal Event<'e, 'f> = (struct (ITimelineEvent<'f> * 'e))
+    let internal createCodec<'e, 'f, 'c> (target: IEventCodec<'e, 'f, 'c>): IEventCodec<Event<'e, 'f>, 'f, 'c>  =
+        let encode (c: 'c) ((input, upped): Event<'e, 'f>) : struct (string * 'f * 'f * System.Guid * string * string * System.DateTimeOffset) =
+            let e = target.Encode(c, upped)
+            e.EventType, e.Data, input.Meta, input.EventId, input.CorrelationId, input.CausationId, input.Timestamp
+        let decode (e: ITimelineEvent<'f>): Event<'e, 'f> voption = match target.Decode e with ValueNone -> ValueNone | ValueSome d -> ValueSome (e, d)
+        Codec.Create<Event<'e, 'f>, 'f, 'c>(encode, decode)
+
+    type private State = unit
+    let internal initial: State = ()
+    let internal fold () = ignore
+
+    let private decide (inputCodec: IEventCodec<'e, 'f, unit>) (inputs: ITimelineEvent<'f>[]) (c: Equinox.ISyncContext<unit>): Event<'e, 'f>[] = [|
+        for x in inputs do
+            if x.Index >= c.Version then // NOTE source and target need to have 1:1 matching event indexes, or things would be much more complex
+                match inputCodec.Decode x with
+                | ValueNone -> failwith $"Unknown EventType {x.EventType} at index {x.Index}"
+                | ValueSome d -> struct (x, d) |] // So we require all source events to exactly one event in the target
+
+    type Service<'id, 'e, 's, 'f> internal (codec: IEventCodec<'e, 'f, unit>, resolve: 'id -> Equinox.Decider<Event<'e, 'f>, State>) =
+        member _.Ingest(id, sourceEvents: ITimelineEvent<'f>[]): Async<int64> =
+            let decider = resolve id
+            decider.TransactEx(decide codec sourceEvents, fun (x: Equinox.ISyncContext<State>) -> x.Version)
+    let internal createService<'id, 'e, 'f> streamId inputCodec cat =
+        let resolve = streamId >> createDecider cat
+        Service<'id, 'e, unit, 'f>(inputCodec, resolve)
+    module Service =
+        let ingest (svc: Service<'id, 'e, 's, System.Text.Json.JsonElement>) id (events: ITimelineEvent<System.ReadOnlyMemory<byte>>[]) =
+            let events = events |> Array.map (FsCodec.Core.TimelineEvent.Map (System.Func<_, _> FsCodec.SystemTextJson.Interop.InteropHelpers.Utf8ToJsonElement))
+            svc.Ingest(id, events)
+
 let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
 
@@ -63,16 +103,16 @@ module Cosmos =
 
     open Equinox.CosmosStore
     
-    let private createCached name codec initial fold accessStrategy (context, cache) =
-        CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
+    let private createCached name codec initial fold accessStrategy shouldCompress (context, cache) =
+        CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache, ?shouldCompress = shouldCompress)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
-        createCached name codec initial fold accessStrategy (context.main, cache)
+        createCached name codec initial fold accessStrategy None (context.main, cache)
 
     let createRollingState name codec initial fold toSnapshot (context, cache) =
         let accessStrategy = AccessStrategy.RollingState toSnapshot
-        createCached name codec initial fold accessStrategy (context.views, cache)
+        createCached name codec initial fold accessStrategy None (context.views, cache)
 
     let createConfig (main, views, snapshotUpdate) cache =
         Config.Cosmos ({ main = main; views = views; snapshotUpdate = snapshotUpdate }, cache)
@@ -82,10 +122,48 @@ module Cosmos =
         let private accessStrategy isOrigin =
             let transmuteAllEventsToUnfolds events _state = [||], events
             AccessStrategy.Custom (isOrigin, transmuteAllEventsToUnfolds)
-        let private createCategory name codec initial fold isCurrent (contexts, cache) =
-            createCached name codec (Snapshotter.initial' initial) (Snapshotter.fold' isCurrent fold) (accessStrategy isCurrent) (contexts.snapshotUpdate, cache)
-
-        let create codec initial fold (isCurrentSnapshot, generate) streamId categoryName config =
+        let private createCategory name codec initial fold isValidUnfolds isOrigin (contexts, cache) =
+            createCached name codec (Snapshotter.initial' initial) (Snapshotter.fold' isValidUnfolds fold) (accessStrategy isOrigin) (Some isOrigin) (contexts.snapshotUpdate, cache)
+        /// Equinox allows any number of unfold events to be stored:
+        /// - the `isOrigin` predicate identifies the "main snapshot" - if it returns `true`, we don't need to load and fold based on events
+        /// - `isValidUnfolds` inspects the full set of unfolds in order to determine whether they are complete
+        ///   - where Index Unfolds are required for application functionality, we can trigger regeneration where they are missing
+        let withIndexing codec initial fold (isOrigin, isValidUnfolds, generateUnfolds) streamId categoryName config =
             let cat = config |> function
-                | Config.Cosmos (context, cache) -> createCategory categoryName codec initial fold isCurrentSnapshot (context, cache)
-            Snapshotter.createService streamId generate cat
+                | Config.Cosmos (context, cache) -> createCategory categoryName codec initial fold isValidUnfolds isOrigin (context, cache)
+            Snapshotter.createService streamId generateUnfolds cat
+        /// For the common case where we don't use any indexing - we only have a single relevant unfold to detect, and a function to generate it
+        let single codec initial fold (isCurrentSnapshot, generate) streamId categoryName config =
+            withIndexing codec initial fold (isCurrentSnapshot, Array.tryExactlyOne >> Option.exists isCurrentSnapshot, generate >> Array.singleton) streamId categoryName config
+
+    module Ingester =
+
+        let private slice eventSize struct (maxEvents, maxBytes) span =
+            let mutable countBudget, bytesBudget = maxEvents, maxBytes
+            let withinLimits y =
+                countBudget <- countBudget - 1
+                bytesBudget <- bytesBudget - eventSize y
+                // always send at least one event in order to surface the problem and have the stream marked malformed
+                countBudget = maxEvents - 1 || (countBudget >= 0 && bytesBudget >= 0)
+            span |> Array.takeWhile withinLimits
+        // We gauge the likely output size from the input size
+        // (to be 100% correct, we should encode it as the Sync in Equinox would do for the real converted data)
+        // (or, to completely cover/gold plate it, we could have an opt-in on the Category to do slicing internally)
+        let eventSize ((x, _e): Ingester.Event<_, _>) = x.Size
+        let private accessStrategy =
+            let isOriginIgnoreEvents _ = true // we only need to know the Version to manage the ingestion process
+            let transmuteTrimsToStoredProcInputLimitAndDoesNotGenerateUnfolds events () =
+                let maxEvents, maxBytes = 16384, 256 * 1024
+                let trimmed = slice eventSize (maxEvents, maxBytes) events
+                trimmed, Array.empty
+            AccessStrategy.Custom (isOriginIgnoreEvents, transmuteTrimsToStoredProcInputLimitAndDoesNotGenerateUnfolds)
+        let private createCategory name codec (context, cache) =
+            createCached name codec Ingester.initial Ingester.fold accessStrategy None (context, cache)
+
+        type TargetCodec<'e> = FsCodec.IEventCodec<'e, Core.EventBody, unit>
+        open FsCodec.SystemTextJson.Interop
+        let create<'id, 'e> struct (inputStreamCodec: FsCodec.IEventCodec<'e, System.ReadOnlyMemory<byte>, unit>, targetCodec: TargetCodec<'e>) streamId categoryName struct (context, cache) =
+            let rewriteEventBodiesCodec = Ingester.createCodec<'e, System.Text.Json.JsonElement, unit> targetCodec
+            let cat = createCategory categoryName rewriteEventBodiesCodec (context, cache)
+            let inputStreamToJsonElement = inputStreamCodec.ToJsonElementCodec()
+            Ingester.createService<'id, 'e, System.Text.Json.JsonElement> streamId inputStreamToJsonElement cat
