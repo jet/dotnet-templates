@@ -56,7 +56,7 @@ let handle maxDop stream events = async {
         })
         let! added = Async.Parallel(maybeAdd, maxDegreeOfParallelism = maxDop)
         let outcome = { added = Seq.length added; notReady = results.Length - ready.Length; dups = results.Length - ticketIds.Length }
-        return Propulsion.Sinks.PartiallyProcessed ticketIds.Length, outcome
+        return outcome, Propulsion.Sinks.Events.index events + ticketIds.LongLength
     | x -> return failwithf "Unexpected stream %O" x
 }
 

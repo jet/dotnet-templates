@@ -14,11 +14,10 @@
 
     <ItemGroup>
         <PackageReference Include="Argu" Version="6.1.4" />
-        <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.0.0-rc.16" />
+        <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.1.0-rc.1" />
         <PackageReference Include="prometheus-net.AspNetCore" Version="3.6.0" />
-        <PackageReference Include="Propulsion.Feed" Version="3.0.0-rc.10" />
-        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.10" />
-        <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-rc.10" />
+        <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.14.10" />
+        <PackageReference Include="Propulsion.MemoryStore" Version="3.0.0-rc.14.10" />
         <PackageReference Include="Serilog.Sinks.Async" Version="1.5.0" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     </ItemGroup>

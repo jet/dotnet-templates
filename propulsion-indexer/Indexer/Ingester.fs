@@ -8,13 +8,13 @@ type Stats(log, statsInterval, stateInterval, verboseStore, abendThreshold) =
     override _.HandleOk(()) = ()
 
 let handle todo
-        stream (events: Propulsion.Sinks.Event[]): Async<_ * unit> = async {
+        stream (events: Propulsion.Sinks.Event[]): Async<unit * int64> = async {
     let handle =
         match stream with
         | Todo.Reactions.For id -> todo id
         | sn -> failwith $"Unexpected category %A{sn}"
     let! pos' = handle events
-    return Propulsion.Sinks.StreamResult.OverrideNextIndex pos', () }
+    return (), pos' }
 
 module Factory =
 

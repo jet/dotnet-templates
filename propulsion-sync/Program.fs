@@ -156,10 +156,9 @@ module Args =
     and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
         let discovery =                     p.GetResult(CosmosSourceParameters.Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
-        let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSourceParameters.Retries, 1)
         let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.GetResult(CosmosSourceParameters.Database, fun () -> c.CosmosDatabase)
         let containerId: string =           p.GetResult CosmosSourceParameters.Container
         let leaseContainerId =              p.GetResult(CosmosSourceParameters.LeaseContainer, containerId + "-aux")
@@ -429,7 +428,7 @@ module EventV0Parser =
     /// We assume all Documents represent Events laid out as above
     let parse (d: System.Text.Json.JsonDocument): Propulsion.Sinks.StreamEvent =
         let e = d.Cast<EventV0>()
-        FsCodec.StreamName.parse e.s, e |> FsCodec.Core.TimelineEvent.Map(Func<_, _> ReadOnlyMemory) 
+        FsCodec.StreamName.parse e.s, e |> FsCodec.Core.TimelineEvent.mapBodies (ReadOnlyMemory >> FsCodec.Encoding.OfBlob)
 
 let transformV0 catFilter v0SchemaDocument: Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
@@ -458,7 +457,7 @@ module Checkpoints =
         let access = AccessStrategy.Custom (Checkpoint.Fold.isOrigin, transmute')
         let create groupName (context, cache) =
             let caching = Equinox.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Checkpoint.Stream.Category, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, access, caching)
+            let cat = CosmosStoreCategory(context, Checkpoint.Stream.Category, FsCodec.SystemTextJson.Encoder.Uncompressed codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, access, caching)
             let resolve sid = Equinox.Stream.Resolve(cat, Store.Metrics.log).Invoke(sid)
             Checkpoint.CheckpointSeries(groupName, resolve)
 
@@ -529,7 +528,7 @@ let build (args: Args.Arguments, log) =
         let checkpoints = Checkpoints.Cosmos.create spec.groupName (dstContainer, cache)
 
         let withNullData (e: FsCodec.ITimelineEvent<_>): FsCodec.ITimelineEvent<_> =
-            FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, ReadOnlyMemory.Empty, e.Meta, timestamp=e.Timestamp) :> _
+            FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, FsCodec.Encoding.OfBlob ReadOnlyMemory.Empty, e.Meta, timestamp=e.Timestamp) :> _
         let tryMapEvent streamFilter (x: EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$"
@@ -538,7 +537,7 @@ let build (args: Args.Arguments, log) =
                 let struct (stream, event) = e
                 if Reader.payloadBytes x > 1_000_000 then
                     Log.Error("replacing {stream} event index {index} with `null` Data due to length of {len}MiB",
-                        stream, event.Index, Propulsion.Internal.Log.miB (let d = event.Data in d.Length))
+                        stream, event.Index, Propulsion.Internal.Log.miB (FsCodec.Encoding.ByteCount event.Data))
                     Some struct (stream, withNullData event)
                 else Some e
         let connect () =

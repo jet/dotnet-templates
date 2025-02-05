@@ -15,7 +15,7 @@ public class CosmosContext : EquinoxContext
 {
     readonly Cache _cache;
 
-    CosmosStoreContext _store;
+    CosmosStoreContext _context;
     readonly Func<Task> _connect;
 
     public CosmosContext(CosmosConfig config)
@@ -26,8 +26,8 @@ public class CosmosContext : EquinoxContext
         var discovery = Discovery.NewConnectionString(config.ConnectionStringWithUriAndKey);
         _connect = async () =>
         {
-            var connector = new CosmosStoreConnector(discovery, timeout, retriesOn429Throttling, timeout, config.Mode);
-            _store = await Connect(connector, config.Database, config.Container);
+            var connector = new CosmosStoreConnector(discovery, retriesOn429Throttling, timeout, config.Mode);
+            _context = await Connect(connector, config.Database, config.Container);
         };
     }
 
@@ -56,7 +56,7 @@ public class CosmosContext : EquinoxContext
         var cacheStrategy = _cache == null
             ? null
             : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
-        var cat = new CosmosStoreCategory<TEvent, TState, Unit>(_store, name, codec.ToJsonElementCodec(), fold, initial, accessStrategy, cacheStrategy);
+        var cat = new CosmosStoreCategory<TEvent, TState, Unit>(_context, name, FsCodec.SystemTextJson.Encoder.CompressedUtf8(codec), fold, initial, accessStrategy, cacheStrategy);
         return cat.Resolve(handlerLog);
     }
 }

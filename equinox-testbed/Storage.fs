@@ -28,7 +28,6 @@ module Cosmos =
     type [<NoEquality; NoComparison>] Parameters =
         | [<AltCommandLine "-V">]       Verbose
         | [<AltCommandLine "-m">]       ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
-        | [<AltCommandLine "-o">]       Timeout of float
         | [<AltCommandLine "-r">]       Retries of int
         | [<AltCommandLine "-rt">]      RetriesWaitTime of float
         | [<AltCommandLine "-s">]       Connection of string
@@ -37,7 +36,6 @@ module Cosmos =
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->       "Include low level Store logging."
-                | Timeout _ ->          "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->          "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
                 | ConnectionMode _ ->   "override the connection mode. Default: Direct."
@@ -47,10 +45,9 @@ module Cosmos =
     type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
-        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
         let container =                     p.GetResult(Container, fun () -> c.CosmosContainer)
         member _.Connect(tipMaxEvents, queryMaxItems) = connector.ConnectContext("Main", database, container, tipMaxEvents, queryMaxItems)

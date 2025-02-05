@@ -47,7 +47,7 @@ module Fold =
         let generate state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
         /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
         let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
-        let config = isOrigin, generate
+        let config = isOrigin, generate, String.startsWith (nameof Events.Snapshotted)
         let internal hydrate (e: Events.SnapshotData): State =
             { nextId = e.nextId; items = List.ofArray e.items }
             

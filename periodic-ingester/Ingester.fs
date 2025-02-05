@@ -49,7 +49,7 @@ let handle stream events = async {
     match stream, events with
     | PipelineEvent.TicketEvents (ticketId, items) ->
         // TODO : Ingest the data
-        return Propulsion.Sinks.StreamResult.AllProcessed, IngestionOutcome.Unchanged
+        return IngestionOutcome.Unchanged, Propulsion.Sinks.Events.next events
     | x -> return failwithf "Unexpected stream %O" x
 }
 

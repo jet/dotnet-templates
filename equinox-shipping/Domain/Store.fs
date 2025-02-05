@@ -14,12 +14,12 @@ module Codec =
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
         Codec.Create<'t>(options = defaultOptions)
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>(options = defaultOptions)
+        CodecJsonElement.Create<'t>() // options = Options.Default
 
 module Memory =
 
     let create name codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial)
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Encoder.Uncompressed codec, fold, initial)
 
 let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
@@ -29,7 +29,7 @@ module Cosmos =
     open Equinox.CosmosStore
     
     let private createCached name codec initial fold accessStrategy (context, cache) =
-        CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
+        CosmosStoreCategory(context, name, FsCodec.SystemTextJson.Encoder.Compressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
@@ -40,7 +40,7 @@ module Dynamo =
     open Equinox.DynamoStore
     
     let private createCached name codec initial fold accessStrategy (context, cache) =
-        DynamoStoreCategory(context, name, FsCodec.Compression.EncodeTryCompress codec, fold, initial, accessStrategy, cacheStrategy cache)
+        DynamoStoreCategory(context, name, FsCodec.Encoder.Compressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
