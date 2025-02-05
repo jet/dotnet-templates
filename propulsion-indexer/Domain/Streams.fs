@@ -7,7 +7,7 @@ module Codec =
     let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
         FsCodec.SystemTextJson.Codec.Create<'E>() |> FsCodec.Encoder.Uncompressed // options = Options.Default
 
-    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(FsCodec.Encoding.ToBlob(x).ToArray())
+    let private renderBody (x: Propulsion.Sinks.EventBody) = FsCodec.Encoding.GetStringUtf8 x
 
     // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
     let internal tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =

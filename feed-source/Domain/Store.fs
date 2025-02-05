@@ -9,7 +9,7 @@ let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 module Codec =
 
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() |> FsCodec.SystemTextJson.Encoder.Compressed // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 module Memory =
 
@@ -20,7 +20,7 @@ module Cosmos =
 
     let private createCached name codec initial fold accessStrategy (context, cache) =
         let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.CosmosStore.CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy)
+        Equinox.CosmosStore.CosmosStoreCategory(context, name, FsCodec.SystemTextJson.Encoder.Uncompressed codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createUnoptimized name codec initial fold (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.Unoptimized

@@ -3,10 +3,9 @@ namespace Shipping.Watchdog.Integration
 type CosmosConnector(connectionString, databaseId, containerId) =
 
     let discovery =                     connectionString |> Equinox.CosmosStore.Discovery.ConnectionString
-    let timeout =                       5. |> System.TimeSpan.FromSeconds
     let retries, maxRetryWaitTime =     5, 5. |> System.TimeSpan.FromSeconds
     let connectionMode =                Microsoft.Azure.Cosmos.ConnectionMode.Gateway
-    let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, connectionMode)
+    let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, connectionMode)
     let leaseContainerId =              containerId + "-aux"
     
     new (c: Shipping.Watchdog.SourceArgs.Configuration) = CosmosConnector(c.CosmosConnection, c.CosmosDatabase, c.CosmosContainer)

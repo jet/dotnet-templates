@@ -278,7 +278,6 @@ module Args =
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
-        | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 #if kafka
@@ -291,7 +290,6 @@ module Args =
                 | Database _ ->             "specify a database name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
                 | Container _ ->            "specify a Container name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
                 | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `<SourceContainer>` + `-aux`."
-                | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 0."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 #if kafka
@@ -300,10 +298,9 @@ module Args =
     and CosmosSinkArguments(c: Configuration, p: ParseResults<CosmosSinkParameters>) =
         let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.GetResult(ConnectionMode, Microsoft.Azure.Cosmos.ConnectionMode.Direct)
-        let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSinkParameters.Retries, 0)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, mode)
         let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
         let container =                     p.GetResult(Container, fun () -> c.CosmosContainer)
         let leaseContainerId =              p.TryGetResult LeaseContainer
@@ -528,7 +525,7 @@ let build (args: Args.Arguments, log) =
         let checkpoints = Checkpoints.Cosmos.create spec.groupName (dstContainer, cache)
 
         let withNullData (e: FsCodec.ITimelineEvent<_>): FsCodec.ITimelineEvent<_> =
-            FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, FsCodec.Encoding.OfBlob ReadOnlyMemory.Empty, e.Meta, timestamp=e.Timestamp) :> _
+            FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, FsCodec.Encoding.OfBlob ReadOnlyMemory.Empty, e.Meta, timestamp = e.Timestamp) :> _
         let tryMapEvent streamFilter (x: EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$"

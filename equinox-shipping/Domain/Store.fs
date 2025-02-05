@@ -14,7 +14,7 @@ module Codec =
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
         Codec.Create<'t>(options = defaultOptions)
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        CodecJsonElement.Create<'t>() // options = Options.Default
+        CodecJsonElement.Create<'t>(options = defaultOptions)
 
 module Memory =
 
