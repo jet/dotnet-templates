@@ -10,7 +10,7 @@ let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 module Codec =
 
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-       FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 /// Implements a Service with a single method that visits the identified stream, with the following possible outcomes:
 /// 1) stream has a 'current' snapshot (per the `isCurrentSnapshot` predicate supplied to `Snapshot.create` and/or `fold'`:-
@@ -83,8 +83,8 @@ module Ingester =
         let resolve = streamId >> createDecider cat
         Service<'id, 'e, unit, 'f>(inputCodec, resolve)
     module Service =
-        let ingest (svc: Service<'id, 'e, 's, System.Text.Json.JsonElement>) id (events: ITimelineEvent<System.ReadOnlyMemory<byte>>[]) =
-            let events = events |> Array.map (FsCodec.Core.TimelineEvent.Map (System.Func<_, _> FsCodec.SystemTextJson.Interop.InteropHelpers.Utf8ToJsonElement))
+        let ingest (svc: Service<'id, 'e, 's, System.Text.Json.JsonElement>) id (events: ITimelineEvent<Encoded>[]) =
+            let events = events |> Array.map (FsCodec.Core.TimelineEvent.mapBodies FsCodec.SystemTextJson.Encoding.Utf8EncodedToJsonElement)
             svc.Ingest(id, events)
 
 let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
@@ -103,12 +103,16 @@ module Cosmos =
 
     open Equinox.CosmosStore
     
+    let eventEncoding codec shouldCompress =
+        match shouldCompress with
+        | None -> FsCodec.SystemTextJson.Encoder.Uncompressed codec
+        | Some predicate -> FsCodec.SystemTextJson.Encoder.Compressed(codec, shouldCompress = fun (x: FsCodec.IEventData<System.Text.Json.JsonElement>) -> predicate x.EventType)
     let private createCached name codec initial fold accessStrategy shouldCompress (context, cache) =
-        CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache, ?shouldCompress = shouldCompress)
+        CosmosStoreCategory(context, name,eventEncoding codec shouldCompress, fold, initial, accessStrategy, cacheStrategy cache)
 
-    let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
+    let createSnapshotted name codec initial fold (isOrigin, toSnapshot, shouldCompress) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
-        createCached name codec initial fold accessStrategy None (context.main, cache)
+        createCached name codec initial fold accessStrategy (Some shouldCompress) (context.main, cache)
 
     let createRollingState name codec initial fold toSnapshot (context, cache) =
         let accessStrategy = AccessStrategy.RollingState toSnapshot
@@ -122,19 +126,20 @@ module Cosmos =
         let private accessStrategy isOrigin =
             let transmuteAllEventsToUnfolds events _state = [||], events
             AccessStrategy.Custom (isOrigin, transmuteAllEventsToUnfolds)
-        let private createCategory name codec initial fold isValidUnfolds isOrigin (contexts, cache) =
-            createCached name codec (Snapshotter.initial' initial) (Snapshotter.fold' isValidUnfolds fold) (accessStrategy isOrigin) (Some isOrigin) (contexts.snapshotUpdate, cache)
+        let private createCategory name codec initial fold isValidUnfolds accessStrategy shouldCompress (contexts, cache) =
+            createCached name codec (Snapshotter.initial' initial) (Snapshotter.fold' isValidUnfolds fold) accessStrategy shouldCompress (contexts.snapshotUpdate, cache)
         /// Equinox allows any number of unfold events to be stored:
         /// - the `isOrigin` predicate identifies the "main snapshot" - if it returns `true`, we don't need to load and fold based on events
         /// - `isValidUnfolds` inspects the full set of unfolds in order to determine whether they are complete
         ///   - where Index Unfolds are required for application functionality, we can trigger regeneration where they are missing
-        let withIndexing codec initial fold (isOrigin, isValidUnfolds, generateUnfolds) streamId categoryName config =
+        let withIndexing codec initial fold (isOrigin, isValidUnfolds, generateUnfolds, shouldCompress) streamId categoryName config forceLoadingAllEvents =
+            let accessStrategy = (if forceLoadingAllEvents then fun _ -> false else isOrigin) |> accessStrategy
             let cat = config |> function
-                | Config.Cosmos (context, cache) -> createCategory categoryName codec initial fold isValidUnfolds isOrigin (context, cache)
+                | Config.Cosmos (context, cache) -> createCategory categoryName codec initial fold isValidUnfolds accessStrategy shouldCompress (context, cache)
             Snapshotter.createService streamId generateUnfolds cat
         /// For the common case where we don't use any indexing - we only have a single relevant unfold to detect, and a function to generate it
-        let single codec initial fold (isCurrentSnapshot, generate) streamId categoryName config =
-            withIndexing codec initial fold (isCurrentSnapshot, Array.tryExactlyOne >> Option.exists isCurrentSnapshot, generate >> Array.singleton) streamId categoryName config
+        let single codec initial fold (isOrigin, generate, shouldCompress) streamId categoryName config =
+            withIndexing codec initial fold (isOrigin, Array.tryLast >> Option.exists isOrigin, generate >> Array.singleton, Some shouldCompress) streamId categoryName config
 
     module Ingester =
 
@@ -160,10 +165,9 @@ module Cosmos =
         let private createCategory name codec (context, cache) =
             createCached name codec Ingester.initial Ingester.fold accessStrategy None (context, cache)
 
-        type TargetCodec<'e> = FsCodec.IEventCodec<'e, Core.EventBody, unit>
-        open FsCodec.SystemTextJson.Interop
-        let create<'id, 'e> struct (inputStreamCodec: FsCodec.IEventCodec<'e, System.ReadOnlyMemory<byte>, unit>, targetCodec: TargetCodec<'e>) streamId categoryName struct (context, cache) =
+        type TargetCodec<'e> = FsCodec.IEventCodec<'e, System.Text.Json.JsonElement, unit>
+        let create<'id, 'e> struct (inputStreamCodec: FsCodec.IEventCodec<'e, FsCodec.Encoded, unit>, targetCodec: TargetCodec<'e>) streamId categoryName struct (context, cache) =
             let rewriteEventBodiesCodec = Ingester.createCodec<'e, System.Text.Json.JsonElement, unit> targetCodec
             let cat = createCategory categoryName rewriteEventBodiesCodec (context, cache)
-            let inputStreamToJsonElement = inputStreamCodec.ToJsonElementCodec()
+            let inputStreamToJsonElement = inputStreamCodec |> FsCodec.SystemTextJson.Encoder.Utf8AsJsonElement
             Ingester.createService<'id, 'e, System.Text.Json.JsonElement> streamId inputStreamToJsonElement cat

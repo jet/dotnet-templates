@@ -22,10 +22,10 @@ type [<Sealed; AbstractClass>] CosmosDumpSource private () =
                     let lineNo = int64 i + 1L
                     try let items = if isEof then Array.empty
                                     else System.Text.Json.JsonDocument.Parse line |> parseFeedDoc |> Seq.toArray
-                        struct (TimeSpan.Zero, ({ items = items; isTail = isEof; checkpoint = Position.parse lineNo }: Core.Batch<_>))
+                        struct (TimeSpan.Zero, ({ items = items; isTail = isEof; checkpoint = Position.parse lineNo }: Batch<_>))
                     with e -> raise <| exn($"File Parse error on L{lineNo}: '{line.Substring(0, 200)}'", e) }
         let source =
             let checkpointStore = Equinox.MemoryStore.VolatileStore()
             let checkpoints = ReaderCheckpoint.MemoryStore.create log ("consumerGroup", TimeSpan.FromMinutes 1) checkpointStore
-            Propulsion.Feed.Core.SinglePassFeedSource(log, statsInterval, SourceId.parse filePath, crawl, checkpoints, sink, string)
+            SinglePassFeedSource(log, statsInterval, SourceId.parse filePath, crawl, checkpoints, sink, string)
         source.Start(fun _ct -> task { return [| TrancheId.parse "0" |] })

@@ -50,7 +50,7 @@ let private handle (processor: GroupCheckoutProcess.Service) stream _events = as
         // NOTE also that in some cases, the observed position on the stream can be beyond that which has been notified via
         //   the change feed. In those cases, Propulsion will drop any incoming events that would represent duplication of processing,
         //   (and not even invoke the Handler unless one or more of the feed events are beyond the write position)
-        return Propulsion.Sinks.StreamResult.OverrideNextIndex ver', outcome
+        return outcome, ver'
     | other ->
         return failwithf $"Span from unexpected category %s{FsCodec.StreamName.toString other}" }
 

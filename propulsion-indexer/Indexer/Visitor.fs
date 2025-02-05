@@ -7,12 +7,12 @@ module Outcome =
     let private create sn ham spam: Outcome = struct (FsCodec.StreamName.Category.ofStreamName sn, ham, spam)
     let render sn ham spam = create sn ham (eventCounts spam)
     let render_ sn ham spam elapsedS =
-        let share = TimeSpan.seconds (match Array.length ham with 0 -> 0 | count -> elapsedS / float count)
+        let share = TimeSpan.s(match Array.length ham with 0 -> 0 | count -> elapsedS / float count)
         create sn (ham |> Array.map (fun x -> struct (eventType x, share))) (eventCounts spam)
 
 [<AbstractClass>]
 type StatsBase<'outcome>(log, statsInterval, stateInterval, verboseStore, ?abendThreshold) =
-    inherit Propulsion.Streams.Stats<'outcome>(log, statsInterval, stateInterval, failThreshold = TimeSpan.seconds 120, ?abendThreshold = abendThreshold)
+    inherit Propulsion.Streams.Stats<'outcome>(log, statsInterval, stateInterval, failThreshold = TimeSpan.s 120, ?abendThreshold = abendThreshold)
 
     override _.DumpStats() =
         base.DumpStats()
@@ -73,9 +73,9 @@ type Stats(log, statsInterval, stateInterval, verboseStore, abendThreshold) =
         if purge then
             accHam.Clear(); accSpam.Clear()
 
-let private handle isValidEvent stream (events: Propulsion.Sinks.Event[]): Async<_ * Outcome> = async {
+let private handle isValidEvent stream (events: Propulsion.Sinks.Event[]): Async<Outcome * int64> = async {
     let ham, spam = events |> Array.partition isValidEvent
-    return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.render_ stream ham spam 0 }
+    return Outcome.render_ stream ham spam 0, Propulsion.Sinks.Events.next events }
 
 module Factory =
 

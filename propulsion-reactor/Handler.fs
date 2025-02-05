@@ -70,11 +70,11 @@ let handle
         let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
         let wrapped = generate stream version' (Contract.Summary summary)
         let! _ = produceSummary wrapped
-        return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
+        return Outcome.Ok (1, eventCount - 1), version'
     | Todo.Reactions.NoStateChange eventCount ->
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped eventCount
+        return Outcome.Skipped eventCount, Propulsion.Sinks.Events.next events
     | Todo.Reactions.NotApplicable eventCount ->
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable eventCount }
+        return Outcome.NotApplicable eventCount, Propulsion.Sinks.Events.next events }
 #endif
 
 type Factory private () =

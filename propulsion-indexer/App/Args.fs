@@ -45,7 +45,7 @@ and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let mode =                          p.TryGetResult ConnectionMode
-        Equinox.CosmosStore.CosmosStoreConnector(Equinox.CosmosStore.Discovery.ConnectionString connection, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        Equinox.CosmosStore.CosmosStoreConnector(Equinox.CosmosStore.Discovery.ConnectionString connection, retries, maxRetryWaitTime, ?mode = mode)
     member val Verbose =                    p.Contains Verbose
     member val Connection =                 connection
     member val Database =                   p.GetResult(Database,  fun () -> c.CosmosDatabase)
@@ -93,7 +93,7 @@ and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParamete
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let mode =                          p.TryGetResult ConnectionMode
-        Equinox.CosmosStore.CosmosStoreConnector(Equinox.CosmosStore.Discovery.ConnectionString connection, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        Equinox.CosmosStore.CosmosStoreConnector(Equinox.CosmosStore.Discovery.ConnectionString connection, retries, maxRetryWaitTime, ?mode = mode)
     let database =                          p.GetResult(Database,  fun () -> c.CosmosDatabase)
     let containerId =                       p.GetResult(Container, fun () -> c.CosmosContainer)
     let viewsContainerId =                  p.GetResult(Views,     fun () -> c.CosmosViews)

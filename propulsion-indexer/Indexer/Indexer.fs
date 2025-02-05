@@ -42,9 +42,9 @@ let handle (sourceService: Todo.Service) (summaryService: TodoIndex.Service) str
     | Todo.Reactions.ImpliesStateChange clientId  ->
         let! version', summary = sourceService.QueryWithVersion(clientId, toSummaryEventData)
         match! summaryService.TryIngest(clientId, version', summary) with
-        | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, events.Length - 1)
-        | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped events.Length
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
+        | true -> return Outcome.Ok (1, events.Length - 1), version'
+        | false -> return Outcome.Skipped events.Length, version'
+    | _ -> return Outcome.NotApplicable events.Length, Propulsion.Sinks.Events.next events }
 
 module Factory =
 

@@ -5,8 +5,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox" Version="4.0.0-rc.16" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.15" />
+    <PackageReference Include="Equinox" Version="4.1.0-rc.1" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0-rc.3" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
   </ItemGroup>
 

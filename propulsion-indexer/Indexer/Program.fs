@@ -144,7 +144,7 @@ module Args =
         member val CosmosVerbose =          match source with Choice1Of2 c -> c.Verbose | Choice2Of2 f -> f.CosmosVerbose
         member x.WaitForTail =              if isFileSource || p.Contains Follow then None
                                             else Some (x.StatsInterval * 2.)
-        member x.LagEstimationInterval =    x.WaitForTail |> Option.map (fun _ -> TimeSpan.seconds 5)
+        member x.LagEstimationInterval =    x.WaitForTail |> Option.map (fun _ -> TimeSpan.s 5)
         member x.ProcessorParams() =        Log.Information("{action}ing... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
                                                             actionLabel, x.ProcessorName, maxReadAhead, x.MaxConcurrentProcessors)
                                             (x.ProcessorName, maxReadAhead, x.MaxConcurrentProcessors)
@@ -165,7 +165,6 @@ module Args =
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c"; Mandatory>] Container of string
         | [<AltCommandLine "-a">]           LeaseContainerId of string
-        | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         | [<AltCommandLine "-kb">]          MaxKiB of int
@@ -177,7 +176,6 @@ module Args =
                 | Database _ ->             "specify a database name for store. Default (if Cosmos): Same as Source"
                 | Container _ ->            "specify a container name for store."
                 | LeaseContainerId _ ->     "store leases in Sync target DB (default: use `-aux` adjacent to the Source Container). Enables the Source to be read via a ReadOnly connection string."
-                | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 0."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
                 | MaxKiB _ ->               "specify maximum size in KiB to pass to the Sync stored proc (reduce if Malformed Streams due to 413 RequestTooLarge responses). Default: 128."
@@ -192,10 +190,9 @@ module Args =
                                             | Choice1Of2 c -> p.GetResult(Connection, fun () -> c.Connection)
                                             | Choice2Of2 _ -> p.GetResult Connection
         let connector =
-            let timeout =                   p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
             let retries =                   p.GetResult(Retries, 1)
             let maxRetryWaitTime =          p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-            Equinox.CosmosStore.CosmosStoreConnector(Equinox.CosmosStore.Discovery.ConnectionString connection, timeout, retries, maxRetryWaitTime)
+            Equinox.CosmosStore.CosmosStoreConnector(Equinox.CosmosStore.Discovery.ConnectionString connection, retries, maxRetryWaitTime)
         let database =                      match source with
                                             | Choice1Of2 c -> p.GetResult(Database, fun () -> c.Database)
                                             | Choice2Of2 _ -> p.GetResult Database

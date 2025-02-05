@@ -33,7 +33,7 @@ type Stats(log, statsInterval, stateInterval, verboseStore, abendThreshold) =
 open IndexerTemplate.Domain
 
 let handle todo
-        stream _events: Async<_ * Outcome> = async {
+        stream _events: Async<Outcome * int64> = async {
     let ts = Stopwatch.timestamp ()
     let! res, pos' =
         match stream with
@@ -45,14 +45,13 @@ let handle todo
     //    to always see all the _events we've been supplied. (Even if this were not the case, the scheduler would retain the excess events, and that
     //    would result in an immediate re-triggering of the handler with those events)
     let elapsed = Stopwatch.elapsed ts
-    return Propulsion.Sinks.StreamResult.OverrideNextIndex pos', Outcome.create stream elapsed res }
+    return Outcome.create stream elapsed res, pos' }
 
 module Factory =
 
     let createHandler dryRun store =
 
-        let todo = Todo.Factory.createSnapshotter store
-
-        let h svc = Store.Snapshotter.Service.tryUpdate dryRun svc
+        let forceLoadingAndFoldingAllEvents = dryRun
+        let h createSnapshotterCategory = Store.Snapshotter.Service.tryUpdate dryRun (createSnapshotterCategory store forceLoadingAndFoldingAllEvents)
         handle
-            (   h todo)
+            (   h Todo.Factory.createSnapshotter)

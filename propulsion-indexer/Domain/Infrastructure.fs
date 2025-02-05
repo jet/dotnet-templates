@@ -10,7 +10,11 @@ module Guid =
 
 module TimeSpan =
 
-    let seconds value = TimeSpan.FromSeconds value
+    let s value = TimeSpan.FromSeconds value
+
+module String =
+
+    let startsWith (prefix: string) (x: string) = x.StartsWith prefix
 
 type Equinox.Decider<'e, 's> with
 
