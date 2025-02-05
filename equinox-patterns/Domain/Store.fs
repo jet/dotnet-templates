@@ -11,12 +11,12 @@ module Codec =
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
         FsCodec.SystemTextJson.Codec.Create<'t>() // options = Options.Default
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() |> FsCodec.SystemTextJson.Encoder.Uncompressed // options = Options.Default
 
 module Memory =
 
     let create name codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial)
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Encoder.Uncompressed codec, fold, initial)
 
 let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)

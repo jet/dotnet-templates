@@ -94,13 +94,13 @@ module MultiStreams =
         member _.Handle(streamName: FsCodec.StreamName, events: Propulsion.Sinks.Event[]) = async {
             match struct (streamName, events) with
             | OtherCategory (cat, count) ->
-                return Propulsion.Sinks.StreamResult.AllProcessed, OtherCategory (cat, count)
+                return OtherCategory (cat, count), Propulsion.Sinks.Events.next events
             | FavoritesEvents (id, s, xs) ->
                 let folder (s: HashSet<_>) = function
                     | Favorites.Favorited e -> s.Add(e.skuId) |> ignore; s
                     | Favorites.Unfavorited e -> s.Remove(e.skuId) |> ignore; s
                 faves[id] <- Array.fold folder s xs
-                return Propulsion.Sinks.StreamResult.AllProcessed, Faves xs.Length
+                return Faves xs.Length, Propulsion.Sinks.Events.next events
             | SavedForLaterEvents (id, s, xs) ->
                 let remove (skus: SkuId seq) (s: _ list) =
                     let removing = (HashSet skus).Contains
@@ -113,7 +113,7 @@ module MultiStreams =
                     | SavedForLater.Removed e -> remove e.skus s
                     | SavedForLater.Merged e -> s |> remove [| for x in e.items -> x.skuId |] |> add [| for x in e.items -> x.skuId |]
                 saves[id] <- (s, xs) ||> Array.fold folder
-                return Propulsion.Sinks.StreamResult.AllProcessed, Saves xs.Length
+                return Saves xs.Length, Propulsion.Sinks.Events.next events
         }
 
         // Dump stats relating to how much information is being held - note it's likely for requests to be in flighht during the call

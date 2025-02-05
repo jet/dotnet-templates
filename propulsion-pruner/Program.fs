@@ -80,10 +80,9 @@ module Args =
     and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
         let discovery =                     p.GetResult(CosmosSourceParameters.Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
-        let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSourceParameters.Retries, 5)
         let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode = mode)
         let databaseId =                    p.GetResult(CosmosSourceParameters.Database, fun () -> c.CosmosDatabase)
         let containerId =                   p.GetResult CosmosSourceParameters.Container
        

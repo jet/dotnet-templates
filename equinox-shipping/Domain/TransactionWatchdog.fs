@@ -12,7 +12,7 @@ module Events =
         | NonTerminal of DateTimeOffset
         | Terminal
     let createCategorizationCodec isTerminalEvent =
-        let tryDecode (encoded: FsCodec.ITimelineEvent<ReadOnlyMemory<byte>>) =
+        let tryDecode (encoded: FsCodec.ITimelineEvent<FsCodec.Encoded>) =
             ValueSome (if isTerminalEvent encoded then Terminal else NonTerminal encoded.Timestamp)
         let encode _ = failwith "Not Implemented"
         let mapCausation () _ = failwith "Not Implemented"

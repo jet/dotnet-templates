@@ -61,9 +61,9 @@ let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) s
     | Todo.Reactions.ImpliesStateChange (clientId, eventCount) ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
-        | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
-        | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped eventCount
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
+        | true -> return Outcome.Ok (1, eventCount - 1), version'
+        | false -> return Outcome.Skipped eventCount, version'
+    | _ -> return Outcome.NotApplicable events.Length, Propulsion.Sinks.Events.next events }
 #endif
 
 type Factory private () =

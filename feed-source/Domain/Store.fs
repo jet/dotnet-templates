@@ -9,7 +9,7 @@ let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 module Codec =
 
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() |> FsCodec.SystemTextJson.Encoder.Compressed // options = Options.Default
 
 module Memory =
 

@@ -49,8 +49,8 @@ module Store =
 //#if cosmos
     /// CosmosDb wiring, uses Equinox.CosmosStore nuget package
     module private Cosmos =
-        let connect (mode, discovery, databaseId, containerId) (operationTimeout, maxRetryForThrottling, maxRetryWait) =
-            let conn = Equinox.CosmosStore.CosmosStoreConnector(discovery, operationTimeout, maxRetryForThrottling, maxRetryWait, mode)
+        let connect (mode, discovery, databaseId, containerId) (maxRetryForThrottling, maxRetryWait) =
+            let conn = Equinox.CosmosStore.CosmosStoreConnector(discovery, maxRetryForThrottling, maxRetryWait, mode = mode)
             let client = conn.Connect(databaseId, [| containerId |]) |> Async.RunSynchronously
             Equinox.CosmosStore.CosmosStoreContext(client, databaseId, containerId, tipMaxEvents = 256) 
 
@@ -82,7 +82,7 @@ module Store =
             let cache = Equinox.Cache("Cosmos", sizeMb = cache)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
-            let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (timeout, retriesOn429Throttling, timeout)
+            let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (retriesOn429Throttling, timeout)
             Store.Config.Cosmos (context, cache)
 //#endif
 //#if dynamo
@@ -190,7 +190,7 @@ type Startup() =
             .UseSerilogRequestLogging() // see https://nblumhardt.com/2019/10/serilog-in-aspnetcore-3/
 #if todos
             // NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
-            .UseCors(fun x -> x.WithOrigins([|"https://www.todobackend.com"|]).AllowAnyHeader().AllowAnyMethod() |> ignore)
+            .UseCors(_.WithOrigins([|"https://www.todobackend.com"|]).AllowAnyHeader().AllowAnyMethod() |> ignore)
 #endif
             .UseEndpoints(fun endpoints ->
                 endpoints.MapMetrics() |> ignore // Host /metrics for Prometheus

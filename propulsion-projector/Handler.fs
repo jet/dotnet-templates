@@ -74,7 +74,7 @@ let handle _stream (events: Propulsion.Sinks.Event[]) = async {
     let r = System.Random()
     let ms = r.Next(1, events.Length)
     do! Async.Sleep ms
-    return Propulsion.Sinks.StreamResult.AllProcessed, events.Length }
+    return events.Length, Propulsion.Sinks.Events.next events }
 #endif // !kafka
 
 type Factory private () =

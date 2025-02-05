@@ -23,7 +23,7 @@ module EnvVar =
 
 module Streams =
 
-    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
+    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(FsCodec.Encoding.ToBlob(x).ToArray())
     // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
     let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
         match codec.Decode event with
@@ -39,7 +39,7 @@ module Streams =
 
         let private withUpconverter<'c, 'e when 'c :> TypeShape.UnionContract.IUnionContract> up: Propulsion.Sinks.Codec<'e> =
             let down (_: 'e) = failwith "Unexpected"
-            FsCodec.SystemTextJson.Codec.Create<'e, 'c, _>(up, down) // options = Options.Default
+            FsCodec.SystemTextJson.Codec.Create<'e, 'c, _>(up, down) |> FsCodec.Encoder.Uncompressed // options = Options.Default
         let genWithIndex<'c when 'c :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<int64 * 'c>  =
             let up (raw: FsCodec.ITimelineEvent<_>) e = raw.Index, e
             withUpconverter<'c, int64 * 'c> up

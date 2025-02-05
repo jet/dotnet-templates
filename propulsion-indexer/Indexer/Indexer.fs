@@ -3,8 +3,8 @@ module IndexerTemplate.Indexer.Indexer
 type Outcome = Metrics.Outcome
 
 /// Gathers stats based on the Outcome of each Span as it's processed, for periodic emission via DumpStats()
-type Stats(log, statsInterval, stateInterval, verboseStore) =
-    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval)
+type Stats(log, statsInterval, stateInterval, verboseStore, abendThreshold) =
+    inherit Propulsion.Streams.Stats<Outcome>(log, statsInterval, stateInterval, abendThreshold = abendThreshold)
 
     let mutable ok, skipped, na = 0, 0, 0
     override _.HandleOk res =
@@ -42,13 +42,13 @@ let handle (sourceService: Todo.Service) (summaryService: TodoIndex.Service) str
     | Todo.Reactions.ImpliesStateChange clientId  ->
         let! version', summary = sourceService.QueryWithVersion(clientId, toSummaryEventData)
         match! summaryService.TryIngest(clientId, version', summary) with
-        | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, events.Length - 1)
-        | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped events.Length
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
+        | true -> return Outcome.Ok (1, events.Length - 1), version'
+        | false -> return Outcome.Skipped events.Length, version'
+    | _ -> return Outcome.NotApplicable events.Length, Propulsion.Sinks.Events.next events }
 
 module Factory =
 
-    let createHandler store =
+    let create store =
         let srcService = Todo.Factory.create store
         let dstService = TodoIndex.Factory.create store
-        handle srcService dstService
+        Some sourceCategories, handle srcService dstService

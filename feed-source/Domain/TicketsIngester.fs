@@ -93,7 +93,7 @@ type ServiceForFc internal (log: Serilog.ILogger, fcId, epochs: TicketsEpoch.Ing
     ///   a) back-off, re-read and retry if there's a concurrent write Optimistic Concurrency Check failure when writing the stream
     ///   b) enter a prolonged period of retries if multiple concurrent writes trigger rate limiting and 429s from CosmosDB
     ///   c) readers will less frequently encounter sustained 429s on the batch
-    let batchedIngest = Equinox.Core.Batching.Batcher(tryIngest, linger)
+    let batchedIngest = Equinox.Core.Batching.Batcher(tryIngest, Linger = linger)
 
     /// Upon startup, we initialize the Tickets cache from recent epochs; we want to kick that process off before our first ingest
     member _.Initialize(): Async<unit> = previousTickets.Await() |> Async.Ignore 

@@ -11,7 +11,7 @@ module Codec =
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
         FsCodec.SystemTextJson.Codec.Create<'t>() // options = Options.Default
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() |> FsCodec.SystemTextJson.Encoder.Uncompressed // options = Options.Default
 
 module Cosmos =
 
@@ -31,7 +31,7 @@ module Dynamo =
 
     let private createCached name codec initial fold accessStrategy (context, cache): Equinox.Category<_, _, _> =
         let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.DynamoStore.DynamoStoreCategory(context, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial, accessStrategy, cacheStrategy)
+        Equinox.DynamoStore.DynamoStoreCategory(context, name, FsCodec.Encoder.Uncompressed codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = Equinox.DynamoStore.AccessStrategy.Snapshot (isOrigin, toSnapshot)

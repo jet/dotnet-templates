@@ -13,7 +13,7 @@ module Contract =
            pickTicketId: string
            purchaseOrderInfo: OrderInfo[] }
     let serdes = FsCodec.SystemTextJson.Serdes.Default
-    let parse (utf8: Propulsion.Sinks.EventBody): Message = serdes.Deserialize<Message>(utf8)
+    let parse (body: Propulsion.Sinks.EventBody): Message = serdes.Deserialize<Message>(FsCodec.Encoding.ToBlob(body).Span)
 
 type Outcome = Completed of used: int * unused: int
 
@@ -49,4 +49,4 @@ let ingest
                         reservedQuantity = o.reservedUnitQuantity }
                 yield x ]
     let! used = service.Ingest(skuId, items)
-    return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Completed(used, items.Length - used) }
+    return Outcome.Completed(used, items.Length - used), Propulsion.Sinks.Events.next events }
