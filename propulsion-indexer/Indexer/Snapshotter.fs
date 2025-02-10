@@ -38,7 +38,7 @@ let handle todo
     let! res, pos' =
         match stream with
         | Todo.Reactions.For id -> todo id
-        | sn -> failwith $"Unexpected category %A{sn}"
+        | sn -> failwith $"Unexpected category %s{FsCodec.StreamName.toString sn}"
     // a) if the tryUpdate saw a version beyond what (Propulsion.Sinks.Events.nextIndex events) would suggest, then we pass that information out
     //    in order to have the scheduler drop all events until we meet an event that signifies we may need to re-update
     // b) the fact that we use the same Microsoft.Azure.Cosmos.CosmosClient for the Change Feed and the Equinox-based Services means we are guaranteed

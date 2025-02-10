@@ -111,7 +111,7 @@ type Equinox.CosmosStore.CosmosStoreConnector with
         let contexts =
             client.CreateContext(role, databaseId, containerId, tipMaxEvents = 256, queryMaxItems = 500),
             // In general, the views container won't write events. We also know we generally won't attach a CFP, so we keep events in tip
-            client.CreateContext($"{role}(Views)", databaseId, viewsContainerId, tipMaxEvents = 128),
+            client.CreateContext($"%s{role}(Views)", databaseId, viewsContainerId, tipMaxEvents = 128),
             // NOTE the tip limits for this connection are set to be effectively infinite in order to ensure that writes never trigger calving from the tip
             client.CreateContext("snapshotUpdater", databaseId, containerId, tipMaxEvents = 1024, tipMaxJsonLength = 1024 * 1024,
                                  skipLog = not (logSnapshotConfig = Some true))

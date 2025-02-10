@@ -72,7 +72,7 @@ module Ingester =
         for x in inputs do
             if x.Index >= c.Version then // NOTE source and target need to have 1:1 matching event indexes, or things would be much more complex
                 match inputCodec.Decode x with
-                | ValueNone -> failwith $"Unknown EventType {x.EventType} at index {x.Index}"
+                | ValueNone -> failwith $"Unknown EventType %s{x.EventType} at index %d{x.Index}"
                 | ValueSome d -> struct (x, d) |] // So we require all source events to exactly one event in the target
 
     type Service<'id, 'e, 's, 'f> internal (codec: IEventCodec<'e, 'f, unit>, resolve: 'id -> Equinox.Decider<Event<'e, 'f>, State>) =

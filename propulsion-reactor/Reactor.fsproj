@@ -42,7 +42,7 @@
         <PackageReference Include="Propulsion.SqlStreamStore" Version="3.0.0-rc.14.10" />
 <!--        TODO remove when moving off 3.1.0-rc.4-->
         <PackageReference Include="FsCodec" Version="3.1.0-rc.4" />
-        <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0-rc.4" />
+        <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0-rc.5" />
         <!--#if (kafka || sourceKafka) -->
         <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.14.10" />
         <!--#endif-->
