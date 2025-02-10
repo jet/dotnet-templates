@@ -22,17 +22,16 @@ module Process =
         let _wasFresh = p.Start()
         p.BeginErrorReadLine(); p.BeginOutputReadLine()
         if not (p.WaitForExit 60_000) then
-            failwithf "Running %s %s timed out" fileName args
+            failwith $"Running %s{fileName} %s{args} timed out"
         if p.ExitCode <> 0 then
-            failwithf "Process <%s %s> Failed:\nstdout: <%O>\n stderr: <%O>" fileName args out err
+            failwith $"Process <%s{fileName} %s{args}> Failed:\nstdout: <%O{out}>\n stderr: <%O{err}>"
 
 module Dotnet =
 
-    let run cmd args =
-        Process.run "dotnet" (System.String.Join(" ", cmd :: args))
-    let install packagePath = run "new" [sprintf "-i \"%s\"" packagePath]
-    let uninstall packageName = run "new" [sprintf "-u \"%s\"" packageName]
-    let instantiate targetDirectory templateName args = run "new" ([templateName; sprintf "--output \"%s\"" targetDirectory] @ args)
+    let run cmd args = Process.run "dotnet" (String.Join(" ", cmd :: args))
+    let install packagePath = run "new" [ $"-i \"%s{packagePath}\""]
+    let uninstall packageName = run "new" [ $"-u \"%s{packageName}\""]
+    let instantiate targetDirectory templateName args = run "new" ([templateName; $"--output \"%s{targetDirectory}\""] @ args)
     let build target = run "build" target
 
 type CodeFolder =

@@ -20,7 +20,7 @@ let main _ =
     let storeStreamArn, indexTableName =
         match getArg streamNameArg, getArg indexTableNameArg with
         | :? string as sa, (:? string as tn) when sa <> null && tn <> null -> sa, tn
-        | _ -> failwith $"Please supply DynamoDB Streams ARN and DynamoDB Index Table Name via -c {streamNameArg}= and -c {indexTableNameArg}= respectively"
+        | _ -> failwith $"Please supply DynamoDB Streams ARN and DynamoDB Index Table Name via -c %s{streamNameArg}= and -c %s{indexTableNameArg}= respectively"
     let indexerCodePath = match getArg "indexerCode" with :? string as path -> path | _ -> lambdaCodePath "Indexer"
 
     let _mainIndexer = IndexerStack(app, "MainIndexer", IndexerStackProps(storeStreamArn, indexTableName, indexerCodePath))
@@ -33,7 +33,7 @@ let main _ =
         match getArg indexStreamArg, getArg topicNameArg with
         | :? string as sa, null when sa <> null -> sa, None
         | :? string as sa, (:? string as tn) when sa <> null -> sa, Option.ofObj tn
-        | _ -> failwith $"Please supply -c {indexStreamArg}=<DynamoDB Index Streams ARN> and (optionally) -c {topicNameArg}=<SNS FIFO Topic ARN>"
+        | _ -> failwith $"Please supply -c %s{indexStreamArg}=<DynamoDB Index Streams ARN> and (optionally) -c %s{topicNameArg}=<SNS FIFO Topic ARN>"
     let _mainNotifier = NotifierStack(app, "MainNotifier", NotifierStackProps(indexStreamArn, notifyTopicArn, notifierCodePath))
 
     app.Synth() |> ignore

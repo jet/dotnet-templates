@@ -14,9 +14,9 @@ let main _ =
         match getArg codePathArg, getArg topicNameArg, getArg storeTableNameArg, getArg indexTableNameArg with
         | :? string as sa, (:? string as tn), (:? string as st), (:? string as it)
             when sa <> null && tn <> null && st <> null && it <> null -> sa, tn, st, it
-        | _ -> failwith $"Please supply -c {topicNameArg}=<SNS Topic Arn>
-                          -c {indexTableNameArg}=<Index Table Name> -c {storeTableNameArg}=<Store Table Name>
-                          and -c {codePathArg}=<Code Path>"
+        | _ -> failwith $"Please supply -c %s{topicNameArg}=<SNS Topic Arn>
+                          -c %s{indexTableNameArg}=<Index Table Name> -c %s{storeTableNameArg}=<Store Table Name>
+                          and -c %s{codePathArg}=<Code Path>"
     let _watchdogLambda = WatchdogLambdaStack(app, "Watchdog", WatchdogLambdaStackProps(
         topicArn, indexTableName, storeTableName,
         codePath, "Shipping Watchdog", "Watchdog.Lambda::Shipping.Watchdog.Lambda.Function::Handle"))

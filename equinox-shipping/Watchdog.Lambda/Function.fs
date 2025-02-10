@@ -13,7 +13,7 @@ open System
 type Configuration(appName, ?tryGet) =
     let envVarTryGet = Environment.GetEnvironmentVariable >> Option.ofObj
     let tryGet = defaultArg tryGet envVarTryGet
-    let get key = match tryGet key with Some value -> value | None -> failwithf $"Missing Argument/Environment Variable %s{key}"
+    let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
     member _.DynamoRegion =             tryGet Propulsion.DynamoStore.Lambda.Args.Dynamo.REGION
     member _.DynamoServiceUrl =         get Propulsion.DynamoStore.Lambda.Args.Dynamo.SERVICE_URL

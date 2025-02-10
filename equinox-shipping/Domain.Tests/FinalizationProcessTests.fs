@@ -47,7 +47,7 @@ type Properties(testOutput) =
             |> List.ofSeq
         test <@ match containerEvents with
                 | [ Container.Events.Finalized e ] -> e.shipmentIds = requestedShipmentIds
-                | xs -> xs |> failwithf "Unexpected %A" @>
+                | xs -> failwith $"Unexpected %A{xs}" @>
         (* Next, we run an overlapping finalize - this should
            a) yield a fail result
            b) result in triggering of Revert flow with associated Shipment revoke events *)
