@@ -91,8 +91,7 @@ type Logging() =
             a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
             a.Logger(fun l -> // but filter what gets emitted to the console sink
                 let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
-                configureConsoleSink l |> ignore)
-            |> ignore
+                configureConsoleSink l |> ignore) |> ignore
         configuration.WriteTo.Async(bufferSize = 65536, blockWhenFull = true, configure = System.Action<_> configure)
 
     [<System.Runtime.CompilerServices.Extension>]
