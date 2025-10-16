@@ -21,9 +21,16 @@ module TransactionId =
 
 namespace global
 
+type DataMemberAttribute = System.Runtime.Serialization.DataMemberAttribute
+
 module Seq =
 
     let inline chooseV f xs = seq { for x in xs do match f x with ValueSome v -> yield v | ValueNone -> () }
+
+module Async =
+
+    let parallelLimit maxDop workflows = Async.Parallel(workflows, maxDegreeOfParallelism = maxDop)
+    let parallelDoLimit maxDop (workflows: seq<Async<unit>>) = parallelLimit maxDop workflows |> Async.Ignore<unit[]>
 
 module Guid =
 
