@@ -21,9 +21,9 @@
         <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props-->
         <!-- <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />-->
 
-        <PackageReference Include="Propulsion.DynamoStore.Indexer" Version="3.0.0-rc.14.10" PrivateAssets="all" />
-        <PackageReference Include="Propulsion.DynamoStore.Notifier" Version="3.0.0-rc.14.10" PrivateAssets="all" />
-        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0-rc.14.10" />
+        <PackageReference Include="Propulsion.DynamoStore.Indexer" Version="3.0.0" PrivateAssets="all" />
+        <PackageReference Include="Propulsion.DynamoStore.Notifier" Version="3.0.0" PrivateAssets="all" />
+        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0" />
     </ItemGroup>
 
     <!-- The Propulsion.DynamoStore.Indexer NuGet package includes the publish folder as content under 'tools/pub' -->

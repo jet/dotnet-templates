@@ -17,7 +17,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
                                          // Ensure batches are completed ASAP so waits in the tests are minimal
                                          wakeForResults = true)
     let source, awaitReactions =
-        let consumerGroupName = $"ReactorFixture/{contextId}"
+        let consumerGroupName = $"ReactorFixture/%s{contextId}"
         let sourceConfig = createSourceConfig consumerGroupName
         Handler.Factory.StartSource(log, sink, sourceConfig)
 

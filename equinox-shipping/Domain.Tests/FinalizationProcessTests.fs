@@ -37,9 +37,9 @@ type Properties(testOutput) =
         let requestedShipmentIds = Array.append shipmentIds1 shipmentIds2
         let! res1 = manager.TryFinalizeContainer(transId1, containerId1, requestedShipmentIds)
         let expectedEvents =
-            [   nameof(FE.FinalizationRequested); nameof(FE.ReservationCompleted); nameof(FE.AssignmentCompleted); nameof(FE.Completed) // Transaction
-                nameof(Shipment.Events.Reserved); nameof(FE.Assigned) // Shipment
-                nameof(Container.Events.Finalized)] // Container
+            [   nameof FE.FinalizationRequested; nameof FE.ReservationCompleted; nameof FE.AssignmentCompleted; nameof FE.Completed // Transaction
+                nameof Shipment.Events.Reserved; nameof FE.Assigned // Shipment
+                nameof Container.Events.Finalized] // Container
         test <@ res1 && set eventTypes = set expectedEvents @>
         let containerEvents =
             buffer.Queue(Container.Reactions.streamName containerId1)
@@ -54,8 +54,8 @@ type Properties(testOutput) =
         buffer.Clear()
         let! res2 = manager.TryFinalizeContainer(transId2, containerId2, Array.append shipmentIds2 [|shipment3|])
         let expectedEvents =
-            [   nameof(FE.FinalizationRequested); nameof(FE.RevertCommenced); nameof(FE.Completed) // Transaction
-                nameof(Shipment.Events.Reserved); nameof(Shipment.Events.Revoked) ] // Shipment
+            [   nameof FE.FinalizationRequested; nameof FE.RevertCommenced; nameof FE.Completed // Transaction
+                nameof Shipment.Events.Reserved; nameof Shipment.Events.Revoked ] // Shipment
         test <@ not res2
                 && set eventTypes = set expectedEvents @>
         testOutput.WriteLine "Iteration completed" }

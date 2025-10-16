@@ -10,7 +10,7 @@ module Events =
         | Reserved    of {| transaction: TransactionId |}
         | Assigned    of {| container: ContainerId |}
         | Revoked
-        | Snapshotted of {| reservation: TransactionId option; association: ContainerId option |}
+        | [<DataMember(Name = "Snapshotted")>] Snapshotted of {| reservation: TransactionId option; association: ContainerId option |}
         interface TypeShape.UnionContract.IUnionContract
     let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 

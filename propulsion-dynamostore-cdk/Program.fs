@@ -2,7 +2,7 @@ module DynamoStoreCdkTemplate.Program
 
 // See logic in .fsproj file, which extracts content from `Propulsion.DynamoStore.Indexer` and `Notifier`'s
 // from each respective NuGet package's `tools/` folder into this well known location
-let lambdaCodePath lambdaName = $"obj/pub/{lambdaName}/net6.0/linux-arm64/"
+let lambdaCodePath lambdaName = $"obj/pub/%s{lambdaName}/net6.0/linux-arm64/"
 
 (* Indexer-related *)
 let streamNameArg = "streamArn"

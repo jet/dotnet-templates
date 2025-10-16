@@ -9,10 +9,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Equinox.DynamoStore" Version="4.1.0-rc.1" />
-      <PackageReference Include="Equinox.MemoryStore" Version="4.1.0-rc.1" />
-      <PackageReference Include="Equinox.MessageDb" Version="4.1.0-rc.1" />
-      <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0-rc.5" />
+      <PackageReference Include="Equinox.DynamoStore" Version="4.1.0" />
+      <PackageReference Include="Equinox.MemoryStore" Version="4.1.0" />
+      <PackageReference Include="Equinox.MessageDb" Version="4.1.0" />
+      <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0" />
     </ItemGroup>
 
     <ItemGroup>
