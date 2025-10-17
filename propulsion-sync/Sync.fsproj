@@ -1,9 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net6.0</TargetFramework>
     <WarningLevel>5</WarningLevel>
+
+    <OutputType>Exe</OutputType>
+    <!-- Opt into Roll forward to future major versions as needed -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
