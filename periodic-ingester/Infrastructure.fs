@@ -154,6 +154,7 @@ type HttpClient with
     ///     Drop-in replacement for HttpClient.SendAsync which addresses known timeout issues
     /// </summary>
     /// <param name="msg">HttpRequestMessage to be submitted.</param>
+    /// <param name="ct">The Cancellation Token.</param>
     member client.Send2(msg: HttpRequestMessage, ct: CancellationToken) = task {
         try return! client.SendAsync(msg, ct)
         // address https://github.com/dotnet/corefx/issues/20296
@@ -196,21 +197,6 @@ type InvalidHttpResponseException =
             let getBodyString str = if String.IsNullOrWhiteSpace str then "<null>" else str
             sb.Appendfn "RequestBody=%s" (getBodyString e.RequestBody)
             sb.Appendfn "ResponseBody=%s" (getBodyString e.ResponseBody))
-
-    interface ISerializable with
-        member e.GetObjectData(si: SerializationInfo, sc: StreamingContext) =
-            let add name (value:obj) = si.AddValue(name, value)
-            base.GetObjectData(si, sc) ; add "userMessage" e.userMessage ;
-            add "requestUri" e.RequestUri ; add "requestMethod" e.requestMethod ; add "requestBody" e.RequestBody
-            add "statusCode" e.StatusCode ; add "reasonPhrase" e.ReasonPhrase ; add "responseBody" e.ResponseBody
-
-    new (si: SerializationInfo, sc: StreamingContext) =
-        let get name = si.GetValue(name, typeof<'a>) :?> 'a
-        {
-            inherit Exception(si, sc) ; userMessage = get "userMessage" ;
-            RequestUri = get "requestUri" ; requestMethod = get "requestMethod" ; RequestBody = get "requestBody" ;
-            StatusCode = get "statusCode" ; ReasonPhrase = get "reasonPhrase" ; ResponseBody = get "responseBody"
-        }
 
     static member Create(userMessage: string, response: HttpResponseMessage, ?innerException: exn) = async {
         let request = response.RequestMessage

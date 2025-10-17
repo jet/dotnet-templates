@@ -48,15 +48,15 @@ let handle
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         stream events = async {
     match struct (stream, events) with
-    | Contract.Input.Decode (_clientId, events) ->
-        for version, event in events do
+    | Contract.Input.Decode (_clientId, decoded) ->
+        for version, event in decoded do
             let summary =
                 match event with
                 | Contract.Input.EventA { field = x } -> Contract.EventA { value = x }
                 | Contract.Input.EventB { field = x } -> Contract.EventB { value = x }
             let wrapped = generate stream version summary
             let! _ = produceSummary wrapped in ()
-        return Outcome.Ok (events.Length, 0), Propulsion.Sinks.Events.next events
+        return Outcome.Ok (decoded.Length, 0), Propulsion.Sinks.Events.next events
     | _ -> return Outcome.NotApplicable events.Length, Propulsion.Sinks.Events.next events }
 #else
 let categories = Todo.Reactions.categories

@@ -69,7 +69,7 @@ module Args =
         let (|Filter|) exprs =
             let values, pats = List.partition isPlain exprs
             let valuesContains = let set = System.Collections.Generic.HashSet(values) in set.Contains
-            let aPatternMatches x = pats |> List.exists (fun p -> System.Text.RegularExpressions.Regex.IsMatch(x, p))
+            let aPatternMatches (x: string) = pats |> List.exists (fun p -> System.Text.RegularExpressions.Regex.IsMatch(x, p))
             fun cat -> valuesContains cat || aPatternMatches cat
         let filter map (allow, deny) =
             match allow, deny with

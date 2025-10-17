@@ -170,7 +170,7 @@ let build (args: Args.Arguments) =
         | Ephemeral _ -> failwith "Unexpected"
         | Persistent (processorName, startFromTail, maxItems, lagFrequency) ->
 
-        let parseFeedDoc (x: System.Text.Json.JsonDocument) = seq { struct (FsCodec.StreamName.Internal.trust null, FsCodec.Core.TimelineEvent.Create(0L, "dummyEventType", data = ReadOnlyMemory.Empty, context = box x)) }
+        let parseFeedDoc (x: System.Text.Json.JsonDocument) = seq { struct (FsCodec.StreamName.Internal.trust null, FsCodec.Core.TimelineEvent.Create(0L, "dummyEventType", data = FsCodec.Encoding.OfBlob ReadOnlyMemory.Empty, context = box x)) }
         Propulsion.CosmosStore.CosmosStoreSource(Log.Logger, statsInterval, monitoredContainer, leasesContainer, processorName, parseFeedDoc, sink,
                                                  startFromTail = startFromTail, ?maxItems = maxItems, lagEstimationInterval = lagFrequency).Start()
 #else
