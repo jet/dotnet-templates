@@ -125,7 +125,7 @@ Replaces the normal/default Handler with one that:
         1. writing a calf Item containing the `30` ejected events
         2. updating the Tip to not have any `e`vents
         3. updating the Tip to have the updated `Snapshotted` event as the single entry in the `u`nfolds field
-4. yields a `StreamResult.OverrideNextIndex` based on the observed version of the stream.
+4. yields a ressult with the `Item2: int64` portion of the result tuple based on the observed version of the stream.
 
   :bulb: Normally, the first visit to the stream is the only one. The exception is if a new write takes place before the processing reaches the end of the ChangeFeed.
 

@@ -56,8 +56,8 @@ let handle
                 | Contract.Input.EventB { field = x } -> Contract.EventB { value = x }
             let wrapped = generate stream version summary
             let! _ = produceSummary wrapped in ()
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (events.Length, 0)
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
+        return Outcome.Ok (events.Length, 0), Propulsion.Sinks.Events.next events
+    | _ -> return Outcome.NotApplicable events.Length, Propulsion.Sinks.Events.next events }
 #else
 let categories = Todo.Reactions.categories
     
