@@ -11,7 +11,7 @@ module Process =
 
     let direct (evt: IEvent<_, _>) output = evt.AddHandler(DataReceivedEventHandler(fun _sender args -> output args.Data))
 
-    let run fileName args =
+    let run fileName (args: string) =
         let out, err = System.Text.StringBuilder(), System.Text.StringBuilder()
         let psi =
             ProcessStartInfo
