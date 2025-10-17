@@ -13,6 +13,7 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <IsTestProject>false</IsTestProject>
     <PackageType>Template</PackageType>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
 
