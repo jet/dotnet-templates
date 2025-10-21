@@ -6,7 +6,12 @@ open System
 
 module Store =
 
-    let log = Log.ForContext("isMetric", true)
+    module Metrics =
+        
+        let [<Literal>] PropertyTag = "isMetric"
+        let log = Log.ForContext(PropertyTag, true)
+        /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+        let logEventIsMetric e = Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 module EnvVar =
 
@@ -14,8 +19,6 @@ module EnvVar =
 
 module Log =
 
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
     /// The Propulsion.Streams.Prometheus LogSink uses this well-known property to identify consumer group associated with the Scheduler
     let forGroup group = Log.ForContext("group", group)
 
@@ -121,5 +124,5 @@ type Logging() =
         |> fun c -> let generalLevel = if verbose then Events.LogEventLevel.Information else Events.LogEventLevel.Warning
                     c.MinimumLevel.Override(typeof<Propulsion.CosmosStore.Internal.Writer.Result>.FullName, generalLevel)
         |> fun c -> let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
-                    let metricFilter = if cfpVerbose then None else Some (fun x -> Log.isStoreMetrics x || isWriterB x)
+                    let metricFilter = if cfpVerbose then None else Some (fun x -> Store.Metrics.logEventIsMetric x || isWriterB x)
                     c.Sinks(Sinks.equinoxAndPropulsionCosmosConsumerMetrics (Sinks.tags appName), Sinks.console verbose, ?isMetric = metricFilter)

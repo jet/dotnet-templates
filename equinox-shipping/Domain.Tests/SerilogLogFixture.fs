@@ -1,10 +1,5 @@
 namespace Shipping.Domain.Tests
 
-module Log =
-
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Serilog.Filters.Matching.WithProperty("isMetric").Invoke e
-    
 type XunitOutputSink(?messageSink: Xunit.Abstractions.IMessageSink, ?minLevel: Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =
@@ -57,7 +52,7 @@ module XunitLogger =
             .WriteTo.Sink(Equinox.EventStoreDb.Log.InternalMetrics.Stats.LogSink())
             .MinimumLevel.Is(minLevel)
             .WriteTo.Logger(fun l ->
-                l.Filter.ByExcluding(System.Func<_, _> Log.isStoreMetrics) // <- comment out to see Equinox logs in Test Output
+                l.Filter.ByExcluding(Store.Metrics.logEventIsMetric) // <- comment out to see Equinox logs in Test Output
                  .WriteTo.Sink(sink) |> ignore)
             .CreateLogger()
 

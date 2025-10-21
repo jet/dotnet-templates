@@ -11,8 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Infrastructure.fs" />
     <Compile Include="Store.fs" />
+    <Compile Include="Infrastructure.fs" />
     <Compile Include="Storage.fs" />
     <Compile Include="Services.fs" />
     <Compile Include="Tests.fs" />

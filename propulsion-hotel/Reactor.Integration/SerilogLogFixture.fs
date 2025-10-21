@@ -43,7 +43,7 @@ module XunitLogger =
             .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink())
             .MinimumLevel.Is(minLevel)
             .WriteTo.Logger(fun l ->
-                l.Filter.ByExcluding(System.Func<_, _> Log.isStoreMetrics) // <- comment out to see Equinox logs in Test Output
+                l.Filter.ByExcluding(Domain.Store.Metrics.logEventIsMetric) // <- comment out to see Equinox logs in Test Output
                  .WriteTo.Sink(sink) |> ignore)
             .CreateLogger()
 

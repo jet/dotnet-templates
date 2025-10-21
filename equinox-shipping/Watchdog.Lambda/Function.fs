@@ -78,7 +78,7 @@ type Function() =
             e.RemovePropertyIfPresent(Equinox.DynamoStore.Core.Log.PropertyTag)
             e.RemovePropertyIfPresent(Propulsion.Streams.Log.PropertyTag)
             e.RemovePropertyIfPresent(Propulsion.Feed.Core.Log.PropertyTag)
-            e.RemovePropertyIfPresent "isMetric"        
+            e.RemovePropertyIfPresent Store.Metrics.PropertyTag
         Log.Logger <- LoggerConfiguration()
             .WriteTo.Sink(Equinox.DynamoStore.Core.Log.InternalMetrics.Stats.LogSink()) // get them counted so we can dump at end of Handle
             .WriteTo.Logger(fun l ->

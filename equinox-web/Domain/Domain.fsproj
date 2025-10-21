@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Infrastructure.fs" />
     <Compile Include="Store.fs" />
+    <Compile Include="Infrastructure.fs" />
 	<!--#if (aggregate)-->
 	<Compile Include="Aggregate.fs" />
 	<!--#endif-->

@@ -128,10 +128,10 @@ module Cosmos =
             AccessStrategy.Custom (isOrigin, transmuteAllEventsToUnfolds)
         let private createCategory name codec initial fold isValidUnfolds accessStrategy shouldCompress (contexts, cache) =
             createCached name codec (Snapshotter.initial' initial) (Snapshotter.fold' isValidUnfolds fold) accessStrategy shouldCompress (contexts.snapshotUpdate, cache)
-        /// Equinox allows any number of unfold events to be stored:
-        /// - the `isOrigin` predicate identifies the "main snapshot" - if it returns `true`, we don't need to load and fold based on events
-        /// - `isValidUnfolds` inspects the full set of unfolds in order to determine whether they are complete
-        ///   - where Index Unfolds are required for application functionality, we can trigger regeneration where they are missing
+        /// <summary>Equinox allows any number of unfold events to be stored:<br />
+        /// - the `isOrigin` predicate identifies the "main snapshot" - if it returns `true`, we don't need to load and fold based on events<br />
+        /// - `isValidUnfolds` inspects the full set of unfolds in order to determine whether they are complete<br />
+        ///   - where Index Unfolds are required for application functionality, we can trigger regeneration where they are missing</summary>
         let withIndexing codec initial fold (isOrigin, isValidUnfolds, generateUnfolds, shouldCompress) streamId categoryName config forceLoadingAllEvents =
             let accessStrategy = (if forceLoadingAllEvents then fun _ -> false else isOrigin) |> accessStrategy
             let cat = config |> function

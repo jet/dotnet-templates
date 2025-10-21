@@ -7,14 +7,18 @@ open System.Text
 open System.Threading
 open System.Threading.Tasks
 
+module Store =
+
+    module Metrics =
+        
+        let [<Literal>] PropertyTag = "isMetric"
+        let log = Log.ForContext(PropertyTag, true)
+        /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+        let logEventIsMetric e = Filters.Matching.WithProperty(PropertyTag).Invoke e
+
 module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
-
-module Log =
-
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
 
 type Equinox.CosmosStore.CosmosStoreContext with
 
@@ -55,11 +59,11 @@ module Sinks =
 
     let equinoxAndPropulsionConsumerMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+          |> _.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
 
     let equinoxAndPropulsionFeedConsumerMetrics tags source (l: LoggerConfiguration) =
         l |> equinoxAndPropulsionConsumerMetrics tags (Propulsion.Feed.SourceId.toString source)
-          |> fun l -> l.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
+          |> _.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
 
     let console (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
@@ -86,7 +90,7 @@ type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
     static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
-        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Store.Metrics.logEventIsMetric)
 
 type Async with
     static member Sleep(t: TimeSpan): Async<unit> = Async.Sleep(int t.TotalMilliseconds)

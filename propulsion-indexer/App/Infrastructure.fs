@@ -8,11 +8,13 @@ module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
 
-module Log =
+module Store =
+    
+    module Metrics =
 
-    let [<Literal>] PropertyTag = "isMetric"
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
+        let [<Literal>] PropertyTag = "isMetric"
+        /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+        let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 /// Equinox and Propulsion provide metrics as properties in log emissions
 /// These helpers wire those to pass through virtual Log Sinks that expose them as Prometheus metrics.
@@ -34,7 +36,7 @@ module Sinks =
         e.RemovePropertyIfPresent Propulsion.CosmosStore.Log.PropertyTag
         e.RemovePropertyIfPresent Propulsion.Feed.Core.Log.PropertyTag
         e.RemovePropertyIfPresent Propulsion.Streams.Log.PropertyTag
-        e.RemovePropertyIfPresent Log.PropertyTag
+        e.RemovePropertyIfPresent Store.Metrics.PropertyTag
 
     let console (configuration: LoggerConfiguration) =
         let t = "{Timestamp:HH:mm:ss} {Level:u1} {Message:lj} {Properties:j}{NewLine}{Exception}"
@@ -67,7 +69,7 @@ type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
     static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
-        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.logEventIsMetric)
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Store.Metrics.logEventIsMetric)
 
 module CosmosStoreConnector =
 
@@ -160,4 +162,4 @@ let startMetricsServer port: IDisposable =
     let metricsServer = new Prometheus.KestrelMetricServer(port = port)
     let ms = metricsServer.Start()
     Log.Information("Prometheus /metrics endpoint on port {port}", port)
-    { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer :> IDisposable).Dispose() }
+    { new IDisposable with member x.Dispose() = ms.Stop(); (metricsServer : IDisposable).Dispose() }

@@ -140,7 +140,7 @@ module Args =
                                             let maxEvents, maxJsonBytes = 100_000, 100_000
                                             let! context = connector.ConnectContext("Destination", databaseId, container, maxEvents,
                                                                                     tipMaxJsonLength = maxJsonBytes, ?auxContainerId = leaseContainerId)
-                                            return Equinox.CosmosStore.Core.EventsContext(context, Store.log) }
+                                            return Equinox.CosmosStore.Core.EventsContext(context, Store.Metrics.log) }
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args
     let parse tryGetConfigValue argv: Arguments =

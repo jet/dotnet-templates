@@ -8,8 +8,8 @@
 
   <ItemGroup>
     <Compile Include="ExactlyOnceIngester.fs" />
-    <Compile Include="Infrastructure.fs" />
     <Compile Include="Store.fs" />
+    <Compile Include="Infrastructure.fs" />
     <Compile Include="Types.fs" />
     <Compile Include="Period.fs" />
     <Compile Include="ListEpoch.fs" />

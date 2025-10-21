@@ -101,7 +101,7 @@ let build (args: Args.Arguments) =
         let handle = Ingester.handle args.TicketsDop
         Ingester.Factory.StartSink(Log.Logger, stats, args.FcsDop, handle, args.MaxReadAhead)
     let source =
-        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.log (args.GroupId, args.CheckpointInterval) (context, cache)
+        let checkpoints = Propulsion.Feed.ReaderCheckpoint.CosmosStore.create Store.Metrics.log (args.GroupId, args.CheckpointInterval) (context, cache)
         let feed = ApiClient.TicketsFeed args.BaseUri
         let source =
             Propulsion.Feed.FeedSource(

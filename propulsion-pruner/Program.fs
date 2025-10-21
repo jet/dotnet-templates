@@ -129,7 +129,7 @@ module Args =
         let leaseContainerId =              p.TryGetResult LeaseContainer
         member _.Is(d, c) =                 databaseId = d && containerId = c
         member _.Connect() = async {        let! context = connector.ConnectContext("DELETION Target", databaseId, containerId, tipMaxEvents = 256, ?auxContainerId = leaseContainerId)
-                                            return Equinox.CosmosStore.Core.EventsContext(context, Store.log) }
+                                            return Equinox.CosmosStore.Core.EventsContext(context, Store.Metrics.log) }
         member _.MaybeLeasesContainer: Microsoft.Azure.Cosmos.Container option = leaseContainerId |> Option.map (fun id -> connector.LeasesContainer(databaseId, id))
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args

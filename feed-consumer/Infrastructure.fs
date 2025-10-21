@@ -7,16 +7,14 @@ open System.Text
 
 module Store =
 
-    let log = Log.ForContext("isMetric", true)
+    module Metrics =
+        let [<Literal>] PropertyTag = "isMetric"
+        let log = Log.ForContext(PropertyTag, true)
+        let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
-
-module Log =
-
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
 
 type Equinox.CosmosStore.CosmosStoreContext with
 
@@ -88,7 +86,7 @@ type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
     static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
-        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Store.Metrics.logEventIsMetric)
 
 type Async with
     static member Sleep(t: TimeSpan): Async<unit> = Async.Sleep(int t.TotalMilliseconds)
