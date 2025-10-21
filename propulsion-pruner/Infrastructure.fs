@@ -86,11 +86,11 @@ module Sinks =
 
     let equinoxAndPropulsionConsumerMetrics tags (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags))
+          |> _.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags))
 
     let equinoxAndPropulsionCosmosConsumerMetrics tags (l: LoggerConfiguration) =
         l |> equinoxAndPropulsionConsumerMetrics tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
+          |> _.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
 
     let console verbose (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"

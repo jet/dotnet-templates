@@ -55,11 +55,11 @@ module Sinks =
 
     let equinoxAndPropulsionConsumerMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+          |> _.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
 
     let equinoxAndPropulsionFeedConsumerMetrics tags source (l: LoggerConfiguration) =
         l |> equinoxAndPropulsionConsumerMetrics tags (Propulsion.Feed.SourceId.toString source)
-          |> fun l -> l.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
+          |> _.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
 
     let console (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
