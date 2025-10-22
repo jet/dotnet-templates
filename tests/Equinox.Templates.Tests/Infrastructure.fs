@@ -21,6 +21,7 @@ module Process =
         direct p.OutputDataReceived (out.AppendLine >> ignore); direct p.ErrorDataReceived (err.AppendLine >> ignore)
         let _wasFresh = p.Start()
         p.BeginErrorReadLine(); p.BeginOutputReadLine()
+        // TODO analyze why this times out at 60s
         if not (p.WaitForExit 120_000) then
             failwith $"Running %s{fileName} %s{args} timed out"
         if p.ExitCode <> 0 then
