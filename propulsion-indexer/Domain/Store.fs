@@ -105,7 +105,7 @@ module Cosmos =
         | None -> FsCodec.SystemTextJson.Encoder.Uncompressed codec
         | Some predicate -> FsCodec.SystemTextJson.Encoder.Compressed(codec, shouldCompress = fun (x: FsCodec.IEventData<System.Text.Json.JsonElement>) -> predicate x.EventType)
     let private createCached name codec initial fold accessStrategy shouldCompress (context, cache) =
-        CosmosStoreCategory(context, name,eventEncoding codec shouldCompress, fold, initial, accessStrategy, cacheStrategy cache)
+        CosmosStoreCategory(context, name, eventEncoding codec shouldCompress, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot, shouldCompress) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
@@ -137,34 +137,3 @@ module Cosmos =
         /// For the common case where we don't use any indexing - we only have a single relevant unfold to detect, and a function to generate it
         let single codec initial fold (isOrigin, generate, shouldCompress) streamId categoryName config =
             withIndexing codec initial fold (isOrigin, Array.tryLast >> Option.exists isOrigin, generate >> Array.singleton, Some shouldCompress) streamId categoryName config
-
-    module Ingester =
-
-        let private slice eventSize struct (maxEvents, maxBytes) span =
-            let mutable countBudget, bytesBudget = maxEvents, maxBytes
-            let withinLimits y =
-                countBudget <- countBudget - 1
-                bytesBudget <- bytesBudget - eventSize y
-                // always send at least one event in order to surface the problem and have the stream marked malformed
-                countBudget = maxEvents - 1 || (countBudget >= 0 && bytesBudget >= 0)
-            span |> Array.takeWhile withinLimits
-        // We gauge the likely output size from the input size
-        // (to be 100% correct, we should encode it as the Sync in Equinox would do for the real converted data)
-        // (or, to completely cover/gold plate it, we could have an opt-in on the Category to do slicing internally)
-        let eventSize ((x, _e): Ingester.Event<_, _>) = x.Size
-        let private accessStrategy =
-            let isOriginIgnoreEvents _ = true // we only need to know the Version to manage the ingestion process
-            let transmuteTrimsToStoredProcInputLimitAndDoesNotGenerateUnfolds events () =
-                let maxEvents, maxBytes = 16384, 256 * 1024
-                let trimmed = slice eventSize (maxEvents, maxBytes) events
-                trimmed, Array.empty
-            AccessStrategy.Custom (isOriginIgnoreEvents, transmuteTrimsToStoredProcInputLimitAndDoesNotGenerateUnfolds)
-        let private createCategory name codec (context, cache) =
-            createCached name codec Ingester.initial Ingester.fold accessStrategy None (context, cache)
-
-        type TargetCodec<'e> = FsCodec.IEventCodec<'e, System.Text.Json.JsonElement, unit>
-        let create<'id, 'e> struct (inputStreamCodec: FsCodec.IEventCodec<'e, FsCodec.Encoded, unit>, targetCodec: TargetCodec<'e>) streamId categoryName struct (context, cache) =
-            let rewriteEventBodiesCodec = Ingester.createCodec<'e, System.Text.Json.JsonElement, unit> targetCodec
-            let cat = createCategory categoryName rewriteEventBodiesCodec (context, cache)
-            let inputStreamToJsonElement = inputStreamCodec |> FsCodec.SystemTextJson.Encoder.Utf8AsJsonElement
-            Ingester.createService<'id, 'e, System.Text.Json.JsonElement> streamId inputStreamToJsonElement cat

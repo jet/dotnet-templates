@@ -98,7 +98,7 @@ coordinate the transfer of the balance of the GuestStay balance onto the
   only the Stays that have not yet had either a success or failure outcome
   recorded for them.
 
-## Reading Your Writes / `OverrideNextIndex`
+## Reading Your Writes / Yielding the Observed Index
 
 The process is not necessarily dependent on the Reactor being able to
 immediately see the events notified on the change feed.
@@ -107,8 +107,8 @@ Examples:
 1. if event 0 is `StaysSelected`, that will trigger the handler. If the
    Handler attempts to read `GroupCheckout` state_ but that event has not yet
    propagated to the node from which the Handler reads_, the State will be
-   `Flow.Action.Ready 0`, and the Handler will immediately yield a
-   `SpanResult.OverrideNextIndex 0`
+   `Flow.Action.Ready 0`, and the Handler will yield `0L` as the next read position
+   (ready to pick up the event when it arrives)
 
 2. if the read _does_ include the `StaysSelected`, then the State will be
    `Flow.Action.MergeStays { stays = (6 stayIds) }`. The
@@ -116,8 +116,8 @@ Examples:
    by the current pending `stayIds`. If there are 5 successes and 1 failure,
    the result is `StaysMerged { stays = [{stayId = ..., residual = ...], ...]}`
    and `MergesFailed { stays = [ (stayid) ]}`. After writing those two events
-   to the stream, the version has moved from `1` to `3`, resulting in
-   `SpanResult.OverrideNextIndex 3`.
+   to the stream, the version has moved from `1` to `3`, so the handler will
+   return `3L` as the next Index Position
 
    This implies one of the following two possible outcomes:
    
@@ -125,7 +125,7 @@ Examples:
       discard events 1 and 2 on receipt from the change feed, without
       even entering the streams buffer (and no further handler invocations
       take place)
-   2. At the point where Propulsion sees the `OverrideNextIndex`, events
+   2. At the point where Propulsion handles the `3L` Next Index Position, events
       and/or 2 have already been read and buffered ready for dispatch. In
       this case, the events are removed from the buffer immediately (and no
       further handler invocations take place)

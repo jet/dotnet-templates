@@ -72,7 +72,6 @@ type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.S
 
 module Factory =
 
-    let createIngester = Store.Cosmos.Ingester.create (Reactions.dec, Events.codec) streamId CategoryName
     let createSnapshotter = Store.Cosmos.Snapshotter.single Events.codec Fold.initial Fold.fold Fold.Snapshot.config streamId CategoryName
     let private (|Category|) = function
         | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted CategoryName Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)

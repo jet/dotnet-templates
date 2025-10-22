@@ -13,9 +13,7 @@
     <ItemGroup>
         <Compile Include="Metrics.fs" />
         <Compile Include="Indexer.fs" />
-        <Compile Include="Visitor.fs" />
         <Compile Include="Snapshotter.fs" />
-        <Compile Include="Ingester.fs" />
         <Compile Include="Program.fs" />
         <Content Include="README.md" />
     </ItemGroup>
