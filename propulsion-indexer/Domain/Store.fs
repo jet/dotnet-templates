@@ -32,7 +32,8 @@ module Snapshotter =
     let decide generate dryRun (hasSnapshot, state) =
         if hasSnapshot then Valid, Array.empty
         elif dryRun then Invalid, Array.empty
-        // Note Updated is a synthetic/tentative event, which transmuteAllEventsToUnfolds will use as a signal to a) update the unfolds b) drop the event
+        // Note the events being returned here will intercepted by the AccessStrategy's `transmuteAllEventsToUnfolds` function,
+        // which will ensure they a) replace the contents of `unfolds` buffer in the Tip and b) are not used as actual events
         else Updated, generate state
     type private StateWithSnapshottedFlag<'s> = bool * 's
     type Service<'id, 'e, 's> internal (resolve: 'id -> Equinox.Decider<'e, StateWithSnapshottedFlag<'s>>, generate: 's -> 'e[]) =
@@ -41,9 +42,7 @@ module Snapshotter =
             decider.TransactWithPostVersion(decide generate dryRun)
     module Service =
         let tryUpdate dryRun (x: Service<_, _, _>) id = x.TryUpdate(id, dryRun)
-    let internal createService streamId generate cat =
-        let resolve = streamId >> createDecider cat
-        Service(resolve, generate)
+    let internal createService streamId generate cat = Service(streamId >> createDecider cat, generate)
 
     let internal initial'<'s> initial: StateWithSnapshottedFlag<'s> = false, initial
     let internal fold' isValidUnfolds fold (_wasOrigin, s) xs: StateWithSnapshottedFlag<'s> =
@@ -75,13 +74,11 @@ module Ingester =
                 | ValueNone -> failwith $"Unknown EventType %s{x.EventType} at index %d{x.Index}"
                 | ValueSome d -> struct (x, d) |] // So we require all source events to exactly one event in the target
 
-    type Service<'id, 'e, 's, 'f> internal (codec: IEventCodec<'e, 'f, unit>, resolve: 'id -> Equinox.Decider<Event<'e, 'f>, State>) =
+    type Service<'id, 'e, 's, 'f> internal (resolve: 'id -> Equinox.Decider<Event<'e, 'f>, State>, codec: IEventCodec<'e, 'f, unit>) =
         member _.Ingest(id, sourceEvents: ITimelineEvent<'f>[]): Async<int64> =
             let decider = resolve id
             decider.TransactEx(decide codec sourceEvents, fun (x: Equinox.ISyncContext<State>) -> x.Version)
-    let internal createService<'id, 'e, 'f> streamId inputCodec cat =
-        let resolve = streamId >> createDecider cat
-        Service<'id, 'e, unit, 'f>(inputCodec, resolve)
+    let internal createService<'id, 'e, 'f> streamId inputCodec cat = Service<'id, 'e, unit, 'f>(streamId >> createDecider cat, inputCodec)
     module Service =
         let ingest (svc: Service<'id, 'e, 's, System.Text.Json.JsonElement>) id (events: ITimelineEvent<Encoded>[]) =
             let events = events |> Array.map (FsCodec.Core.TimelineEvent.mapBodies FsCodec.SystemTextJson.Encoding.Utf8EncodedToJsonElement)
