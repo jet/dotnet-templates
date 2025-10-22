@@ -1,10 +1,9 @@
 module IndexerTemplate.Domain.Todo
 
-module private Stream =
-    let [<Literal>] Category = "Todos"
-    let id = FsCodec.StreamId.gen ClientId.toString
-    let decodeId = FsCodec.StreamId.dec ClientId.parse
-    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
+let [<Literal>] CategoryName = "Todos"
+let private streamId = FsCodec.StreamId.gen ClientId.toString
+let private decodeId = FsCodec.StreamId.dec ClientId.parse
+let private tryDecode = FsCodec.StreamName.tryFind CategoryName >> ValueOption.map decodeId
 
 // NB - these types and the union case names reflect the actual storage formats and hence need to be versioned with care
 module Events =
@@ -24,13 +23,13 @@ module Events =
 
 module Reactions =
 
-    let categories = [| Stream.Category |]
+    let categories = [| CategoryName |]
     
     /// Allows us to skip producing summaries for events that we know won't result in an externally discernable change to the summary output
     let private impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
     
     let dec = Streams.Codec.gen<Events.Event>
-    let [<return: Struct>] (|For|_|) = Stream.tryDecode
+    let [<return: Struct>] (|For|_|) = tryDecode
     let [<return: Struct>] (|ImpliesStateChange|_|) = function
         | struct (For clientId, _) & Streams.Decode dec events when Array.exists impliesStateChange events -> ValueSome clientId
         | _ -> ValueNone
@@ -48,7 +47,7 @@ module Fold =
         let generate state = Events.Snapshotted { nextId = state.nextId; items = Array.ofList state.items }
         /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
         let isOrigin = function Events.Cleared _ | Events.Snapshotted _ -> true | _ -> false
-        let config = isOrigin, generate
+        let config = isOrigin, generate, String.startsWith (nameof Events.Snapshotted)
         let internal hydrate (e: Events.SnapshotData): State =
             { nextId = e.nextId; items = List.ofArray e.items }
             
@@ -73,7 +72,7 @@ type Service internal (resolve: ClientId -> Equinox.Decider<Events.Event, Fold.S
 
 module Factory =
 
-    let createSnapshotter = Store.Cosmos.Snapshotter.create Events.codec Fold.initial Fold.fold Fold.Snapshot.config Stream.id Stream.Category
+    let createSnapshotter = Store.Cosmos.Snapshotter.single Events.codec Fold.initial Fold.fold Fold.Snapshot.config streamId CategoryName
     let private (|Category|) = function
-        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)
-    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)
+        | Store.Config.Cosmos (context, cache) -> Store.Cosmos.createSnapshotted CategoryName Events.codec Fold.initial Fold.fold Fold.Snapshot.config (context, cache)
+    let create (Category cat) = Service(streamId >> Store.createDecider cat)

@@ -1,14 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <WarningLevel>5</WarningLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    
+    <OutputType>Exe</OutputType>
+    <!-- Opt into Roll forward to future major versions as needed -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Infrastructure.fs" />
     <Compile Include="Store.fs" />
+    <Compile Include="Infrastructure.fs" />
     <Compile Include="Storage.fs" />
     <Compile Include="Services.fs" />
     <Compile Include="Tests.fs" />
@@ -17,11 +21,11 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.4" />
-    <PackageReference Include="Equinox.CosmosStore" Version="4.0.0-rc.14.5" />
-    <PackageReference Include="Equinox.EventStoreDb" Version="4.0.0-rc.14.5" />
-    <PackageReference Include="Equinox.MemoryStore" Version="4.0.0-rc.14.5" />
-    <PackageReference Include="Equinox.Tools.TestHarness" Version="4.0.0-rc.14.5" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.0.0-rc.14.1" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.1.0" />
+    <PackageReference Include="Equinox.EventStoreDb" Version="4.1.0" />
+    <PackageReference Include="Equinox.MemoryStore" Version="4.1.0" />
+    <PackageReference Include="Equinox.Tools.TestHarness" Version="4.1.0" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.2" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
     <PackageReference Include="Serilog.Sinks.Seq" Version="4.0.0" />

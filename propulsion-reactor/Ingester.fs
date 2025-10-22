@@ -44,9 +44,9 @@ let handle stream (events: Propulsion.Sinks.Event[]) = async {
         let ok = true
         // "TODO: add handler code"
         match ok with
-        | true -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (1, events.Length - 1)
-        | false -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped events.Length
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
+        | true -> return Outcome.Ok (1, events.Length - 1), Propulsion.Sinks.Events.next events
+        | false -> return Outcome.Skipped events.Length, Propulsion.Sinks.Events.next events
+    | _ -> return Outcome.NotApplicable events.Length, Propulsion.Sinks.Events.next events }
 #else
 // map from external contract to internal contract defined by the aggregate
 let toSummaryEventData (x: Contract.SummaryInfo): TodoSummary.Events.SummaryData =
@@ -61,9 +61,9 @@ let handle (sourceService: Todo.Service) (summaryService: TodoSummary.Service) s
     | Todo.Reactions.ImpliesStateChange (clientId, eventCount) ->
         let! version', summary = sourceService.QueryWithVersion(clientId, Contract.ofState)
         match! summaryService.TryIngest(clientId, version', toSummaryEventData summary) with
-        | true -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
-        | false -> return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Skipped eventCount
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
+        | true -> return Outcome.Ok (1, eventCount - 1), version'
+        | false -> return Outcome.Skipped eventCount, version'
+    | _ -> return Outcome.NotApplicable events.Length, Propulsion.Sinks.Events.next events }
 #endif
 
 type Factory private () =

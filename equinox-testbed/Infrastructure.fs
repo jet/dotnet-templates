@@ -19,10 +19,6 @@ type SkuId = Guid<skuId>
 and [<Measure>] skuId
 module SkuId = let toString (value: SkuId): string = Guid.toStringN %value
 
-module Store =
-
-    let log = Serilog.Log.ForContext("isMetric", true)
-
 module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj

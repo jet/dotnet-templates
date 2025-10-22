@@ -49,9 +49,8 @@ let handle stream events = async {
     match stream, events with
     | PipelineEvent.TicketEvents (ticketId, items) ->
         // TODO : Ingest the data
-        return Propulsion.Sinks.StreamResult.AllProcessed, IngestionOutcome.Unchanged
-    | x -> return failwithf "Unexpected stream %O" x
-}
+        return IngestionOutcome.Unchanged, Propulsion.Sinks.Events.next events
+    | sn, _ -> return failwith $"Unexpected stream %s{FsCodec.StreamName.toString sn}" }
 
 type Factory private () =
     

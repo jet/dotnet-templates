@@ -42,16 +42,15 @@ let handle
     | TransactionWatchdog.Finalization.MatchStatus (transId, state) ->
         match TransactionWatchdog.toStatus processingStuckCutoff state with
         | TransactionWatchdog.Complete ->
-            return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Completed
+            return Outcome.Completed, Propulsion.Sinks.Events.next events
         | TransactionWatchdog.Active ->
             // We don't want to be warming the data center for no purpose; visiting every second is not too expensive
             do! Async.Sleep 1000 // ms
-            return Propulsion.Sinks.StreamResult.NoneProcessed, Outcome.Deferred
+            return Outcome.Deferred, Propulsion.Sinks.Events.index events
         | TransactionWatchdog.Stuck ->
             let! success = driveTransaction transId
-            return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Resolved success
-    | other ->
-        return failwithf "Span from unexpected category %A" other }
+            return Outcome.Resolved success, Propulsion.Sinks.Events.next events
+    | sn, _xs -> return failwith $"Span from unexpected category %s{FsCodec.StreamName.toString sn}" }
 
 type Factory private () =
     

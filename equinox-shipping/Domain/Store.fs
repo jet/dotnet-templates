@@ -2,7 +2,9 @@ module Store
 
 module Metrics = 
 
-    let log = Serilog.Log.ForContext("isMetric", true)
+    let [<Literal>] PropertyTag = "isMetric"
+    let log = Serilog.Log.ForContext(PropertyTag, true)
+    let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
@@ -19,7 +21,7 @@ module Codec =
 module Memory =
 
     let create name codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial)
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Encoder.Uncompressed codec, fold, initial)
 
 let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
@@ -29,7 +31,7 @@ module Cosmos =
     open Equinox.CosmosStore
     
     let private createCached name codec initial fold accessStrategy (context, cache) =
-        CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
+        CosmosStoreCategory(context, name, FsCodec.SystemTextJson.Encoder.Compressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
@@ -40,7 +42,7 @@ module Dynamo =
     open Equinox.DynamoStore
     
     let private createCached name codec initial fold accessStrategy (context, cache) =
-        DynamoStoreCategory(context, name, FsCodec.Compression.EncodeTryCompress codec, fold, initial, accessStrategy, cacheStrategy cache)
+        DynamoStoreCategory(context, name, FsCodec.Encoder.Compressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)

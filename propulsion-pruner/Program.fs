@@ -4,13 +4,17 @@ open Propulsion.CosmosStore
 open Serilog
 open System
 
+let [<Literal>] CONNECTION =                "EQUINOX_COSMOS_CONNECTION"
+let [<Literal>] DATABASE =                  "EQUINOX_COSMOS_DATABASE"
+let [<Literal>] CONTAINER =                 "EQUINOX_COSMOS_CONTAINER"
+
 type Configuration(tryGet) =
 
     let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
-    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
-    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
-    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
+    member _.CosmosConnection =             get CONNECTION
+    member _.CosmosDatabase =               get DATABASE
+    member _.CosmosContainer =              get CONTAINER
 
 module Args =
 
@@ -69,9 +73,9 @@ module Args =
                 | LeaseContainer _ ->       "specify Container Name for Leases container. Default: `sourceContainer` + `-aux`."
 
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
-                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->             "specify a database name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a container name within `Database` to apply the pruning to"
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 5."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
@@ -80,10 +84,9 @@ module Args =
     and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
         let discovery =                     p.GetResult(CosmosSourceParameters.Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
-        let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSourceParameters.Retries, 5)
         let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode = mode)
         let databaseId =                    p.GetResult(CosmosSourceParameters.Database, fun () -> c.CosmosDatabase)
         let containerId =                   p.GetResult CosmosSourceParameters.Container
        
@@ -108,32 +111,29 @@ module Args =
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
-        | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
-                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->             "specify a database name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a Container name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
                 | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `SourceContainer` + `-aux`."
-                | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 0."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
     and CosmosSinkArguments(c: Configuration, p: ParseResults<CosmosSinkParameters>) =
         let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
-        let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSinkParameters.Retries, 0)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode = mode)
         let databaseId =                    p.GetResult(Database, fun () -> c.CosmosDatabase)
         let containerId =                   p.GetResult(Container, fun () -> c.CosmosContainer)
         let leaseContainerId =              p.TryGetResult LeaseContainer
         member _.Is(d, c) =                 databaseId = d && containerId = c
         member _.Connect() = async {        let! context = connector.ConnectContext("DELETION Target", databaseId, containerId, tipMaxEvents = 256, ?auxContainerId = leaseContainerId)
-                                            return Equinox.CosmosStore.Core.EventsContext(context, Store.log) }
+                                            return Equinox.CosmosStore.Core.EventsContext(context, Store.Metrics.log) }
         member _.MaybeLeasesContainer: Microsoft.Azure.Cosmos.Container option = leaseContainerId |> Option.map (fun id -> connector.LeasesContainer(databaseId, id))
 
     /// Parse the commandline; can throw exceptions in response to missing arguments and/or `-h`/`--help` args

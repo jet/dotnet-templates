@@ -9,7 +9,9 @@ module Store =
 
     module Metrics =
 
-        let log = Log.ForContext("isMetric", true)
+        let [<Literal>] PropertyTag = "isMetric"
+        let log = Log.ForContext(PropertyTag, true)
+        let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 module EnvVar =
 
@@ -17,8 +19,6 @@ module EnvVar =
 
 module Log =
 
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
     /// The Propulsion.Streams.Prometheus LogSink uses this well-known property to identify consumer group associated with the Scheduler
     let forGroup group = Log.ForContext("group", group)
 
@@ -45,7 +45,7 @@ type Logging() =
                             let isWriterB = Filters.Matching.FromSource<Propulsion.CosmosStore.Internal.Writer.Result>().Invoke
                             let l =
                                 if verboseStore then l
-                                else l.Filter.ByExcluding(fun x -> Log.isStoreMetrics x || isWriterA x || isWriterB x)
+                                else l.Filter.ByExcluding(fun x -> Store.Metrics.logEventIsMetric x || isWriterA x || isWriterB x)
                             l.WriteTo.Console(theme=Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code, outputTemplate=t)
                             |> ignore) |> ignore
                     c.WriteTo.Async(bufferSize=65536, blockWhenFull=true, configure=System.Action<_> configure)

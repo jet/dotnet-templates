@@ -24,12 +24,11 @@ module EnvVar =
 // #if (kafka || !blank)
 module Streams =
 
-    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
     // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
     let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
         match codec.Decode event with
         | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
-            Log.ForContext("eventData", renderBody event.Data)
+            Log.ForContext("eventData", FsCodec.Encoding.GetStringUtf8 event.Data)
                 .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
             ValueNone
         | x -> x
@@ -39,11 +38,11 @@ module Streams =
     module Codec =
         
         let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
-            FsCodec.SystemTextJson.Codec.Create<'E>() // options = Options.Default
+            FsCodec.SystemTextJson.Codec.Create<'E>() |> FsCodec.Encoder.Uncompressed // options = Options.Default
 
         let private withUpconverter<'c, 'e when 'c :> TypeShape.UnionContract.IUnionContract> up: Propulsion.Sinks.Codec<'e> =
             let down (_: 'e) = failwith "Unexpected"
-            FsCodec.SystemTextJson.Codec.Create<'e, 'c, _>(up, down) // options = Options.Default
+            FsCodec.SystemTextJson.Codec.Create<'e, 'c, _>(up, down) |> FsCodec.Encoder.Uncompressed // options = Options.Default
         let genWithIndex<'c when 'c :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<int64 * 'c>  =
             let up (raw: FsCodec.ITimelineEvent<_>) e = raw.Index, e
             withUpconverter<'c, int64 * 'c> up
@@ -100,7 +99,7 @@ module Dynamo =
     let defaultCacheDuration = TimeSpan.FromMinutes 20.
     let private createCached name codec initial fold accessStrategy (context, cache) =
         let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
-        DynamoStoreCategory(context, name, FsCodec.Compression.EncodeTryCompress codec, fold, initial, accessStrategy, cacheStrategy)
+        DynamoStoreCategory(context, name, FsCodec.Encoder.Compressed codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
@@ -146,9 +145,10 @@ type Logging() =
 
 module OutcomeKind =
     
-    let [<return: Struct>] (|StoreExceptions|_|) exn =
+    let [<return: Struct>] (|StoreExceptions|_|) (exn: exn) =
         match exn with
         | Equinox.DynamoStore.Exceptions.ProvisionedThroughputExceeded
         | Equinox.CosmosStore.Exceptions.RateLimited -> Propulsion.Streams.OutcomeKind.RateLimited |> ValueSome
-        | Equinox.CosmosStore.Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Timeout |> ValueSome
+        | Equinox.CosmosStore.Exceptions.RequestTimeout -> Propulsion.Streams.OutcomeKind.Tagged "cosmosTimeout" |> ValueSome
+        | :? System.Threading.Tasks.TaskCanceledException -> Propulsion.Streams.OutcomeKind.Tagged "taskCancelled" |> ValueSome
         | _ -> ValueNone

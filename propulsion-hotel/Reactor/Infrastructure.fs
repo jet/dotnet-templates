@@ -4,11 +4,6 @@ module Infrastructure
 open Serilog
 open System
 
-module Log =
-    
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
-    
 module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
@@ -66,11 +61,11 @@ module Sinks =
 
     let private equinoxAndPropulsionMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+          |> _.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
 
     let equinoxAndPropulsionFeedMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxAndPropulsionMetrics tags group
-          |> fun l -> l.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
+          |> _.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
 
     let console (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
@@ -91,10 +86,9 @@ type Logging() =
             a.Logger(configureMetricsSinks >> ignore) |> ignore // unconditionally feed all log events to the metrics sinks
             a.Logger(fun l -> // but filter what gets emitted to the console sink
                 let l = match isMetric with None -> l | Some predicate -> l.Filter.ByExcluding(Func<Serilog.Events.LogEvent, bool> predicate)
-                configureConsoleSink l |> ignore)
-            |> ignore
+                configureConsoleSink l |> ignore) |> ignore
         configuration.WriteTo.Async(bufferSize = 65536, blockWhenFull = true, configure = System.Action<_> configure)
 
     [<System.Runtime.CompilerServices.Extension>]
     static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
-        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Domain.Store.Metrics.logEventIsMetric)

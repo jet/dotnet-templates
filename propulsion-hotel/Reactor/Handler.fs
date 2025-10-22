@@ -26,7 +26,7 @@ type Stats(log, statsInterval, stateInterval, ?logExternalStats) =
 
 open Domain
 
-let private reactionCategories = [| GroupCheckout.Reactions.categoryName |]
+let private reactionCategories = [| GroupCheckout.Reactions.CategoryName |]
 
 // Invocation of the handler is prompted by event notifications from the event store's feed.
 // Wherever possible, multiple events get processed together (e.g. in catchup scenarios or where the async checkpointing
@@ -50,9 +50,8 @@ let private handle (processor: GroupCheckoutProcess.Service) stream _events = as
         // NOTE also that in some cases, the observed position on the stream can be beyond that which has been notified via
         //   the change feed. In those cases, Propulsion will drop any incoming events that would represent duplication of processing,
         //   (and not even invoke the Handler unless one or more of the feed events are beyond the write position)
-        return Propulsion.Sinks.StreamResult.OverrideNextIndex ver', outcome
-    | other ->
-        return failwithf $"Span from unexpected category %s{FsCodec.StreamName.toString other}" }
+        return outcome, ver'
+    | sn -> return failwith $"Span from unexpected category %s{FsCodec.StreamName.toString sn}" }
 
 let private createService store =
     let stays = GuestStay.Factory.create store

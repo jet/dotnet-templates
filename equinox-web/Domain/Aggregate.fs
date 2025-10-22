@@ -64,4 +64,4 @@ module Factory =
         | Store.Config.Esdb (context, cache) ->
             Store.Esdb.createSnapshotted Stream.Category Events.codec Fold.initial Fold.fold (Fold.isOrigin, Fold.toSnapshot) (context, cache)
 //#endif
-    let create (Category cat) = Service(Stream.id >> Store.resolveDecider cat)
+    let create (Category cat) = Service(Stream.id >> Store.createDecider cat)

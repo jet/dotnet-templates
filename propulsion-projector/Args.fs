@@ -10,14 +10,18 @@ let [<Literal>] SECRET_KEY =                "EQUINOX_DYNAMO_SECRET_ACCESS_KEY"
 let [<Literal>] TABLE =                     "EQUINOX_DYNAMO_TABLE"
 let [<Literal>] INDEX_TABLE =               "EQUINOX_DYNAMO_TABLE_INDEX"
 
+let [<Literal>] CONNECTION =                "EQUINOX_COSMOS_CONNECTION"
+let [<Literal>] DATABASE =                  "EQUINOX_COSMOS_DATABASE"
+let [<Literal>] CONTAINER =                 "EQUINOX_COSMOS_CONTAINER"
+
 type Configuration(tryGet: string -> string option) =
 
     member val tryGet =                     tryGet
     member _.get key =                      match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
-    member x.CosmosConnection =             x.get "EQUINOX_COSMOS_CONNECTION"
-    member x.CosmosDatabase =               x.get "EQUINOX_COSMOS_DATABASE"
-    member x.CosmosContainer =              x.get "EQUINOX_COSMOS_CONTAINER"
+    member x.CosmosConnection =             x.get CONNECTION
+    member x.CosmosDatabase =               x.get DATABASE
+    member x.CosmosContainer =              x.get CONTAINER
 
     member x.DynamoServiceUrl =             x.get SERVICE_URL
     member x.DynamoAccessKey =              x.get ACCESS_KEY
@@ -36,17 +40,15 @@ module Cosmos =
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
-        | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
-                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a container name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
-                | Timeout _ ->              "specify operation timeout in seconds (default: 5)."
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
 
@@ -54,10 +56,9 @@ module Cosmos =
         let connection =                    p.GetResult(Connection, fun () -> c.CosmosConnection)
         let discovery =                     Equinox.CosmosStore.Discovery.ConnectionString connection
         let mode =                          p.TryGetResult ConnectionMode
-        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
         let container =                     p.GetResult(Container, fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose

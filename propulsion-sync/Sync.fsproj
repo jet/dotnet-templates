@@ -1,9 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <WarningLevel>5</WarningLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <OutputType>Exe</OutputType>
+    <!-- Opt into Roll forward to future major versions as needed -->
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,10 +18,10 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.4" />
-    <PackageReference Include="Propulsion.EventStore" Version="3.0.0-rc.9.11" />
-    <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0-rc.9.11" />
+    <PackageReference Include="Propulsion.EventStore" Version="3.0.0" />
+    <PackageReference Include="Propulsion.CosmosStore" Version="3.0.0" />
     <!--#if (kafka || marveleqx)-->
-    <PackageReference Include="Propulsion.Kafka" Version="3.0.0-rc.9.11" />
+    <PackageReference Include="Propulsion.Kafka" Version="3.0.0" />
     <!--#endif-->
     <PackageReference Include="Serilog.Sinks.Async" Version="1.5.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />

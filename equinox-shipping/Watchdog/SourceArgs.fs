@@ -17,7 +17,6 @@ module Cosmos =
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
-        | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 
@@ -29,10 +28,9 @@ module Cosmos =
             member p.Usage = p |> function
                 | Verbose ->                "request Verbose Logging from ChangeFeedProcessor and Store. Default: off"
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
-                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->             "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
-                | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{Args.CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{Args.DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{Args.CONTAINER} specified)"
                 | Retries _ ->              "specify operation retries. Default: 9."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 30."
 
@@ -44,10 +42,9 @@ module Cosmos =
     type Arguments(c: Args.Configuration, p: ParseResults<Parameters>) =
         let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
-        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 9)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
         let containerId =                   p.GetResult(Container, fun () -> c.CosmosContainer)
         let leaseContainerId =              p.GetResult(LeaseContainer, containerId + "-aux")

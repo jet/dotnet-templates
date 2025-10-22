@@ -5,12 +5,12 @@ let private streamId = FsCodec.StreamId.gen GroupCheckoutId.toString
 let private catId = CategoryId(CategoryName, streamId, FsCodec.StreamId.dec GroupCheckoutId.parse)
 
 module Reactions =
-    let [<Literal>] categoryName = CategoryName
+    let [<Literal>] CategoryName = CategoryName
     let [<return: Struct>] (|For|_|) = catId.TryDecode
     
 module Events =
 
-    type CheckoutResidual =     { stay:  GuestStayId; residual: decimal }
+    type CheckoutResidual =     { stay: GuestStayId; residual: decimal }
     type Event =
         /// There may be more than one of these; each represents the user requesting the adding a group of Stays into group checkout
         /// NOTE in the case where >=1 of the nominated Stays has already been checked out, the pending stay will be taken off the list via

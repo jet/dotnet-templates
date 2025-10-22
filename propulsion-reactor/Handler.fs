@@ -48,16 +48,16 @@ let handle
         (produceSummary: Propulsion.Codec.NewtonsoftJson.RenderedSummary -> Async<unit>)
         stream events = async {
     match struct (stream, events) with
-    | Contract.Input.Decode (_clientId, events) ->
-        for version, event in events do
+    | Contract.Input.Decode (_clientId, decoded) ->
+        for version, event in decoded do
             let summary =
                 match event with
                 | Contract.Input.EventA { field = x } -> Contract.EventA { value = x }
                 | Contract.Input.EventB { field = x } -> Contract.EventB { value = x }
             let wrapped = generate stream version summary
             let! _ = produceSummary wrapped in ()
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Ok (events.Length, 0)
-    | _ -> return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable events.Length }
+        return Outcome.Ok (decoded.Length, 0), Propulsion.Sinks.Events.next events
+    | _ -> return Outcome.NotApplicable events.Length, Propulsion.Sinks.Events.next events }
 #else
 let categories = Todo.Reactions.categories
     
@@ -70,11 +70,11 @@ let handle
         let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
         let wrapped = generate stream version' (Contract.Summary summary)
         let! _ = produceSummary wrapped
-        return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
+        return Outcome.Ok (1, eventCount - 1), version'
     | Todo.Reactions.NoStateChange eventCount ->
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped eventCount
+        return Outcome.Skipped eventCount, Propulsion.Sinks.Events.next events
     | Todo.Reactions.NotApplicable eventCount ->
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable eventCount }
+        return Outcome.NotApplicable eventCount, Propulsion.Sinks.Events.next events }
 #endif
 
 type Factory private () =

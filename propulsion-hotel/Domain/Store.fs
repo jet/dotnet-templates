@@ -2,7 +2,10 @@ module Domain.Store
 
 module Metrics = 
 
-    let log = Serilog.Log.ForContext("isMetric", true)
+    let [<Literal>] PropertyTag = "isMetric"
+    let log = Serilog.Log.ForContext(PropertyTag, true)
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
@@ -14,7 +17,7 @@ module Codec =
 module Memory =
 
     let create name codec initial fold store: Equinox.Category<_, _, _> =
-        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial)
+        Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Encoder.Uncompressed codec, fold, initial)
 
 let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
@@ -24,7 +27,7 @@ module Dynamo =
     open Equinox.DynamoStore
 
     let private create name codec initial fold accessStrategy (context, cache) =
-        DynamoStoreCategory(context, name, FsCodec.Compression.EncodeUncompressed codec, fold, initial, accessStrategy, cacheStrategy cache)
+        DynamoStoreCategory(context, name, FsCodec.Encoder.Uncompressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createUnoptimized name codec initial fold (context, cache) =
         let accessStrategy = AccessStrategy.Unoptimized

@@ -8,14 +8,18 @@ open Propulsion.Kafka
 open Serilog
 open System
 
+let [<Literal>] CONNECTION =                "EQUINOX_COSMOS_CONNECTION"
+let [<Literal>] DATABASE =                  "EQUINOX_COSMOS_DATABASE"
+let [<Literal>] CONTAINER =                 "EQUINOX_COSMOS_CONTAINER"
+
 type Configuration(tryGet) =
 
     let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
     let isTrue varName = tryGet varName |> Option.exists (fun s -> String.Equals(s, bool.TrueString, StringComparison.OrdinalIgnoreCase))
 
-    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
-    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
-    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
+    member _.CosmosConnection =             get CONNECTION
+    member _.CosmosDatabase =               get DATABASE
+    member _.CosmosContainer =              get CONTAINER
     member _.EventStoreHost =               get "EQUINOX_ES_HOST"
     member _.EventStoreTcp =                isTrue "EQUINOX_ES_TCP"
     member _.EventStorePort =               tryGet "EQUINOX_ES_PORT" |> Option.map int
@@ -144,9 +148,9 @@ module Args =
                 | LeaseContainer _ ->       "specify Container Name for Leases container. Default: `sourceContainer` + `-aux`."
 
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
-                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->             "specify a database name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a container name within `Database`"
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
                 | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 1."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
@@ -156,10 +160,9 @@ module Args =
     and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
         let discovery =                     p.GetResult(CosmosSourceParameters.Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult CosmosSourceParameters.ConnectionMode
-        let timeout =                       p.GetResult(CosmosSourceParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSourceParameters.Retries, 1)
         let maxRetryWaitTime =              p.GetResult(CosmosSourceParameters.RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode = mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode = mode)
         let database =                      p.GetResult(CosmosSourceParameters.Database, fun () -> c.CosmosDatabase)
         let containerId: string =           p.GetResult CosmosSourceParameters.Container
         let leaseContainerId =              p.GetResult(CosmosSourceParameters.LeaseContainer, containerId + "-aux")
@@ -279,7 +282,6 @@ module Args =
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
         | [<AltCommandLine "-a"; Unique>]   LeaseContainer of string
-        | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
 #if kafka
@@ -288,11 +290,10 @@ module Args =
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
-                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->             "specify a database name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a Container name for Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
                 | LeaseContainer _ ->       "specify Container Name (in this [target] Database) for Leases container. Default: `<SourceContainer>` + `-aux`."
-                | Timeout _ ->              "specify operation timeout in seconds. Default: 5."
                 | Retries _ ->              "specify operation retries. Default: 0."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 #if kafka
@@ -301,10 +302,9 @@ module Args =
     and CosmosSinkArguments(c: Configuration, p: ParseResults<CosmosSinkParameters>) =
         let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.GetResult(ConnectionMode, Microsoft.Azure.Cosmos.ConnectionMode.Direct)
-        let timeout =                       p.GetResult(CosmosSinkParameters.Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(CosmosSinkParameters.Retries, 0)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, mode)
         let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
         let container =                     p.GetResult(Container, fun () -> c.CosmosContainer)
         let leaseContainerId =              p.TryGetResult LeaseContainer
@@ -429,7 +429,7 @@ module EventV0Parser =
     /// We assume all Documents represent Events laid out as above
     let parse (d: System.Text.Json.JsonDocument): Propulsion.Sinks.StreamEvent =
         let e = d.Cast<EventV0>()
-        FsCodec.StreamName.parse e.s, e |> FsCodec.Core.TimelineEvent.Map(Func<_, _> ReadOnlyMemory) 
+        FsCodec.StreamName.parse e.s, e |> FsCodec.Core.TimelineEvent.mapBodies (ReadOnlyMemory >> FsCodec.Encoding.OfBlob)
 
 let transformV0 catFilter v0SchemaDocument: Propulsion.Streams.StreamEvent<_> seq = seq {
     let parsed = EventV0Parser.parse v0SchemaDocument
@@ -458,7 +458,7 @@ module Checkpoints =
         let access = AccessStrategy.Custom (Checkpoint.Fold.isOrigin, transmute')
         let create groupName (context, cache) =
             let caching = Equinox.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
-            let cat = CosmosStoreCategory(context, Checkpoint.Stream.Category, codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, access, caching)
+            let cat = CosmosStoreCategory(context, Checkpoint.Stream.Category, FsCodec.SystemTextJson.Encoder.Uncompressed codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, access, caching)
             let resolve sid = Equinox.Stream.Resolve(cat, Store.Metrics.log).Invoke(sid)
             Checkpoint.CheckpointSeries(groupName, resolve)
 
@@ -529,7 +529,7 @@ let build (args: Args.Arguments, log) =
         let checkpoints = Checkpoints.Cosmos.create spec.groupName (dstContainer, cache)
 
         let withNullData (e: FsCodec.ITimelineEvent<_>): FsCodec.ITimelineEvent<_> =
-            FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, ReadOnlyMemory.Empty, e.Meta, timestamp=e.Timestamp) :> _
+            FsCodec.Core.TimelineEvent.Create(e.Index, e.EventType, FsCodec.Encoding.OfBlob ReadOnlyMemory.Empty, e.Meta, timestamp = e.Timestamp) :> _
         let tryMapEvent streamFilter (x: EventStore.ClientAPI.ResolvedEvent) =
             match x.Event with
             | e when not e.IsJson || e.EventStreamId.StartsWith "$"
@@ -538,7 +538,7 @@ let build (args: Args.Arguments, log) =
                 let struct (stream, event) = e
                 if Reader.payloadBytes x > 1_000_000 then
                     Log.Error("replacing {stream} event index {index} with `null` Data due to length of {len}MiB",
-                        stream, event.Index, Propulsion.Internal.Log.miB (let d = event.Data in d.Length))
+                        stream, event.Index, Propulsion.Internal.Log.miB (FsCodec.Encoding.ByteCount event.Data))
                     Some struct (stream, withNullData event)
                 else Some e
         let connect () =

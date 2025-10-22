@@ -3,13 +3,17 @@
 open Serilog
 open System
 
+let [<Literal>] CONNECTION =                "EQUINOX_COSMOS_CONNECTION"
+let [<Literal>] DATABASE =                  "EQUINOX_COSMOS_DATABASE"
+let [<Literal>] CONTAINER =                 "EQUINOX_COSMOS_CONTAINER"
+
 type Configuration(tryGet) =
 
     let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
-    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
-    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
-    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
+    member _.CosmosConnection =             get CONNECTION
+    member _.CosmosDatabase =               get DATABASE
+    member _.CosmosContainer =              get CONTAINER
 
     member _.PrometheusPort =               tryGet "PROMETHEUS_PORT" |> Option.map int
 
@@ -74,26 +78,23 @@ module Args =
         | [<AltCommandLine "-s">]           Connection of string
         | [<AltCommandLine "-d">]           Database of string
         | [<AltCommandLine "-c">]           Container of string
-        | [<AltCommandLine "-o">]           Timeout of float
         | [<AltCommandLine "-r">]           Retries of int
         | [<AltCommandLine "-rt">]          RetriesWaitTime of float
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
-                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a container name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
-                | Timeout _ ->              "specify operation timeout in seconds (default: 30)."
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
                 | Retries _ ->              "specify operation retries (default: 9)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 30)"
     and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
         let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
-        let timeout =                       p.GetResult(Timeout, 30.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 9)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 30.) |> TimeSpan.FromSeconds
-        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, timeout, retries, maxRetryWaitTime, ?mode=mode)
+        let connector =                     Equinox.CosmosStore.CosmosStoreConnector(discovery, retries, maxRetryWaitTime, ?mode=mode)
         let database =                      p.GetResult(Database, fun () -> c.CosmosDatabase)
         let container =                     p.GetResult(Container, fun () -> c.CosmosContainer)
         member val Verbose =                p.Contains Verbose

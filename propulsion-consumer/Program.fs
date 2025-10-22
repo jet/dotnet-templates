@@ -7,9 +7,6 @@ type Configuration(tryGet) =
 
     let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
-    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
-    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
-    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
     member _.Broker =                       get "PROPULSION_KAFKA_BROKER"
     member _.Topic =                        get "PROPULSION_KAFKA_TOPIC"
     member _.Group =                        get "PROPULSION_KAFKA_GROUP"

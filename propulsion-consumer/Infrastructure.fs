@@ -7,12 +7,11 @@ open System.Threading.Tasks
 
 module Streams =
 
-    let private renderBody (x: Propulsion.Sinks.EventBody) = System.Text.Encoding.UTF8.GetString(x.Span)
     // Uses the supplied codec to decode the supplied event record (iff at LogEventLevel.Debug, failures are logged, citing `stream` and `.Data`)
     let private tryDecode<'E> (codec: Propulsion.Sinks.Codec<'E>) (streamName: FsCodec.StreamName) event =
         match codec.Decode event with
         | ValueNone when Log.IsEnabled Serilog.Events.LogEventLevel.Debug ->
-            Log.ForContext("eventData", renderBody event.Data)
+            Log.ForContext("eventData", FsCodec.Encoding.GetStringUtf8 event.Data)
                 .Debug("Codec {type} Could not decode {eventType} in {stream}", codec.GetType().FullName, event.EventType, streamName)
             ValueNone
         | x -> x
@@ -22,7 +21,7 @@ module Streams =
     module Codec =
         
         let gen<'E when 'E :> TypeShape.UnionContract.IUnionContract> : Propulsion.Sinks.Codec<'E> =
-            FsCodec.SystemTextJson.Codec.Create<'E>() // options = Options.Default
+            FsCodec.SystemTextJson.Codec.Create<'E>() |> FsCodec.Encoder.Uncompressed // options = Options.Default
 
 module EnvVar =
 

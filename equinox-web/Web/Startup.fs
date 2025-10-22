@@ -49,8 +49,8 @@ module Store =
 //#if cosmos
     /// CosmosDb wiring, uses Equinox.CosmosStore nuget package
     module private Cosmos =
-        let connect (mode, discovery, databaseId, containerId) (operationTimeout, maxRetryForThrottling, maxRetryWait) =
-            let conn = Equinox.CosmosStore.CosmosStoreConnector(discovery, operationTimeout, maxRetryForThrottling, maxRetryWait, mode)
+        let connect (mode, discovery, databaseId, containerId) (maxRetryForThrottling, maxRetryWait) =
+            let conn = Equinox.CosmosStore.CosmosStoreConnector(discovery, maxRetryForThrottling, maxRetryWait, mode = mode)
             let client = conn.Connect(databaseId, [| containerId |]) |> Async.RunSynchronously
             Equinox.CosmosStore.CosmosStoreContext(client, databaseId, containerId, tipMaxEvents = 256) 
 
@@ -82,7 +82,7 @@ module Store =
             let cache = Equinox.Cache("Cosmos", sizeMb = cache)
             let retriesOn429Throttling = 1 // Number of retries before failing processing when provisioned RU/s limit in CosmosDb is breached
             let timeout = TimeSpan.FromSeconds 5. // Timeout applied per request to CosmosDb, including retry attempts
-            let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (timeout, retriesOn429Throttling, timeout)
+            let context = Cosmos.connect (mode, Equinox.CosmosStore.Discovery.ConnectionString connectionString, database, container) (retriesOn429Throttling, timeout)
             Store.Config.Cosmos (context, cache)
 //#endif
 //#if dynamo
@@ -155,8 +155,7 @@ type Startup() =
                     "AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
                 Store.Config.Cosmos (Microsoft.Azure.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
 //#endif
-            | _ ->
-                failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar containerVar
+            | _ -> failwith $"Event Storage subsystem requires the following Environment Variables to be specified: %s{connectionVar}, %s{databaseVar}, %s{containerVar}"
 
 //#endif
 //#if dynamo
@@ -166,8 +165,7 @@ type Startup() =
             match read regionVar, read tableVar with
             | Some region, Some table ->
                 Store.Config.Dynamo (region, table, cacheMb)
-            | _ ->
-                failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s" regionVar tableVar
+            | _ -> failwith $"Event Storage subsystem requires the following Environment Variables to be specified: %s{regionVar}, %s{tableVar}"
 
 //#endif
 #if (memoryStore && !cosmos && !dynamo && !eventStore)
