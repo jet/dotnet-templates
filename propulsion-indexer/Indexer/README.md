@@ -22,7 +22,8 @@ From the base of the repo, it's invoked as follows:
 
 The following overrides can be useful:
 
-- `-w` overrides the streams parallelism limit (default: `8`). In general, Cosmos rate limiting policy and request latency means increasing beyond that is not normally useful. A potential exception is when retraversing due to the RU consumption from writes being avoided (i.e. correct efficient idempotent processing).
+- `-w` overrides the streams parallelism limit (default: `8`)
+  - In general, Cosmos rate limiting policy and request latency means increasing beyond that is not normally useful. A potential exception is when retraversing due to the RU consumption from writes being avoided (i.e. correct efficient idempotent processing).
 - `-r` overrides the maximum read-ahead limit (default: `2`).
   - In rare cases (where the I/O involved in processing events is efficient and/or the items are being traversed at a high throughput) increasing the read ahead limit can help to ensure that there's always something for the processor 'threads' to work on
   - reading ahead can help throughput in some cases: multiple events from the same stream are handled as a single span of events to the maximum degree possible, including events from batches beyond the one that's currently in progress.
@@ -34,53 +35,7 @@ There are other settings that relate to the source ChangeFeed (i.e. you specify 
    - Lower values induce more frequent checkpointing, and reduce the RU cost of each individual read.
    - Higher values increase the RU cost of each batch read and the number of events that need to be re-processed if a partition is re-assigned, or the Index App is restarted.
 
-----
-
-# Indexing logic fundamentals
-
-Over time, the number of events in the system will keep growing. But, you still want to be able to reconstitute the content and/or add a new variant at any time.
-
-This has the following implications:
-- processing should work on a batched basis
-- no permanent state should be held in the Views Container; it's literally just a structure that's built up to support the current needs of the system as a whole in terms of providing for efficient traversal of data to support the use cases and performance needs of both read and write paths.
-
-## Key principle: The views Container is ephemeral
-
-In a deployed instance, indexing typically runs as live loop working from the tail of the ChangeFeed.
-
-However, it's important to note that in a well written event-sourced system that it should be considered absolutely normal to, at the drop of a hat be able to regenerate the views and/or provision a slightly tweaked version of the existing format.
-
-It is easy, and should remain easy to validate that a given indexing function works correctly and efficiently: blow away the views container and retraverse on the desktop or in a sandbox environment.
-
-:bulb: NOTE this is one reason why using Kafka or some form of Service Bus to consume events indirectly is problematic; you need to re-emit all the events to the 'bus'
-
-## Example: Completely regenerating the Views Container
-
-The only real 'state' in the system as a whole is the ChangeFeed processor checkpoint (identified by the Processor Name in the `-g` commandline argument)
-
-If there's ever doubt about the integrity of the state in the Views Container, it should be possible to reconstitute its content at any time by:
-
-1. delete the Views Container
-2. re-initialize it with `eqx init`
-3. run `index` over all the events from the start of time
-
-## Example: capturing fields from an event into the View Container state that were not previously captured
-
-In general, Indexes should not speculatively hold information that's not being used - writing more than is necessary consumes space and increases RU consumption.
-
-Instead, where a new feature and/or a tweak to an existing one requires previously un-indexed information, one can simply use an Expand and Contract strategy:
-1. Expand to add the extra information
-   - change the `Category` for the view (i.e. if it was `$TodoIndex`, and a new field is needed, change the `Category` to `$TodoIndex2`)
-   - add the logic to populate the relevant state
-   - run the `index` subcommand (with a fresh _Processor Name_)
-2. Write consumer logic
-3. Deploy. This can be done in two common ways:
-   - (if the consumption logic is not behind a feature flag) as part of the deploy, run the `index` before the system goes live
-   - (if the consumption logic is behind a feature flag):
-     - after the deploy, run an `index` operation
-     - when the index has caught up, enable the feature flag that uses the information it provides
-
-----
+## See also Appendix: Indexing Overview
 
 # Command: `snapshot`
 
@@ -131,53 +86,9 @@ Replaces the normal/default Handler with one that:
 
 In other aspects (from the perspective of how it traverses the events, checkpoints progress, manages concurrency and/or reading ahead), this subcommand is equivalent to the  `index` subcommand; the same overrides apply.
 
-## Versioning events
+## See: Appendix: Versioning Events and Snapshots
 
-All types used in the body of an event need to be able to be safely round-tripped to/from the Event Store. While events are written exactly once, they will live in the store forever, so need to be designed carefully.
-
-As a result, you want to follow the normal principles of doing changes to message contracts safely:
-- the most obvious thing not to do is rename fields
-- removing fields (as long as you know no reader anywhere is going to have an exception in their absence)
-- adding new fields as `option`s (assuming you can do something workable in the case where the value is `None)
-
-That said, the most important thing in defining the contract for a normal event sourced event is the semantic intent; if the intent/meaning behind an event is changing, it's normally best to add a new case to the `Event` union to reflect that.
-
-:bulb: Whenever an Event is no longer relevant to the system as a whole, it's safe to remove it from the `type Event` union - Event Types that don't have cases in the union are simply ignored.
-
-There's a wide variety of techniques and established strategies, most of which are covered in https://github.com/jet/fscodec#upconversion
-
-## Versioning snapshots
-
-The `Snapshotted` event in the `type Event =` union is explicitly tagged with a `Name`:
-
-```fsharp
-| [<DataMember(Name = "Snapshotted")>] Snapshotted of Snapshotted
-```
-
-As with any Event, all types used in the body (i.e. the entire tree of types used in the `type Snapshotted` needs to be able to be roundtripped safely to/from the Store).
-
-The same rules above re Versioning Events apply equally.
-
-The critical differences between 'real Events' and `Snapshotted` events are:
-- Snapshotted event are stored in the `u`nfolds field of the tip, and get replaced with a fresh version every time an event is updated
-- It's always theoretically safe to remove the `Snapshotted` case from the Union; no data would be lost. However it does mean that the state will need to be produced from the events, which will likely result in higher latency and RU consumption on the initial load (the Cache means you generally only pay this price once).
-
-The following general rules apply:
-
-- CONSIDER per aggregate whether a `Snapshotted` event is appropriate. It may make sense to avoid having a snapshotted stream if streams are short, and you are using Events In Tip mode
-  - the cache will hold the state, and reads and writes don't pay the cost of conveying a snapshot
-  - the additional cost of deserializing and folding the events is extremely unlikely to be relevant when considering the overall I/O costs
-- ALWAYS change the `Name` _string_ from `Snapshotted` to `Snapshotted/2`, `Snapshotted/3` etc whenever a breaking change is needed - that removes any risk of a failure to parse the snapshot event body due to changes in the representation.
-
-Given the above arrangements, you can at any time ensure snapshots have been updated in a given environment by running the following command against the Store: 
-
-  ```bash
-  # establish prod env vars for EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABASE, EQUINOX_COSMOS_CONTAINER etc
-  dotnet run --project Indexer -- -g deployYYMMDD snapshot
-  ```
-----
-
-# Command: `sync`
+# Command: `export`
 
 :warning: **Writes to the nominated 'Export' Container; Does not write to the `source` (or the Views Container)**.
 
@@ -189,17 +100,17 @@ In addition to being useful on a one-off basis, it can also be run to maintain a
 
 From the base of the repo, it's invoked as follows:
 
-    eqx init -A cosmos -c Export # once; make an empty container to Sync into
-    dotnet run --project Indexer -g syncExport sync -c Export source
+    eqx init -A cosmos -c Export # once; make an empty container to export into
+    dotnet run --project Indexer -g syncExport export -c Export source
     eqx stats -A cosmos # get stats for Main store
     eqx stats -A cosmos -c Export # compare stats for exported version
 
 - `syncExport` is a _Processor Name_ (aka Consumer Group Name) that is different to the one used for the Indexing behavior (`defaultIndexer` in the example above)
-- `source` is a mandatory subcommand of the `sync` command; you can supply the typical arguments to control the ChangeFeed as one would for `index` or `snapshot`
+- `source` is a mandatory subcommand of the `export` command; you can supply the typical arguments to control the ChangeFeed as one would for `index` or `snapshot`
 
-:bulb: **NOTE** The Sync process only writes events. Each write will replace any snapshots stored in the `u`nfolds space in the Tip with an empty list. This means your next step after 'exporting' will frequently be to point the `EQUINOX_COSMOS_CONTAINER` at the exported version and then run the `snapshot` subcommand (while the system will work without doing so, each initial load will be less efficient).
+:bulb: **NOTE** The Export process only writes events. Each write will replace any snapshots stored in the `u`nfolds space in the Tip with an empty list. This means your next step after 'exporting' will frequently be to point the `EQUINOX_COSMOS_CONTAINER` at the exported version and then run the `snapshot` subcommand (while the system will work without doing so, each initial load will be less efficient).
 
-:bulb: **ASIDE:** You could run the `sync` concurrently with the `snapshot`; the outcome would be correct, but it would typically be inefficient as they'd be duelling for the same RU capacity. Also, depending on whether or not the source events are stored compactly (using Events In Tip), the streams may be written to many times in the course of the export (and each of those appends would mark that stream 'dirty' and hence trigger another visit by the `snapshot` processing)
+:bulb: **ASIDE:** You could run the `export` concurrently with the `snapshot`; the outcome would be correct, but it would typically be inefficient as they'd be duelling for the same RU capacity. Also, depending on whether or not the source events are stored compactly (using Events In Tip), the streams may be written to many times in the course of the export (and each of those appends would mark that stream 'dirty' and hence trigger another visit by the `snapshot` processing)
 
 ## Example: exporting to a local database from a production environment
 
@@ -214,7 +125,7 @@ eqx init -A cosmos -c app-views
 eqx init -A cosmos -c test
 # copy from prod datastore into a temporary (`test`)
 dotnet run --project Indexer -- -w 64 -g defaultSync `
-    sync -s $EQUINOX_COSMOS_CONNECTION -c test -a app-aux `
+    export -s $EQUINOX_COSMOS_CONNECTION -c test -a app-aux `
     source -s $SOURCE_COSMOS_KEY -d productiondb -c app -b 1000
 # apply snapshots to the exported database (optional; things will still work without them)
 dotnet run --project Indexer -- -g defaultSnapshotter `
@@ -226,3 +137,98 @@ dotnet run --project Indexer -- -g defaultIndexer `
 
 - `-w 64`: override normal concurrency of 8
 - `-b 9999`: reduce ChangeFeed Reader messages
+
+# Appendix: Indexing Overview
+
+Over time, the number of events in the system will keep growing. But, you still want to be able to reconstitute the content and/or add a new variant at any time.
+
+This has the following implications:
+- processing can only reasonably work on a batched basis
+- no permanent state should be held in the Views Container; it's literally just a structure that's built up to support the current needs of the system as a whole in terms of providing for efficient traversal of data to support the use cases and performance needs of the overall current mix of read and write paths.
+
+## Key principle: The views Container is ephemeral
+
+In a deployed instance, indexing typically runs as live loop working from the tail of the ChangeFeed.
+
+However, it's important to note that in a well architected event-sourced system, it should be considered absolutely normal to, at the drop of a hat be able to regenerate the views and/or provision a slightly tweaked version of the existing format. The reasons to facilitate such a need might be:
+- to support architectural spike work
+- to support the [Expand and Contract](https://martinfowler.com/bliki/ParallelChange.html) paradigm in general. If it makes sense to clone something and change it slightly to address new needs, one should not be fretting about deferring the work and/or introducign complexity into the Read Model
+- you may want to spin up a clean and/or anonymized clone of an environment. Having to duplicate the anonymization logic for all views can easily be avoided by rebuilding based on the cleansed/anonymized data
+
+It is easy, and should remain easy to validate that a given indexing function works correctly and efficiently: blow away the views container and re-traverse on the desktop or in a sandbox environment.
+
+:bulb: NOTE this is one reason why using Kafka or some form of Service Bus to consume events indirectly is problematic; you need to re-emit all the events to the 'bus'
+
+## Example: Completely regenerating the Views Container
+
+The only real 'state' in the system as a whole is the ChangeFeed processor checkpoint (identified by the Processor Name in the `-g` commandline argument)
+
+If there's ever doubt about the integrity of the state in the Views Container, it should be possible to reconstitute its content at any time via the following steps:
+
+1. delete the Views Container
+2. re-initialize it with `eqx init`
+3. run `index` over all the events from the start of time
+
+## Example: capturing fields from an event into the View Container state that were not previously captured
+
+In general, Indexes should not speculatively hold information that's not being used - writing more than is necessary consumes space and increases RU consumption.
+
+Instead, where a new feature and/or a tweak to an existing one requires previously un-indexed information, one can simply use an [Expand and Contract](https://martinfowler.com/bliki/ParallelChange.html) strategy:
+1. Expand to add the extra information
+    - change the `Category` for the view (i.e. if it was `$TodoIndex`, and a new field is needed, change the `Category` to `$TodoIndex2`)
+    - add the logic to populate the relevant state
+    - run the `index` subcommand (with a fresh _Processor Name_)
+2. Write consumer logic
+3. Deploy. This can be done in two common ways:
+    - (if the consumption logic is not behind a feature flag) as part of the deploy, run the `index` before the system goes live
+    - (if the consumption logic is behind a feature flag):
+        - after the deploy, run an `index` operation
+        - when the index has caught up, enable the feature flag that uses the information it provides
+
+# Appendix: Versioning Events and Snapshots
+
+## Versioning events
+
+All types used in the body of an event need to be able to be safely round-tripped to/from the Event Store. While events are written exactly once, they will live in the store forever, so need to be designed carefully.
+  - NOTE The `export` subcommand affords the possibility of doing a live migration involving upconversion, which may in some cases be an appropriate course of action. This does not invalidate the key point: Event Contracts can and should outlive code
+
+As a result, you want to follow the normal principles of doing changes to message contracts safely:
+- the most obvious thing is: DONT rename fields
+- removing fields is ok (as long as you know no reader anywhere is going to have an exception in their absence)
+- adding new fields as `option`s (assuming you can do something workable in the case where the value is `None)
+
+That said, the most important thing in defining the contract for a normal event sourced event is the semantic intent; if the intent/meaning behind an event is changing, it's normally best to add a new case to the `Event` union to reflect that.
+
+:bulb: Whenever an Event is no longer relevant to the system as a whole, it's safe to remove it from the `type Event` union - Event Types that don't have cases in the union are ignored; there is no impact from the 'missing' events as the Version is never computed solely based on  the count of deserialized events.
+
+There's a wide variety of techniques and established strategies, most of which are covered in https://github.com/jet/fscodec#upconversion
+
+## Versioning snapshots
+
+The `Snapshotted` event in the `type Event =` union is explicitly tagged with a `Name`:
+
+```fsharp
+| [<DataMember(Name = "Snapshotted")>] Snapshotted of Snapshotted
+```
+
+As with any Event, all types used in the body (i.e. the entire tree of types used in the `type Snapshotted` needs to be able to be round-tripped safely to/from the Store).
+
+The same rules above re Versioning Events apply equally.
+
+The critical differences between 'real Events' and `Snapshotted` events are:
+- Snapshotted event are stored in the `u`nfolds field of the tip, and get replaced with a fresh version every time an event is updated
+- It's always theoretically safe to remove the `Snapshotted` case from the Union; no data would be lost. However it does mean that the state will need to be produced from the events, which will likely result in higher latency and RU consumption on the initial load (the Cache means you generally only pay this price once).
+
+The following general rules apply:
+
+- CONSIDER per aggregate whether a `Snapshotted` event is appropriate. It may make sense to avoid even maintaining a snapshot for a given category if streams are short, and you are using Events In Tip mode
+    - the cache will hold the state, and reads and writes don't incur the cost of transmitting the snapshot data
+    - the additional cost of deserializing and folding the events is extremely unlikely to be relevant when considering the overall I/O costs
+- ALWAYS change the `Name` _string_ from `Snapshotted` to `Snapshotted/2`, `Snapshotted/3` etc whenever a breaking change is needed - that removes any risk of a failure to parse the snapshot event body due to changes in the representation.
+
+Given the above arrangements, you can at any time ensure snapshots have been updated in a given environment by running the following command against the Store:
+
+  ```bash
+  # establish prod env vars for EQUINOX_COSMOS_CONNECTION, EQUINOX_COSMOS_DATABASE, EQUINOX_COSMOS_CONTAINER etc
+  dotnet run --project Indexer -- -g deployYYMMDD snapshot
+  ```
