@@ -3,13 +3,17 @@
 open Argu
 open System
 
+let [<Literal>] CONNECTION =                "EQUINOX_COSMOS_CONNECTION"
+let [<Literal>] DATABASE =                  "EQUINOX_COSMOS_DATABASE"
+let [<Literal>] CONTAINER =                 "EQUINOX_COSMOS_CONTAINER"
+
 type Configuration(tryGet: string -> string option) =
 
     let get key = match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
 
-    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
-    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
-    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
+    member _.CosmosConnection =             get CONNECTION
+    member _.CosmosDatabase =               get DATABASE
+    member _.CosmosContainer =              get CONTAINER
 
 //#if (memoryStore || (!cosmos && !eventStore))
 module MemoryStore =
@@ -35,13 +39,13 @@ module Cosmos =
         | [<AltCommandLine "-c">]       Container of string
         interface IArgParserTemplate with
             member p.Usage = p |> function
-                | Verbose ->       "Include low level Store logging."
-                | Retries _ ->          "specify operation retries. Default: 1."
-                | RetriesWaitTime _ ->  "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
-                | ConnectionMode _ ->   "override the connection mode. Default: Direct."
-                | Connection _ ->       "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->         "specify a database name for store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->        "specify a container name for store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
+                | Verbose ->                "Include low level Store logging."
+                | Retries _ ->              "specify operation retries. Default: 1."
+                | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
+                | ConnectionMode _ ->       "override the connection mode. Default: Direct."
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
     type Arguments(c: Configuration, p: ParseResults<Parameters>) =
         let discovery =                     p.GetResult(Connection, fun () -> c.CosmosConnection) |> Equinox.CosmosStore.Discovery.ConnectionString
         let mode =                          p.TryGetResult ConnectionMode
