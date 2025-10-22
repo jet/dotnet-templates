@@ -12,7 +12,7 @@ This project was generated using:
         $env:EQUINOX_COSMOS_CONNECTION="AccountEndpoint=https://....;AccountKey=....=;" # or use -s
         $env:EQUINOX_COSMOS_DATABASE="equinox-test" # or use -d
         $env:EQUINOX_COSMOS_CONTAINER="app" # or use -c
-        $env:EQUINOX_COSMOS_VIEWS="app-views" # or use -c
+        $env:EQUINOX_COSMOS_VIEWS="app-views" # or use -v
 
 1. Use the `eqx` tool to initialize a CosmosDb container
 
