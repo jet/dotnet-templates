@@ -16,54 +16,57 @@ type internal Service internal (transactions: FinalizationTransaction.Service, c
     member internal _.FinalizeContainer(containerId, shipmentIds) =
         containers.Finalize(containerId, shipmentIds)
 
-    member internal _.Step(transactionId, update) =
-        transactions.Step(transactionId, update)
+    member internal _.Read transactionId = transactions.Read transactionId
+    member internal _.Start(transactionId, containerId, shipments) = transactions.Start(transactionId, containerId, shipments) 
+    member internal _.RecordCompleted transactionId = transactions.RecordCompleted transactionId
+    member internal _.RecordAssignmentCompleted transactionId = transactions.RecordAssignmentCompleted transactionId
+    member internal _.RecordReservationCompleted transactionId = transactions.RecordReservationCompleted transactionId
+    member internal _.StartRevert(transactionId, failedReservations) = transactions.StartRevert(transactionId, failedReservations) 
 
 type Manager internal (service: Service, maxDop) =
 
-    let rec run transactionId update = async {
-        let loop updateEvent = run transactionId (Some updateEvent)
-        match! service.Step(transactionId, update) with
+    let handle transactionId phase = async {
+        match phase with
         | Flow.ReserveShipments shipmentIds ->
-            let tryReserve sId = async {
-                let! res = service.TryReserveShipment(sId, transactionId)
-                return if res then None else Some sId
-            }
-
-            let! outcomes = Async.Parallel(shipmentIds |> Seq.map tryReserve, maxDop)
-
-            match Array.choose id outcomes with
+            let! outcomes = Async.parallelLimit maxDop [| for sId in shipmentIds -> service.TryReserveShipment(sId, transactionId) |]
+            match [| for sId, reserved in Seq.zip shipmentIds outcomes do if not reserved then sId |] with
             | [||] ->
-                return! loop Events.ReservationCompleted
+                return! service.RecordReservationCompleted transactionId
             | failedReservations ->
-                let inDoubt = shipmentIds |> Array.except failedReservations
-                return! loop (Events.RevertCommenced {| shipments = inDoubt |})
+                return! service.StartRevert(transactionId, failedReservations)
 
         | Flow.RevertReservations shipmentIds ->
-            let! _ = Async.Parallel(seq { for sId in shipmentIds -> service.RevokeShipmentReservation(sId, transactionId) }, maxDop)
-            return! loop Events.Completed
+            do! Async.parallelDoLimit maxDop [| for sId in shipmentIds -> service.RevokeShipmentReservation(sId, transactionId) |] 
+            return! service.RecordCompleted transactionId
 
         | Flow.AssignShipments (shipmentIds, containerId) ->
-            let! _ = Async.Parallel(seq { for sId in shipmentIds -> service.AssignShipment(sId, transactionId, containerId) }, maxDop)
-            return! loop Events.AssignmentCompleted
+            do! Async.parallelDoLimit maxDop [| for sId in shipmentIds -> service.AssignShipment(sId, transactionId, containerId) |]
+            return! service.RecordAssignmentCompleted transactionId
 
         | Flow.FinalizeContainer (containerId, shipmentIds) ->
             do! service.FinalizeContainer(containerId, shipmentIds)
-            return! loop Events.Completed
+            return! service.RecordCompleted transactionId
 
-        | Flow.Finish result ->
-            return result
-        }
+        | Flow.Finish _ as s -> return s }
+
+    let run transactionId init = async {
+        let rec aux phase = async {
+            match phase with
+            | Flow.Finish res -> return res
+            | phase ->
+                let! next = handle transactionId phase
+                return! aux next }
+        let! phase = init transactionId
+        return! aux phase }
 
     /// Used by watchdog service to drive processing to a conclusion where a given request was orphaned
-    member _.Pump(transactionId: TransactionId) =
-        run transactionId None
+    member _.Pump transactionId =
+         run transactionId service.Read
 
     // Caller should generate the TransactionId via a deterministic hash of the shipmentIds in order to ensure idempotency (and sharing of fate) of identical requests
     member _.TryFinalizeContainer(transactionId, containerId, shipmentIds): Async<bool> =
         if Array.isEmpty shipmentIds then invalidArg "shipmentIds" "must not be empty"
-        let initialRequest = Events.FinalizationRequested {| container = containerId; shipments = shipmentIds |}
-        run transactionId (Some initialRequest)
+        run transactionId (fun id -> service.Start(id, containerId, shipmentIds))
 
 module Factory =
 

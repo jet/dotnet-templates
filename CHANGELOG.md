@@ -18,6 +18,7 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - Target .NET 8 SDK; Target `net8.0` for EXEs [#136](https://github.com/jet/dotnet-templates/pull/136)
 - Target `Equinox` v `4.0.0`, `Propulsion` v `3.0.0`, `FsCodec` v `3.0.0` [#136](https://github.com/jet/dotnet-templates/pull/136)
 - Target `Argu` v `6.0.14` [#135](https://github.com/jet/dotnet-templates/pull/135)
+- `eqxShipping`: Clarified reactor logic (removed `isValidTransition` anti-pattern) [#137](https://github.com/jet/dotnet-templates/pull/1377
 
 ### Removed 
  
