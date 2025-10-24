@@ -10,7 +10,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 ### Added
 
-- `proIndexer`: Template demonstrating a reactor app that maintais a summarised form of an Aggregate's as `RollingState` in a separated `Views` Container [#132](https://github.com/jet/dotnet-templates/pull/132)
+- `proIndexer`: Template demonstrating a reactor app that maintains a summarized form of an Aggregate's state as `RollingState` in a separated `Views` Container, with `snapshot` and `sync` subcommands [#132](https://github.com/jet/dotnet-templates/pull/132)
+- `proIndexer`: Added `export` and `stats` commands; Added file source support [#138](https://github.com/jet/dotnet-templates/pull/138)
 
 ### Changed
 
