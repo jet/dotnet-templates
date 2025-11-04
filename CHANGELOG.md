@@ -9,6 +9,14 @@ The `Unreleased` section name is replaced by the expected version of next releas
 ## [Unreleased]
 
 ### Added
+### Changed
+### Removed
+### Fixed
+
+<a name="7.0.0"></a>
+## [7.0.0] - 2025-11-04
+
+### Added
 
 - `proIndexer`: Template demonstrating a reactor app that maintains a summarized form of an Aggregate's state as `RollingState` in a separated `Views` Container, with `snapshot` and `sync` subcommands [#132](https://github.com/jet/dotnet-templates/pull/132)
 - `proIndexer`: Added `export` and `stats` commands; Added file source support [#138](https://github.com/jet/dotnet-templates/pull/138)
@@ -18,13 +26,11 @@ The `Unreleased` section name is replaced by the expected version of next releas
 - Target .NET 8 SDK; Target `net8.0` for EXEs [#136](https://github.com/jet/dotnet-templates/pull/136)
 - Target `Equinox` v `4.0.0`, `Propulsion` v `3.0.0`, `FsCodec` v `3.0.0` [#136](https://github.com/jet/dotnet-templates/pull/136)
 - Target `Argu` v `6.0.14` [#135](https://github.com/jet/dotnet-templates/pull/135)
-- `eqxShipping`: Clarified reactor logic (removed `isValidTransition` anti-pattern) [#137](https://github.com/jet/dotnet-templates/pull/1377
+- `eqxShipping`: Clarified reactor logic (removed `isValidTransition` anti-pattern) [#137](https://github.com/jet/dotnet-templates/pull/137)
 
 ### Removed 
  
 - `proCosmosReactor`: Extended/split to become `proIndexer` [#132](https://github.com/jet/dotnet-templates/pull/132)
-
-### Fixed
 
 <a name="6.3.1"></a>
 ## [6.3.1] - 2023-06-12
@@ -644,7 +650,8 @@ The `Unreleased` section name is replaced by the expected version of next releas
 
 (For information pertaining to earlier releases, see release notes in https://github.com/jet/dotnet-templates/releases and/or can someone please add it!)
 
-[Unreleased]: https://github.com/jet/dotnet-templates/compare/6.3.1...HEAD
+[Unreleased]: https://github.com/jet/dotnet-templates/compare/7.0.0...HEAD
+[7.0.0]: https://github.com/jet/dotnet-templates/compare/6.3.1...7.0.0
 [6.3.1]: https://github.com/jet/dotnet-templates/compare/6.3.0...6.3.1
 [6.3.0]: https://github.com/jet/dotnet-templates/compare/6.2.0...6.3.0
 [6.2.0]: https://github.com/jet/dotnet-templates/compare/6.1.0...6.2.0

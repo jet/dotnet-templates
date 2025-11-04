@@ -7,6 +7,7 @@
     <PackageProjectUrl>https://github.com/jet/dotnet-templates</PackageProjectUrl>
     <PackageTags>equinox fsharp eventsourcing cosmosdb dynamodb eventstore changefeedprocessor kafka benchmark</PackageTags>
     <PackageLicense>Apache-2.0</PackageLicense>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <Copyright>Copyright © 2018-25</Copyright>
 
     <TargetFramework>netstandard2.0</TargetFramework>
