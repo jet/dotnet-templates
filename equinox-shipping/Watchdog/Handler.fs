@@ -50,8 +50,7 @@ let handle
         | TransactionWatchdog.Stuck ->
             let! success = driveTransaction transId
             return Outcome.Resolved success, Propulsion.Sinks.Events.next events
-    | other ->
-        return failwithf "Span from unexpected category %A" other }
+    | sn, _xs -> return failwith $"Span from unexpected category %s{FsCodec.StreamName.toString sn}" }
 
 type Factory private () =
     

@@ -7,14 +7,18 @@ open System.Text
 open System.Threading
 open System.Threading.Tasks
 
+module Store =
+
+    module Metrics =
+        
+        let [<Literal>] PropertyTag = "isMetric"
+        let log = Log.ForContext(PropertyTag, true)
+        /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+        let logEventIsMetric e = Filters.Matching.WithProperty(PropertyTag).Invoke e
+
 module EnvVar =
 
     let tryGet varName: string option = Environment.GetEnvironmentVariable varName |> Option.ofObj
-
-module Log =
-
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
 
 type Equinox.CosmosStore.CosmosStoreContext with
 
@@ -55,11 +59,11 @@ module Sinks =
 
     let equinoxAndPropulsionConsumerMetrics tags group (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
+          |> _.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags, group))
 
     let equinoxAndPropulsionFeedConsumerMetrics tags source (l: LoggerConfiguration) =
         l |> equinoxAndPropulsionConsumerMetrics tags (Propulsion.Feed.SourceId.toString source)
-          |> fun l -> l.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
+          |> _.WriteTo.Sink(Propulsion.Feed.Prometheus.LogSink(tags))
 
     let console (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
@@ -86,7 +90,7 @@ type Logging() =
 
     [<System.Runtime.CompilerServices.Extension>]
     static member Sinks(configuration: LoggerConfiguration, configureMetricsSinks, verboseStore) =
-        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Log.isStoreMetrics)
+        configuration.Sinks(configureMetricsSinks, Sinks.console, ?isMetric = if verboseStore then None else Some Store.Metrics.logEventIsMetric)
 
 type Async with
     static member Sleep(t: TimeSpan): Async<unit> = Async.Sleep(int t.TotalMilliseconds)
@@ -154,6 +158,7 @@ type HttpClient with
     ///     Drop-in replacement for HttpClient.SendAsync which addresses known timeout issues
     /// </summary>
     /// <param name="msg">HttpRequestMessage to be submitted.</param>
+    /// <param name="ct">The Cancellation Token.</param>
     member client.Send2(msg: HttpRequestMessage, ct: CancellationToken) = task {
         try return! client.SendAsync(msg, ct)
         // address https://github.com/dotnet/corefx/issues/20296
@@ -196,21 +201,6 @@ type InvalidHttpResponseException =
             let getBodyString str = if String.IsNullOrWhiteSpace str then "<null>" else str
             sb.Appendfn "RequestBody=%s" (getBodyString e.RequestBody)
             sb.Appendfn "ResponseBody=%s" (getBodyString e.ResponseBody))
-
-    interface ISerializable with
-        member e.GetObjectData(si: SerializationInfo, sc: StreamingContext) =
-            let add name (value:obj) = si.AddValue(name, value)
-            base.GetObjectData(si, sc) ; add "userMessage" e.userMessage ;
-            add "requestUri" e.RequestUri ; add "requestMethod" e.requestMethod ; add "requestBody" e.RequestBody
-            add "statusCode" e.StatusCode ; add "reasonPhrase" e.ReasonPhrase ; add "responseBody" e.ResponseBody
-
-    new (si: SerializationInfo, sc: StreamingContext) =
-        let get name = si.GetValue(name, typeof<'a>) :?> 'a
-        {
-            inherit Exception(si, sc) ; userMessage = get "userMessage" ;
-            RequestUri = get "requestUri" ; requestMethod = get "requestMethod" ; RequestBody = get "requestBody" ;
-            StatusCode = get "statusCode" ; ReasonPhrase = get "reasonPhrase" ; ResponseBody = get "responseBody"
-        }
 
     static member Create(userMessage: string, response: HttpResponseMessage, ?innerException: exn) = async {
         let request = response.RequestMessage

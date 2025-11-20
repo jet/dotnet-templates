@@ -5,8 +5,6 @@
         <TargetFramework>net6.0</TargetFramework>
         <WarningLevel>5</WarningLevel>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <!-- TODO remove, only required if you have a very old SDK -->
-        <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     </PropertyGroup>
 
     <ItemGroup>
@@ -20,11 +18,11 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Equinox.CosmosStore" Version="4.1.0-rc.1" />
-      <PackageReference Include="Equinox.DynamoStore" Version="4.1.0-rc.1" />
-      <PackageReference Include="Equinox.EventStoreDb" Version="4.1.0-rc.1" />
-      <PackageReference Include="Equinox.MemoryStore" Version="4.1.0-rc.1" />
-      <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0-rc.3" />
+      <PackageReference Include="Equinox.CosmosStore" Version="4.1.0" />
+      <PackageReference Include="Equinox.DynamoStore" Version="4.1.0" />
+      <PackageReference Include="Equinox.EventStoreDb" Version="4.1.0" />
+      <PackageReference Include="Equinox.MemoryStore" Version="4.1.0" />
+      <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0" />
     </ItemGroup>
 
 </Project>

@@ -3,11 +3,12 @@
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <WarningLevel>5</WarningLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Infrastructure.fs" />
     <Compile Include="Store.fs" />
+    <Compile Include="Infrastructure.fs" />
 	<!--#if (aggregate)-->
 	<Compile Include="Aggregate.fs" />
 	<!--#endif-->
@@ -17,11 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox.CosmosStore" Version="4.1.0-rc.1" />
-    <PackageReference Include="Equinox.DynamoStore" Version="4.1.0-rc.1" />
-    <PackageReference Include="Equinox.EventStoreDb" Version="4.1.0-rc.1" />
-    <PackageReference Include="Equinox.MemoryStore" Version="4.1.0-rc.1" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0-rc.3" />
+    <PackageReference Include="Equinox.CosmosStore" Version="4.1.0" />
+    <PackageReference Include="Equinox.DynamoStore" Version="4.1.0" />
+    <PackageReference Include="Equinox.EventStoreDb" Version="4.1.0" />
+    <PackageReference Include="Equinox.MemoryStore" Version="4.1.0" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0" />
   </ItemGroup>
 
 </Project>

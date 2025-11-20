@@ -31,17 +31,16 @@ type [<NoEquality; NoComparison>] CosmosParameters =
         member p.Usage = p |> function
             | Verbose ->                    "request Verbose Logging from Store. Default: off"
             | ConnectionMode _ ->           "override the connection mode. Default: Direct."
-            | Connection _ ->               $"specify a connection string for a Cosmos account. (optional if environment variable ${CONNECTION} specified)"
-            | Database _ ->                 $"specify a database name for store. (optional if environment variable ${DATABASE} specified)"
-            | Container _ ->                $"specify a container name for store. (optional if environment variable ${CONTAINER} specified)"
-            | Views _ ->                    $"specify a views Container name for Cosmos views. (optional if environment variable ${VIEWS} specified)"
+            | Connection _ ->               $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+            | Database _ ->                 $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+            | Container _ ->                $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
+            | Views _ ->                    $"specify a views Container name for Cosmos views. (optional if environment variable $%s{VIEWS} specified)"
             | Timeout _ ->                  "specify operation timeout in seconds. Default: 5."
             | Retries _ ->                  "specify operation retries. Default: 1."
             | RetriesWaitTime _ ->          "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
 and CosmosArguments(c: Configuration, p: ParseResults<CosmosParameters>) =
     let connection =                        p.GetResult(Connection, fun () -> c.CosmosConnection)
     let connector =
-        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let mode =                          p.TryGetResult ConnectionMode
@@ -73,10 +72,10 @@ type [<NoEquality; NoComparison>] CosmosSourceParameters =
         member p.Usage = p |> function
             | Verbose ->                    "request Verbose Logging from ChangeFeedProcessor and Store. Default: off"
             | ConnectionMode _ ->           "override the connection mode. Default: Direct."
-            | Connection _ ->               $"specify a connection string for a Cosmos account. (optional if environment variable {CONNECTION} specified)"
-            | Database _ ->                 $"specify a database name for store. (optional if environment variable {DATABASE} specified)"
-            | Container _ ->                $"specify a container name for store. (optional if environment variable {CONTAINER} specified)"
-            | Views _ ->                    $"specify a container name for views container. (optional if environment variable {VIEWS} specified)"
+            | Connection _ ->               $"specify a connection string for a Cosmos account. (optional if environment variable %s{CONNECTION} specified)"
+            | Database _ ->                 $"specify a database name for store. (optional if environment variable %s{DATABASE} specified)"
+            | Container _ ->                $"specify a container name for store. (optional if environment variable %s{CONTAINER} specified)"
+            | Views _ ->                    $"specify a container name for views container. (optional if environment variable %s{VIEWS} specified)"
             | Timeout _ ->                  "specify operation timeout in seconds. Default: 5."
             | Retries _ ->                  "specify operation retries. Default: 1."
             | RetriesWaitTime _ ->          "specify max wait-time for retry when being throttled by Cosmos in seconds. Default: 5."
@@ -89,7 +88,6 @@ type [<NoEquality; NoComparison>] CosmosSourceParameters =
 and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParameters>) =
     let connection =                        p.GetResult(Connection, fun () -> c.CosmosConnection)
     let connector =
-        let timeout =                       p.GetResult(Timeout, 5.) |> TimeSpan.FromSeconds
         let retries =                       p.GetResult(Retries, 1)
         let maxRetryWaitTime =              p.GetResult(RetriesWaitTime, 5.) |> TimeSpan.FromSeconds
         let mode =                          p.TryGetResult ConnectionMode

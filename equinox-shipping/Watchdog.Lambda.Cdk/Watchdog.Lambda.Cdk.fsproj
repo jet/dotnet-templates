@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
+        <TargetFramework>net8.0</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 
         <OutputType>Exe</OutputType>
         <!-- Opt into Roll forward to future major versions as needed -->
@@ -20,7 +22,7 @@
         <!-- jsii Roslyn analyzers (un-comment to obtain compile-time checks for missing required props-->
         <!-- <PackageReference Include="Amazon.Jsii.Analyzers" Version="*" PrivateAssets="all" />-->
 
-        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0-rc.14.10" />
+        <PackageReference Include="Propulsion.DynamoStore.Constructs" Version="3.0.0" />
     </ItemGroup>
 
 </Project>

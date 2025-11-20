@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net6.0</TargetFramework>
+        <TargetFramework>net8.0</TargetFramework>
+        <WarningLevel>5</WarningLevel>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         
         <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
         <AWSProjectType>Lambda</AWSProjectType>
@@ -16,7 +18,7 @@
     <ItemGroup>
         <PackageReference Include="Amazon.Lambda.Core" Version="2.1.0" />
         <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.3.0" />
-        <PackageReference Include="Propulsion.DynamoStore.Lambda" Version="3.0.0-rc.14.10" />
+        <PackageReference Include="Propulsion.DynamoStore.Lambda" Version="3.0.0" />
     </ItemGroup>
     <ItemGroup>
       <ProjectReference Include="..\Watchdog\Watchdog.fsproj" />

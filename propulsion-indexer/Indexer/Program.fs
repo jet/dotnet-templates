@@ -65,11 +65,11 @@ module Args =
         let incIndexes = p.Contains IncIdx
         let allowEts, denyEts = p.GetResults IncEvent, p.GetResults ExcEvent
         let isPlain = Seq.forall (fun x -> Char.IsLetterOrDigit x || x = '_')
-        let asRe = Seq.map (fun x -> if isPlain x then $"^{x}$" else x)
+        let asRe = Seq.map (fun x -> if isPlain x then $"^%s{x}$" else x)
         let (|Filter|) exprs =
             let values, pats = List.partition isPlain exprs
             let valuesContains = let set = System.Collections.Generic.HashSet(values) in set.Contains
-            let aPatternMatches x = pats |> List.exists (fun p -> System.Text.RegularExpressions.Regex.IsMatch(x, p))
+            let aPatternMatches (x: string) = pats |> List.exists (fun p -> System.Text.RegularExpressions.Regex.IsMatch(x, p))
             fun cat -> valuesContains cat || aPatternMatches cat
         let filter map (allow, deny) =
             match allow, deny with
@@ -155,7 +155,7 @@ module Args =
                                             | Choice2Of2 f, Index _ ->
                                                 let! contexts = f.Connect()
                                                 return Choice2Of3 (f.Filepath, (f.Skip, f.Trunc), store contexts)
-                                            | Choice2Of2 _, (Summarize _ | Snapshot _ as x) -> return x |> failwithf "unexpected %A"
+                                            | Choice2Of2 _, (Summarize _ | Snapshot _ as x) -> return failwith $"unexpected %A{x}"
                                             | Choice1Of2 c, action ->
                                                 let lsc = match action with Snapshot _ -> true | _ -> false
                                                 let! contexts, monitored, leases = c.ConnectWithFeed(lsc = lsc)
@@ -287,12 +287,12 @@ let build (args: Args.Arguments) = async {
             | Args.Action.SummarizeFile _ -> summarize ()
             | Args.Action.Sync a -> sync a
             | Args.Action.Export a -> export a
-            | x -> x |> failwithf "unexpected %A"
+            | x -> failwith $"unexpected %A{x}"
     | Choice2Of3 (filePath, skipTrunc, store) -> // Index from file to store (no change feed involved)
         return mkFileSource filePath skipTrunc <||
             match args.Action with
             | Args.Action.Index _ -> index store
-            | x -> x |> failwithf "unexpected %A"
+            | x -> failwith $"unexpected %A{x}"
     | Choice3Of3 (monitored, leases, (startFromTail, maxItems, tailSleepInterval, _lagFrequency), store) -> // normal case - consume from change feed, write to store
         let parseFeedDoc, sink =
             match args.Action with
@@ -301,7 +301,7 @@ let build (args: Args.Arguments) = async {
             | Args.Action.Snapshot _ -> snapshot store
             | Args.Action.Sync a -> sync a
             | Args.Action.Export a -> export a
-            | Args.Action.SummarizeFile _ as x -> x |> failwithf "unexpected %A"
+            | Args.Action.SummarizeFile _ as x -> failwith $"unexpected %A{x}"
         let source =
             Propulsion.CosmosStore.CosmosStoreSource(
                 Log.Logger, args.StatsInterval, monitored, leases, processorName, parseFeedDoc, sink,

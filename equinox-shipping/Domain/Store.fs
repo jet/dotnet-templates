@@ -2,7 +2,9 @@ module Store
 
 module Metrics = 
 
-    let log = Serilog.Log.ForContext("isMetric", true)
+    let [<Literal>] PropertyTag = "isMetric"
+    let log = Serilog.Log.ForContext(PropertyTag, true)
+    let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 

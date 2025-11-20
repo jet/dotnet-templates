@@ -7,7 +7,7 @@ module Outcome =
     let private create sn ham spam: Outcome = struct (FsCodec.StreamName.Category.ofStreamName sn, ham, spam)
     let render sn ham spam = create sn ham (eventCounts spam)
     let render_ sn ham spam elapsedS =
-        let share = TimeSpan.s(match Array.length ham with 0 -> 0 | count -> elapsedS / float count)
+        let share = TimeSpan.s (match Array.length ham with 0 -> 0 | count -> elapsedS / float count)
         create sn (ham |> Array.map (fun x -> struct (eventType x, share))) (eventCounts spam)
 
 [<AbstractClass>]

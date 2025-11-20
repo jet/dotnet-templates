@@ -155,8 +155,7 @@ type Startup() =
                     "AccountEndpoint=https://localhost:8081;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;"
                 Store.Config.Cosmos (Microsoft.Azure.Cosmos.ConnectionMode.Direct, wellKnownConnectionStringForCosmosDbSimulator, database, container, cacheMb)
 //#endif
-            | _ ->
-                failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s, %s" connectionVar databaseVar containerVar
+            | _ -> failwith $"Event Storage subsystem requires the following Environment Variables to be specified: %s{connectionVar}, %s{databaseVar}, %s{containerVar}"
 
 //#endif
 //#if dynamo
@@ -166,8 +165,7 @@ type Startup() =
             match read regionVar, read tableVar with
             | Some region, Some table ->
                 Store.Config.Dynamo (region, table, cacheMb)
-            | _ ->
-                failwithf "Event Storage subsystem requires the following Environment Variables to be specified: %s, %s" regionVar tableVar
+            | _ -> failwith $"Event Storage subsystem requires the following Environment Variables to be specified: %s{regionVar}, %s{tableVar}"
 
 //#endif
 #if (memoryStore && !cosmos && !dynamo && !eventStore)

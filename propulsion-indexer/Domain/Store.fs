@@ -32,7 +32,8 @@ module Snapshotter =
     let decide generate dryRun (hasSnapshot, state) =
         if hasSnapshot then Valid, Array.empty
         elif dryRun then Invalid, Array.empty
-        // Note Updated is a synthetic/tentative event, which transmuteAllEventsToUnfolds will use as a signal to a) update the unfolds b) drop the event
+        // Note the events being returned here will intercepted by the AccessStrategy's `transmuteAllEventsToUnfolds` function,
+        // which will ensure they a) replace the contents of `unfolds` buffer in the Tip and b) are not used as actual events
         else Updated, generate state
     type private StateWithSnapshottedFlag<'s> = bool * 's
     type Service<'id, 'e, 's> internal (resolve: 'id -> Equinox.Decider<'e, StateWithSnapshottedFlag<'s>>, generate: 's -> 'e[]) =
@@ -41,9 +42,7 @@ module Snapshotter =
             decider.TransactWithPostVersion(decide generate dryRun)
     module Service =
         let tryUpdate dryRun (x: Service<_, _, _>) id = x.TryUpdate(id, dryRun)
-    let internal createService streamId generate cat =
-        let resolve = streamId >> createDecider cat
-        Service(resolve, generate)
+    let internal createService streamId generate cat = Service(streamId >> createDecider cat, generate)
 
     let internal initial'<'s> initial: StateWithSnapshottedFlag<'s> = false, initial
     let internal fold' isValidUnfolds fold (_wasOrigin, s) xs: StateWithSnapshottedFlag<'s> =
@@ -72,16 +71,14 @@ module Ingester =
         for x in inputs do
             if x.Index >= c.Version then // NOTE source and target need to have 1:1 matching event indexes, or things would be much more complex
                 match inputCodec.Decode x with
-                | ValueNone -> failwith $"Unknown EventType {x.EventType} at index {x.Index}"
+                | ValueNone -> failwith $"Unknown EventType %s{x.EventType} at index %d{x.Index}"
                 | ValueSome d -> struct (x, d) |] // So we require all source events to exactly one event in the target
 
-    type Service<'id, 'e, 's, 'f> internal (codec: IEventCodec<'e, 'f, unit>, resolve: 'id -> Equinox.Decider<Event<'e, 'f>, State>) =
+    type Service<'id, 'e, 's, 'f> internal (resolve: 'id -> Equinox.Decider<Event<'e, 'f>, State>, codec: IEventCodec<'e, 'f, unit>) =
         member _.Ingest(id, sourceEvents: ITimelineEvent<'f>[]): Async<int64> =
             let decider = resolve id
             decider.TransactEx(decide codec sourceEvents, fun (x: Equinox.ISyncContext<State>) -> x.Version)
-    let internal createService<'id, 'e, 'f> streamId inputCodec cat =
-        let resolve = streamId >> createDecider cat
-        Service<'id, 'e, unit, 'f>(inputCodec, resolve)
+    let internal createService<'id, 'e, 'f> streamId inputCodec cat = Service<'id, 'e, unit, 'f>(streamId >> createDecider cat, inputCodec)
     module Service =
         let ingest (svc: Service<'id, 'e, 's, System.Text.Json.JsonElement>) id (events: ITimelineEvent<Encoded>[]) =
             let events = events |> Array.map (FsCodec.Core.TimelineEvent.mapBodies FsCodec.SystemTextJson.Encoding.Utf8EncodedToJsonElement)
@@ -108,7 +105,7 @@ module Cosmos =
         | None -> FsCodec.SystemTextJson.Encoder.Uncompressed codec
         | Some predicate -> FsCodec.SystemTextJson.Encoder.Compressed(codec, shouldCompress = fun (x: FsCodec.IEventData<System.Text.Json.JsonElement>) -> predicate x.EventType)
     let private createCached name codec initial fold accessStrategy shouldCompress (context, cache) =
-        CosmosStoreCategory(context, name,eventEncoding codec shouldCompress, fold, initial, accessStrategy, cacheStrategy cache)
+        CosmosStoreCategory(context, name, eventEncoding codec shouldCompress, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot, shouldCompress) (context, cache) =
         let accessStrategy = AccessStrategy.Snapshot (isOrigin, toSnapshot)
@@ -128,10 +125,10 @@ module Cosmos =
             AccessStrategy.Custom (isOrigin, transmuteAllEventsToUnfolds)
         let private createCategory name codec initial fold isValidUnfolds accessStrategy shouldCompress (contexts, cache) =
             createCached name codec (Snapshotter.initial' initial) (Snapshotter.fold' isValidUnfolds fold) accessStrategy shouldCompress (contexts.snapshotUpdate, cache)
-        /// Equinox allows any number of unfold events to be stored:
-        /// - the `isOrigin` predicate identifies the "main snapshot" - if it returns `true`, we don't need to load and fold based on events
-        /// - `isValidUnfolds` inspects the full set of unfolds in order to determine whether they are complete
-        ///   - where Index Unfolds are required for application functionality, we can trigger regeneration where they are missing
+        /// <summary>Equinox allows any number of unfold events to be stored:<br />
+        /// - the `isOrigin` predicate identifies the "main snapshot" - if it returns `true`, we don't need to load and fold based on events<br />
+        /// - `isValidUnfolds` inspects the full set of unfolds in order to determine whether they are complete<br />
+        ///   - where Index Unfolds are required for application functionality, we can trigger regeneration where they are missing</summary>
         let withIndexing codec initial fold (isOrigin, isValidUnfolds, generateUnfolds, shouldCompress) streamId categoryName config forceLoadingAllEvents =
             let accessStrategy = (if forceLoadingAllEvents then fun _ -> false else isOrigin) |> accessStrategy
             let cat = config |> function

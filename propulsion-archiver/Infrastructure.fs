@@ -6,7 +6,12 @@ open System
 
 module Store =
 
-    let log = Log.ForContext("isMetric", true)
+    module Metrics =
+        
+        let [<Literal>] PropertyTag = "isMetric"
+        let log = Log.ForContext(PropertyTag, true)
+        /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+        let logEventIsMetric e = Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 module EnvVar =
 
@@ -14,8 +19,6 @@ module EnvVar =
 
 module Log =
 
-    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
-    let isStoreMetrics e = Filters.Matching.WithProperty("isMetric").Invoke e
     /// The Propulsion.Streams.Prometheus LogSink uses this well-known property to identify consumer group associated with the Scheduler
     let forGroup group = Log.ForContext("group", group)
 
@@ -31,11 +34,11 @@ module Sinks =
 
     let equinoxAndPropulsionConsumerMetrics tags (l: LoggerConfiguration) =
         l |> equinoxMetricsOnly tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags))
+          |> _.WriteTo.Sink(Propulsion.Prometheus.LogSink(tags))
 
     let equinoxAndPropulsionCosmosConsumerMetrics tags (l: LoggerConfiguration) =
         l |> equinoxAndPropulsionConsumerMetrics tags
-          |> fun l -> l.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
+          |> _.WriteTo.Sink(Propulsion.CosmosStore.Prometheus.LogSink(tags))
 
     let console verbose (configuration: LoggerConfiguration) =
         let t = "[{Timestamp:HH:mm:ss} {Level:u1}] {Message:lj} {Properties:j}{NewLine}{Exception}"
@@ -77,7 +80,7 @@ type Logging() =
                             m.ru < minRu
                         | _ -> false
                     let isTooCheapToShow = match minRu with Some mru -> isCheaperThan mru | None -> fun _ -> false
-                    let metricFilter = if logSyncToConsole then None else Some (fun x -> Log.isStoreMetrics x || isWriterB x || isTooCheapToShow x)
+                    let metricFilter = if logSyncToConsole then None else Some (fun x -> Store.Metrics.logEventIsMetric x || isWriterB x || isTooCheapToShow x)
                     c.Sinks(Sinks.equinoxAndPropulsionCosmosConsumerMetrics (Sinks.tags appName), Sinks.console verbose, ?isMetric = metricFilter)
 
 module CosmosStoreConnector =

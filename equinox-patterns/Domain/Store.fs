@@ -24,7 +24,7 @@ let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, 
 module Cosmos =
 
     let private createCached name codec initial fold accessStrategy (context, cache) =
-        Equinox.CosmosStore.CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy cache)
+        Equinox.CosmosStore.CosmosStoreCategory(context, name, FsCodec.SystemTextJson.Encoder.Uncompressed codec, fold, initial, accessStrategy, cacheStrategy cache)
 
     let createUnoptimized name codec initial fold (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.Unoptimized

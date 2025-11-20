@@ -1,8 +1,11 @@
 module TestbedTemplate.Store
 
-module Metrics = 
-
-    let log = Serilog.Log.ForContext("isMetric", true)
+module Metrics =
+    
+    let [<Literal>] PropertyTag = "isMetric"
+    let log = Serilog.Log.ForContext(PropertyTag, true)
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
@@ -23,7 +26,7 @@ module Memory =
 module Cosmos =
 
     let create name codec initial fold accessStrategy cacheStrategy context =
-        Equinox.CosmosStore.CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy)
+        Equinox.CosmosStore.CosmosStoreCategory(context, name, FsCodec.SystemTextJson.Encoder.Uncompressed codec, fold, initial, accessStrategy, cacheStrategy)
 
 module Esdb =
 

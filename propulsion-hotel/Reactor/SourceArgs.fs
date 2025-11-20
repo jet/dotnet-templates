@@ -89,10 +89,10 @@ module Mdb =
         | [<AltCommandLine "-Z"; Unique>]   FromTail
         interface IArgParserTemplate with
             member a.Usage = a |> function
-                | ConnectionString _ ->     $"Connection string for the postgres database housing message-db when writing. (Optional if environment variable {CONNECTION_STRING} is defined)"
-                | ReadConnectionString _ -> $"Connection string for the postgres database housing message-db when reading. (Defaults to the (write) Connection String; Optional if environment variable {READ_CONN_STRING} is defined)"
+                | ConnectionString _ ->     $"Connection string for the postgres database housing message-db when writing. (Optional if environment variable %s{CONNECTION_STRING} is defined)"
+                | ReadConnectionString _ -> $"Connection string for the postgres database housing message-db when reading. (Defaults to the (write) Connection String; Optional if environment variable %s{READ_CONN_STRING} is defined)"
                 | CheckpointConnectionString _ -> "Connection string used for the checkpoint store. If not specified, defaults to the connection string argument"
-                | CheckpointSchema _ ->     $"Schema that should contain the checkpoints table. Optional if environment variable {SCHEMA} is defined"
+                | CheckpointSchema _ ->     $"Schema that should contain the checkpoints table. Optional if environment variable %s{SCHEMA} is defined"
                 | BatchSize _ ->            "maximum events to load in a batch. Default: 1000"
                 | TailSleepIntervalMs _ ->  "How long to sleep in ms once the consumer has hit the tail (default: 100ms)"
                 | FromTail ->               "(iff the Consumer Name is fresh) - force skip to present Position. Default: Never skip an event."

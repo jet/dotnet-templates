@@ -2,11 +2,13 @@
 
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
+    <WarningLevel>5</WarningLevel>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Equinox" Version="4.1.0-rc.1" />
-    <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0-rc.3" />
+    <PackageReference Include="Equinox" Version="4.1.0" />
+    <PackageReference Include="FsCodec.SystemTextJson" Version="3.1.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
   </ItemGroup>
 

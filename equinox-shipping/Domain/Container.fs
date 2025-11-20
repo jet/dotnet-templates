@@ -11,7 +11,7 @@ module Events =
 
     type Event =
         | Finalized   of {| shipmentIds: ShipmentId[] |}
-        | Snapshotted of {| shipmentIds: ShipmentId[] |}
+        | [<DataMember(Name = "Snapshotted")>] Snapshotted of {| shipmentIds: ShipmentId[] |}
         interface TypeShape.UnionContract.IUnionContract
     let codec, codecJe = Store.Codec.gen<Event>, Store.Codec.genJsonElement<Event>
 

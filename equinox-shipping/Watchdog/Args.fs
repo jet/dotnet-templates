@@ -11,14 +11,18 @@ let [<Literal>] SECRET_KEY =                "EQUINOX_DYNAMO_SECRET_ACCESS_KEY"
 let [<Literal>] TABLE =                     "EQUINOX_DYNAMO_TABLE"
 let [<Literal>] INDEX_TABLE =               "EQUINOX_DYNAMO_TABLE_INDEX"
 
+let [<Literal>] CONNECTION =                "EQUINOX_COSMOS_CONNECTION"
+let [<Literal>] DATABASE =                  "EQUINOX_COSMOS_DATABASE"
+let [<Literal>] CONTAINER =                 "EQUINOX_COSMOS_CONTAINER"
+
 type Configuration(tryGet: string -> string option) =
 
     let get key =                           match tryGet key with Some value -> value | None -> failwith $"Missing Argument/Environment Variable %s{key}"
     member val tryGet =                     tryGet
 
-    member _.CosmosConnection =             get "EQUINOX_COSMOS_CONNECTION"
-    member _.CosmosDatabase =               get "EQUINOX_COSMOS_DATABASE"
-    member _.CosmosContainer =              get "EQUINOX_COSMOS_CONTAINER"
+    member x.CosmosConnection =             get CONNECTION
+    member x.CosmosDatabase =               get DATABASE
+    member x.CosmosContainer =              get CONTAINER
 
     member _.DynamoServiceUrl =             get SERVICE_URL
     member _.DynamoAccessKey =              get ACCESS_KEY
@@ -48,9 +52,9 @@ module Cosmos =
             member p.Usage = p |> function
                 | Verbose ->                "request verbose logging."
                 | ConnectionMode _ ->       "override the connection mode. Default: Direct."
-                | Connection _ ->           "specify a connection string for a Cosmos account. (optional if environment variable EQUINOX_COSMOS_CONNECTION specified)"
-                | Database _ ->             "specify a database name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_DATABASE specified)"
-                | Container _ ->            "specify a container name for Cosmos store. (optional if environment variable EQUINOX_COSMOS_CONTAINER specified)"
+                | Connection _ ->           $"specify a connection string for a Cosmos account. (optional if environment variable $%s{CONNECTION} specified)"
+                | Database _ ->             $"specify a database name for store. (optional if environment variable $%s{DATABASE} specified)"
+                | Container _ ->            $"specify a container name for store. (optional if environment variable $%s{CONTAINER} specified)"
                 | Retries _ ->              "specify operation retries (default: 1)."
                 | RetriesWaitTime _ ->      "specify max wait-time for retry when being throttled by Cosmos in seconds (default: 5)"
 
@@ -80,8 +84,8 @@ module Dynamo =
         interface IArgParserTemplate with
             member p.Usage = p |> function
                 | Verbose ->                "Include low level Store logging."
-                | RegionProfile _ ->        "specify an AWS Region (aka System Name, e.g. \"us-east-1\") to connect to using the implicit AWS SDK/tooling config and/or environment variables etc. Optional if:\n" +
-                                            "1) $" + REGION + " specified OR\n" +
+                | RegionProfile _ ->        $"specify an AWS Region (aka System Name, e.g. \"us-east-1\") to connect to using the implicit AWS SDK/tooling config and/or environment variables etc. Optional if:\n" +
+                                            "1) $%s{REGION} specified OR\n" +
                                             "2) Explicit `ServiceUrl`/$" + SERVICE_URL + "+`AccessKey`/$" + ACCESS_KEY + "+`Secret Key`/$" + SECRET_KEY + " specified.\n" +
                                             "See https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html for details"
                 | ServiceUrl _ ->           "specify a server endpoint for a Dynamo account. (Not applicable if `ServiceRegion`/$" + REGION + " specified; Optional if $" + SERVICE_URL + " specified)"

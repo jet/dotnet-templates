@@ -1,8 +1,11 @@
 module FeedSourceTemplate.Domain.Store
 
-module Metrics = 
-
-    let log = Serilog.Log.ForContext("isMetric", true)
+module Metrics =
+    
+    let [<Literal>] PropertyTag = "isMetric"
+    let log = Serilog.Log.ForContext(PropertyTag, true)
+    /// Allow logging to filter out emission of log messages whose information is also surfaced as metrics
+    let logEventIsMetric e = Serilog.Filters.Matching.WithProperty(PropertyTag).Invoke e
 
 let createDecider cat = Equinox.Decider.forStream Metrics.log cat
 
@@ -20,7 +23,7 @@ module Cosmos =
 
     let private createCached name codec initial fold accessStrategy (context, cache) =
         let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
-        Equinox.CosmosStore.CosmosStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy)
+        Equinox.CosmosStore.CosmosStoreCategory(context, name, FsCodec.SystemTextJson.Encoder.Uncompressed codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createUnoptimized name codec initial fold (context, cache) =
         let accessStrategy = Equinox.CosmosStore.AccessStrategy.Unoptimized
