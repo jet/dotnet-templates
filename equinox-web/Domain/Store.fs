@@ -14,7 +14,7 @@ module Codec =
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
         FsCodec.SystemTextJson.Codec.Create<'t>() // options = Options.Default
     let genJsonElement<'t when 't :> TypeShape.UnionContract.IUnionContract> =
-        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() |> FsCodec.SystemTextJson.Encoder.Uncompressed // options = Options.Default
+        FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
 #if (memoryStore || (!cosmos && !dynamo && !eventStore))
 module Memory =
