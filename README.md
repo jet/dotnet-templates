@@ -35,19 +35,17 @@ The following templates focus specifically on the usage of `Propulsion` componen
       
 - [`proConsumer`](propulsion-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) (typically consuming from an app produced with `dotnet new proProjector -k`).
 
-- [`periodicIngester`](periodic-ingester/) - Boilerplate for a service that regularly walks the content of a source, feeding it into a propulsion projector in order to manage the ingestion process using [`Propulsion.Feed.PeriodicSource`](https://github.com/jet/propulsion)
+- [`periodicIngester`](periodic-ingester/) - Boilerplate for a service that regularly walks the content of a source, feeding it into a Propulsion projector in order to manage the ingestion process using [`Propulsion.Feed.PeriodicSource`](https://github.com/jet/propulsion)
 
-- [`proDynamoStoreCdk`](propulsion-dynamostore-cdk/README.md)
-
-    - AWS CDK Wiring for programmatic IaC deployment of `Propulsion.DynamoStore.Indexer` and `Propulsion.DynamoStore.Notifier`
+- [`proDynamoStoreCdk`](propulsion-dynamostore-cdk/README.md) - AWS CDK Wiring for programmatic IaC deployment of `Propulsion.DynamoStore.Indexer` and `Propulsion.DynamoStore.Notifier`
 
 ## Producer/Reactor Templates combining usage of Equinox and Propulsion
 
 The bulk of the remaining templates have a consumer aspect, and hence involve usage of `Propulsion`.
-The specific behaviors carried out in reaction to incoming events often use `Equinox components
+The specific behaviors carried out in reaction to incoming events often use Equinox components.
 
 <a name="proReactor"></a>
-- [`proReactor`](propulsion-reactor/README.md) - Boilerplate for an application that handles reactive actions ranging from publishing notifications via Kafka (simple, or [summarising events](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) through to driving follow-on actions implied by events (e.g., updating a denormalized view of an aggregate)
+- [`proReactor`](propulsion-reactor/README.md) - Boilerplate for an application that handles reactive actions ranging from publishing notifications via Kafka (simple, or [summarising events](http://verraes.net/2019/05/patterns-for-decoupling-distsys-summary-event/) through to driving follow-on actions implied by events e.g., updating a denormalized view of an aggregate)
 
    Input options are:
    
@@ -70,46 +68,46 @@ The specific behaviors carried out in reaction to incoming events often use `Equ
 
 - [`trackingConsumer`](propulsion-tracking-consumer/README.md) - Boilerplate for an Apache Kafka Consumer using [`Propulsion.Kafka`](https://github.com/jet/propulsion) to ingest accumulating changes in an `Equinox.Cosmos` store idempotently.
 
-- [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.Cosmos` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
+- [`proSync`](propulsion-sync/README.md) - Boilerplate for a console app that that syncs events between [`Equinox.CosmosStore` and `Equinox.EventStore` stores](https://github.com/jet/equinox) using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion), filtering/enriching/mapping Events as necessary.
 
 - [`proArchiver`](propulsion-archiver/README.md) - Boilerplate for a console app that that syncs Events from relevant Categories from a Hot container and to an associated warm [`Equinox.Cosmos` stores](https://github.com/jet/equinox) archival container using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion).
     - An Archiver is intended to run continually as an integral part of a production system.
 
 - [`proPruner`](propulsion-pruner/README.md) - Boilerplate for a console app that that inspects Events from relevant Categories in an [`Equinox.Cosmos` store's](https://github.com/jet/equinox) Hot container and uses that to drive the removal of (archived) Events that have Expired from the associated Hot Container using the [relevant `Propulsion`.* libraries](https://github.com/jet/propulsion).
     
-    - While a Pruner does not consume a large amount of RU capacity from either the Hot or Warm Containers, running one continually is definitely optional; a Pruner only has a purpose when there are Expired events in the Hot Container; running periodically during low-load periods may be appropriate, depending on the lifetime profile of the events in your system
+    - While a Pruner does not consume a large amount of RU capacity from either the Hot or Warm Containers, running one continually is definitely optional; a Pruner only has a purpose when there are Expired events in the Hot Container; running periodically during low-load periods may be appropriate, depending on the lifetime profile of the events in your system.
     
     - Reducing the traversal frequency needs to be balanced against the primary goal of deleting from the Hot Container: preventing it splitting into multiple physical Ranges.
     
-    - It is necessary to reset the CFP checkpoint (delete the checkpoint documents, or use a new Consumer Group Name) to trigger a re-traversal if events have expired since the lsat time a traversal took place.
+    - It is necessary to reset the CFP checkpoint (delete the checkpoint documents, or use a new Consumer Group Name) to trigger a re-traversal if events have expired since the last traversal completed.
 
-- [`proIndexer`](propulsion-cosmos-reactor/README.md) - Derivative of `proReactor` template. :pray: [@ragiano215](https://github.com/ragiano215)
+- [`proIndexer`](propulsion-cosmos-reactor/README.md) - Derivative of `proReactor` template, with some CosmosDB specific features. :pray: [@ragiano215](https://github.com/ragiano215)
 
-    - Specific to CosmosDB, though it would be easy to make it support DynamoDB
+    - Specific to CosmosDB, though extending it to support DynamoDB would be a relatively simple porting exercise.
 
-    - For applications where the reactions using the same Container, credentials etc as the one being Monitored by the change feed processor (simpler config wiring and less argument processing)
+    - For applications where the reactions using the same Container, credentials etc as the one being Monitored by the change feed processor (simpler config wiring and less argument processing).
 
-    - includes full wiring for Prometheus metrics emission from the Handler outcomes
+    - includes full wiring for Prometheus metrics emission of Handler outcomes.
 
-    - Demonstrates notion of an `App` project that hosts common wiring common to a set of applications without having the Domain layer reference any of it. 
+    - Demonstrates notion of an `App` project that hosts wiring common to a set of applications without forcing the Domain layer to reference those dependencies. 
   
-    - Implements `sync` and `snapshot` subcommands to enable updating snapshots and/or keeping a cloned database in sync
+    - Implements `sync` and `snapshot` subcommands to enable updating snapshots and/or keeping a cloned database in sync.
 
 <a name="eqxShipping"></a>
 - [`eqxShipping`](equinox-shipping/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate items into a separated `Container` Aggregate as an atomic operation. :pray: [@Kimserey](https://github.com/Kimserey).
  
    - processing is fully idempotent; retries, concurrent or overlapping transactions are intended to be handled thoroughly and correctly
    - if any `Shipment`s cannot be `Reserved`, those that have been get `Revoked`, and the failure is reported to the caller
-   - includes a `Watchdog` console app (based on `dotnet new proReactor --blank`) responsible for concluding abandoned transaction instances (e.g., where processing is carried out in response to a HTTP request and the Clients fails to retry after a transient failure leaves processing in a non-terminal state).
-   - Does not include wiring for Prometheus metrics (see `proHotel`)
+   - includes a `Watchdog` console app (based on `dotnet new proReactor --blank`) responsible for concluding abandoned transaction instances (e.g., where processing is carried out in response to a HTTP request and the client fails to retry after a transient failure leaves processing in a non-terminal state).
+   - Does not include wiring for Prometheus metrics (see `proHotel`).
 
 <a name="proHotel"></a>
 - [`proHotel`](propulsion-hotel/README.md) - Example demonstrating the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that coordinates the merging of a set of `GuestStay`s in a Hotel as a single `GroupCheckout` activity that coves the payment for each of the stays selected.
 
-    - illustrates correct idempotent logic such that concurrent group checkouts that are competing to cover the same stay work correctly, even when commands are retried.
-    - Reactor program is wired to support consuming from `MessageDb` or `DynamoDb`.
+    - illustrates correct idempotent logic such that concurrent group checkouts that are competing to cover the same stay operate correctly, even when commands are retried.
+    - Reactor program is wired to support consuming from `MessageDb` or `DynamoDb` (adding others would not be straightforward, but two is sufficient to illustrate how to generalize the wiring).
     - Unit tests validate correct processing of reactions without the use of projection support mechanisms from the Propulsion library.
-    - Integration tests establish a Reactor an xUnit.net Collection Fixture (for MessageDb or DynamoDb) or Class Fixtures (for MemoryStore) to enable running scenarios that are reliant on processing that's managed by the Reactor program, without having to run that concurrently.
+    - Integration tests establish a Reactor an xUnit.net Collection Fixture (for `MessageDb` or `DynamoStore`) or Class Fixtures (for `MemoryStore`) to enable running scenarios that are reliant on processing that's managed by the Reactor program, without having to run that concurrently.
     - Includes wiring for Prometheus metrics.
 
 ## Walkthrough
@@ -202,7 +200,7 @@ To use from the command line, the outline is:
 
 ## TESTING
 
-There's [integration tests in the repo](https://github.com/jet/dotnet-templates/blob/int-tests/tests/Equinox.Templates.Tests/DotnetBuild.fs) that check everything compiles before we merge/release
+There are [integration tests in the repo](https://github.com/jet/dotnet-templates/blob/int-tests/tests/Equinox.Templates.Tests/DotnetBuild.fs) that check everything compiles before we merge/release
 
     dotnet build build.proj # build Equinox.Templates package, run tests \/
     dotnet pack build.proj # build Equinox.Templates package only
@@ -241,7 +239,7 @@ One can also do it manually:
 
 3. uninstalling the locally built templates from step 2a:
 
-      $ dotnet new -u Equinox.Templates
+       $ dotnet new -u Equinox.Templates
 
 <a name="guidance"></a>
 # PATTERNS / GUIDANCE
