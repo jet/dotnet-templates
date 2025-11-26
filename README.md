@@ -273,7 +273,7 @@ That means letting go of something that feels _almost_ perfect...
 <a name="global-dont-share-types"></a>
 ### ❌ DONT share types across Aggregates / Categories
 
-In some cases, Aggregates have overlapping concerns that can mean soe aspects of Event Contracts are common. It can be very tempting to keep this [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) as shared types in a central place. These benefits must unfortunately be relinquished. Instead:
+In some cases, Aggregates have overlapping concerns that can mean some aspects of Event Contracts are common. It can be very tempting to keep this [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) as shared types in a central place. These benefits must unfortunately be relinquished. Instead:
 
 ```fs
 ❌ BAD shared types
@@ -306,14 +306,14 @@ module Events =
         ..
 ```
 
-Instead, let each `module <Aggregate>` maintain its own version of each type that will be used in an event _within its `module Events`_.
+Instead, let each `module <Aggregate>` define independent types _within its `module Events`_.
 
-The `decide` function can map from an input type if desired. The important thing is that the Aggregate will need to be able to roundtrip its types in perpetuity, and having to disentangle the overlaps between types shared across multiple Aggregates is simply never worth it.
+The `decide` function can map from an common _input_ type if desired. The important thing is that the Aggregate will need to be able to roundtrip its types in perpetuity, and having to disentangle the overlaps between types shared across multiple Aggregates is simply never worth it.
 
 <a name="do-id-type"></a>
 ### ✅ DO have global strongly typed ids
 
-While [sharing the actual types is a no-no](#global-dont-share-types), having common id types, and using those for references across streams is valid.
+While [sharing the actual types is a no-no](#global-dont-share-types), having common id types, and using those for references across streams is reasonable.
 
 It's extremely valuable for these to be strongly typed.
 
@@ -357,12 +357,12 @@ module UserId =
 
 Wherever possible, the templates use use strongly type identifiers, particularly ones that might naturally be represented as primitives, i.e. `string` etc.
 
-[`FSharp.UMX`](https://github.com/fsprojects/FSharp.UMX) is useful to transparently pin types in a message contract cheaply - it works well for a number of contexts:
+[`FSharp.UMX`](https://github.com/fsprojects/FSharp.UMX) is useful to transparently wrap types in a message contract cheaply - it works well for a number of contexts:
 
-- Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them is not a central concern as we load and fold these incontrovertible Facts)
+- Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them is not a concern as we load and fold; we trust events that we have written)
 - Model binding in ASP.NET; because the types de-sugar to the primitives, no special support is required.
 
-  _Unlike events, there are more considerations in play in this context though; often you'll want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/).
+  _NOTE, unlike the preceding case of parsing existing events, there are more considerations in play in this context though: you'll often want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/)_.
 
 ### CONSIDER UMX `strings` for serialized ids
 
