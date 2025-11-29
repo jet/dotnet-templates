@@ -260,7 +260,7 @@ One can also do it manually:
 
 ## High level
 
-### ❌ DONT have shared types in `Types.fs`
+### ❌ AVOID shared types in `Types.fs`
 
 F# excels at succinctly expressing a high level design for a system; see [_Designing with types_ by Scott Wlaschin](https://fsharpforfunandprofit.com/series/designing-with-types/) for many examples. 
 
@@ -273,10 +273,10 @@ That means letting go of something that feels _almost_ perfect...
 <a name="global-dont-share-types"></a>
 ### ❌ DONT share types across Aggregates / Categories
 
-In some cases, Aggregates have overlapping concerns that can mean some aspects of Event Contracts are common. It can be very tempting to keep this [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) as shared types in a central place. These benefits must unfortunately be relinquished. Instead:
+In many systems, Aggregates have overlapping concerns that dictate that some elements of Event Contracts are common. It can be very tempting to keep this [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) via shared types in a central place. These benefits must unfortunately be relinquished. Instead:
 
 ```fs
-❌ BAD shared types
+❌ BAD: shared types
 // <Types.fs>
 module Domain.Types
 
@@ -302,20 +302,21 @@ module Aggregate2
 module Events =
 
     type Event =
+        // ❌ BAD defines a contract that can be changed by someone adding or renaming a field in a shared type
         | Copied of {| by: UserId; context: Types.EntityContext |}
         ..
 ```
 
-Instead, let each `module <Aggregate>` define independent types _within its `module Events`_.
+Instead, have each `module <Aggregate>` define independent types _within its `module Events`_.
 
-The `decide` function can map from an common _input_ type if desired. The important thing is that the Aggregate will need to be able to roundtrip its types in perpetuity, and having to disentangle the overlaps between types shared across multiple Aggregates is simply never worth it.
+The `decide` function can map from a common _input_ type if desired. The important thing is that the Aggregate can roundtrip its types in perpetuity; having to disentangle the overlaps between types shared across multiple Aggregates is simply not worth it.
 
 <a name="do-id-type"></a>
-### ✅ DO have global strongly typed ids
+### ✅ DO Have global strongly typed ids
 
 While [sharing the actual types is a no-no](#global-dont-share-types), having common id types, and using those for references across streams is reasonable.
 
-It's extremely valuable for these to be strongly typed.
+It's essential for these to be strongly typed.
 
 ```fsharp
 module Domain.Types
@@ -330,14 +331,13 @@ module Domain.User
 module Events =
 
     type Joined = { tenant: TenantId; authorizedBy: UserId }
-
 ```
 
 <a name="do-id-module"></a>
 ### ✅ DO Have a helper `module` per id type
 
-Per [strongly-typed id `type`](#do-id-type), having an associated `module` with the same name alongside works well.
-This enables one to quickly identify and/or navigate the various ways in which such ids are generated/parsed and/or validated.
+Having an associated `module` (with the same name) per [strongly-typed id `type`](#do-id-type) works well.
+This enables one to quickly identify and/or navigate the various ways in which sua given id can be generated/parsed and/or validated.
 
 ```fsharp
 namespace Domain
@@ -353,38 +353,39 @@ module UserId =
     let toString (x: UserId): string = (toGuid x).ToString "N"
 ```
 
-### CONSIDER UMX for ids not used in storage contracts
+### CONSIDER `FSharp.UMX` for ids not used in storage contracts
 
-Wherever possible, the templates use use strongly type identifiers, particularly ones that might naturally be represented as primitives, i.e. `string` etc.
+Wherever possible, the templates use strongly typed identifiers, particularly ones that might naturally be represented as primitives, i.e. `string` etc.
 
-[`FSharp.UMX`](https://github.com/fsprojects/FSharp.UMX) is useful to transparently wrap types in a message contract cheaply - it works well for a number of contexts:
+[`FSharp.UMX`](https://github.com/fsprojects/FSharp.UMX) is useful to transparently wrap types in a message contract cheaply - it works well for a number of scenarios:
 
-- Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them is not a concern as we load and fold; we trust events that we have written)
+- Coding/decoding events using [FsCodec](https://github.com/jet/fscodec). (because Events are things that **have happened**, validating them as we load and fold is not required; we trust events that we have written)
 - Model binding in ASP.NET; because the types de-sugar to the primitives, no special support is required.
 
   _NOTE, unlike the preceding case of parsing existing events, there are more considerations in play in this context though: you'll often want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/)_.
 
-### CONSIDER UMX `strings` for serialized ids
+### CONSIDER `FSharp.UMX` `string`s for serialized ids
 
-TODO write up the fact that while UMX is a good default, there are nuances wrt string ones
+When using `FSharp.UMX` to wrap/type a `string`-based value, consider:
+- there is no constructor in play that can canonicalize values (i.e converting to uppercase or lowercase)
+- stream names in Stores should be treated as being case-sensitive
+- because the type is not visible to Reflection etc, there is no way to hook in conversion/upcasting/downcasting at the point where the value is loaded or stored
+- because there is no constructor that can reject the value, you will need to ensure that all paths that create them do appropriate guarding against `null` values, long strings that exhaust storage etc
+- if the value is being used as part of a `FsCodec.StreamName`, you'll need to ensure that there are no embedded separator characters such as `_` or `-` present within the value (or you'll face an exception when constructing the `StreamName`)
 
-- case sensitive
-- works transparently for most serializers, also works for model binding
-- how/do you validate nulls/lengths, xss protection, rejecting massive ones
-- if you use UMX, when/how will you validate
+### CONSIDER `FSharp.UMX` `Guid`s for serialized ids
 
-### CONSIDER UMX `Guid`s for serialized ids
+When using `FSharp.UMX` to wrap/type a `Guid`-based value, consider:
+- there is no canonical rendering format when mapping to JSON (which represents it as a string)
+- in general you'll want to be tolerant of renditions with embedded `-`, `{` or `}` characters (but typically render in a canonical form that does not include them)
+- similarly you'll normally want to parse on a case-insensitive basis, but consistently render in either upper or lower case 
+- unlike a `UMX` string, the fact that only a well formed GUID will parse correctly, and the fact that the backing value is a GUID affords a level of protection against XSS and/or `null` values
 
-TODO write up the fact that while UMX is a good default, there are nuances wrt Guid ones
+### ❌ AVOID SCDUs for ids
 
-- parsing needs to not be sensitive to case
-- rendering with or without dashes/braces - can be messy with configuring json serializers
-- not actually part of JSON
-- provides some XSS/null protection but is that worth it
+While you'll find plenty examples and articles that use Single Case Discriminated Unions (SCDUs) as id values, in general it's recommended to consider default `FSharp.UMX` (but see the specific advice above) or `FsCodec.StringId` (and the associated `FsCodec.SystemTextJson.StringIdConverter` and `FsCodec.SystemTextJson.StringIdConverter` and `FsCodec.SystemTextJson.StringIdOrDictionaryKeyConverter` helpers)
 
-### ❌ DONT use SCDUs for ids
-
-TODO write something in more depth
+The following articles present a thorough walkthrough of the tradeoffs:
 
 - https://paul.blasuc.ci/posts/really-scu.html
 - https://paul.blasuc.ci/posts/even-more-scu.html
@@ -424,15 +425,14 @@ type Config =
     | Cosmos of contexts: CosmosContexts * cache: Equinox.Cache
 and [<NoComparison; NoEquality>] CosmosContexts =
     { main: Equinox.CosmosStore.CosmosStoreContext
-      views: Equinox.CosmosStore.CosmosStoreContext
-      /// Variant of `main` that's configured such that `module Snapshotter` updates will never trigger a calve
-      snapshotUpdate: Equinox.CosmosStore.CosmosStoreContext }
+      views: Equinox.CosmosStore.CosmosStoreContext }
 ```
 
 :bulb: This does mean that the `Domain` project will need to reference the concrete store packages (i.e., `Equinox.CosmosStore`, `Equinox.MemoryStore` etc).
+
 :bulb: the wiring that actually establishes the `Context`s should be external to the `Domain` project in [an `App` project, as `propulsion-indexer` does](https://github.com/jet/dotnet-templates/tree/master/propulsion-indexer/App), and should only be triggered within a Host application's Composition root
 
-## Code structure
+## Code structure conventions & recommendations
 
 ### 1. `module Aggregate`
 
@@ -441,80 +441,79 @@ and [<NoComparison; NoEquality>] CosmosContexts =
 
 There are established conventions documented in [Equinox's `module Aggregate` overview](https://github.com/jet/equinox/blob/master/DOCUMENTATION.md#aggregate-module)
 
-#### ❌ DONT split the `module <Aggregate>`
-Having the Event Contracts, State and Decision logic in a single module can feel wrong when you get over e.g. 1000 lines of code; instincts to split the file on some basis will kick in. Don't do it; splitting the file is hiding complexity under the carpet.
+#### ❌ DONT split `module <Aggregate>`
+Having the Event Contracts, State and Decision logic in a single module can feel wrong when you get over e.g. 1000 lines of code; instincts to split the file on some basis will kick in. Don't do it; splitting the file is sweeping complexity under the carpet.
 
-#### ❌ DONT move the `module Events` out
+#### ❌ DONT move `module Events` out
 
-The Event Contracts are the most important contract that an Aggregate has - decision logic will churn endlessly. You might even implement logic against it in other languages. But the Event Contracts you define are permanent. As a developer fresh to a project, the event contracts are often the best starting point as you try to understand what a given aggregate is responsible for. 
+The Event Contracts are the most important interface that an Aggregate has. Decision logic can be refactored endlessly; you may even implement logic against it in other languages. The Event Contracts you define are permanent. As a developer fresh to a project, the event contracts are often the best starting point as you try to understand what a given aggregate is responsible for. 
 
-#### ❌ DONT move the `module State`, or `evolve` logic out
+#### ❌ DONT move `module State`, or `evolve` logic out
 
 The State type and the associated `evolve` and `fold` functions are intimately tied to the Event Contracts. Over time, ugliness and upconversion can lead to noise, and temptation to move it out. Don't do it; being able to understand the full coupling is critical to understanding how things work, and equally critical to being able to change or add functions.
 
 <a name="dont-remove-decisions"></a>
-#### ❌ DONT move the decision logic out
+#### ❌ DONT move decision logic out
 
-Decision logic bridges between the two worlds of State and Events.
+Decision logic bridges between the worlds of State and Events.
 The State being held exists only to serve the Decision logic.
 The only reason for Event Contracts is to record Decisions.
-Trying to pretend that some of the Decisions are less important and hence should live elsewhere is rarely a good idea.
-How decisions are made, and how those decisions are encoded as Events should be encapsulated within the Aggregate.
+How decisions are made, and how those decisions are encoded as Events should be encapsulated within the Aggregate. Relegating some of the Decision logic to an external file is rarely a good idea.
 
-In some cases, it can make sense for a decision function to be a skeleton function that passes out to some helper functions that it's passed to assist in the decision making and/or composing some details that go into the event body.
+In some cases, it can make sense for a decision function to be a skeleton function that calls out to supplied helper functions that handle low-level aspects of the decision and/or pre-rendering of the event body.
 Sometimes these functions are best passed as arguments to the Service Method that will call the decision function.
 In other cases, the relevant helper functions can be passed to the `type Service` as arguments when it's being constructed in the `Factory`.
 
-The critical bit is that the bits that need to touch the State and/or generate Events should not leave the `module Aggregate`, as there is not better place in the system for that to live.
+The critical bit is that the pieces that need to touch the State and/or generate Events should not leave the `module Aggregate`; there simply is no better place in the system for it to live.
 
-This is akin to the maxim (from [the GOOS book](http://www.growing-object-oriented-software.com) of _Listen to your Tests_: If a given Aggregate has too many responsibilities, that's feedback you should be using to your advantage, not lamenting or ignoring:
+This is akin to the maxim (from [the GOOS book](http://www.growing-object-oriented-software.com)) of _Listen to your Tests_: If a given Aggregate has too many responsibilities, that's feedback you should be using to your advantage, not lamenting or ignoring:
 
 - if an aggregate consumes or produces an extraordinary number of event types, maybe there's an axis on which they can be split?
-- if there are multiple splittable pieces of state in the overall State, maybe you need two aggregates over the same stream? Or two sibling categories that share an id?
+- if there are multiple separable pieces of state in the overall State, maybe you need two aggregates over the same stream? Or two sibling categories that share an id?
 - should some of the logic and/or events be part of an adjacent aggregate? (why should a Cart have Checkout flow elements in it?)
-- if there are many decision functions, is that a sign that there's a missing workflow or process manager that should be delegating some (cohesive) responsibolities to this aggregate?
-- if a decision function is 300 lines, but only 5 lines touch the state and only 4 lines produce an event, can you extract just that logic to a single boring module that can be unit tested independent of how the State and Events are ultimately maintained?
+- if there are an excessive number of decision functions, is that a sign that there's a missing workflow or process manager to which that responsibility can be extracted?
+- if a decision function is 300 lines, but only 5 lines touch the state and only 4 lines produce an event, can you extract just that logic to a single boring module that can be unit tested independent of how the State and Events change over time?
 
 ### 2. `module Events`
 
 Having the Event Contracts be their own `module` is a critical forcing function for good aggregate design. Having all types and all cases live in one place and being able to quickly determine where each Event is produced is key to being able to understand the moving parts of a system.
 
 <a name="events-no-ids"></a>
-#### ❌ AVOID including egregious identity information
+#### ❌ AVOID duplicating identity information
 
 When modelling, it's common to include primary identifiers (e.g. a user id), or contextual identifiers (e.g. a tenant id) in an Event in order to convey the relationships between events in the systems as a whole; you want the correlations to stand out. In the implementation however, repeating the identity information in every event is a major liability:
 1. the State needs to contain the values - that's more noise
-2. Event versioning gets messier - imagine extending a system to make it multi-tenant, you'd need to be able to handle all the historic events that predated the concept
+2. Event versioning gets messier - imagine extending a system to make it multi-tenant, you'd need to version all the historic events that predated the change
 
-The alternative is for a workflow to react to the events in the context of a stream - if some logic needs to know the userid let the `User` reactor handling the `User` event on a `User` Stream pass that context forward if relevant in that context.
+The alternative is for reactions to consider events in the context of a stream - if some logic needs to know the userid, let the `User` reactor handling the `User` event on a `User` Stream pass that context forward if relevant in that context.
 
 #### ❌ DONT `open Events` in an aggregate module
 
-Having to prefix types and/or Event Type names with `Events.` is a feature, not a bug. 
+Having to prefix types and/or Event Type names with `Events.` is a feature, not a bug. Using `Events.` lets event generation stick out in a decision function.
 
 ### 4. `module Reactions`
 
 ✅ DO encapsulate inferences from events and `Stream` names in a `module Reactions` facade
 
-`module Stream` should be always be `private`.
-Any classification of events, parsing of stream names, should be via helpers within the `module Reactions`, e.g.: 
+Constants such as `CategoryName` and helpers like `streamId` should be kept `private`.
+
+Any external classification of events, parsing of stream names, should be via helpers within a `module Reactions`, e.g.: 
 
 ```fsharp
-// ❌ BAD Stream module is `public`
-module Stream =
-
-    let [<Literal>] Category = "tenant"
+// ❌ BAD stream category, composition and parsing helpers are public
+let [<Literal>] CategoryNam = "tenant"
+let streamId (id: TenantId) = FsCodec.StreamId.gen TenantId.toString id
     
-// ❌ BAD
+// ❌ BAD direct usage of low level helpers from the Aggregate module
 module TenantNotifications
 
-let categories = [ Tenant.Stream.Category]
+let categories = [ Tenant.Stream.Category ]
 
 let handle (stream, events) = async {
-    if StreamName.category stream = Tenant.Stream.Category then
+    if StreamName.category stream = Tenant.CategoryName then
         let tenantId = FsCodec.StreamName.Split stream |> snd |> TenantId.parse
          
-// ❌ BAD
+// ❌ BAD direct low level mamipulation of Stream Names
 module Tenant.Tests
 
 let [<Fact>] ``generated correct events` () =
@@ -523,44 +522,36 @@ let [<Fact>] ``generated correct events` () =
     let streamName = FsCodec.StreamName.create Tenant.Stream.Category id
 ```
 
-Instead, keep the `module Streams` private:
+Instead, keep the helpers `private`:
 
 ```fsharp
-module private Stream =
-
-    let [<Literal>] Category = "tenant"
-    let id (id: TenantId) = FsCodec.StreamId.gen TenantId.toString id
-    let decodeId = FsCodec.StreamId.dec TenantId.parse
-    let name = id >> FsCodec.StreamName.create Category
-    let tryDecode = FsCodec.StreamName.tryFind Category >> ValueOption.map decodeId
+let [<Literal>] private CategoryName = "tenant"
+let private streamId = FsCodec.StreamId.gen TenantId.toString
+// NOTE on a case by case basis, one may opt to have an individual helper public
+let streamName tenantId = FsCodec.StreamName.create CategoryName (streamId tenantId)
+let private catId = CategoryId(CategoryName, streamId, FsCodec.StreamId.dec TenantId.parse)
 ```
 
-selectively expose a relevant interface via a `module Reactions` facade:
+Then, selectively expose a higher level interface via a `module Reactions` facade:
 
 ```fsharp
 // ✅ GOOD expose all reactions and test integration helpers via a Reactions facade
 module Reactions =
 
     // ✅ GOOD - F12 can show us all reaction logic
-    let categoryName = Stream.Category
-    // ✅ GOOD - if a unit test needs to generate a stream name, it can supply the tenant id    
-    let streamName = Stream.name
-    let [<return: Struct>] (|For|_|) = Stream.tryDecode
-    // ✅ OK generic decoding function (but next ones are better...)
-    let dec = Streams.Codec.dec<Events.Event>
+    let categoryName = CategoryName
     let [<return: Struct>] (|Decode|_|) = function
         | struct (For id, _) & Streams.Decode dec events -> ValueSome struct (id, events)
         | _ -> ValueNone
-    let deletionNamePrefix tenantIdStr = $"%s{Stream.Category}-%s{tenantIdStr}"
 ```
 
 in some cases, the filtering and/or classification functions can be more than just simple forwarding functions:
 
 ```fsharp
-    // ✅ GOOD - better than sprinkling `nameof(Aggregate..Events.Completed)` in an adjacent `module`
+    // ✅ GOOD - clearer than sprinkling `nameof Aggregate.Events.Completed` in an adjacent `module`
     /// Used by the Watchdog to infer whether a given event signifies that the processing has reached a terminal state
     let isTerminalEvent (encoded: FsCodec.ITimelineEvent<_>) =
-        encoded.EventType = nameof(Events.Completed)
+        encoded.EventType = nameof Events.Completed
     let private impliesStateChange = function Events.Snapshotted _ -> false | _ -> true
 
     // ✅ BETTER specific pattern that extracts relevant items, keeping it close to the Event definitiosn
@@ -599,21 +590,21 @@ let handle (stream, events) = async {
         let! version', summary = service.QueryWithVersion(clientId, Contract.ofState)
         let wrapped = generate stream version' (Contract.Summary summary)
         let! _ = produceSummary wrapped
-        return Propulsion.Sinks.StreamResult.OverrideNextIndex version', Outcome.Ok (1, eventCount - 1)
+        return Outcome.Ok (1, eventCount - 1), version'
     | Todo.Reactions.NoStateChange eventCount ->
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.Skipped eventCount
+        return Outcome.Skipped eventCount, Propulsion.Sinks.Events.next events
     | Todo.Reactions.NotApplicable eventCount ->
-        return Propulsion.Sinks.StreamResult.AllProcessed, Outcome.NotApplicable eventCount }
+        return Outcome.NotApplicable eventCount, Propulsion.Sinks.Events.next events }
 ```
 
-The helpers can make tests terser, and make it easier to :
+The helpers tend to make tests more terse and legible:
 
 ```fsharp
 // ✅ BETTER - intention revealing names, classification encapslated close to the events
 module Tenant.Tests
 
 let [<Fact>] ``generated correct events` () =
-    let id = TenantId.generate()
+    let id = TenantId.generate ()
     let streamName = Tenant.Reactions.streamName id
 ```
 
@@ -623,8 +614,9 @@ let [<Fact>] ``generated correct events` () =
 #### ❌ DONT log
 
 If your `Fold` logic is anything but incredibly boring, that's a design smell.
-If you must, unit test it to satisfy yourself things can't go wrong, but logging is never the answer.
-Fold logic should not be deciding anything - just summarizing facts.
+If you must, unit test it to satisfy yourself things can't go wrong, but logging is _never_ the answer.
+Fold logic should not be deciding anything - just collating facts.
+
 If anything needs to be massaged prior to making a decision, do that explicitly; don't pollute the `Fold` logic.
 In general, you want to [make illegal States unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/).
 
@@ -639,34 +631,35 @@ See [Events: AVOID including egregious identity information](#events-no-ids).
 
 [Railway Oriented programming](https://fsharpforfunandprofit.com/rop) is a fantastic thinking tool. [Designing with types](https://fsharpforfunandprofit.com/series/designing-with-types/) is an excellent implementation strategy. [_Domain Modelling Made Functional_](https://fsharpforfunandprofit.com/books/) is a must read book. But it's critical to also consider the other side of the coin to avoid a lot of mess:
 - [_Against Railway Oriented Programming_ by Scott Wlaschin](https://fsharpforfunandprofit.com/posts/against-railway-oriented-programming/). Scott absolutely understands the tradeoffs, but it's easy to forget them when reading the series 
-- [_you're better off using Exceptions_ by Eirik Tsarpalis](https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
+- [_you're better off using Exceptions_ by Eirik Tsarpalis](https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions). A must read for any F# programmer.
 
 Each Decision function should have as specific a result contract as possible. In order of preference:
-- `unit`: A function that idempotently maps the intent or request to internal Events based solely on the State is the ideal. Telling the world about what you did is not better. Logging what it did is not better than being able to trust it to do it's job. Unit tests should assert based on the produced Events as much as possible rather than relying on a return value.
+- `unit`: A function that idempotently maps the intent or request to internal Events based solely on the State is the ideal. Telling the world about what you did is not better. Even logging what it did is not better than being able to trust it to do it's job. Unit tests should assert based on the produced Events as much as possible rather than relying on a return value.
 - `throw`: if something can go wrong, but it's not an anticipated first class part of the workflow, there's no point returning an `Error` result; [_you're better off using Exceptions_](https://eiriktsarpalis.wordpress.com/2017/02/19/youre-better-off-using-exceptions).
-- `bool`: in some cases, an external system may need to know whether something is permitted or necessary. If that's all that's needed, don't return identifiers or messages give away extra information
-- _simple discriminated union_: the next step after a `true`/`false` is to make a simple discriminated union - you get a chance to name it, and the cases involved.
-- record, anonymous record, tuple: returning multiple items is normally best accomplished via a named record type.
+- `bool`: in some cases, an external system may need to know whether something is permitted or necessary. If that's all that's needed, don't return identifiers or messages that expose extra information ([Hyrum's law](https://en.wiktionary.org/wiki/Hyrum%27s_law)). 
+- _simple discriminated union_: the next step after a `true`/`false` is to make a simple discriminated union; you get a chance to name it, and the cases involved.
+- record, anonymous record, tuple: returning multiple items is normally best accomplished via a named record type:-
   - the caller gets to use a clear name per field
   - how it's encoded in the State type can vary over time without consumption sites needing to be revisited
   - extra fields can be added later, without each layer through which the response travels needing to be adjusted
-  - the caller gets to pin the exact result type via a type annotation (either in the `Service`'s `member` return type, or at the call site) - this is not possible if it's an anonymous record
-  :bulb: in some cases it a tuple can be a better encoding if it's important that each call site explicitly consume each part of the result
+  - the caller gets to pin the exact result type via a type annotation (either in the `Service`'s `member` return type, or at the call site); this is not possible if it's an anonymous record
+
+  :bulb: in some cases it a tuple can be a better encoding if it's important that each call site explicitly consume each part of the result.
 - `string`: A string can be anything in any language. It can be `null`. It should not be used to convey a decision outcome.
-- `Result`: A result can be a success or a failure. both sides are generic. Its the very definition of a lowest common denominator.
+- `Result`: A result can be a success or a failure. Both sides are generic. The very definition of a lowest common denominator.
   - if it's required in a response transmission, map it out there; don't make the implementation logic messier and harder to test in order to facilitate that need.
   - if it's because you want to convey some extra information that the event cannot convey, use a tuple, a record or a Discriminated Union 
 
 #### ❌ DONT Log
 
-It's always sufficient to return a `bool` or `enum` to convey an outcome (but try to avoid even that). See also [Fold: DONT log](#fold-dont-log)
+It's always sufficient to return a `bool` or `enum` to convey an outcome (but try to avoid even that). See also [Fold: DONT log](#fold-dont-log).
 
 <a name="dont-result"></a>
 #### ❌ DONT use a `Result` type
 
 Combining success and failures into one type because something will need to know suggests that there is a workflow. It's better to model that explicitly.
 
-If your API has a common set of result codes that it can return, map to those later - the job here is to model the decisions.
+If your API has a common set of result codes that it can return, map to those later; the job here is to model the decisions.
 
 See [use the simplest result possible](#decide-results-simple).
 
@@ -685,8 +678,8 @@ module Decisions =
 ```
 The world does not need to know that you correctly handled at least once delivery of a request that was retried when the wifi reconnected.
 
-Instead:
 ```fsharp
+// ✅ BETTER less logic, tests just as clear
 let create name = function
     | Fold.Initial -> [| Events.Created { name = name } |]
     | Fold.Running _ -> [||]
@@ -705,7 +698,6 @@ let [<Fact>] ``create is idempotent`` () =
     let events = Decisions.create "tim" state
     events =! [||]
 ```
-
 
 #### ❌ DONT share a common result type across multiple decision functions
 
