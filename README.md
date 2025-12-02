@@ -353,7 +353,7 @@ module UserId =
     let toString (x: UserId): string = (toGuid x).ToString "N"
 ```
 
-### CONSIDER `FSharp.UMX` for ids not used in storage contracts
+### 🤔 CONSIDER `FSharp.UMX` for ids not used in storage contracts
 
 Wherever possible, the templates use strongly typed identifiers, particularly ones that might naturally be represented as primitives, i.e. `string` etc.
 
@@ -364,7 +364,7 @@ Wherever possible, the templates use strongly typed identifiers, particularly on
 
   _NOTE, unlike the preceding case of parsing existing events, there are more considerations in play in this context though: you'll often want to apply validation to the inputs (representing Commands) as you map them to [Value Objects](https://martinfowler.com/bliki/ValueObject.html), [Making Illegal States Unrepresentable](https://fsharpforfunandprofit.com/posts/designing-with-types-making-illegal-states-unrepresentable/)_.
 
-### CONSIDER `FSharp.UMX` `string`s for serialized ids
+### 🤔 CONSIDER `FSharp.UMX` `string`s for serialized ids
 
 When using `FSharp.UMX` to wrap/type a `string`-based value, consider:
 - there is no constructor in play that can canonicalize values (i.e converting to uppercase or lowercase)
@@ -373,7 +373,7 @@ When using `FSharp.UMX` to wrap/type a `string`-based value, consider:
 - because there is no constructor that can reject the value, you will need to ensure that all paths that create them do appropriate guarding against `null` values, long strings that exhaust storage etc
 - if the value is being used as part of a `FsCodec.StreamName`, you'll need to ensure that there are no embedded separator characters such as `_` or `-` present within the value (or you'll face an exception when constructing the `StreamName`)
 
-### CONSIDER `FSharp.UMX` `Guid`s for serialized ids
+### 🤔 CONSIDER `FSharp.UMX` `Guid`s for serialized ids
 
 When using `FSharp.UMX` to wrap/type a `Guid`-based value, consider:
 - there is no canonical rendering format when mapping to JSON (which represents it as a string)
@@ -652,7 +652,9 @@ Each Decision function should have as specific a result contract as possible. In
 
 #### ❌ DONT Log
 
-It's always sufficient to return a `bool` or `enum` to convey an outcome (but try to avoid even that). See also [Fold: DONT log](#fold-dont-log).
+It's always sufficient to return a `bool` or `enum` to convey an outcome (but try to avoid even that).
+
+See [Fold: DONT log](#fold-dont-log).
 
 <a name="dont-result"></a>
 #### ❌ DONT use a `Result` type
@@ -701,26 +703,34 @@ let [<Fact>] ``create is idempotent`` () =
 
 #### ❌ DONT share a common result type across multiple decision functions
 
-If you have three outcomes for one decision, don't borrow that result type for a separate decision that only needs two. Just give it it's own type. See [use the simplest result possible](#decide-results-simple).
+If you have three outcomes for one decision, don't borrow that result type for a separate decision that only needs two. Just give it it's own type.
+
+See [use the simplest result possible](#decide-results-simple).
 
 #### ✅ DO partition decision logic
 
-Most systems will have a significant number of Aggregates with low numbers of Events and Decisions. Having the Decision functions at the top level of the Aggregate Module can work well for those. Many people like to group such logic within a `module Decisions`, as it gives a good outline (`module Stream`, `module Events`, `module Reactions`, `module Fold`, `type Service`, `module Factory`) that allows one to quickly locate relevant artifacts and orient oneself in a less familiar area of the code. A key part of managing the complexity is to start looking for ways to group them into clumps of 3-10 related decision functions in a `module` within the overall `module Decisions` (or at top level in the file) as early as possible.
+Most systems will have a significant number of Aggregates with low numbers of Events and Decisions. Having the Decision functions at the top level of the Aggregate Module can work well for those.
+
+Some opt to place decision functions within a `module Decisions`, as it gives a good outline (`module Events`, `module Reactions`, `module Fold`, `module Decisions`, `type Service`, `module Factory`) that allows one to quickly locate relevant artifacts and orient oneself in a less familiar area of the code.
+
+A key part of managing overall complexity is to start looking for ways to group them into clumps of 3-10 related decision functions into sub-`module`s within `module Decisions` as early as possible.
+
+In some cases, one may opt to collapse `module Decisions` entirely (typically when there are 2-5 sub-`module`s within it).
 
 <a name="dont-commands"></a>
 #### ❌ DONT be a slave to the Command pattern
 
-The bulk of introductory material on the Decider pattern, and event sourcing in general uses the Command pattern as if it's a central part of the architecture. That's not unreasonable; it's a proven pattern that's useful in a variety of contexts.
+The bulk of introductory material on the Decider pattern (and event sourcing in general) uses the Command pattern as if it's a central part of the architecture. That's not unreasonable; it's a proven pattern that's useful in a variety of contexts.
 
 Some positives of the pattern are:
 - one can route any number of commands through any number of layers without having to change anything to add a new command
 - it can be enable applying cross-cutting logic uniformly
-- when implemented as Discriminated Unions in F#, the code can be very terse, and you can lean on total matching etc.
+- when implemented as Discriminated Unions in F#, the code can be very terse, and you can lean on total matching
 - In some cases it can work well with property based testing; the entirety of an Aggregate's Command Handling can be covered via Property Based Testing etc
 
-However, it's also just a pattern. It has negatives; some:
-- if you have a single command handler, the result type is forced to be a lowest common denominator
-- the code can actually end up longer and harder to read, but still anaemic in terms of modelling the domain properly
+However, it's also just a pattern. It has negatives; here are some:
+- if you have a single command handler, the result type is forced to be a [lowest common denominator](do-simplest-result).
+- the code can actually end up longer and harder to read, but still anaemic in terms of modelling the domain properly.
 
     ```fsharp
     module Decisions =
@@ -748,14 +758,18 @@ However, it's also just a pattern. It has negatives; some:
     ```fsharp
     module Decisions =
         let increment state = [| if state < 10 then Events.Incremented |]
+        let decrement state = [| if state > 0 then Events.Decremented |]
         let reset _state = [| if state <> 0 then Events.Reset |]
     type Service(resolve: ...) =
         member _.Reset id =
             let decider = resolve id
             decider.Transact Decisions.reset
-        member _.Increment(id, ?by) =
+        member _.Increment(id) =
             let decider = resolve id
             decider.Transact Decisions.increment
+        member _.Decrement(id) =
+            let decider = resolve id
+            decider.Transact Decisions.decrement
     type App(service: Service, otherService: ...) =
         member _.HandleFrob(id) =
             if otherService.AttemptFrob() then
@@ -772,42 +786,42 @@ However, it's also just a pattern. It has negatives; some:
 <a name="module-queries"></a>
 ### 7. `module Queries`
 
-The primary purpose of an Aggregate is to gather State and produce Events to facilitate making and recording of Decisions. There is no Law Of Event Sourcing that says you must at all times use CQRS to split all reads out to some secondary derived read model.
+The primary purpose of an Aggregate is to handle making and recording of Decisions as Events. In most cases, State derived from those Events is a key ingredient. There is no Law Of Event Sourcing that says you must at all times use CQRS to split all reads out to some secondary derived read model.
 
-In fact, in the the context of Equinox, the `AccessStrategy.RollingState`, `LoadOption.AllowStale` and `LoadOption.AnyCachedState` features each encourage borrowing the Decision State to facilitate rendering that state to users of the system directly.
+In particular, in the the context of Equinox, the `AccessStrategy.RollingState`, `LoadOption.AllowStale` and `LoadOption.AnyCachedState` features each encourage borrowing the Decision State to facilitate rendering that state to users of the system directly.
 
-However, making pragmatic choices can also become unfettered hacking very quickly. As such the following apply.
+However, making pragmatic choices can also descend into unfettered hacking very quickly. As such the following apply.
 
 #### ✅ DO use a `module Queries`
 
-Unless there is a single obvious boring rendition for a boring aggregate, you should have a type per Queyr
+Unless there is a single obvious canonical rendition for a boring aggregate, you should have a response type per Query
 
 #### ✅ DO use view DTOs
 
-As with the guidance on [not using Lowest Common Denominator representations for results](#decide-results-simple), you want to avoid directly exposing the State
+As with the guidance on [not using Lowest Common Denominator representations for results](#decide-results-simple), you want to avoid directly exposing the State - expose a minimal result type instead.
 
 <a name="dont-expose-state"></a>
-##### ❌ DONT having a public generic `Read` function that exposes the `Fold.State`
+##### ❌ DONT have a public generic `Read` function that exposes the `Fold.State`
 
-The purpose of the Fold State is to facilitate making decisions correctly. It often has other concerns such as:
+The purpose of the State is to facilitate making decisions. It often has other concerns such as:
 - being able to store and reload from a snapshot
 - being able to validate inferences being made based on events are being made correctly in the context of tests
     
 Having it also be a read model DTO is a bridge too far:
 
-```fs
+```fsharp
 // ❌ DONT DO THIS!
 member service.Read(tenantId) =
     let decider = resolve tenantId
-    decider.Query(fun state -> state)
+    decider.Query(fun state -> state) // yes, aka `id`
 ```
 
 <a name="do-allowstale"></a>
-#### CONSIDER `ReadCached*` methods delegating to an internal generic `Query` with a `maxAge`:
+#### 🤔 CONSIDER `ReadCached*` methods delegating to an internal generic `Query` with a `maxAge`:
 
 `LoadOption.AllowStale` is the preferred default strategy for all queries. This is for two reasons:
-1. if a cached version of the state fresher than the `maxAge` tolerance is available, you produce a result immediately and your store does less work
-2. even if a sufficiently fresh state is not available, all such reads are coalesced into a single store roundtrip. This means that the impact of read traffic on the workload hitting the store itself is limited to one read round trip per `maxAge` interval. 
+1. if a cached version of the state fresher than the `maxAge` tolerance is available, you produce a result immediately and your store does less work.
+2. even if a sufficiently fresh state is not available, concurrent reads are coalesced into a single store roundtrip. This means that the impact of read traffic on the workload hitting the store itself is limited to one read round trip per `maxAge` interval (aka [stampede protection](https://en.wikipedia.org/wiki/Cache_stampede)). 
 
 ```fsharp
 module Queries =
@@ -820,6 +834,7 @@ module Queries =
 type Service(resolve: ...)
 
     // NOTE: Query should remain private; expose each relevant projection as a `Read*` method
+    // In some cases, a tupled function might make sense, but then you lose optional arguments
     member private service.Query(maxAge: TimeSpan, tenantId, render: Fold.State -> 'r): Async<'r> =
         let decider = resolve tenantId
         decider.Query(render, load = Equinox.LoadOption.AllowStale maxAge)
@@ -831,30 +846,30 @@ type Service(resolve: ...)
 ```
 
 <a name="consider-querycurrent"></a>
-#### CONSIDER `QueryCurrent*` methods delegating to a `QueryRaw` helper
+#### 🤔 CONSIDER `QueryCurrent*` methods delegating to a `QueryRaw` helper
 
-While the `ReadCached*` pattern above is preferred, as it protect the store from unconstrained read traffic, there are cases where it's deemed necessary to be able to [Read Your Writes](https://www.allthingsdistributed.com/2007/12/eventually_consistent.html) 'as much as possible' at all costs.
+While the `ReadCached*` pattern above is preferred, as it shields the store from unconstrained read traffic, there are cases where it's deemed necessary to be able to [Read Your Writes](https://www.allthingsdistributed.com/2007/12/eventually_consistent.html) 'as much as possible' at all costs.
 
 _TL;DR quite often you should really be doing the [`ReadCached` pattern](#do-allowstale)_
 
-The first thing to note is that you need to be sure you're actually meeting that requirement. For instance, if you are using EventStoreDB, DynamoDB or MessageDB, you will want to use `Equinox.LoadOption.RequireLeader` for it to be meaningful (otherwise a read, (yes, even one served from the same application instance) might be read from a replica that has yet to see the latest state). For [CosmosDB in `Session` consistency mode, similar concerns apply](https://github.com/jet/equinox/issues/192).
+The first thing to note is that you need to be sure you're actually meeting that requirement. For instance, if you are using EventStoreDB, DynamoDB or MessageDB, you will want to use `Equinox.LoadOption.RequireLeader` for it to be meaningful. Otherwise a query, (yes, even one served from the same application instance) might read from a replica that has yet to see the latest state). For [CosmosDB in `Session` consistency mode, similar concerns apply](https://github.com/jet/equinox/issues/192).
 
-It's also important to consider the fact that any read, no matter how consistent it is at the point of reading, is also instantly stale data the instant it's been performed.
+It's also important to consider the fact that any read, no matter how consistent it is at the point of reading, is also instantly stale data from the instant it's been served from the store.
 
 :warning: If each and every query that is processed results in a store roundtrip, and you don't have any natural limiting of the request traffic, you open yourself up to overloading the store with read traffic (which is a primary reason the CQRS pattern is considered a good default). [`AllowStale` mode](#do-allowstale) is less prone to this issue, as store read round trips are limited to one per `maxAge` interval.
 
 :warning: `QueryRaw` should stay `private` - you want to avoid having read logic spread across your application doing arbitrary reads that are not appropriately encapsulated within the Aggregate.
   
-```fs
+```fsharp
 // NOTE: the QueryRaw helper absolutely needs to stay private. Expose queries only as specific `QueryCurrent*` methods  
 member private service.QueryRaw(tenantId, render) =
     let decider = resolve tenantId
     decider.Query(render, Equinox.LoadOption.RequireLeader)
 
+// This should not expose the full Fold.State
 member service.QueryCurrentState(tenantId) =
     service.QueryRaw(Queries.renderState)        
 ```
-
 ## Outside `module <Aggregate>`
 
 <a name="dont-open-aggregate"></a>
@@ -862,7 +877,7 @@ member service.QueryCurrentState(tenantId) =
 
 Ideally use the full name. If you can't help it, [use `module` aliases as outlined below](#dont-open-events) instead. If you are opening it because you also need to touch the Fold State, [don't do that either](#dont-open-fold).
 
-Exception: for the unit tests associated with a single Aggregate, `open Aggregate` may make sense. As long as it's exactly that one `Aggregate`
+Exception: for the unit tests associated with a single Aggregate, `open Aggregate` may make sense. _As long as it's a single `Aggregate`_.
 
 <a name="dont-open-events"></a>
 ### ❌ DONT `open <Aggregate>.Events`
