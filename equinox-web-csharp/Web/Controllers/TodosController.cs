@@ -13,14 +13,11 @@ public class FromClientIdHeaderAttribute() : ModelBinderAttribute(typeof(ClientI
 
 sealed class ClientIdModelBinder : IModelBinder
 {
-    public Task BindModelAsync(ModelBindingContext bindingContext)
+    public async Task BindModelAsync(ModelBindingContext bindingContext)
     {
         var headerValue = bindingContext.HttpContext.Request.Headers["COMPLETELY_INSECURE_CLIENT_ID"].FirstOrDefault();
-        var clientId = string.IsNullOrEmpty(headerValue)
-            ? new ClientId(Guid.Empty)
-            : new ClientId(Guid.Parse(headerValue));
+        ClientId clientId = Guid.TryParse(headerValue, out var res) ?  new (res) : new (Guid.Empty);
         bindingContext.Result = ModelBindingResult.Success(clientId);
-        return Task.CompletedTask;
     }
 }
 
@@ -73,7 +70,8 @@ public class TodosController(Todo.Service service) : ControllerBase
         service.Execute(clientId, new Todo.Command.Clear());
 
     static Todo.Props ToProps(TodoView value) =>
-        new() { Order = value.Order, Title = value.Title, Completed = value.Completed };
+        // TODO PATCH passes a view without a Title - the intended semantics is probably to have it fully sparse (but the todobackend spec does not provide a test t make that clear)
+        new() { Order = value.Order, Title = value.Title ?? "", Completed = value.Completed };
 
     TodoView WithUri(Todo.View x)
     {

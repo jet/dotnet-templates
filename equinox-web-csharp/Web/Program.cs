@@ -26,6 +26,10 @@ try
         .AddMvc()
         .AddJsonOptions(o =>
         {
+            o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+            o.JsonSerializerOptions.DictionaryKeyPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+            o.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+
             foreach (var c in FsCodec.SystemTextJson.Options.Default.Converters)
                 o.JsonSerializerOptions.Converters.Add(c);
         });
@@ -61,7 +65,6 @@ try
 #endif
        ;
 
-// add controllers from this assembly
     app.MapControllers();
     app.MapMetrics(); // Host /metrics for Prometheus
 

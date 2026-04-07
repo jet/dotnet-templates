@@ -21,9 +21,8 @@ public static class EquinoxCodec
 {
     public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(
         Func<TEvent, (string, ReadOnlyMemory<byte>)> encode,
-        Func<string, ReadOnlyMemory<byte>, FSharpValueOption<TEvent>> tryDecode) where TEvent : class =>
-        FsCodec.Codec.Create(encode, tryDecode);
-
+        Func<string, ReadOnlyMemory<byte>, TEvent?> tryDecode) =>
+        FsCodec.Codec.Create(encode, (s, b) => tryDecode(s,b) ?? FSharpValueOption<TEvent>.None);
     public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(JsonSerializerOptions? options = null) where TEvent : TypeShape.UnionContract.IUnionContract =>
         FsCodec.SystemTextJson.Codec.Create<TEvent>(options);
 }

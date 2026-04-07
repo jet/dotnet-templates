@@ -6,7 +6,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <WarningLevel>5</WarningLevel>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <DefineConstants>todos</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

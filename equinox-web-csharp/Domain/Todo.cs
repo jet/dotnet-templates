@@ -5,45 +5,19 @@ namespace TodoBackendTemplate;
 public static class Todo
 {
     /// NB - these types and names reflect the actual storage formats and hence need to be versioned with care
-    public abstract class Event
+    public interface IEvent { }
+    public static class Event
     {
         /// Information we retain per Todo List entry
-        public class ItemData
-        {
-            public int Id { get; set; }
-            public int Order { get; set; }
-            public string? Title { get; set; }
-            public bool Completed { get; set; }
-        }
+        public record ItemData(int Id, int Order, string Title, bool Completed);
+        public record Added(ItemData Data) : IEvent;
+        public record Updated(ItemData Data) : IEvent;
+        public record Deleted(int Id) : IEvent;
+        public record Cleared(int NextId) : IEvent;
+        public record Snapshotted(int NextId, ItemData[] Items) : IEvent;
+        static readonly SystemTextJsonUtf8Codec Codec = new(new System.Text.Json.JsonSerializerOptions());
 
-        public abstract class ItemEvent : Event
-        {
-            public ItemData Data { get; } = new();
-        }
-
-        public class Added : ItemEvent { }
-
-        public class Updated : ItemEvent { }
-
-        public class Deleted : Event
-        {
-            public int Id { get; init; }
-        }
-
-        public class Cleared : Event
-        {
-            public int NextId { get; init; }
-        }
-
-        public class Snapshotted : Event
-        {
-            public int NextId { get; init; }
-            public required ItemData[] Items { get; init; }
-        }
-
-        static readonly SystemTextJsonUtf8Codec Codec = new(new ());
-
-        public static FSharpValueOption<Event> TryDecode(string et, ReadOnlyMemory<byte> json) =>
+        public static IEvent? TryDecode(string et, ReadOnlyMemory<byte> json) =>
             et switch
             {
                 nameof(Added) => Codec.Decode<Added>(json),
@@ -51,11 +25,14 @@ public static class Todo
                 nameof(Deleted) => Codec.Decode<Deleted>(json),
                 nameof(Cleared) => Codec.Decode<Cleared>(json),
                 nameof(Snapshotted) => Codec.Decode<Snapshotted>(json),
-                _ => FSharpValueOption<Event>.None
+                _ => null
             };
 
-        public static (string, ReadOnlyMemory<byte>) Encode(Event e) =>
-            (e.GetType().Name, Codec.Encode(e));
+        public static (string, ReadOnlyMemory<byte>) Encode(IEvent e)
+        {
+            var utf8 = Codec.Encode(e);
+            return (e.GetType().Name, utf8);
+        }
 
         public const string Category = "Todos";
         /// Maps a ClientId to the StreamId that identifies the Stream in which the data for that client will be held
@@ -81,7 +58,7 @@ public static class Todo
         public static readonly State Initial = new(0, []);
 
         /// Folds a set of events from the store into a given `state`
-        public static State Fold(State origin, IEnumerable<Event> xs)
+        public static State Fold(State origin, IEnumerable<IEvent> xs)
         {
             var nextId = origin.NextId;
             var items = origin.Items.ToList();
@@ -115,17 +92,17 @@ public static class Todo
         }
 
         /// Determines whether a given event represents a checkpoint that implies we don't need to see any preceding events
-        public static bool IsOrigin(Event e) => e is Event.Cleared or Event.Snapshotted;
+        public static bool IsOrigin(IEvent e) => e is Event.Cleared or Event.Snapshotted;
 
         /// Prepares an Event that encodes all relevant aspects of a State such that `evolve` can rehydrate a complete State from it
-        public static Event Snapshot(State state) => new Event.Snapshotted { NextId = state.NextId, Items = state.Items };
+        public static IEvent Snapshot(State state) => new Event.Snapshotted(state.NextId, state.Items);
     }
 
     /// Properties that can be edited on a Todo List item
     public class Props
     {
         public int Order { get; init; }
-        public required string? Title { get; init; }
+        public required string Title { get; init; }
         public bool Completed { get; init; }
     }
 
@@ -155,21 +132,20 @@ public static class Todo
         public class Clear : Command { }
 
         /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream
-        public Event[] Interpret(State s) => this switch
+        public IEvent[] Interpret(State s) => this switch
         {
-            Add c => [Make<Event.Added>(s.NextId, c.Props)],
+            Add c => [new Event.Added(Make(s.NextId, c.Props))],
             Update c when s.Items.Any(i => i.Id == c.Id
                 && new { i.Order, i.Title, i.Completed } == new { c.Props.Order, c.Props.Title, c.Props.Completed }) => [],
-            Update c => [Make<Event.Updated>(c.Id, c.Props)],
+            Update c => [new Event.Updated(Make(c.Id, c.Props))],
             Delete c when s.Items.All(i => i.Id != c.Id) => [],
-            Delete c => [new Event.Deleted { Id = c.Id }],
+            Delete c => [new Event.Deleted(c.Id)],
             Clear when !s.Items.Any() => [],
-            Clear => [new Event.Cleared { NextId = s.NextId }],
+            Clear => [new Event.Cleared(s.NextId)],
             _ => throw new ArgumentOutOfRangeException(nameof(Command), this, "invalid")
         };
 
-        static Event Make<T>(int id, Props value) where T : Event.ItemEvent, new() =>
-            new T { Data = { Id = id, Order = value.Order, Title = value.Title, Completed = value.Completed } };
+        static Event.ItemData Make(int id, Props value) => new Event.ItemData(id, value.Order, value.Title, value.Completed);
     }
 
     /// A single Item in the Todo List
@@ -177,12 +153,12 @@ public static class Todo
     {
         public int Id { get; init; }
         public int Order { get; init; }
-        public string? Title { get; init; }
+        public required string Title { get; init; }
         public bool Completed { get; init; }
     }
 
     /// Defines operations that a Controller can perform on a Todo List
-    public class Service(Func<ClientId, Equinox.DeciderCore<Event, State>> resolve)
+    public class Service(Func<ClientId, Equinox.DeciderCore<IEvent, State>> resolve)
     {
         //
         // READ

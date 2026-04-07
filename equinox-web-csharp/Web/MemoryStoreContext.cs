@@ -19,5 +19,5 @@ public class MemoryStoreContext(VolatileStore<ReadOnlyMemory<byte>> store) : Equ
         return cat.Resolve(handlerLog);
     }
 
-    internal override Task Connect() => Task.CompletedTask;
+    internal override async Task Connect() {}
 }

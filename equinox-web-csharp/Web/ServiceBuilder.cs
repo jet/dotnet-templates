@@ -19,7 +19,7 @@ internal class ServiceBuilder
             _context.Resolve(
                 Todo.Event.Category,
                 _handlerLog,
-                EquinoxCodec.Create(Todo.Event.Encode, Todo.Event.TryDecode),
+                EquinoxCodec.Create<Todo.IEvent>(Todo.Event.Encode, Todo.Event.TryDecode),
                 Todo.State.Fold,
                 Todo.State.Initial,
                 Todo.State.IsOrigin,
@@ -35,7 +35,7 @@ internal class ServiceBuilder
             _context.Resolve(
                 Aggregate.Event.Category,
                 _handlerLog,
-                EquinoxCodec.Create(Aggregate.Event.Encode, Aggregate.Event.TryDecode),
+                EquinoxCodec.Create<Aggregate.IEvent>(Aggregate.Event.Encode, Aggregate.Event.TryDecode),
                 Aggregate.State.Fold,
                 Aggregate.State.Initial,
                 Aggregate.State.IsOrigin,
@@ -50,7 +50,7 @@ internal class ServiceBuilder
 //            _context.Resolve(
 //                Thing.Event.Category,
 //                _handlerLog,
-//                EquinoxCodec.Create(Thing.Event.Encode, Thing.Event.TryDecode),
+//                EquinoxCodec.Create<Thing.IEvent>(Thing.Event.Encode, Thing.Event.TryDecode),
 //                Thing.Fold.Fold,
 //                Thing.Fold.Initial,
 //                Thing.Fold.IsOrigin,
