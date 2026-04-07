@@ -1,32 +1,22 @@
 using Equinox;
 using Equinox.EventStoreDb;
 using Microsoft.FSharp.Core;
-using System;
-using System.Threading.Tasks;
 
 namespace TodoBackendTemplate;
 
 public record EventStoreConfig(string ConnectionString, int CacheMb);
 
-public class EventStoreContext : EquinoxContext
+public class EventStoreContext(EventStoreConfig config) : EquinoxContext
 {
-    readonly Cache _cache;
+    readonly Cache _cache = new("Es", config.CacheMb);
+    Equinox.EventStoreDb.EventStoreContext _connection = null!;
 
-    Equinox.EventStoreDb.EventStoreContext _connection;
-    readonly Func<Task> _connect;
+    internal override async Task Connect() =>
+        _connection = await ConnectStore(config);
 
-    public EventStoreContext(EventStoreConfig config)
-    {
-        _cache = new Cache("Es", config.CacheMb);
-        _connect = async () => _connection = await Connect(config);
-    }
-
-    internal override async Task Connect() => await _connect();
-
-    static Task<Equinox.EventStoreDb.EventStoreContext> Connect(EventStoreConfig config)
+    static Task<Equinox.EventStoreDb.EventStoreContext> ConnectStore(EventStoreConfig config)
     {
         var c = new EventStoreConnector(reqTimeout: TimeSpan.FromSeconds(5));
-
         var conn = c.Establish("Twin", Discovery.NewConnectionString(config.ConnectionString), ConnectionStrategy.ClusterTwinPreferSlaveReads);
         return Task.FromResult(new Equinox.EventStoreDb.EventStoreContext(conn));
     }
@@ -37,16 +27,14 @@ public class EventStoreContext : EquinoxContext
         FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
         Func<TState, TEvent[], TState> fold,
         TState initial,
-        Func<TEvent, bool> isOrigin = null,
-        Func<TState, TEvent> toSnapshot = null)
+        Func<TEvent, bool>? isOrigin = null,
+        Func<TState, TEvent>? toSnapshot = null)
     {
         var accessStrategy =
             isOrigin == null && toSnapshot == null
                 ? null
-                : AccessStrategy<TEvent, TState>.NewRollingSnapshots(FuncConvert.FromFunc(isOrigin), FuncConvert.FromFunc(toSnapshot));
-        var cacheStrategy = _cache == null
-            ? null
-            : CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
+                : AccessStrategy<TEvent, TState>.NewRollingSnapshots(FuncConvert.FromFunc(isOrigin!), FuncConvert.FromFunc(toSnapshot!));
+        var cacheStrategy = CachingStrategy.NewSlidingWindow(_cache, TimeSpan.FromMinutes(20));
         var cat = new EventStoreCategory<TEvent, TState, Unit>(_connection, name, codec, fold, initial, accessStrategy, cacheStrategy);
         return cat.Resolve(handlerLog);
     }

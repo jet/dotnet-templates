@@ -1,7 +1,4 @@
 ﻿using Microsoft.FSharp.Core;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace TodoBackendTemplate;
 
@@ -10,9 +7,7 @@ public static class Aggregate
     /// NB - these types and names reflect the actual storage formats and hence need to be versioned with care
     public abstract class Event
     {
-        public class Happened : Event
-        {
-        }
+        public class Happened : Event { }
 
         public class Snapshotted : Event
         {
@@ -20,7 +15,7 @@ public static class Aggregate
         }
 
         static readonly SystemTextJsonUtf8Codec Codec = new(new());
-            
+
         public static FSharpValueOption<Event> TryDecode(string et, ReadOnlyMemory<byte> json) =>
             et switch
             {
@@ -30,16 +25,17 @@ public static class Aggregate
             };
 
         public static (string, ReadOnlyMemory<byte>) Encode(Event e) => (e.GetType().Name, Codec.Encode(e));
-        public const string Category = "Aggregate"; 
+        public const string Category = "Aggregate";
         public static string StreamId(ClientId id) => id.ToString();
     }
+
     public class State
     {
         public bool Happened { get; set; }
 
         State(bool happened) { Happened = happened; }
 
-        public static readonly State Initial = new (false);
+        public static readonly State Initial = new(false);
 
         static void Evolve(State s, Event x) =>
             s.Happened = x switch
@@ -59,47 +55,35 @@ public static class Aggregate
         }
 
         public static bool IsOrigin(Event e) => e is Event.Snapshotted;
-            
-        public static Event Snapshot(State s) => new Event.Snapshotted {HasHappened = s.Happened};
+
+        public static Event Snapshot(State s) => new Event.Snapshotted { HasHappened = s.Happened };
     }
 
-    /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream 
+    /// Defines the decision process which maps from the intent of the `Command` to the `Event`s that represent that decision in the Stream
     public abstract class Command
     {
-        public class MakeItSo : Command
-        {
-        }
+        public class MakeItSo : Command { }
 
         public Event[] Interpret(State s) => this switch
         {
-            MakeItSo =>
-                s.Happened
-                    ? Array.Empty<Event>()
-                    : new Event[] { new Event.Happened() },
+            MakeItSo => s.Happened ? [] : [new Event.Happened()],
             _ => throw new ArgumentOutOfRangeException(nameof(Command), this, "invalid")
         };
     }
 
     public record View(bool Sorted);
 
-    public class Service
+    public class Service(Func<ClientId, Equinox.DeciderCore<Event, State>> resolve)
     {
-        /// Maps a ClientId to Handler for the relevant stream
-        readonly Func<ClientId, Equinox.DeciderCore<Event, State>> _resolve;
-
-        public Service(Func<ClientId, Equinox.DeciderCore<Event, State>> resolve) =>
-            _resolve = resolve; 
-
-        /// Execute the specified command 
+        /// Execute the specified command
         public Task<Unit> Execute(ClientId id, Command command) =>
-            _resolve(id).Transact(command.Interpret);
+            resolve(id).Transact(command.Interpret);
 
         /// Read the present state
         // TOCONSIDER: you should probably be separating this out per CQRS and reading from a denormalized/cached set of projections
         public Task<View> Read(ClientId id) =>
-            _resolve(id).Query(Render);
+            resolve(id).Query(Render);
 
-        static View Render(State s) =>
-            new (Sorted: s.Happened);
+        static View Render(State s) => new(Sorted: s.Happened);
     }
 }

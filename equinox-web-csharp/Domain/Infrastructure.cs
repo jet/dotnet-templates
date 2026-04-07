@@ -1,5 +1,3 @@
-using System;
-
 namespace TodoBackendTemplate;
 
 /// System.Text.Json implementation of IEncoder that encodes direct to a UTF-8 Buffer
