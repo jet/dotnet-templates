@@ -68,7 +68,7 @@ type App(store: Store) =
         
     member x.RunUntilCaughtUp(tranches, lambdaTimeout) =
         let source = store.CreateSource(tranches, sink)
-        let lambdaCutoffDuration = lambdaTimeout - processingTimeout - TimeSpan.FromSeconds 5
+        let lambdaCutoffDuration = lambdaTimeout - processingTimeout - TimeSpan.FromSeconds 5.
         source.RunUntilCaughtUp(lambdaCutoffDuration, stats.StatsInterval)
         
 type Function() =

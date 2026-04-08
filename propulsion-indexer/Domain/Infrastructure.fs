@@ -10,7 +10,7 @@ module Guid =
 
 module TimeSpan =
 
-    let s value = TimeSpan.FromSeconds value
+    let s (value: float) = TimeSpan.FromSeconds value
 
 module String =
 

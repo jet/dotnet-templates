@@ -103,7 +103,7 @@ module Mdb =
         let schema =                        p.GetResult(CheckpointSchema, fun () -> c.MdbSchema)
         let fromTail =                      p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 1000)
-        let tailSleepInterval =             p.GetResult(TailSleepIntervalMs, 100) |> TimeSpan.FromMilliseconds
+        let tailSleepInterval =             p.GetResult(TailSleepIntervalMs, 100) |> float |> TimeSpan.FromMilliseconds
         member _.Connect() =
                                             let sanitize (cs: string) = Npgsql.NpgsqlConnectionStringBuilder(cs, Password = null)
                                             Log.Information("Npgsql checkpoint connection {connectionString}", sanitize checkpointConnStr)

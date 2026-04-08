@@ -4,7 +4,7 @@ module Metrics =
 
     let log = Serilog.Log.ForContext("isMetric", true)
 
-let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
+let private defaultCacheDuration = System.TimeSpan.FromMinutes 20.
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
 
 // #if (cosmos || esdb || sss)

@@ -12,5 +12,8 @@
     <NoWarn>$(NoWarn);FS2003;NU5105</NoWarn>
     <!-- 3579: Warn on untyped string interpolations -->
     <WarnOn>$(NoWarn);FS3579</WarnOn>
+    <!-- .NET 10 defaults NuGetAuditMode to all (incl transitive); keep direct-only to avoid
+         flagging transitive vulnerabilities that template users can't themselves address -->
+    <NuGetAuditMode>direct</NuGetAuditMode>
   </PropertyGroup>
 </Project>

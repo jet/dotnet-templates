@@ -11,7 +11,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     let contextId = Guid.gen () |> Guid.toStringN
     let handler = Handler.create store
     let log = Serilog.Log.Logger
-    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1, stateInterval = TimeSpan.FromMinutes 2,
+    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 2.,
                               logExternalStats = dumpStats)
     let sink = Handler.Factory.StartSink(log, stats, 4, handler, maxReadAhead = 1024, 
                                          // Ensure batches are completed ASAP so waits in the tests are minimal
@@ -51,7 +51,7 @@ module MemoryReactor =
             new Fixture(messageSink, Domain.Store.Config.Memory store, createSourceConfig)
         // override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member _.Wait() = base.Await(TimeSpan.MaxValue) // Propagation delay is not applicable for MemoryStore
-        member val private Backoff = TimeSpan.FromMilliseconds 1
+        member val private Backoff = TimeSpan.FromMilliseconds 1.
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromSeconds 5.
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
@@ -59,7 +59,7 @@ module MemoryReactor =
 
 module DynamoReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 50
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50.
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.DynamoStoreSource Feed
     type Fixture private (messageSink, store, dumpStats, createSource) =
@@ -89,7 +89,7 @@ module DynamoReactor =
 
 module MessageDbReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 50
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50.
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.MessageDbSource Feed
     type Fixture private (messageSink, store, dumpStats, createSource) =

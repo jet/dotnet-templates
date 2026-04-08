@@ -11,7 +11,7 @@
 
     <PackOptions>/p:BUILD_ID=$(BUILD_ID) $(PrOption) -o $(ThisDirAbsolute)bin/nupkg</PackOptions>
 
-    <TestOptions>--report-trx --timeout 3300</TestOptions>
+    <TestOptions>--report-xunit-trx --timeout 3300s --xunit-diagnostics on</TestOptions>
   </PropertyGroup>
 
   <Target Name="Pack">
@@ -20,7 +20,7 @@
 
   <!-- NOTE The tests unpack the nupkg-->
   <Target Name="VSTest" DependsOnTargets="Pack">
-    <Exec Command="dotnet test tests/Equinox.Templates.Tests $(Cfg) $(TestOptions)" />
+    <Exec Command="dotnet test --project tests/Equinox.Templates.Tests $(Cfg) $(TestOptions)" />
   </Target>
 
 </Project>

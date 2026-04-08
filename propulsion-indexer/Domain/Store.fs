@@ -84,7 +84,7 @@ module Ingester =
             let events = events |> Array.map (FsCodec.Core.TimelineEvent.mapBodies FsCodec.SystemTextJson.Encoding.Utf8EncodedToJsonElement)
             svc.Ingest(id, events)
 
-let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
+let private defaultCacheDuration = System.TimeSpan.FromMinutes 20.
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
 
 [<NoComparison; NoEquality; RequireQualifiedAccess>]

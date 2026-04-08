@@ -44,7 +44,7 @@ module Args =
         member val StatsInterval =          TimeSpan.FromMinutes 1.
         member val StateInterval =          TimeSpan.FromMinutes 10.
         member val PurgeInterval =          TimeSpan.FromHours 1.
-        member val IdleDelay =              p.GetResult(IdleDelayMs, 1000) |> TimeSpan.FromMilliseconds
+        member val IdleDelay =              p.GetResult(IdleDelayMs, 1000) |> float |> TimeSpan.FromMilliseconds
         member val WakeForResults =         p.Contains WakeForResults
         member x.ProcessorParams() =        Log.Information("Watching... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
                                                             processorName, maxReadAhead, maxConcurrentProcessors)

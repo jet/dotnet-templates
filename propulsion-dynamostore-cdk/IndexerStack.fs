@@ -25,7 +25,7 @@ type IndexerStackProps
     member val IndexTableName = indexTableName
     member val MemorySize = defaultArg memorySize 128
     member val BatchSize = defaultArg batchSize 1000
-    member val Timeout = defaultArg timeout (TimeSpan.FromSeconds 180)
+    member val Timeout = defaultArg timeout (TimeSpan.FromSeconds 180.)
     member val LambdaCodePath = lambdaCodePath
 
 type IndexerStack(scope, id, props: IndexerStackProps) as stack =

@@ -16,7 +16,7 @@ type XunitOutputSink(?messageSink: Xunit.Sdk.IMessageSink, ?minLevel: Serilog.Ev
         formatter.Format(logEvent, writer)
         let message = writer |> string |> fun s -> s.TrimEnd('\n')
         currentTestOutput |> Option.iter (fun testOutput -> testOutput.WriteLine message)
-        messageSink |> Option.iter (fun sink -> sink.OnMessage(Xunit.Sdk.DiagnosticMessage message) |> ignore)
+        messageSink |> Option.iter (fun sink -> sink.OnMessage(Xunit.v3.DiagnosticMessage message) |> ignore)
     member _.CaptureSerilogLog(testOutput) =
         currentTestOutput <- Some testOutput
         { new System.IDisposable with member _.Dispose() = currentTestOutput <- None }

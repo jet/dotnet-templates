@@ -144,7 +144,7 @@ module Args =
         member val CosmosVerbose =          match source with Choice1Of2 c -> c.Verbose | Choice2Of2 f -> f.CosmosVerbose
         member x.WaitForTail =              if isFileSource || p.Contains Follow then None
                                             else Some (x.StatsInterval * 2.)
-        member x.LagEstimationInterval =    x.WaitForTail |> Option.map (fun _ -> TimeSpan.s 5)
+        member x.LagEstimationInterval =    x.WaitForTail |> Option.map (fun _ -> TimeSpan.s 5.)
         member x.ProcessorParams() =        Log.Information("{action}ing... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
                                                             actionLabel, x.ProcessorName, maxReadAhead, x.MaxConcurrentProcessors)
                                             (x.ProcessorName, maxReadAhead, x.MaxConcurrentProcessors)
@@ -271,7 +271,7 @@ let build (args: Args.Arguments) = async {
         parse None,
         let stats = Propulsion.CosmosStore.CosmosStoreSinkStats(Log.Logger, args.StatsInterval, args.StateInterval)
         Propulsion.CosmosStore.CosmosStoreSink.Start(Log.Logger, maxReadAhead, eventsContext, maxConcurrentStreams, stats,
-                                                     purgeInterval = TimeSpan.FromHours 1, maxBytes = a.MaxBytes)
+                                                     purgeInterval = TimeSpan.FromHours 1., maxBytes = a.MaxBytes)
     let export (a: Args.SyncArguments) =
         let context = a.Connect() |> Async.RunSynchronously
         let cache = Equinox.Cache (AppName, sizeMb = 10)

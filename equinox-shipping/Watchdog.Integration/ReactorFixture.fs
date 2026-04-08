@@ -14,7 +14,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
         let maxDop = 4
         Shipping.Domain.FinalizationProcess.Factory.create maxDop store
     let log = Serilog.Log.Logger
-    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1, stateInterval = TimeSpan.FromMinutes 2,
+    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 2.,
                               verboseStore = true, logExternalStats = dumpStats)
     let sink = Handler.Factory.StartSink(log, stats, 4, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 1024,
                                         // Ensure batches are completed ASAP so waits in the tests are minimal
@@ -58,7 +58,7 @@ module MemoryReactor =
             new Fixture(messageSink, Store.Config.Memory store, createSourceConfig)
         override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member _.Wait() = base.Await(TimeSpan.MaxValue) // Propagation delay is not applicable for MemoryStore
-        member val private Backoff = TimeSpan.FromMilliseconds 1
+        member val private Backoff = TimeSpan.FromMilliseconds 1.
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromSeconds 5.
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
@@ -66,7 +66,7 @@ module MemoryReactor =
 
 module CosmosReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 300
+    let tailSleepInterval = TimeSpan.FromMilliseconds 300.
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.CosmosStore CFP
     type Fixture private (messageSink, store, createSourceConfig) =
@@ -80,7 +80,7 @@ module CosmosReactor =
             new Fixture(messageSink, store, createSourceConfig)
         member _.NullWait(_arguments) = async.Zero () // We could wire up a way to await all tranches having caught up, but not implemented yet
         member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
-        member val private Backoff = TimeSpan.FromMilliseconds 100 // Vary to adjust effect of too many retries on rate limiting
+        member val private Backoff = TimeSpan.FromMilliseconds 100. // Vary to adjust effect of too many retries on rate limiting
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
         member x.CheckReactions label = Propulsion.Reactor.Monitor.check x.NullWait x.Backoff x.Timeout x.WarnThreshold label
@@ -93,7 +93,7 @@ module CosmosReactor =
 
 module DynamoReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 50
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50.
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.DynamoStoreSource Feed
     type Fixture private (messageSink, store, dumpStats, createSource) =
@@ -123,7 +123,7 @@ module DynamoReactor =
 
 module EsdbReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 50
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50.
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.EventStoreDb.EventStoreSource
     type Fixture private (messageSink, store, dumpStats, createSource) =
