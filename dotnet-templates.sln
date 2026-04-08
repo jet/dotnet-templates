@@ -33,7 +33,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".project", ".project", "{DA9B4252-0CFE-428E-A934-D21D8D6BAC1F}"
 	ProjectSection(SolutionItems) = preProject
 		azure-pipelines.yml = azure-pipelines.yml
-		build.proj = build.proj
 		CHANGELOG.md = CHANGELOG.md
 		Directory.Build.props = Directory.Build.props
 		Directory.Build.targets = Directory.Build.targets
