@@ -271,7 +271,7 @@ let build (args: Args.Arguments) = async {
         parse None,
         let stats = Propulsion.CosmosStore.CosmosStoreSinkStats(Log.Logger, args.StatsInterval, args.StateInterval)
         Propulsion.CosmosStore.CosmosStoreSink.Start(Log.Logger, maxReadAhead, eventsContext, maxConcurrentStreams, stats,
-                                                     purgeInterval = TimeSpan.FromHours 1., maxBytes = a.MaxBytes)
+                                                     purgeInterval = TimeSpan.FromHours 1, maxBytes = a.MaxBytes)
     let export (a: Args.SyncArguments) =
         let context = a.Connect() |> Async.RunSynchronously
         let cache = Equinox.Cache (AppName, sizeMb = 10)

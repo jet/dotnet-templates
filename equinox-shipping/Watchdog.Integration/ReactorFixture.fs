@@ -59,7 +59,7 @@ module MemoryReactor =
         override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member _.Wait() = base.Await(TimeSpan.MaxValue) // Propagation delay is not applicable for MemoryStore
         member val private Backoff = TimeSpan.FromMilliseconds 1L
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromSeconds 5L
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromSeconds 5L
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
         member x.CheckReactions label = Propulsion.Reactor.Monitor.check x.Wait x.Backoff x.Timeout x.WarnThreshold label
@@ -79,7 +79,7 @@ module CosmosReactor =
                 SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, TimeSpan.FromSeconds 60L)
             new Fixture(messageSink, store, createSourceConfig)
         member _.NullWait(_arguments) = async.Zero () // We could wire up a way to await all tranches having caught up, but not implemented yet
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1L
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromMinutes 1L
         member val private Backoff = TimeSpan.FromMilliseconds 100L // Vary to adjust effect of too many retries on rate limiting
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
@@ -106,7 +106,7 @@ module DynamoReactor =
                 SourceConfig.Dynamo (conn.IndexContext, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
                                      tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60L)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1L
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromMinutes 1L
         // Give the events a chance to propagate through the Streams and Lambda before we start the wait
         member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 1200L
         member x.Backoff = tailSleepInterval * 2. // Vary to adjust effect of too many retries on rate limiting
@@ -136,7 +136,7 @@ module EsdbReactor =
                                    tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60L)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
         override _.RunTimeout = TimeSpan.FromSeconds 0.1
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1L
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromMinutes 1L
         member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 300L
         member x.Backoff = tailSleepInterval * 2.
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 

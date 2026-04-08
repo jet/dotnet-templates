@@ -825,7 +825,7 @@ member service.Read(tenantId) =
 ```fsharp
 module Queries =
 
-    let infoCachingPeriod = TimeSpan.FromSeconds 10.
+    let infoCachingPeriod = TimeSpan.FromSeconds 10L
     type NameInfo = { name: string; contact: ContactInfo }
     let renderName (state: Fold.State) = { name = state.originalName; contact = state.contactDetails } 
     let renderPendingApprovals (state: Fold.State) = Fold.calculatePendingApprovals state

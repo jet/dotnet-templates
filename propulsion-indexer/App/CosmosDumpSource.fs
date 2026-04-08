@@ -26,6 +26,6 @@ type [<Sealed; AbstractClass>] CosmosDumpSource private () =
                     with e -> raise <| exn($"File Parse error on L%d{lineNo}: '%s{line.Substring(0, 200)}'", e) }
         let source =
             let checkpointStore = Equinox.MemoryStore.VolatileStore()
-            let checkpoints = ReaderCheckpoint.MemoryStore.create log ("consumerGroup", TimeSpan.FromMinutes 1.) checkpointStore
+            let checkpoints = ReaderCheckpoint.MemoryStore.create log ("consumerGroup", TimeSpan.FromMinutes 1) checkpointStore
             SinglePassFeedSource(log, statsInterval, SourceId.parse filePath, crawl, checkpoints, sink, string)
         source.Start(fun _ct -> task { return [| TrancheId.parse "0" |] })

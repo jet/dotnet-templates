@@ -76,7 +76,7 @@ module Args =
         member x.VerboseStore =             x.Source.VerboseStore           
         member val StatsInterval =          TimeSpan.FromMinutes 1L
         member val StateInterval =          TimeSpan.FromMinutes 5L
-        member val PurgeInterval =          TimeSpan.FromHours 1.
+        member val PurgeInterval =          TimeSpan.FromHours 1
         
         member _.ProcessorParams() =        Log.Information("Reacting... {processorName}, reading {maxReadAhead} ahead, {dop} streams",
                                                             processorName, maxReadAhead, maxConcurrentStreams)

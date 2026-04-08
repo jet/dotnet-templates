@@ -67,7 +67,7 @@ type Service internal
         let decider = resolve epochId
         let! _, closed as res = decider.Query(id, Equinox.LoadOption.AnyCachedValue)
         if closed then return res // Once the Epoch is closed, no new tickets ca ever be entered so no re-reads needed
-        else return! decider.Query(id, Equinox.LoadOption.AllowStale (System.TimeSpan.FromSeconds 1.)) }
+        else return! decider.Query(id, Equinox.LoadOption.AllowStale (System.TimeSpan.FromSeconds 1)) }
 
 module Factory =
 

@@ -76,8 +76,8 @@ module Args =
         member val Duration =           duration
         member val ReportingIntervals =
             match p.GetResults(ReportIntervalS) with
-            | [] -> TimeSpan.FromSeconds 10L|> Seq.singleton
-            | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(float i) }
+            | [] -> TimeSpan.FromSeconds 10L |> Seq.singleton
+            | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(int64 i) }
             |> fun intervals -> [| yield duration; yield! intervals |]
         member x.ConfigureStore(log: ILogger, createStoreLog) =
             match p.GetSubCommand() with

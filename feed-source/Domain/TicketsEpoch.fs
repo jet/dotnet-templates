@@ -87,7 +87,7 @@ type IngestionService internal (capacity, resolve: struct (FcId * TicketsEpochId
         let decider = resolve (fcId, epochId)
         match! decider.Query(id, Equinox.LoadOption.AnyCachedValue) with
         | tickets, true -> return tickets // Once the Epoch is closed, no new tickets ca ever be entered so no re-reads needed
-        | _, false -> return! decider.Query(fst, Equinox.LoadOption.AllowStale (System.TimeSpan.FromSeconds 1.)) }
+        | _, false -> return! decider.Query(fst, Equinox.LoadOption.AllowStale (System.TimeSpan.FromSeconds 1)) }
 
 module Factory =
 

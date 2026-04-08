@@ -18,7 +18,7 @@ module Memory =
     let create name codec initial fold store: Equinox.Category<_, _, _> =
         Equinox.MemoryStore.MemoryStoreCategory(store, name, FsCodec.Encoder.Uncompressed codec, fold, initial)
 
-let private defaultCacheDuration = System.TimeSpan.FromMinutes 20.
+let private defaultCacheDuration = System.TimeSpan.FromMinutes 20
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
 
 module Cosmos =

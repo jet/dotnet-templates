@@ -20,6 +20,6 @@ module Factory =
         let ingester = ExactlyOnceIngester.create log linger (series.ReadIngestionEpochId, series.MarkIngestionEpochId) (epochs.Ingest, Array.toSeq)
         Service(ingester)
     let create store =
-        let defaultLinger = System.TimeSpan.FromMilliseconds 200.
+        let defaultLinger = System.TimeSpan.FromMilliseconds 200
         let maxItemsPerEpoch = 10_000
         create_ defaultLinger maxItemsPerEpoch store

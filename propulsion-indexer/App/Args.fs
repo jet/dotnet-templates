@@ -101,7 +101,7 @@ and CosmosSourceArguments(c: Configuration, p: ParseResults<CosmosSourceParamete
 
     let fromTail =                          p.Contains FromTail
     let maxItems =                          p.TryGetResult MaxItems
-    let tailSleepInterval =                 TimeSpan.FromMilliseconds 500.
+    let tailSleepInterval =                 TimeSpan.FromMilliseconds 500
     let lagFrequency =                      p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
 
     member val IsLagFreqSpecified =         p.Contains LagFreqM
