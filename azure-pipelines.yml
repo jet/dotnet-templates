@@ -3,14 +3,16 @@ jobs:
 - job: Windows
   pool:
     vmImage: 'windows-latest'
+  variables:
+    BUILD_ID: $(BUILD.BUILDNUMBER)
+    BUILD_PR: $(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)
+    CI: true
   steps:
-  # for this repo, `dotnet test` implies pack as it validates the .nupkg file
+  # for this repo, `dotnet test` requires a build/pack as it validates the .nupkg file
+  - script: dotnet pack src/Equinox.Templates
+    displayName: dotnet pack
   - script: dotnet test --project tests/Equinox.Templates.Tests --report-xunit-trx --timeout 3300s --xunit-diagnostics on
-    displayName: dotnet pack + test
-    env:
-      BUILD_ID: $(BUILD.BUILDNUMBER)
-      CI: true
-      BUILD_PR: $(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)
+    displayName: dotnet test
   - task: PublishTestResults@2
     inputs:
       testResultsFormat: 'VSTest'
