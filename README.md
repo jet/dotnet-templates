@@ -203,7 +203,7 @@ To use from the command line, the outline is:
 There are [integration tests in the repo](https://github.com/jet/dotnet-templates/blob/int-tests/tests/Equinox.Templates.Tests/DotnetBuild.fs) that check everything compiles before we merge/release
 
     dotnet pack src/Equinox.Templates # build Equinox.Templates package into artifacts/nupkg
-    dotnet test --project tests/Equinox.Templates.Tests -c Release # Test aphabetically newest file in artifacts/nupkgs only (-c Release to run full tests)
+    dotnet test --project tests/Equinox.Templates.Tests -c Release # Test alphabetically newest file in artifacts/nupkg only (-c Release to run full tests)
 
 One can also do it manually:
 
