@@ -20,5 +20,5 @@ jobs:
     condition: succeededOrFailed()
   - task: PublishBuildArtifacts@1
     inputs:
-      pathToPublish: 'bin/nupkg'
+      pathToPublish: 'artifacts/nupkg'
       artifactName: 'nupkg'
