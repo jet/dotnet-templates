@@ -43,8 +43,8 @@ type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheNa
     member x.CreateSource(trancheIds, sink) =
         let batchSizeCutoff =           100
         let fromTail =                  false
-        let tailSleepInterval =         TimeSpan.FromMilliseconds 500.
-        let statsInterval =             TimeSpan.FromMinutes 1.
+        let tailSleepInterval =         TimeSpan.FromMilliseconds 500L
+        let statsInterval =             TimeSpan.FromMinutes 1L
         let streamsDop =                2
         let loadMode =                  Propulsion.DynamoStore.WithData (streamsDop, context)
         Handler.Factory.CreateDynamoSource(Log.Logger, sink, (indexContext, checkpoints, loadMode, fromTail, batchSizeCutoff, tailSleepInterval, statsInterval), trancheIds)
@@ -52,7 +52,7 @@ type Store internal (connector: DynamoStoreConnector, table, indexTable, cacheNa
 /// Wiring for Source and Sink running the Watchdog.Handler
 type App(store: Store) =
     
-    let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1., TimeSpan.FromMinutes 2., verboseStore = false, logExternalStats = store.DumpMetrics)
+    let stats = Handler.Stats(Log.Logger, TimeSpan.FromMinutes 1L, TimeSpan.FromMinutes 2L, verboseStore = false, logExternalStats = store.DumpMetrics)
     let processingTimeout = 10. |> TimeSpan.FromSeconds
     let sink =
         let manager =
@@ -62,13 +62,13 @@ type App(store: Store) =
         let maxConcurrentStreams = 8
         // On paper, a 1m window should be fine, give the timeout for a single lifecycle
         // We use a higher value to reduce redundant work in the (edge) case of multiple deliveries due to rate limiting of readers
-        let purgeInterval = TimeSpan.FromMinutes 5.
+        let purgeInterval = TimeSpan.FromMinutes 5L
         Handler.Factory.StartSink(Log.Logger, stats, maxConcurrentStreams, manager, processingTimeout, maxReadAhead, 
                                  wakeForResults = true, purgeInterval = purgeInterval)
         
     member x.RunUntilCaughtUp(tranches, lambdaTimeout) =
         let source = store.CreateSource(tranches, sink)
-        let lambdaCutoffDuration = lambdaTimeout - processingTimeout - TimeSpan.FromSeconds 5.
+        let lambdaCutoffDuration = lambdaTimeout - processingTimeout - TimeSpan.FromSeconds 5L
         source.RunUntilCaughtUp(lambdaCutoffDuration, stats.StatsInterval)
         
 type Function() =
@@ -86,7 +86,7 @@ type Function() =
                  .WriteTo.Console(outputTemplate = "{Level:u1} {Message:lj} {Properties:j}{NewLine}{Exception}") |> ignore)
             .CreateLogger()
     let config = Configuration("Watchdog.Lambda")
-    let store = Store(config, requestTimeout = TimeSpan.FromSeconds 120., retries = 10)
+    let store = Store(config, requestTimeout = TimeSpan.FromSeconds 120L, retries = 10)
     let app = App(store)
 
     /// Process for all tranches in the input batch; requeue any triggers that we've not yet fully completed the processing for

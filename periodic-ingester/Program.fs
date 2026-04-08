@@ -48,9 +48,9 @@ module Args =
         member val PrometheusPort =         p.TryGetResult PrometheusPort |> Option.orElseWith (fun () -> c.PrometheusPort)
         member val MaxReadAhead =           p.GetResult(MaxReadAhead, 8)
         member val TicketsDop =             p.GetResult(TicketsDop, 4)
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 5.
-        member val CheckpointInterval =     TimeSpan.FromHours 1.
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 5L
+        member val CheckpointInterval =     TimeSpan.FromHours 1
         member val Feed: FeedArguments =
             match p.GetSubCommand() with
             | Feed feed -> FeedArguments(c, feed)
@@ -67,7 +67,7 @@ module Args =
     and FeedArguments(c: Configuration, p: ParseResults<FeedParameters>) =
         member val SourceId =               p.GetResult(Group, fun () -> c.Group) |> Propulsion.Feed.SourceId.parse
         member val BaseUri =                p.GetResult(BaseUri, fun () -> c.BaseUri) |> Uri
-        member val RefreshInterval =        TimeSpan.FromHours 1.
+        member val RefreshInterval =        TimeSpan.FromHours 1
         member val Cosmos: CosmosArguments =
             match p.GetSubCommand() with
             | Cosmos cosmos -> CosmosArguments(c, cosmos)

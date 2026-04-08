@@ -25,7 +25,7 @@ type NotifierStackProps
     member val UpdatesTopicArn = updatesTopicArn
     member val MemorySize = defaultArg memorySize 128
     member val BatchSize = defaultArg batchSize 10
-    member val Timeout = defaultArg timeout (TimeSpan.FromSeconds 10.)
+    member val Timeout = defaultArg timeout (TimeSpan.FromSeconds 10L)
     member val LambdaCodePath = lambdaCodePath
 
 type NotifierStack(scope, id, props: NotifierStackProps) as stack =

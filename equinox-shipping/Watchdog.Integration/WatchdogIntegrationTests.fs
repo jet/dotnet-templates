@@ -31,7 +31,7 @@ type ReactorPropertiesBase(reactor: FixtureBase, testOutput) =
     default _.DisposeAsync() = async.Zero ()
 
     abstract member RunTimeout: TimeSpan with get
-    default _.RunTimeout = TimeSpan.FromSeconds 1.
+    default _.RunTimeout = TimeSpan.FromSeconds 1L
 
     // Abusing IDisposable rather than IAsyncDisposable as we want the output to accompany the test output
     interface IDisposable with

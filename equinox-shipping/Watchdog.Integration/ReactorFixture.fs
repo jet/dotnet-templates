@@ -14,9 +14,9 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
         let maxDop = 4
         Shipping.Domain.FinalizationProcess.Factory.create maxDop store
     let log = Serilog.Log.Logger
-    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 2.,
+    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1L, stateInterval = TimeSpan.FromMinutes 2L,
                               verboseStore = true, logExternalStats = dumpStats)
-    let sink = Handler.Factory.StartSink(log, stats, 4, manager, processingTimeout = TimeSpan.FromSeconds 1., maxReadAhead = 1024,
+    let sink = Handler.Factory.StartSink(log, stats, 4, manager, processingTimeout = TimeSpan.FromSeconds 1L, maxReadAhead = 1024,
                                         // Ensure batches are completed ASAP so waits in the tests are minimal
                                         wakeForResults = true)
     let source, awaitReactions =
@@ -27,7 +27,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     member val Store = store
     member val ProcessManager = manager
     abstract member RunTimeout: TimeSpan with get
-    default _.RunTimeout = TimeSpan.FromSeconds 1.
+    default _.RunTimeout = TimeSpan.FromSeconds 1L
     member val Log = Serilog.Log.Logger // initialized by CaptureSerilogLog
 
     /// As this is a Collection Fixture, it will outlive an individual instantiation of a Test Class
@@ -58,15 +58,15 @@ module MemoryReactor =
             new Fixture(messageSink, Store.Config.Memory store, createSourceConfig)
         override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member _.Wait() = base.Await(TimeSpan.MaxValue) // Propagation delay is not applicable for MemoryStore
-        member val private Backoff = TimeSpan.FromMilliseconds 1.
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromSeconds 5.
+        member val private Backoff = TimeSpan.FromMilliseconds 1L
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromSeconds 5L
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
         member x.CheckReactions label = Propulsion.Reactor.Monitor.check x.Wait x.Backoff x.Timeout x.WarnThreshold label
 
 module CosmosReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 300.
+    let tailSleepInterval = TimeSpan.FromMilliseconds 300L
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.CosmosStore CFP
     type Fixture private (messageSink, store, createSourceConfig) =
@@ -76,11 +76,11 @@ module CosmosReactor =
             let store, monitored, leases = conn.Connect()
             let createSourceConfig consumerGroupName =
                 let checkpointConfig = CosmosFeedConfig.Ephemeral consumerGroupName
-                SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, TimeSpan.FromSeconds 60.)
+                SourceConfig.Cosmos (monitored, leases, checkpointConfig, tailSleepInterval, TimeSpan.FromSeconds 60L)
             new Fixture(messageSink, store, createSourceConfig)
         member _.NullWait(_arguments) = async.Zero () // We could wire up a way to await all tranches having caught up, but not implemented yet
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
-        member val private Backoff = TimeSpan.FromMilliseconds 100. // Vary to adjust effect of too many retries on rate limiting
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromMinutes 1L
+        member val private Backoff = TimeSpan.FromMilliseconds 100L // Vary to adjust effect of too many retries on rate limiting
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
         member x.CheckReactions label = Propulsion.Reactor.Monitor.check x.NullWait x.Backoff x.Timeout x.WarnThreshold label
@@ -93,7 +93,7 @@ module CosmosReactor =
 
 module DynamoReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 50.
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50L
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.DynamoStoreSource Feed
     type Fixture private (messageSink, store, dumpStats, createSource) =
@@ -104,11 +104,11 @@ module DynamoReactor =
                 let loadMode = Propulsion.DynamoStore.WithData (4, conn.StoreContext)
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
                 SourceConfig.Dynamo (conn.IndexContext, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
-                                     tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
+                                     tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60L)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromMinutes 1L
         // Give the events a chance to propagate through the Streams and Lambda before we start the wait
-        member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 1200.
+        member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 1200L
         member x.Backoff = tailSleepInterval * 2. // Vary to adjust effect of too many retries on rate limiting
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
@@ -123,7 +123,7 @@ module DynamoReactor =
 
 module EsdbReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 50.
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50L
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.EventStoreDb.EventStoreSource
     type Fixture private (messageSink, store, dumpStats, createSource) =
@@ -133,11 +133,11 @@ module EsdbReactor =
             let createSourceConfig consumerGroupName =
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
                 SourceConfig.Esdb (conn.EventStoreClient, checkpoints, withData = true, startFromTail = true, batchSize = 100,
-                                   tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
+                                   tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60L)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
         override _.RunTimeout = TimeSpan.FromSeconds 0.1
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
-        member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 300.
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromMinutes 1L
+        member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 300L
         member x.Backoff = tailSleepInterval * 2.
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero

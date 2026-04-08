@@ -11,7 +11,7 @@ module Codec =
     let gen<'t when 't :> TypeShape.UnionContract.IUnionContract> =
         FsCodec.SystemTextJson.CodecJsonElement.Create<'t>() // options = Options.Default
 
-let private defaultCacheDuration = System.TimeSpan.FromMinutes 20.
+let private defaultCacheDuration = System.TimeSpan.FromMinutes 20L
 let private cacheStrategy cache = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
 
 module Cosmos =

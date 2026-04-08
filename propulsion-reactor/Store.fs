@@ -16,7 +16,7 @@ module Codec =
 module Cosmos =
 
     let private createCached name codec initial fold accessStrategy (context, cache): Equinox.Category<_, _, _> =
-        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20L)
         Equinox.CosmosStore.CosmosStoreCategory(context, name, FsCodec.SystemTextJson.Encoder.Uncompressed codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
@@ -30,7 +30,7 @@ module Cosmos =
 module Dynamo =
 
     let private createCached name codec initial fold accessStrategy (context, cache): Equinox.Category<_, _, _> =
-        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20L)
         Equinox.DynamoStore.DynamoStoreCategory(context, name, FsCodec.Encoder.Uncompressed codec, fold, initial, accessStrategy, cacheStrategy)
 
     let createSnapshotted name codec initial fold (isOrigin, toSnapshot) (context, cache) =
@@ -45,14 +45,14 @@ module Dynamo =
 module Esdb =
 
     let create name codec initial fold (context, cache) =
-        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20L)
         let accessStrategy = Equinox.EventStoreDb.AccessStrategy.Unoptimized
         Equinox.EventStoreDb.EventStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy)
 
 module Sss =
 
     let create name codec initial fold (context, cache) =
-        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20.)
+        let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, System.TimeSpan.FromMinutes 20L)
         let accessStrategy = Equinox.SqlStreamStore.AccessStrategy.Unoptimized
         Equinox.SqlStreamStore.SqlStreamStoreCategory(context, name, codec, fold, initial, accessStrategy, cacheStrategy)
 

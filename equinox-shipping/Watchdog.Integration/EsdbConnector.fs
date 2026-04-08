@@ -4,7 +4,7 @@ open System
 
 type EsdbConnector(connection, credentials) =
 
-    let requestTimeout, retries =       TimeSpan.FromSeconds 5., 5
+    let requestTimeout, retries =       TimeSpan.FromSeconds 5L, 5
     let tags =                          ["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
     let connector =                     Equinox.EventStoreDb.EventStoreConnector(requestTimeout, retries, tags = tags)
     let discovery =                     let connectionString = match credentials with None -> connection | Some credentials -> String.Join(";", connection, credentials)
@@ -26,6 +26,6 @@ type EsdbConnector(connection, credentials) =
     member val Store =                  Store.Config<Equinox.DynamoStore.Core.EncodedBody>.Esdb (storeContext, cache)
     /// Uses an in-memory checkpoint service; the real app will obviously need to store real checkpoints (see CheckpointStore.Config)  
     member x.CreateCheckpointService(consumerGroupName) =
-        let checkpointInterval =        TimeSpan.FromHours 1.
+        let checkpointInterval =        TimeSpan.FromHours 1
         let store = Equinox.MemoryStore.VolatileStore()
         Propulsion.Feed.ReaderCheckpoint.MemoryStore.create Store.Metrics.log (consumerGroupName, checkpointInterval) store

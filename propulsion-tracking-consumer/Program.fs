@@ -50,8 +50,8 @@ module Args =
         member val MaxInFlightBytes =       p.GetResult(MaxInflightMb, 10.) * 1024. * 1024. |> int64
         member val LagFrequency =           p.TryGetResult LagFreqM |> Option.map TimeSpan.FromMinutes
         member val MaxConcurrentStreams =   p.GetResult(MaxWriters, 8)
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 5.
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 5L
         member val Cosmos =                 CosmosArguments(c, p.GetResult Cosmos)
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode

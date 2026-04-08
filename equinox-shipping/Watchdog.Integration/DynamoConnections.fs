@@ -4,7 +4,7 @@ open Equinox.DynamoStore
 open Shipping.Watchdog.Infrastructure
 
 type DynamoConnections(serviceUrl, accessKey, secretKey, table, indexTable) =
-    let requestTimeout, retries =               System.TimeSpan.FromSeconds 5., 5
+    let requestTimeout, retries =               System.TimeSpan.FromSeconds 5L, 5
     let connector =                             DynamoStoreConnector(serviceUrl, accessKey, secretKey, requestTimeout, retries)
     let client =                                connector.CreateClient()
     let storeClient =                           DynamoStoreClient(client, table)

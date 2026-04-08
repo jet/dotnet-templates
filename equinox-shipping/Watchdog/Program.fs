@@ -41,10 +41,10 @@ module Args =
         member val Verbose =                p.Contains Parameters.Verbose
         member val ProcessManagerMaxDop =   4
         member val CacheSizeMb =            10
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 10.
-        member val PurgeInterval =          TimeSpan.FromHours 1.
-        member val IdleDelay =              p.GetResult(IdleDelayMs, 1000) |> float |> TimeSpan.FromMilliseconds
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 10L
+        member val PurgeInterval =          TimeSpan.FromHours 1
+        member val IdleDelay =              p.GetResult(IdleDelayMs, 1000) |> int64 |> TimeSpan.FromMilliseconds
         member val WakeForResults =         p.Contains WakeForResults
         member x.ProcessorParams() =        Log.Information("Watching... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
                                                             processorName, maxReadAhead, maxConcurrentProcessors)

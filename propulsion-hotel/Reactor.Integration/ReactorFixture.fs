@@ -11,7 +11,7 @@ type FixtureBase(messageSink, store, dumpStats, createSourceConfig) =
     let contextId = Guid.gen () |> Guid.toStringN
     let handler = Handler.create store
     let log = Serilog.Log.Logger
-    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1., stateInterval = TimeSpan.FromMinutes 2.,
+    let stats = Handler.Stats(log, statsInterval = TimeSpan.FromMinutes 1L, stateInterval = TimeSpan.FromMinutes 2L,
                               logExternalStats = dumpStats)
     let sink = Handler.Factory.StartSink(log, stats, 4, handler, maxReadAhead = 1024, 
                                          // Ensure batches are completed ASAP so waits in the tests are minimal
@@ -51,15 +51,15 @@ module MemoryReactor =
             new Fixture(messageSink, Domain.Store.Config.Memory store, createSourceConfig)
         // override _.RunTimeout = TimeSpan.FromSeconds 0.1
         member _.Wait() = base.Await(TimeSpan.MaxValue) // Propagation delay is not applicable for MemoryStore
-        member val private Backoff = TimeSpan.FromMilliseconds 1.
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromSeconds 5.
+        member val private Backoff = TimeSpan.FromMilliseconds 1L
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromSeconds 5L
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
         member x.CheckReactions label = Propulsion.Reactor.Monitor.check x.Wait x.Backoff x.Timeout x.WarnThreshold label
 
 module DynamoReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 50.
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50L
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.DynamoStoreSource Feed
     type Fixture private (messageSink, store, dumpStats, createSource) =
@@ -70,11 +70,11 @@ module DynamoReactor =
                 let loadMode = Propulsion.DynamoStore.IndexOnly
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
                 SourceConfig.Dynamo (conn.IndexContext, checkpoints, loadMode, startFromTail = true, batchSizeCutoff = 100,
-                                     tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
+                                     tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60L)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromMinutes 1L
         // Give the events a chance to propagate through the Streams and Lambda before we start the wait
-        member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 1200.
+        member val private PropagationDelay = tailSleepInterval * 2. + TimeSpan.FromMilliseconds 1200L
         member x.Backoff = tailSleepInterval * 2. // Vary to adjust effect of too many retries on rate limiting
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 
         member val private WarnThreshold = TimeSpan.Zero
@@ -89,7 +89,7 @@ module DynamoReactor =
 
 module MessageDbReactor =
 
-    let tailSleepInterval = TimeSpan.FromMilliseconds 50.
+    let tailSleepInterval = TimeSpan.FromMilliseconds 50L
 
     /// XUnit Collection Fixture managing setup and disposal of Serilog.Log.Logger, a Reactor instance and a Propulsion.MessageDbSource Feed
     type Fixture private (messageSink, store, dumpStats, createSource) =
@@ -99,9 +99,9 @@ module MessageDbReactor =
             let createSourceConfig consumerGroupName =
                 let checkpoints = conn.CreateCheckpointService(consumerGroupName)
                 SourceConfig.Mdb (conn.ConnectionString, checkpoints, startFromTail = true, batchSize = 100,
-                                  tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60.)
+                                  tailSleepInterval = tailSleepInterval, statsInterval = TimeSpan.FromSeconds 60L)
             new Fixture(messageSink, conn.Store, conn.DumpStats, createSourceConfig)
-        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1. else TimeSpan.FromMinutes 1.
+        member val private Timeout = if System.Diagnostics.Debugger.IsAttached then TimeSpan.FromHours 1 else TimeSpan.FromMinutes 1L
         member val private PropagationDelay = tailSleepInterval * 2.
         member x.Backoff = tailSleepInterval * 2. 
         // Can be increased to only note long delays, but in general it's more useful to see the phases of processing 

@@ -74,9 +74,9 @@ module Args =
         let cacheSizeMb =                   10
         member val Verbose =                p.Contains Verbose
         member x.VerboseStore =             x.Source.VerboseStore           
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 5.
-        member val PurgeInterval =          TimeSpan.FromHours 1.
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 5L
+        member val PurgeInterval =          TimeSpan.FromHours 1
         
         member _.ProcessorParams() =        Log.Information("Reacting... {processorName}, reading {maxReadAhead} ahead, {dop} streams",
                                                             processorName, maxReadAhead, maxConcurrentStreams)
