@@ -45,7 +45,7 @@ type Equinox.DynamoStore.DynamoStoreClient with
 type Equinox.DynamoStore.DynamoStoreContext with
 
     member context.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
-        let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1)
+        let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
         Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
 
 /// Equinox and Propulsion provide metrics as properties in log emissions

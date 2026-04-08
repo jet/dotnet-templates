@@ -21,6 +21,6 @@ type DynamoConnector(connector: Equinox.DynamoStore.DynamoStoreConnector, table,
     member val Store =                  Store.Config<Equinox.DynamoStore.Core.EncodedBody>.Dynamo (storeContext, cache)
     /// Uses an in-memory checkpoint service; the real app will obviously need to store real checkpoints (see SourceArgs.Dynamo.Arguments.CreateCheckpointStore)  
     member _.CreateCheckpointService(consumerGroupName) =
-        let checkpointInterval =        System.TimeSpan.FromHours 1
+        let checkpointInterval =        System.TimeSpan.FromHours 1.
         let store = Equinox.MemoryStore.VolatileStore()
         Propulsion.Feed.ReaderCheckpoint.MemoryStore.create Store.Metrics.log (consumerGroupName, checkpointInterval) store

@@ -270,7 +270,7 @@ module Args =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             EventStoreConnector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
                 .Establish(appName, discovery, connectionStrategy)
-        member _.CheckpointInterval =   TimeSpan.FromHours 1
+        member _.CheckpointInterval =   TimeSpan.FromHours 1.
 
         member val Sink =
             match p.GetSubCommand() with

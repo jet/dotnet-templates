@@ -54,7 +54,7 @@ module Args =
         member val TicketsDop =             p.GetResult(TicketsDop, 4)
         member val StatsInterval =          TimeSpan.FromMinutes 1L
         member val StateInterval =          TimeSpan.FromMinutes 5L
-        member val CheckpointInterval =     TimeSpan.FromHours 1
+        member val CheckpointInterval =     TimeSpan.FromHours 1.
         member val TailSleepInterval =      TimeSpan.FromSeconds 1L
         member val Cosmos: CosmosArguments =
             match p.GetSubCommand() with
