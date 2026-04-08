@@ -11,7 +11,7 @@
 
     <PackOptions>/p:BUILD_ID=$(BUILD_ID) $(PrOption) -o $(ThisDirAbsolute)bin/nupkg</PackOptions>
 
-    <TestOptions>--logger:trx -- RunConfiguration.TestSessionTimeout=3300000 xunit.diagnosticMessages=true</TestOptions>
+    <TestOptions>--report-trx --timeout 3300</TestOptions>
   </PropertyGroup>
 
   <Target Name="Pack">

@@ -1,12 +1,12 @@
 namespace Shipping.Domain.Tests
 
-type XunitOutputSink(?messageSink: Xunit.Abstractions.IMessageSink, ?minLevel: Serilog.Events.LogEventLevel, ?templatePrefix) =
+type XunitOutputSink(?messageSink: Xunit.Sdk.IMessageSink, ?minLevel: Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =
         let baseTemplate = "{Timestamp:HH:mm:ss.fff} {Level:u1} " + Option.toObj templatePrefix + "{Message} {Properties}{NewLine}{Exception}"
         let template = if minLevel <= Serilog.Events.LogEventLevel.Debug then baseTemplate else baseTemplate.Replace("{Properties}", "")
         Serilog.Formatting.Display.MessageTemplateTextFormatter(template, null)
-    let mutable currentTestOutput: Xunit.Abstractions.ITestOutputHelper option = None
+    let mutable currentTestOutput: Xunit.ITestOutputHelper option = None
     let writeSerilogEvent (logEvent: Serilog.Events.LogEvent) =
         logEvent.RemovePropertyIfPresent Equinox.CosmosStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
