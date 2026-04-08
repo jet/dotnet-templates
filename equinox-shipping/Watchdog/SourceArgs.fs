@@ -50,7 +50,7 @@ module Cosmos =
         let leaseContainerId =              p.GetResult(LeaseContainer, containerId + "-aux")
         let fromTail =                      p.Contains FromTail
         let maxItems =                      p.TryGetResult MaxItems
-        let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
+        let tailSleepInterval =             TimeSpan.FromMilliseconds 500L
         let lagFrequency =                  p.GetResult(LagFreqM, 1.) |> TimeSpan.FromMinutes
         member val Verbose =                p.Contains Verbose
         member val MonitoringParams =       fromTail, maxItems, tailSleepInterval, lagFrequency
@@ -111,7 +111,7 @@ module Dynamo =
         let indexSuffix =                   p.GetResult(IndexSuffix, "-index")
         let indexTable =                    p.GetResult(IndexTable, fun () -> defaultArg c.DynamoIndexTable (table + indexSuffix))
         let fromTail =                      p.Contains FromTail
-        let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
+        let tailSleepInterval =             TimeSpan.FromMilliseconds 500L
         let batchSizeCutoff =               p.GetResult(MaxItems, 100)
         let streamsDop =                    p.GetResult(StreamsDop, 4)
         let client =                        lazy connector.CreateClient()
@@ -177,7 +177,7 @@ module Esdb =
                                             |> Equinox.EventStoreDb.Discovery.ConnectionString
         let retries =                       p.GetResult(Retries, 3)
         let timeout =                       p.GetResult(Timeout, 20.) |> TimeSpan.FromSeconds
-        let checkpointInterval =            TimeSpan.FromHours 1.
+        let checkpointInterval =            TimeSpan.FromHours 1
         member val Verbose =                p.Contains Verbose
 
         member _.Connect(log: ILogger, appName, nodePreference): Equinox.EventStoreDb.EventStoreConnection =

@@ -41,8 +41,8 @@ module Args =
         member val ProcessorName =          p.GetResult ProcessorName
         member val MaxReadAhead =           p.GetResult(MaxReadAhead, 8)
         member val MaxWriters =             p.GetResult(MaxWriters, 4)
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 5.
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 5L
         member val Source: CosmosSourceArguments =
             match p.GetSubCommand() with
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)

@@ -55,8 +55,8 @@ module Args =
         member val MaxConcurrentStreams =   p.GetResult(MaxWriters, 8)
 
         member val Verbose =                p.Contains Verbose
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 5.
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 5L
     and [<NoEquality; NoComparison>] CosmosParameters =
         | [<AltCommandLine "-m">]           ConnectionMode of Microsoft.Azure.Cosmos.ConnectionMode
         | [<AltCommandLine "-s">]           Connection of string

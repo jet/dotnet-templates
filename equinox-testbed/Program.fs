@@ -76,8 +76,8 @@ module Args =
         member val Duration =           duration
         member val ReportingIntervals =
             match p.GetResults(ReportIntervalS) with
-            | [] -> TimeSpan.FromSeconds 10.|> Seq.singleton
-            | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(float i) }
+            | [] -> TimeSpan.FromSeconds 10L |> Seq.singleton
+            | intervals -> seq { for i in intervals -> TimeSpan.FromSeconds(int64 i) }
             |> fun intervals -> [| yield duration; yield! intervals |]
         member x.ConfigureStore(log: ILogger, createStoreLog) =
             match p.GetSubCommand() with
@@ -153,7 +153,7 @@ module LoadTest =
         let duration, intervals = a.Duration, a.ReportingIntervals
         log.Information( "Running {test} for {duration} @ {tps} hits/s across {clients} clients; Max errors: {errorCutOff}, reporting intervals: {ri}, report file: {report}",
             a.Test, a.Duration, a.TestsPerSecond, clients.Length, a.ErrorCutoff, intervals, reportFilename)
-        let results = runLoadTest log a.TestsPerSecond (duration.Add(TimeSpan.FromSeconds 5.)) a.ErrorCutoff intervals clients runSingleTest |> Async.RunSynchronously
+        let results = runLoadTest log a.TestsPerSecond (duration.Add(TimeSpan.FromSeconds 5L)) a.ErrorCutoff intervals clients runSingleTest |> Async.RunSynchronously
 
         let resultFile = createResultLog reportFilename
         for r in results do

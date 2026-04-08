@@ -49,8 +49,8 @@ module Args =
         member val MaxReadAhead =           p.GetResult(MaxReadAhead, 32)
         member val MaxWriters =             p.GetResult(MaxWriters, 4)
         member val MaxBytes =               p.GetResult(MaxKib, 512) * 1024
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 5.
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 5L
         member val Source: CosmosSourceArguments =
             match p.GetSubCommand() with
             | SrcCosmos cosmos -> CosmosSourceArguments(c, cosmos)
@@ -161,7 +161,7 @@ let build (args: Args.Arguments) =
         let eventsContext = args.DestinationArchive.Connect() |> Async.RunSynchronously
         let stats = CosmosStoreSinkStats(log, args.StatsInterval, args.StateInterval)
         CosmosStoreSink.Start(log, maxReadAhead, eventsContext, maxWriters, stats,
-                              purgeInterval = TimeSpan.FromMinutes 10., maxBytes = maxBytes)
+                              purgeInterval = TimeSpan.FromMinutes 10L, maxBytes = maxBytes)
     let monitored, leases = args.Source.ConnectFeed() |> Async.RunSynchronously
     let source =
         let startFromTail, maxItems, lagFrequency = args.Source.MonitoringParams

@@ -67,7 +67,7 @@ module Cosmos =
         let cacheStrategy =
             if cache then
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
-                Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
+                Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20L)
             else Equinox.CachingStrategy.NoCaching
         Store.Config.Cosmos (context, cacheStrategy, unfolds)
 
@@ -113,7 +113,7 @@ module EventStore =
         let cacheStrategy =
             if cache then
                 let c = Equinox.Cache("TestbedTemplate", sizeMb = 50)
-                Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20.)
+                Equinox.CachingStrategy.SlidingWindow (c, TimeSpan.FromMinutes 20L)
             else Equinox.CachingStrategy.NoCaching
         Store.Config.Esdb ((createContext conn batchSize), cacheStrategy, unfolds)
 //#endif

@@ -1,7 +1,6 @@
 namespace Equinox.Templates.Tests
 
 open Xunit
-open Xunit.Abstractions
 
 type ProProjector() as this =
     inherit TheoryData<string list>()

@@ -65,7 +65,7 @@ module Dynamo =
         let client =                        lazy connector.CreateClient()
         let indexContext =                  lazy client.Value.CreateContext("Index", indexTable)
         let fromTail =                      p.Contains FromTail
-        let tailSleepInterval =             TimeSpan.FromMilliseconds 500.
+        let tailSleepInterval =             TimeSpan.FromMilliseconds 500L
         let batchSizeCutoff =               p.GetResult(MaxItems, 100)
         member _.Connect() =                client.Value.CreateContext("Main", table)
         member _.MonitoringParams(log: ILogger) =
@@ -103,7 +103,7 @@ module Mdb =
         let schema =                        p.GetResult(CheckpointSchema, fun () -> c.MdbSchema)
         let fromTail =                      p.Contains FromTail
         let batchSize =                     p.GetResult(BatchSize, 1000)
-        let tailSleepInterval =             p.GetResult(TailSleepIntervalMs, 100) |> TimeSpan.FromMilliseconds
+        let tailSleepInterval =             p.GetResult(TailSleepIntervalMs, 100) |> int64 |> TimeSpan.FromMilliseconds
         member _.Connect() =
                                             let sanitize (cs: string) = Npgsql.NpgsqlConnectionStringBuilder(cs, Password = null)
                                             Log.Information("Npgsql checkpoint connection {connectionString}", sanitize checkpointConnStr)

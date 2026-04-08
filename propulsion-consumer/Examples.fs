@@ -148,7 +148,7 @@ module MultiStreams =
 
     let start (config: FsKafka.KafkaConsumerConfig, degreeOfParallelism: int) =
         let log, handler = Log.ForContext<InMemoryHandler>(), InMemoryHandler()
-        let stats = Stats(log, TimeSpan.FromSeconds 30., TimeSpan.FromMinutes 5.)
+        let stats = Stats(log, TimeSpan.FromSeconds 30L, TimeSpan.FromMinutes 5L)
         Propulsion.Kafka.Factory.StartConcurrent(
             log, config, parseStreamEvents,
             degreeOfParallelism, (fun s ss -> handler.Handle(s, ss)), stats, logExternalState = handler.DumpState)
@@ -207,7 +207,7 @@ module MultiMessages =
             let handleMessage (KeyValue (streamName, eventsSpan)) _ct = task { processor.Handle(FsCodec.StreamName.parse streamName, eventsSpan) }
             Propulsion.Kafka.ParallelConsumer.Start(
                 log, config, degreeOfParallelism, handleMessage,
-                statsInterval=TimeSpan.FromSeconds 30., logExternalStats=processor.DumpStats)
+                statsInterval=TimeSpan.FromSeconds 30L, logExternalStats=processor.DumpStats)
 
     type BatchesSync =
         /// Starts a consumer that consumes a topic in a batched mode, based on a source defined by `cfg`

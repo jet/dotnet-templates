@@ -138,5 +138,5 @@ type Config() =
 
     static member Create(store, ?linger, ?maxItemsPerEpoch, ?lookBackLimit) =
         let maxItemsPerEpoch, lookBackLimit = defaultArg maxItemsPerEpoch 50_000, defaultArg lookBackLimit 100
-        let linger = defaultArg linger (System.TimeSpan.FromMilliseconds 200.)
+        let linger = defaultArg linger (System.TimeSpan.FromMilliseconds 200)
         create linger maxItemsPerEpoch lookBackLimit store

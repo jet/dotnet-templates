@@ -57,7 +57,7 @@ module SourceConfig =
                 | Ephemeral processorName ->
                     let withStartTime1sAgo (x: Microsoft.Azure.Cosmos.ChangeFeedProcessorBuilder) =
                         x.WithStartTime(let t = DateTime.UtcNow in t.AddSeconds -1.)
-                    let lagFrequency = TimeSpan.FromMinutes 1.
+                    let lagFrequency = TimeSpan.FromMinutes 1L
                     CosmosStoreSource(log, statsInterval, monitoredContainer, leasesContainer, processorName, parseFeedDoc, sink,
                                       startFromTail = true, customize = withStartTime1sAgo, tailSleepInterval = tailSleepInterval,
                                       lagEstimationInterval = lagFrequency).Start()

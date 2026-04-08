@@ -13,7 +13,7 @@ Templates are primarily F# (except `equinox-web-csharp/` which is C#). Core libr
 dotnet msbuild build.proj -t:Pack
 
 # Pack then run all template tests (what CI runs)
-dotnet test build.proj -v n
+dotnet test --project build.proj -v n
 
 # Run tests directly (requires the .nupkg to already exist in bin/nupkg/)
 dotnet test tests/Equinox.Templates.Tests --configuration Release

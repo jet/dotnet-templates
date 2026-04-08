@@ -45,7 +45,7 @@ module Dir =
     let (++) s1 s2 = Path.Combine(s1, s2)
 
     let projectBaseDir = CodeFolder.OfMe() ++ "../.."
-    let projectBinNuGetDir = projectBaseDir ++ "bin/nupkg"
+    let projectBinNuGetDir = projectBaseDir ++ "artifacts/nupkg"
 
     let scratchFolder = projectBaseDir ++ "scratch-area"
     let cleared subFolder =

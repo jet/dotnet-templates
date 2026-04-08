@@ -4,7 +4,7 @@ NOTE: In general, this is not intended to be the first example you touch when ex
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     dotnet new eqxShipping
 
 The purpose of this template is to demonstrate the implementation of a [Process Manager](https://www.enterpriseintegrationpatterns.com/patterns/messaging/ProcessManager.html) using [`Equinox`](https://github.com/jet/equinox) that manages the enlistment of a set of `Shipment` Aggregate Root items into a separated `Container` Aggregate Root as an atomic operation.

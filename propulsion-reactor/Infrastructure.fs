@@ -96,7 +96,7 @@ module Dynamo =
 
     open Equinox.DynamoStore
     
-    let defaultCacheDuration = TimeSpan.FromMinutes 20.
+    let defaultCacheDuration = TimeSpan.FromMinutes 20L
     let private createCached name codec initial fold accessStrategy (context, cache) =
         let cacheStrategy = Equinox.CachingStrategy.SlidingWindow (cache, defaultCacheDuration)
         DynamoStoreCategory(context, name, FsCodec.Encoder.Compressed codec, fold, initial, accessStrategy, cacheStrategy)
@@ -128,7 +128,7 @@ type Equinox.DynamoStore.DynamoStoreClient with
 type Equinox.DynamoStore.DynamoStoreContext with
 
      member context.CreateCheckpointService(consumerGroupName, cache, log, ?checkpointInterval) =
-         let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1.)
+         let checkpointInterval = defaultArg checkpointInterval (TimeSpan.FromHours 1)
          Propulsion.Feed.ReaderCheckpoint.DynamoStore.create log (consumerGroupName, checkpointInterval) (context, cache)
 
 #endif

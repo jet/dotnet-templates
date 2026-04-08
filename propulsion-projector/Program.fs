@@ -57,8 +57,8 @@ module Args =
         let maxReadAhead =                  p.GetResult(MaxReadAhead, 64)
         let maxConcurrentProcessors =       p.GetResult(MaxWriters, 1024)
         member val Verbose =                p.Contains Parameters.Verbose
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 10.
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 10L
         member val CacheSizeMb =            10
         member _.ProcessorParams() =        Log.Information("Projecting... {processorName}, reading {maxReadAhead} ahead, {dop} writers",
                                                             processorName, maxReadAhead, maxConcurrentProcessors)

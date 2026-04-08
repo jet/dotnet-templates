@@ -7,7 +7,7 @@ open FsCheck.Xunit
 open FSharp.UMX
 open Swensen.Unquote
 
-let linger, maxItemsPerEpoch = System.TimeSpan.FromMilliseconds 1., 5
+let linger, maxItemsPerEpoch = System.TimeSpan.FromMilliseconds 1L, 5
 
 let createSut =
     // While we use ~ 200ms when hitting Cosmos, there's no value in doing so in the context of these property based tests

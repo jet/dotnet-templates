@@ -7,7 +7,7 @@ open FsCheck.Xunit
 open FSharp.UMX
 open Swensen.Unquote
 
-let linger, lookBackLimit, maxPickTicketsPerBatch = System.TimeSpan.FromMilliseconds 1., 2, 5
+let linger, lookBackLimit, maxPickTicketsPerBatch = System.TimeSpan.FromMilliseconds 1L, 2, 5
 
 let createSut store trancheId =
     // While we use ~ 200ms when hitting Cosmos, there's no value in doing so in the context of these property based tests

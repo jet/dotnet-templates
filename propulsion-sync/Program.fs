@@ -75,8 +75,8 @@ module Args =
             | SrcEs es -> Choice2Of2 (EsSourceArguments(c, es))
             | _ -> p.Raise "Must specify one of cosmos or es for Src"
 
-        member val StatsInterval =          TimeSpan.FromMinutes 1.
-        member val StateInterval =          TimeSpan.FromMinutes 5.
+        member val StatsInterval =          TimeSpan.FromMinutes 1L
+        member val StateInterval =          TimeSpan.FromMinutes 5L
         member _.CategoryFilterFunction(?excludeLong, ?longOnly): string -> bool =
             let isLong (streamName: string) =
                 streamName.StartsWith "Inventory-" // Too long
@@ -270,7 +270,7 @@ module Args =
             let tags=["M", Environment.MachineName; "I", Guid.NewGuid() |> string]
             EventStoreConnector(x.User, x.Password, x.Timeout, x.Retries, log=log, heartbeatTimeout=x.Heartbeat, tags=tags)
                 .Establish(appName, discovery, connectionStrategy)
-        member _.CheckpointInterval =   TimeSpan.FromHours 1.
+        member _.CheckpointInterval =   TimeSpan.FromHours 1
 
         member val Sink =
             match p.GetSubCommand() with
@@ -457,7 +457,7 @@ module Checkpoints =
         let transmute' xs s = let x, y = Checkpoint.Fold.transmute (Array.toList xs) s in (List.toArray x, List.toArray y)
         let access = AccessStrategy.Custom (Checkpoint.Fold.isOrigin, transmute')
         let create groupName (context, cache) =
-            let caching = Equinox.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20.)
+            let caching = Equinox.CachingStrategy.SlidingWindow (cache, TimeSpan.FromMinutes 20L)
             let cat = CosmosStoreCategory(context, Checkpoint.Stream.Category, FsCodec.SystemTextJson.Encoder.Uncompressed codec, Checkpoint.Fold.fold, Checkpoint.Fold.initial, access, caching)
             let resolve sid = Equinox.Stream.Resolve(cat, Store.Metrics.log).Invoke(sid)
             Checkpoint.CheckpointSeries(groupName, resolve)

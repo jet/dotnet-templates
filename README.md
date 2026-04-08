@@ -120,7 +120,7 @@ To use from the command line, the outline is:
 
     # install the templates into `dotnet new`s list of available templates so it can be picked up by
     # `dotnet new`, Rider, Visual Studio etc.
-    dotnet new -i Equinox.Templates
+    dotnet new install Equinox.Templates
 
     # --help shows the options including wiring for storage subsystems,
     # -t includes an example Domain, Handler, Service and Controller to test from app to storage subsystem
@@ -202,9 +202,8 @@ To use from the command line, the outline is:
 
 There are [integration tests in the repo](https://github.com/jet/dotnet-templates/blob/int-tests/tests/Equinox.Templates.Tests/DotnetBuild.fs) that check everything compiles before we merge/release
 
-    dotnet build build.proj # build Equinox.Templates package, run tests \/
-    dotnet pack build.proj # build Equinox.Templates package only
-    dotnet test build.proj -c Release # Test aphabetically newest file in bin/nupkgs only (-c Release to run full tests)
+    dotnet pack src/Equinox.Templates # build Equinox.Templates package into artifacts/nupkg
+    dotnet test --project tests/Equinox.Templates.Tests -c Release # Test alphabetically newest file in artifacts/nupkg only (-c Release to run full tests)
 
 One can also do it manually:
 
@@ -215,8 +214,8 @@ One can also do it manually:
     b. packaging into a local nupkg
 
         $ cd ~/dotnet-templates
-        $ dotnet pack build.proj
-        Successfully created package '/Users/me/dotnet-templates/bin/nupkg/Equinox.Templates.3.10.1-alpha.0.1.nupkg'.
+        $ dotnet pack src/Equinox.Templates
+        Successfully created package '/Users/me/dotnet-templates/artifacts/nupkg/Equinox.Templates.3.10.1-alpha.0.1.nupkg'.
 
 2. Test, per variant
 
@@ -224,7 +223,7 @@ One can also do it manually:
 
     a. installing the templates into the `dotnet new` local repo
 
-        $ dotnet new -i /Users/me/dotnet-templates/bin/nupkg/Equinox.Templates.3.10.1-alpha.0.1.nupkg
+        $ dotnet new install /Users/me/dotnet-templates/artifacts/nupkg/Equinox.Templates.3.10.1-alpha.0.1.nupkg
 
     b. get to an empty scratch area
 
@@ -239,7 +238,7 @@ One can also do it manually:
 
 3. uninstalling the locally built templates from step 2a:
 
-       $ dotnet new -u Equinox.Templates
+       $ dotnet new uninstall Equinox.Templates
 
 <a name="guidance"></a>
 # PATTERNS / GUIDANCE
@@ -826,7 +825,7 @@ member service.Read(tenantId) =
 ```fsharp
 module Queries =
 
-    let infoCachingPeriod = TimeSpan.FromSeconds 10.
+    let infoCachingPeriod = TimeSpan.FromSeconds 10L
     type NameInfo = { name: string; contact: ContactInfo }
     let renderName (state: Fold.State) = { name = state.originalName; contact = state.contactDetails } 
     let renderPendingApprovals (state: Fold.State) = Fold.calculatePendingApprovals state

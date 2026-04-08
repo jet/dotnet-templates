@@ -4,12 +4,12 @@ This project was generated using:
 
 //#if marveleqx
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     dotnet new proSync -m # -m - include Marvel V0 import logic
 
 //#else
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     # add -m to include Marvel V0 import logic
     dotnet new proSync # use --help to see options
 

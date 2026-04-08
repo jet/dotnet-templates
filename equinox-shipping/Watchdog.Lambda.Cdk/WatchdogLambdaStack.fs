@@ -34,7 +34,7 @@ type WatchdogLambdaStackProps
     member val IndexTableName = indexTableName
     member val MemorySize = defaultArg memorySize 128
     member val BatchSize = defaultArg batchSize 10
-    member val Timeout = defaultArg timeout (TimeSpan.FromMinutes 3)
+    member val Timeout = defaultArg timeout (TimeSpan.FromMinutes 3L)
     member val LambdaCodePath = lambdaCodePath
     member val LambdaDescription = lambdaDescription
     member val LambdaHandler = lambdaHandler

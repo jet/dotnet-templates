@@ -7,11 +7,11 @@
 This project was generated using:
 //#if kafka
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     dotnet new proReactor -k # -k => include Kafka projection logic
 //#else
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
     dotnet new proReactor # use --help to see options
 //#endif

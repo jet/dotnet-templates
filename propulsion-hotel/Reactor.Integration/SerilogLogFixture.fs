@@ -1,12 +1,12 @@
 namespace Reactor.Integration
 
-type XunitOutputSink(?messageSink: Xunit.Abstractions.IMessageSink, ?minLevel: Serilog.Events.LogEventLevel, ?templatePrefix) =
+type XunitOutputSink(?messageSink: Xunit.Sdk.IMessageSink, ?minLevel: Serilog.Events.LogEventLevel, ?templatePrefix) =
     let minLevel = defaultArg minLevel Serilog.Events.LogEventLevel.Information
     let formatter =
         let baseTemplate = "{Timestamp:HH:mm:ss.fff} {Level:u1} " + Option.toObj templatePrefix + "{Message:l} {Properties}{NewLine}{Exception}"
         let template = if minLevel <= Serilog.Events.LogEventLevel.Debug then baseTemplate else baseTemplate.Replace("{Properties}", "")
         Serilog.Formatting.Display.MessageTemplateTextFormatter(template, null)
-    let mutable currentTestOutput: Xunit.Abstractions.ITestOutputHelper option = None
+    let mutable currentTestOutput: Xunit.ITestOutputHelper option = None
     let writeSerilogEvent (logEvent: Serilog.Events.LogEvent) =
         logEvent.RemovePropertyIfPresent Equinox.DynamoStore.Core.Log.PropertyTag
         logEvent.RemovePropertyIfPresent Equinox.MessageDb.Log.PropertyTag
@@ -16,7 +16,7 @@ type XunitOutputSink(?messageSink: Xunit.Abstractions.IMessageSink, ?minLevel: S
         formatter.Format(logEvent, writer)
         let message = writer |> string |> fun s -> s.TrimEnd('\n')
         currentTestOutput |> Option.iter (fun testOutput -> testOutput.WriteLine message)
-        messageSink |> Option.iter (fun sink -> sink.OnMessage(Xunit.Sdk.DiagnosticMessage message) |> ignore)
+        messageSink |> Option.iter (fun sink -> sink.OnMessage(Xunit.v3.DiagnosticMessage message) |> ignore)
     member _.CaptureSerilogLog(testOutput) =
         currentTestOutput <- Some testOutput
         { new System.IDisposable with member _.Dispose() = currentTestOutput <- None }

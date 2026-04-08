@@ -45,13 +45,13 @@ let handle maxDop stream events = async {
         // What makes sense in terms of a good chunking size will vary depending on the workload in question
         let ticketIds = seq { for x in items -> x.id } |> Seq.truncate 1000 |> Seq.toArray
         let maybeAccept = Seq.distinct ticketIds |> Seq.mapi (fun i _x -> async {
-            do! Async.Sleep(TimeSpan.FromSeconds 1.)
+            do! Async.Sleep(TimeSpan.FromSeconds 1L)
             return if i % 3 = 1 then Some 42 else None
         })
         let! results = Async.Parallel(maybeAccept, maxDegreeOfParallelism = maxDop)
         let ready = results |> Array.choose id
         let maybeAdd = ready |> Seq.mapi (fun i _x -> async {
-            do! Async.Sleep(TimeSpan.FromSeconds 1.)
+            do! Async.Sleep(TimeSpan.FromSeconds 1L)
             return if i % 2 = 1 then Some 42 else None
         })
         let! added = Async.Parallel(maybeAdd, maxDegreeOfParallelism = maxDop)
