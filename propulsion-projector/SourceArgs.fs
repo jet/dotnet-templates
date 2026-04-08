@@ -196,7 +196,7 @@ module Esdb =
                                             |> Equinox.EventStoreDb.Discovery.ConnectionString
         let retries =                       p.GetResult(Retries, 3)
         let timeout =                       p.GetResult(Timeout, 20.) |> TimeSpan.FromSeconds
-        let checkpointInterval =            TimeSpan.FromHours 1L
+        let checkpointInterval =            TimeSpan.FromHours 1
         member val Verbose =                p.Contains Verbose
 
         member _.Connect(appName, nodePreference): Equinox.EventStoreDb.EventStoreConnection =
