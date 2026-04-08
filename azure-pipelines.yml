@@ -5,7 +5,7 @@ jobs:
     vmImage: 'windows-latest'
   steps:
   # for this repo, `dotnet test` implies pack as it validates the .nupkg file
-  - script: dotnet test build.proj -v n
+  - script: dotnet test --project build.proj -v n
     displayName: dotnet pack + test
     env:
       BUILD_PR: $(SYSTEM.PULLREQUEST.PULLREQUESTNUMBER)
