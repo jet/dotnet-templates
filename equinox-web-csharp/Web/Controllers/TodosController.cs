@@ -1,77 +1,82 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+﻿
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
-namespace TodoBackendTemplate.Controllers
+namespace TodoBackendTemplate.Controllers;
+
+// Binds ClientId from the COMPLETELY_INSECURE_CLIENT_ID header, defaulting to Guid.Empty when absent
+[AttributeUsage(AttributeTargets.Parameter)]
+public class FromClientIdHeaderAttribute() : ModelBinderAttribute(typeof(ClientIdModelBinder))
 {
-    public class FromClientIdHeaderAttribute : FromHeaderAttribute
+    public override BindingSource BindingSource => BindingSource.Header;
+}
+
+sealed class ClientIdModelBinder : IModelBinder
+{
+    public async Task BindModelAsync(ModelBindingContext bindingContext)
     {
-        public FromClientIdHeaderAttribute() =>
-            Name = "COMPLETELY_INSECURE_CLIENT_ID";
+        var headerValue = bindingContext.HttpContext.Request.Headers["COMPLETELY_INSECURE_CLIENT_ID"].FirstOrDefault();
+        ClientId clientId = Guid.TryParse(headerValue, out var res) ?  new (res) : new (Guid.Empty);
+        bindingContext.Result = ModelBindingResult.Success(clientId);
+    }
+}
+
+public class TodoView
+{
+    public int Id { get; set; }
+    public string? Url { get; set; }
+    public int Order { get; set; }
+    public string? Title { get; set; }
+    public bool Completed { get; set; }
+}
+
+// Fulfills contract dictated by https://www.todobackend.com
+// To run:
+//     & dotnet run -p Web
+//     https://www.todobackend.com/client/index.html?https://localhost:5001/todos
+//     # NB Jet does not own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing to use in your environment before using it.
+// See also similar backends used as references when implementing:
+//     https://github.com/ChristianAlexander/dotnetcore-todo-webapi/blob/master/src/TodoWebApi/Controllers/TodosController.cs
+//     https://github.com/joeaudette/playground/blob/master/spa-stack/src/FSharp.WebLib/Controllers.fs
+[Route("[controller]"), ApiController]
+public class TodosController(Todo.Service service) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IEnumerable<TodoView>> Get([FromClientIdHeader] ClientId clientId) =>
+        from x in await service.List(clientId) select WithUri(x);
+
+    [HttpGet("{id}", Name = "GetTodo")]
+    public async Task<IActionResult> Get([FromClientIdHeader] ClientId clientId, int id)
+    {
+        var res = await service.TryGet(clientId, id);
+        if (res is null) return NotFound();
+        return new ObjectResult(WithUri(res));
     }
 
-    public class TodoView
+    [HttpPost]
+    public async Task<TodoView> Post([FromClientIdHeader] ClientId clientId, [FromBody] TodoView value) =>
+        WithUri(await service.Create(clientId, ToProps(value)));
+
+    [HttpPatch("{id}")]
+    public async Task<TodoView> Patch([FromClientIdHeader] ClientId clientId, int id, [FromBody] TodoView value) =>
+        WithUri(await service.Patch(clientId, id, ToProps(value)));
+
+    [HttpDelete("{id}")]
+    public Task Delete([FromClientIdHeader] ClientId clientId, int id) =>
+        service.Execute(clientId, new Todo.Command.Delete { Id = id });
+
+    [HttpDelete]
+    public Task DeleteAll([FromClientIdHeader] ClientId clientId) =>
+        service.Execute(clientId, new Todo.Command.Clear());
+
+    static Todo.Props ToProps(TodoView value) =>
+        // TODO PATCH passes a view without a Title - the intended semantics is probably to have it fully sparse (but the todobackend spec does not provide a test t make that clear)
+        new() { Order = value.Order, Title = value.Title ?? "", Completed = value.Completed };
+
+    TodoView WithUri(Todo.View x)
     {
-        public int Id { get; set; }
-        public string Url { get; set; }
-        public int Order { get; set; }
-        public string Title { get; set; }
-        public bool Completed { get; set; }
-    }
-
-    // Fulfills contract dictated by https://www.todobackend.com
-    // To run:
-    //     & dotnet run -p Web
-    //     https://www.todobackend.com/client/index.html?https://localhost:5001/todos
-    //     # NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
-    // See also similar backends used as references when implementing:
-    //     https://github.com/ChristianAlexander/dotnetcore-todo-webapi/blob/master/src/TodoWebApi/Controllers/TodosController.cs
-    //     https://github.com/joeaudette/playground/blob/master/spa-stack/src/FSharp.WebLib/Controllers.fs
-    [Route("[controller]"), ApiController]
-    public class TodosController : ControllerBase
-    {
-        readonly Todo.Service _service;
-
-        public TodosController(Todo.Service service) =>
-            _service = service;
-
-        [HttpGet]
-        public async Task<IEnumerable<TodoView>> Get([FromClientIdHeader] ClientId clientId) =>
-            from x in await _service.List(clientId) select WithUri(x);
-
-        [HttpGet("{id}", Name = "GetTodo")]
-        public async Task<IActionResult> Get([FromClientIdHeader] ClientId clientId, int id)
-        {
-            var res = await _service.TryGet(clientId, id);
-            if (res == null) return NotFound();
-            return new ObjectResult(WithUri(res));
-        }
-
-        [HttpPost]
-        public async Task<TodoView> Post([FromClientIdHeader] ClientId clientId, [FromBody] TodoView value) =>
-            WithUri(await _service.Create(clientId, ToProps(value)));
-
-        [HttpPatch("{id}")]
-        public async Task<TodoView> Patch([FromClientIdHeader] ClientId clientId, int id, [FromBody] TodoView value) =>
-            WithUri(await _service.Patch(clientId, id, ToProps(value)));
-
-        [HttpDelete("{id}")]
-        public Task Delete([FromClientIdHeader] ClientId clientId, int id) =>
-            _service.Execute(clientId, new Todo.Command.Delete {Id = id});
-
-        [HttpDelete]
-        public Task DeleteAll([FromClientIdHeader] ClientId clientId) =>
-            _service.Execute(clientId, new Todo.Command.Clear());
-
-        Todo.Props ToProps(TodoView value) =>
-            new Todo.Props {Order = value.Order, Title = value.Title, Completed = value.Completed};
-
-        TodoView WithUri(Todo.View x)
-        {
-            // Supplying scheme is secret sauce for making it absolute as required by client
-            var url = Url.RouteUrl("GetTodo", new {id = x.Id}, Request.Scheme);
-            return new TodoView {Id = x.Id, Url = url, Order = x.Order, Title = x.Title, Completed = x.Completed};
-        }
+        // Supplying scheme is secret sauce for making it absolute as required by client
+        var url = Url.RouteUrl("GetTodo", new { id = x.Id }, Request.Scheme);
+        return new TodoView { Id = x.Id, Url = url, Order = x.Order, Title = x.Title, Completed = x.Completed };
     }
 }

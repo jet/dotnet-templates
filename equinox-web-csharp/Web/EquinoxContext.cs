@@ -1,7 +1,5 @@
 using Microsoft.FSharp.Core;
-using System;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace TodoBackendTemplate;
 
@@ -13,8 +11,8 @@ public abstract class EquinoxContext
         FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> codec,
         Func<TState, TEvent[], TState> fold,
         TState initial,
-        Func<TEvent, bool> isOrigin = null,
-        Func<TState, TEvent> toSnapshot = null);
+        Func<TEvent, bool>? isOrigin = null,
+        Func<TState, TEvent>? toSnapshot = null);
 
     internal abstract Task Connect();
 }
@@ -23,10 +21,8 @@ public static class EquinoxCodec
 {
     public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(
         Func<TEvent, (string, ReadOnlyMemory<byte>)> encode,
-        Func<string, ReadOnlyMemory<byte>, FSharpValueOption<TEvent>> tryDecode) where TEvent: class =>
-            
-        FsCodec.Codec.Create(encode, tryDecode);
-
-    public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(JsonSerializerOptions options = null) where TEvent: TypeShape.UnionContract.IUnionContract =>
+        Func<string, ReadOnlyMemory<byte>, TEvent?> tryDecode) =>
+        FsCodec.Codec.Create(encode, (s, b) => tryDecode(s,b) ?? FSharpValueOption<TEvent>.None);
+    public static FsCodec.IEventCodec<TEvent, ReadOnlyMemory<byte>, Unit> Create<TEvent>(JsonSerializerOptions? options = null) where TEvent : TypeShape.UnionContract.IUnionContract =>
         FsCodec.SystemTextJson.Codec.Create<TEvent>(options);
 }

@@ -1,7 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
     <WarningLevel>5</WarningLevel>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
@@ -11,9 +13,10 @@
     <PackageReference Include="Equinox.CosmosStore.Prometheus" Version="4.1.0" />
     <PackageReference Include="Equinox.EventStoreDb" Version="4.1.0" />
     <PackageReference Include="Equinox.MemoryStore" Version="4.1.0" />
-    <PackageReference Include="prometheus-net.AspNetCore" Version="3.6.0" />
-    <PackageReference Include="Serilog.AspNetCore" Version="3.2.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="4.0.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" /> <!-- override vulnerable transitive version -->
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,16 +1,11 @@
-using System;
-
 namespace TodoBackendTemplate;
 
 /// System.Text.Json implementation of IEncoder that encodes direct to a UTF-8 Buffer
-public class SystemTextJsonUtf8Codec
+public class SystemTextJsonUtf8Codec(TypeShape.UnionContract.IEncoder<ReadOnlyMemory<byte>> codec)
 {
-    readonly TypeShape.UnionContract.IEncoder<ReadOnlyMemory<byte>> _codec; 
-
-    public SystemTextJsonUtf8Codec(System.Text.Json.JsonSerializerOptions options) =>
-        _codec = new FsCodec.SystemTextJson.Core.ReadOnlyMemoryEncoder(new FsCodec.SystemTextJson.Serdes(options));
-
-    public ReadOnlyMemory<byte> Encode<T>(T value) => _codec.Encode(value);
-
-    public T Decode<T>(ReadOnlyMemory<byte> json) => _codec.Decode<T>(json);
+    SystemTextJsonUtf8Codec(FsCodec.SystemTextJson.Serdes serdes) : this(new FsCodec.SystemTextJson.Core.ReadOnlyMemoryEncoder(serdes)) { }
+    public SystemTextJsonUtf8Codec(System.Text.Json.JsonSerializerOptions options) : this(new FsCodec.SystemTextJson.Serdes(options)) { }
+    public ReadOnlyMemory<byte> Encode(object value) => EncodeTyped(value);
+    public ReadOnlyMemory<byte> EncodeTyped<T>(T value) => codec.Encode(value);
+    public T Decode<T>(ReadOnlyMemory<byte> json) => codec.Decode<T>(json);
 }
