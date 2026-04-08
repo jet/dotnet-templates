@@ -4,14 +4,14 @@
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     dotnet new proProjector -k # -k => include Kafka projection logic
 //#else // cosmos && !kafka
 # Propulsion CosmosDB Projector (without Kafka emission)
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
     dotnet new proProjector # use --help to see options
 //#endif // cosmos && !kafka
@@ -22,14 +22,14 @@ This project was generated using:
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     dotnet new proProjector -s dynamo -k # -k => include Kafka projection logic
 //#else // dynamo && !kafka
 # Propulsion DynamoDb Projector (without Kafka emission)
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
     dotnet new proProjector -s dynamo # use --help to see options
 //#endif // dynamo && !kafka
@@ -40,14 +40,14 @@ This project was generated using:
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     dotnet new proProjector -s eventStore -k # -k => include Kafka projection logic
 //#else // esdb && !kafka
 # Propulsion EventStoreDB Projector (without Kafka emission)
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
     dotnet new proProjector -s eventStore # use --help to see options
 //#endif // esdb && !kafka
@@ -58,14 +58,14 @@ This project was generated using:
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     dotnet new proProjector -s sqlStreamStore -k # -k => include Kafka projection logic
 //#else // sss && !kafka
 # Propulsion SqlStreamStore Projector (without Kafka emission)
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     # add -k to add Kafka Projection logic
     dotnet new proProjector -s sqlStreamStore # use --help to see options
 //#endif // sss && !kafka

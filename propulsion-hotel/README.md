@@ -6,7 +6,7 @@ more progressive sequence of things to explore)
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
     dotnet new proHotel
 
 The purpose of this template is to demonstrate the core aspects of implementing

@@ -2,7 +2,7 @@
 
 This project was generated using:
 
-    dotnet new -i Equinox.Templates # just once, to install/update in the local templates store
+    dotnet new install Equinox.Templates # just once, to install/update in the local templates store
 
 //#if eventStore
     # use -m=false to remove Equinox.MemoryStore support
