@@ -35,8 +35,8 @@ module Fold =
     /// Compute State change implied by a given Event
     let evolve state = function
         | Events.Added item    -> { items = item :: state.items; nextId = state.nextId + 1 }
-        | Events.Updated value -> { state with items = state.items |> List.map (function { id = id } when id = value.id -> value | item -> item) }
-        | Events.Deleted e     -> { state with items = state.items  |> List.filter (fun x -> x.id <> e.id) }
+        | Events.Updated e     -> { state with items = state.items |> List.map (fun x -> if x.id = e.id then e else x) }
+        | Events.Deleted e     -> { state with items = state.items |> List.filter (fun x -> x.id <> e.id) }
         | Events.Cleared e     -> { nextId = e.nextId; items = [] }
         | Events.Snapshotted s -> { nextId = s.nextId; items = List.ofArray s.items }
     /// Folds a set of events from the store into a given `state`
@@ -56,7 +56,7 @@ let decideAdd value (state: Fold.State) =
 
 let decideUpdate itemId value (state: Fold.State) = [|
     let proposed = mkItem itemId value
-    match state.items |> List.tryFind (function { id = id } -> id = itemId) with
+    match state.items |> List.tryFind (fun x -> x.id = itemId) with
     | Some current when current <> proposed -> Events.Updated proposed
     | _ -> () |]
 
@@ -64,7 +64,7 @@ let decideDelete id (state: Fold.State) = [|
     if state.items |> List.exists (fun x -> x.id = id) then Events.Deleted { id = id } |]
 
 let decideClear (state: Fold.State) = [|
-    if state.items |> List.isEmpty |> not then Events.Cleared { nextId = state.nextId } |]
+    if state.items <> [] then Events.Cleared { nextId = state.nextId } |]
 
 /// A single Item in the Todo List
 type View = { id: int; order: int; title: string; completed: bool }

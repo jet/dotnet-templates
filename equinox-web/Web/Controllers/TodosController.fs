@@ -1,9 +1,25 @@
 ﻿namespace TodoBackendTemplate.Controllers
 
 open Microsoft.AspNetCore.Mvc
+open System
 open TodoBackendTemplate
 
-type FromClientIdHeaderAttribute() = inherit FromHeaderAttribute(Name="COMPLETELY_INSECURE_CLIENT_ID")
+type ClientIdModelBinder() =
+    interface ModelBinding.IModelBinder with
+        member _.BindModelAsync bindingContext = task {
+            bindingContext.Result <-
+                bindingContext.HttpContext.Request.Headers["COMPLETELY_INSECURE_CLIENT_ID"]
+                |> Seq.tryHead
+                |> Option.bind Guid.tryParse
+                |> Option.defaultValue Guid.Empty
+                |> ModelBinding.ModelBindingResult.Success
+        }
+
+/// Binds ClientId from the COMPLETELY_INSECURE_CLIENT_ID header, defaulting to Guid.Empty when absent
+[<AttributeUsage(AttributeTargets.Parameter)>]
+type FromClientIdHeaderAttribute() =
+    inherit ModelBinderAttribute(typeof<ClientIdModelBinder>)
+    override _.BindingSource = ModelBinding.BindingSource.Header
 
 type TodoView =
     {   id: int
@@ -16,7 +32,7 @@ type GetByIdArgsTemplate = { id: int }
 // To run:
 //     & dotnet run -p Web
 //     https://www.todobackend.com/client/index.html?https://localhost:5001/todos
-//     # NB Jet does now own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing use in your environment before using it._
+//     # NB Jet does not own, control or audit https://todobackend.com; it is a third party site; please satisfy yourself that this is a safe thing to use in your environment before using it.
 // See also similar backends used as references when implementing:
 //     https://github.com/ChristianAlexander/dotnetcore-todo-webapi/blob/master/src/TodoWebApi/Controllers/TodosController.cs
 //     https://github.com/joeaudette/playground/blob/master/spa-stack/src/FSharp.WebLib/Controllers.fs
@@ -39,7 +55,7 @@ type TodosController(service: Todo.Service) =
     [<HttpGet("{id}", Name="GetTodo")>]
     member this.Get([<FromClientIdHeader>]clientId: ClientId, id): Async<IActionResult> = async {
         let! x = service.TryGet(clientId, id)
-        return match x with None -> this.NotFound() :> _ | Some x -> ObjectResult(this.WithUri x) :> _
+        return match x with None -> this.NotFound() | Some x -> ObjectResult(this.WithUri x)
     }
 
     [<HttpPost>]
@@ -60,4 +76,4 @@ type TodosController(service: Todo.Service) =
 
     [<HttpDelete>]
     member _.DeleteAll([<FromClientIdHeader>]clientId: ClientId): Async<unit> =
-        service.Clear(clientId)
+        service.Clear clientId
